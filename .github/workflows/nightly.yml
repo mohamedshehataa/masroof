@@ -1,0 +1,446 @@
+# Masroof — nightly (PROMPT.md S12): `make check-full`, mutation, full eval
+# with the real API, Maestro on an emulator, ZAP baseline, Lighthouse + k6
+# (`make perf`), MobSF, dependency-updates report, flaky-test report and the
+# regenerated SDLC metrics committed back through a PR (never a direct push).
+#
+# Rules: only `make` targets (S8). Module jobs are gated through `detect`.
+#
+# Secrets:
+#   ANTHROPIC_API_KEY   full eval runs against the real API when present;
+#                       otherwise the reference adapter is used
+# Variables:
+#   none required
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC = 04:00 Africa/Cairo
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHON_VERSION: "3.12"
+  JAVA_VERSION: "21"
+  NODE_VERSION: "24"
+  MAKEFLAGS: --no-print-directory
+  CI: "true"
+  IMAGE_TAG: nightly-${{ github.run_id }}
+  MAESTRO_VERSION: "1.41.0" # pinned; bump deliberately (Dependabot does not track it)
+
+jobs:
+  # --------------------------------------------------------------------------
+  detect:
+    name: Detect modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.mods.outputs.backend }}
+      web: ${{ steps.mods.outputs.web }}
+      android: ${{ steps.mods.outputs.android }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: mods
+        run: |
+          flag() { if [ -f "$2" ]; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+          flag backend backend/gradlew
+          flag web     web/package.json
+          flag android android/gradlew
+          cat "$GITHUB_OUTPUT"
+
+  # --------------------------------------------------------------------------
+  check-full:
+    name: make check-full
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: detect
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install SDLC tooling
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
+          sudo apt-get update -q
+          sudo apt-get install -y -q shellcheck jq
+      - uses: actions/setup-java@v5
+        if: needs.detect.outputs.backend == 'true' || needs.detect.outputs.android == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        if: needs.detect.outputs.web == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: android-actions/setup-android@v3
+        if: needs.detect.outputs.android == 'true'
+      - run: make check-full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: check-full-reports
+          path: |
+            backend/build/reports/
+            web/coverage/
+            web/playwright-report/
+            android/**/build/reports/
+            eval/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # --------------------------------------------------------------------------
+  mutation:
+    name: Mutation tests (PIT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - run: make mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pitest-report
+          path: backend/build/reports/pitest/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # --------------------------------------------------------------------------
+  eval:
+    name: AI eval (full)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install eval dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
+      - name: Adapter notice
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::warning::ANTHROPIC_API_KEY missing: full eval runs with the reference adapter only."
+      - run: make eval
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-full-report
+          path: eval/reports/
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # --------------------------------------------------------------------------
+  maestro:
+    name: Maestro e2e on emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Maestro CLI (pinned release)
+        run: |
+          curl -fsSLo /tmp/maestro.zip "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          unzip -q /tmp/maestro.zip -d "$HOME/.maestro-dist"
+          echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
+      - name: Run Maestro flows
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: make e2e MODULE=android
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maestro-report
+          path: |
+            android/**/build/maestro/
+            /home/runner/.maestro/tests/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # --------------------------------------------------------------------------
+  zap:
+    name: OWASP ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    permissions:
+      contents: read
+      issues: write # action-baseline can file an issue; disabled below, kept for opt-in
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - name: Start the stack
+        run: make up
+      - name: Wait for health
+        run: make smoke URL=http://localhost:8080
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:8080
+          cmd_options: "-a -j"
+          allow_issue_writing: false
+          fail_action: false # report-only until the baseline is tuned; then flip to true
+          artifact_name: zap-baseline-report
+      - name: Stop the stack
+        if: always()
+        run: make down
+
+  # --------------------------------------------------------------------------
+  perf:
+    name: Performance (k6, Lighthouse CI, size-limit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: detect
+    if: needs.detect.outputs.backend == 'true' && needs.detect.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: grafana/setup-k6-action@v1
+      - name: Install Lighthouse CI
+        run: npm install --global @lhci/cli
+      - name: Start the stack
+        run: make up
+      - name: Wait for health
+        run: make smoke URL=http://localhost:8080
+      - run: make perf
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-reports
+          path: |
+            .lighthouseci/
+            web/.lighthouseci/
+            backend/build/reports/k6/
+            perf/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Stop the stack
+        if: always()
+        run: make down
+
+  # --------------------------------------------------------------------------
+  mobsf:
+    name: MobSF static scan (APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Build debug APK
+        run: make build-apk
+      - name: Run MobSF and scan the APK
+        run: |
+          set -euo pipefail
+          MOBSF_API_KEY="$(openssl rand -hex 16)" # ephemeral, per run
+          docker run -d --name mobsf -p 8000:8000 -e MOBSF_API_KEY="$MOBSF_API_KEY" \
+            opensecurity/mobile-security-framework-mobsf:latest
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/ >/dev/null 2>&1; then break; fi; sleep 5
+          done
+          apk="$(find android -path '*/outputs/apk/*' -name '*.apk' | head -n 1)"
+          [ -n "$apk" ] || { echo "::error::no APK found after make build-apk"; exit 1; }
+          mkdir -p mobsf-report
+          hash="$(curl -fsS -F "file=@${apk}" -H "Authorization: ${MOBSF_API_KEY}" \
+            http://localhost:8000/api/v1/upload | jq -r .hash)"
+          curl -fsS -X POST -H "Authorization: ${MOBSF_API_KEY}" --data "hash=${hash}" \
+            http://localhost:8000/api/v1/scan > mobsf-report/scan.json
+          curl -fsS -X POST -H "Authorization: ${MOBSF_API_KEY}" --data "hash=${hash}" \
+            http://localhost:8000/api/v1/report_json > mobsf-report/report.json
+          curl -fsS -X POST -H "Authorization: ${MOBSF_API_KEY}" --data "hash=${hash}" \
+            http://localhost:8000/api/v1/scorecard > mobsf-report/scorecard.json
+          jq '{security_score, high: (.high|length), warning: (.warning|length), info: (.info|length)}' \
+            mobsf-report/scorecard.json | tee "$GITHUB_STEP_SUMMARY"
+          # Gate (S9): no HIGH findings. Tune via MobSF's own suppression once the APK exists.
+          high="$(jq '.high|length' mobsf-report/scorecard.json)"
+          if [ "$high" -gt 0 ]; then echo "::error::MobSF reported ${high} HIGH findings"; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobsf-report
+          path: mobsf-report/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Stop MobSF
+        if: always()
+        run: docker rm -f mobsf >/dev/null 2>&1 || true
+
+  # --------------------------------------------------------------------------
+  dependency-report:
+    name: Dependency updates report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Collect open Dependabot PRs and alerts
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          {
+            echo "# Dependency updates report ($(date -u +%F))"
+            echo
+            echo "## Open Dependabot pull requests"
+            gh pr list --repo "$GITHUB_REPOSITORY" --state open --author 'app/dependabot' \
+              --json number,title,createdAt,labels \
+              --template '{{range .}}- #{{.number}} {{.title}} (opened {{timeago .createdAt}}){{"\n"}}{{end}}' \
+              || echo "_could not list PRs_"
+            echo
+            echo "## Open Dependabot alerts"
+            gh api --paginate "/repos/${GITHUB_REPOSITORY}/dependabot/alerts?state=open&per_page=100" \
+              --jq '.[] | "- [\(.security_advisory.severity | ascii_upcase)] \(.dependency.package.ecosystem)/\(.dependency.package.name) in \(.dependency.manifest_path): \(.security_advisory.summary)"' \
+              || echo "_Dependabot alerts API unavailable (enable Dependabot alerts in repo settings)_"
+            echo
+            echo "## Lockfiles present"
+            find . -type f \( -name package-lock.json -o -name gradle.lockfile -o -name 'requirements*.txt' \) \
+              -not -path '*/node_modules/*' | sed 's/^/- /' || true
+          } > reports/dependency-updates.md
+          cat reports/dependency-updates.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-updates-report
+          path: reports/dependency-updates.md
+          retention-days: 90
+
+  # --------------------------------------------------------------------------
+  flaky-report:
+    name: Flaky test report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Find PR runs that failed and then passed on re-run (last 24 h)
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          since="$(date -u -d '24 hours ago' +%FT%TZ)"
+          {
+            echo "# Flaky test report ($(date -u +%F))"
+            echo
+            echo "A run counts as suspicious when a later attempt of the same run succeeded after a failed attempt."
+            echo "S9 flakiness rule: quarantine automatically, open a story, quarantine never exceeds 5 tests."
+            echo
+            gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/workflows/pr.yml/runs?created=>${since}&per_page=100" \
+              --jq '.workflow_runs[] | select(.run_attempt > 1 and .conclusion == "success") | "- run \(.id) (attempt \(.run_attempt)) on \(.head_branch): \(.html_url)"' \
+              || echo "_could not query workflow runs_"
+          } > reports/flaky-tests.md
+          if [ "$(wc -l < reports/flaky-tests.md)" -le 5 ]; then echo "- none" >> reports/flaky-tests.md; fi
+          cat reports/flaky-tests.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flaky-test-report
+          path: reports/flaky-tests.md
+          retention-days: 90
+
+  # --------------------------------------------------------------------------
+  metrics:
+    name: Regenerate SDLC metrics + traceability (PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [check-full]
+    if: always() && needs.check-full.result != 'cancelled'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install --quiet --upgrade pip pyyaml
+      - run: make metrics
+      - run: make trace
+      - name: Open or update the metrics PR (never push to main directly)
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: sdlc/nightly-metrics
+          delete-branch: true
+          add-paths: |
+            docs/SDLC_METRICS.md
+            docs/TRACEABILITY.md
+          commit-message: "chore(sdlc): refresh SDLC metrics and traceability [SDLC]"
+          title: "chore(sdlc): nightly SDLC metrics refresh [SDLC]"
+          body: |
+            Automated nightly refresh of `docs/SDLC_METRICS.md` and `docs/TRACEABILITY.md`
+            from `make metrics` / `make trace` (run ${{ github.run_id }}).
+
+            - [x] No source files touched
+            - [ ] Reviewed numbers for anomalies (TODO(owner))
+          labels: sdlc

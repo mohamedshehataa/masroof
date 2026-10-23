@@ -1,0 +1,425 @@
+# Masroof — pull-request gates (PROMPT.md S12).
+#
+# Rules of this file
+# - Every job calls `make` targets only (S8: the single command surface).
+#   Never call gradlew / npm / pytest directly from CI.
+# - Module jobs are skipped while the module does not exist yet, so the
+#   workflow is green on the SDLC-only skeleton. `hashFiles()` is evaluated on
+#   the runner (after checkout) so it cannot gate a *job*; the `detect` job
+#   publishes outputs that other jobs read through `needs`.
+# - The `gate` job is the single required status check for branch protection:
+#   it fails when any upstream job failed or was cancelled and passes when
+#   upstream jobs were skipped.
+#
+# Secrets used (all optional on PRs):
+#   ANTHROPIC_API_KEY  - enables `claude-review` and the real-API eval adapter;
+#                        when empty, review is skipped and eval uses the
+#                        reference adapter.
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHON_VERSION: "3.12"
+  JAVA_VERSION: "21"
+  NODE_VERSION: "24"
+  MAKEFLAGS: --no-print-directory
+  CI: "true"
+
+jobs:
+  # --------------------------------------------------------------------------
+  detect:
+    name: Detect modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.mods.outputs.backend }}
+      web: ${{ steps.mods.outputs.web }}
+      android: ${{ steps.mods.outputs.android }}
+      contracts: ${{ steps.mods.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: mods
+        name: Publish module flags
+        run: |
+          flag() { if [ -f "$2" ]; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+          flag backend   backend/gradlew
+          flag web       web/package.json
+          flag android   android/gradlew
+          flag contracts contracts/openapi.yaml
+          echo "::group::module flags"; cat "$GITHUB_OUTPUT"; echo "::endgroup::"
+
+  # --------------------------------------------------------------------------
+  labeler:
+    name: Label by path
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Avoid a label -> run -> label loop.
+    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  # --------------------------------------------------------------------------
+  sdlc:
+    name: SDLC (hooks, rules, traceability)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install SDLC tooling
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          sudo apt-get update -q
+          sudo apt-get install -y -q shellcheck jq
+      - name: Fast checks for the sdlc module
+        run: make check-fast MODULE=sdlc
+      - name: Hook tests
+        run: make hooks-test
+      - name: Traceability
+        run: make trace
+
+  # --------------------------------------------------------------------------
+  contract:
+    name: API contract (lint + breaking-change diff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: detect
+    if: needs.detect.outputs.contracts == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Allow breaking changes only with the `breaking-change` label
+        if: contains(github.event.pull_request.labels.*.name, 'breaking-change')
+        run: |
+          echo "MASROOF_ALLOW_BREAKING=1" >> "$GITHUB_ENV"
+          echo "::warning::PR is labeled breaking-change: oasdiff breaking changes are allowed. An ADR is required (S9)."
+      - name: Lint contract
+        run: make contract-lint
+      - name: Diff contract against main
+        run: make contract-diff BASE=origin/main
+
+  # --------------------------------------------------------------------------
+  test-integrity:
+    name: Test integrity (no weakened or deleted tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Compare tests with the base branch
+        run: make test-integrity BASE=origin/${{ github.base_ref }}
+
+  # --------------------------------------------------------------------------
+  eval-fast:
+    name: AI eval (fast subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Empty for fork PRs and when the secret is not configured: the harness
+      # then runs with the deterministic reference adapter.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install eval dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
+      - name: Run fast eval suite
+        run: make eval-fast
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-fast-report
+          path: eval/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  backend:
+    name: Backend (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+          cache-dependency-path: |
+            backend/*.gradle*
+            backend/**/gradle-wrapper.properties
+      - name: Fast checks for backend
+        run: make check-fast MODULE=backend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-reports
+          path: |
+            backend/build/reports/
+            backend/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  web:
+    name: Web (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Fast checks for web
+        run: make check-fast MODULE=web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-test-reports
+          path: |
+            web/coverage/
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  android:
+    name: Android (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle*
+            android/**/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v3
+      - name: Fast checks for android
+        run: make check-fast MODULE=android
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            android/**/build/reports/
+            android/**/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  security-fast:
+    name: Security (gitleaks, semgrep, osv-scanner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history for secret scanning
+      - name: gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: "true"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      - name: semgrep (p/default + .semgrep/ custom rules)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:latest \
+            semgrep scan --config p/default --config .semgrep/ --error --quiet .
+      - name: osv-scanner (lockfiles)
+        # Skipped until a lockfile exists: osv-scanner exits non-zero on "no package sources found".
+        if: hashFiles('**/package-lock.json', '**/pnpm-lock.yaml', '**/gradle.lockfile', '**/gradle/verification-metadata.xml', '**/requirements*.txt', '**/poetry.lock') != ''
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --recursive
+            --skip-git
+            ./
+
+  # --------------------------------------------------------------------------
+  claude-review:
+    name: Claude review (code-reviewer + security-reviewer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      pull-requests: write # posts inline review comments
+      issues: read
+      id-token: write
+    env:
+      # `secrets` is not available in a job-level `if`, so the gate is at step level.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Skip notice
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::notice::ANTHROPIC_API_KEY not configured (or fork PR): skipping Claude review."
+      - uses: actions/checkout@v5
+        if: env.ANTHROPIC_API_KEY != ''
+        with:
+          fetch-depth: 0
+      - name: Review with Claude Code
+        if: env.ANTHROPIC_API_KEY != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE: ${{ github.event.pull_request.base.sha }}
+            HEAD: ${{ github.event.pull_request.head.sha }}
+
+            You are running the CI review stage of the Masroof agentic SDLC.
+            This complements, and never replaces, the local review stage.
+
+            1. Read `.claude/agents/code-reviewer.md` and `.claude/agents/security-reviewer.md`
+               from this checkout and follow both procedures and quality bars.
+               Also read `CLAUDE.md` for the project invariants (money in minor
+               units, never log message bodies, contract-first API, no skipped tests).
+            2. Review ONLY the PR diff (`git diff BASE...HEAD`). Read surrounding
+               code when you need context. Do not modify files.
+            3. Post findings as inline review comments on the exact lines, each
+               prefixed with a severity tag: [BLOCKER], [MAJOR], [MINOR] or [NIT],
+               followed by the REQ ID or invariant it violates when applicable,
+               a one-sentence rationale and a concrete fix.
+            4. Finish with ONE summary comment listing counts per severity and a
+               line `REVIEW_STATUS: PASS` (no BLOCKER/MAJOR) or
+               `REVIEW_STATUS: FAIL` (any BLOCKER/MAJOR). Keep it short.
+            Do not comment on style that a formatter or linter enforces.
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 20
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__github_comment__create_comment,Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+
+  # --------------------------------------------------------------------------
+  artifacts:
+    name: Build artifacts (image, web bundle, debug APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: detect
+    if: needs.detect.outputs.backend == 'true' || needs.detect.outputs.web == 'true' || needs.detect.outputs.android == 'true'
+    env:
+      IMAGE_TAG: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        if: needs.detect.outputs.backend == 'true' || needs.detect.outputs.android == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        if: needs.detect.outputs.web == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: android-actions/setup-android@v3
+        if: needs.detect.outputs.android == 'true'
+      - name: Build backend image
+        if: needs.detect.outputs.backend == 'true'
+        run: make build-images
+      - name: Build web bundle
+        if: needs.detect.outputs.web == 'true'
+        run: make build-web
+      - uses: actions/upload-artifact@v4
+        if: needs.detect.outputs.web == 'true'
+        with:
+          name: web-bundle
+          path: web/dist/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build debug APK
+        if: needs.detect.outputs.android == 'true'
+        run: make build-apk
+      - uses: actions/upload-artifact@v4
+        if: needs.detect.outputs.android == 'true'
+        with:
+          name: android-debug-apk
+          path: android/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  # --------------------------------------------------------------------------
+  gate:
+    name: PR gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - sdlc
+      - contract
+      - test-integrity
+      - eval-fast
+      - backend
+      - web
+      - android
+      - security-fast
+      - artifacts
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"result": *"(failure|cancelled)"'; then
+            echo "::error::At least one required job failed or was cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed or were skipped (module not present yet)."

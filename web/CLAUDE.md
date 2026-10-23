@@ -1,0 +1,27 @@
+# web/ - React PWA conventions
+
+React 19 + TypeScript (strict, `noUncheckedIndexedAccess`) + Vite, TanStack Query, Tailwind, shadcn/ui, Recharts,
+i18next (ar/en, RTL), vite-plugin-pwa. Installed to the iPhone home screen; also the desktop layout.
+Module arrives in Phase 1 (walking skeleton page) and grows in Phase 2.
+
+## Layout
+```
+src/api/generated/   TypeScript client generated from ../contracts/openapi.yaml (never hand-edited)
+src/api/             thin wrappers, query keys, SSE client
+src/features/<area>/ screens + components per tab (home, transactions, add, insights, more, review, onboarding)
+src/components/ui/   shadcn primitives; src/components/ shared (AmountText, MemberChip, SourceIcon, EmptyState, Skeleton, ErrorState)
+src/i18n/{ar,en}.json  every user-facing string; ESLint forbids hard-coded strings in JSX
+src/lib/money.ts     format minor units per locale and digit setting (1,250 EGP / ١٬٢٥٠ ج.م); never floats for money
+src/lib/dates.ts     Africa/Cairo periods, month-start-day
+e2e/                 Playwright (LTR/RTL x light/dark x mobile/desktop) + axe-core
+```
+
+## npm scripts the SDLC calls (define in package.json)
+- `check-fast` = `tsc --noEmit` + `eslint .` (typescript-eslint strict-type-checked, jsx-a11y, react-hooks, i18n no-literal-strings) + `prettier --check` + `vitest run`.
+- `test:coverage` (>= 85% on hooks/utils/components), `build`, `e2e` (Playwright), `size` (size-limit: initial JS <= 200 KB gzip), `lighthouse` (Performance >= 90, Accessibility = 100, Best Practices >= 95, installable).
+
+## Rules
+- Every list has empty, loading (skeleton), error (retry) and offline states; pull-to-refresh on mobile; 48px touch targets; AA contrast; `dir` switches with language; icons that imply direction are mirrored in RTL.
+- Amounts are integers in minor units from the API; formatting happens only in `lib/money.ts` (tabular numerals, Western or Arabic-Indic digits per setting).
+- Offline: cached app shell + last-viewed data; manual entries queue in IndexedDB and sync on reconnect; web push for budget alerts/review requests; Web Share Target for receipts.
+- Tests: Vitest + Testing Library named `describe('REQ-UI-012 ...')`; Playwright specs carry REQ ids; axe has zero serious/critical violations.

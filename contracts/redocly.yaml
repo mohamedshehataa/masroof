@@ -1,0 +1,14 @@
+# Redocly CLI configuration for `npx --yes @redocly/cli@2 lint contracts/openapi.yaml`.
+# Run from the repo root with --config contracts/redocly.yaml (Redocly only auto-discovers a config in the cwd).
+extends:
+  - recommended
+rules:
+  # The first server entry is the local `make up` stack on localhost:8080, on purpose:
+  # generated clients default to it in dev. Production is the `https://{domain}` entry.
+  no-server-example.com: off
+  # Everything else stays at the `recommended` severity. Tighten a few rules we rely on:
+  operation-4xx-response: error
+  operation-operationId: error
+  no-unused-components: error
+  tag-description: error
+  info-license: error

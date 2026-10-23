@@ -1,0 +1,16 @@
+# gitleaks config: default rules + project allowlist for anonymized fixtures.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Anonymized fixtures and documented placeholders"
+paths = [
+  '''fixtures/.*''',
+  '''eval/datasets/.*''',
+  '''\.env\.example$''',
+  '''docs/SDLC_SELFTEST\.md$''',
+]
+regexes = [
+  '''changeme[a-zA-Z0-9-]*''',
+  '''\+2010000[0-9]{5}''',
+]

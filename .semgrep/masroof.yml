@@ -1,0 +1,215 @@
+# Masroof custom semgrep rules (PROMPT.md S9 "Security": custom rules for
+# logging of message content, string-concatenated SQL, money invariant,
+# System.out, exported Android components).
+#
+# Run locally:  semgrep scan --config .semgrep/ .
+# CI:           make security  /  .github/workflows/pr.yml security-fast job
+# Each rule carries the REQ-SEC id it enforces (docs/security/THREAT_MODEL.md).
+rules:
+  # ---------------------------------------------------------------------------
+  # (a) Never log message bodies / OCR text / payloads (REQ-SEC-005)
+  # ---------------------------------------------------------------------------
+  - id: masroof-no-log-message-content-jvm
+    message: >-
+      Do not log raw message content ($FIELD). Bank SMS, WhatsApp texts, OCR text
+      and payloads are PII; log ids, lengths or hashes instead (REQ-SEC-005, S13).
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      category: security
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+      masroof-req: REQ-SEC-005
+      owasp-llm: LLM02
+    paths:
+      exclude:
+        - "**/src/test/**"
+        - "**/src/androidTest/**"
+        - "**/src/testFixtures/**"
+    patterns:
+      - pattern-either:
+          - pattern-inside: $LOG.$METHOD(...)
+          - pattern-inside: $LOG.atLevel(...).$METHOD(...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(trace|debug|info|warn|warning|error|fatal|severe|v|d|i|w|e|wtf|log)$
+      - pattern-either:
+          - pattern: $OBJ.$FIELD
+          - pattern: $OBJ.$FIELD()
+          - pattern: $FIELD
+      - metavariable-regex:
+          metavariable: $FIELD
+          regex: (?i)^(get)?(body|text|ocr_?text|raw_?text|payload|message_?body|sms_?body)$
+
+  - id: masroof-no-log-message-content-ts
+    message: >-
+      Do not log raw message content ($FIELD) from the web app. Log ids or
+      lengths only (REQ-SEC-005).
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+      masroof-req: REQ-SEC-005
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.spec.ts"
+        - "**/e2e/**"
+    patterns:
+      - pattern-either:
+          - pattern-inside: console.$METHOD(...)
+          - pattern-inside: $LOGGER.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(log|info|debug|warn|error|trace|table|dir)$
+      - pattern-either:
+          - pattern: $OBJ.$FIELD
+          - pattern: $OBJ?.$FIELD
+          - pattern: $FIELD
+      - metavariable-regex:
+          metavariable: $FIELD
+          regex: (?i)^(body|text|ocr_?text|raw_?text|payload|message_?body|sms_?body)$
+
+  # ---------------------------------------------------------------------------
+  # (b) No string-concatenated SQL (REQ-SEC-023 / injection)
+  # ---------------------------------------------------------------------------
+  - id: masroof-no-string-concat-sql
+    message: >-
+      SQL built by string concatenation or formatting. Use JPA/JPQL parameters,
+      `NamedParameterJdbcTemplate` or a `PreparedStatement` placeholder (CWE-89).
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      masroof-req: REQ-SEC-023
+      owasp: A03:2021 Injection
+    patterns:
+      - pattern-either:
+          - pattern: '"$SQL" + $X'
+          - pattern: '$X + "$SQL"'
+          - pattern: String.format("$SQL", ...)
+          - pattern: '"$SQL".formatted(...)'
+          - pattern: '"$SQL".format(...)'
+          - pattern: String.join($SEP, "$SQL", ...)
+          - pattern: new StringBuilder("$SQL").append(...)
+          - pattern: $SB.append("$SQL").append($X)
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: (?is)^\s*(select|insert|update|delete|with|merge|create|alter|drop|truncate)\b.*
+
+  - id: masroof-no-template-sql-kotlin
+    message: >-
+      SQL built with a Kotlin string template. Use JPA/JPQL parameters or
+      `PreparedStatement` placeholders (CWE-89).
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      masroof-req: REQ-SEC-023
+    pattern-regex: '"{1,3}\s*(?i:select|insert|update|delete|with|merge|create|alter|drop|truncate)\b[^"]*\$\{?[A-Za-z_]'
+
+  # ---------------------------------------------------------------------------
+  # (c) Money invariant: never double/float for money (REQ-SEC-019, CLAUDE.md)
+  # ---------------------------------------------------------------------------
+  - id: masroof-money-not-floating-java
+    message: >-
+      Money field/parameter `$NAME` uses a floating-point type `$T`. Money is a
+      `long` in minor units (piasters) or `BigDecimal` with explicit scale.
+      Never `double`/`float` (CLAUDE.md invariant, ArchUnit rule).
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: correctness
+      masroof-req: REQ-SEC-019
+    patterns:
+      - pattern-either:
+          - pattern: $T $NAME;
+          - pattern: $T $NAME = $V;
+          - pattern: |
+              $RET $M(..., $T $NAME, ...) { ... }
+          - pattern: |
+              $RET $M(..., $T $NAME, ...);
+          - pattern: |
+              record $R(..., $T $NAME, ...) { ... }
+      - metavariable-regex:
+          metavariable: $T
+          regex: ^(double|float|Double|Float)$
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i)(amount|price|total|balance|fee|rate_?egp|share)
+
+  - id: masroof-money-not-floating-kotlin
+    message: >-
+      Money property/parameter uses Double/Float. Money is a `Long` in minor
+      units (piasters) or `BigDecimal`; never floating point (detekt rule mirrors this).
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      category: correctness
+      masroof-req: REQ-SEC-019
+    pattern-regex: '\b(?:val|var)?\s*\w*(?i:amount|price|total|balance|fee|rate_?egp|share)\w*\s*:\s*(?:Double|Float)\??\b'
+
+  - id: masroof-money-not-floating-ts
+    message: >-
+      Money value parsed or formatted as a float. Amounts travel as integer minor
+      units (piasters) or decimal strings; use the shared money helpers, never
+      parseFloat/toFixed arithmetic.
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      category: correctness
+      masroof-req: REQ-SEC-019
+    pattern-either:
+      - pattern-regex: '\b\w*(?i:amount|price|total|balance|fee|rate_?egp|share)\w*\s*[:=]\s*(?:Number\.)?parseFloat\('
+      - pattern-regex: '\b\w*(?i:amount|price|total|balance|fee|rate_?egp|share)\w*\s*\.toFixed\('
+      - pattern-regex: '\b\w*(?i:amount|price|total|balance|fee|rate_?egp|share)\w*\??\s*:\s*(?:float|double)\b'
+
+  # ---------------------------------------------------------------------------
+  # (d) No System.out / System.err in backend production code (S9 ArchUnit mirror)
+  # ---------------------------------------------------------------------------
+  - id: masroof-no-system-out-backend
+    message: >-
+      `System.$STREAM` in production code bypasses structured JSON logging and
+      redaction (S13). Use the SLF4J logger.
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      category: best-practice
+      masroof-req: REQ-SEC-005
+    paths:
+      include:
+        - "backend/src/main/**"
+    patterns:
+      - pattern: System.$STREAM.$PRINT(...)
+      - metavariable-regex:
+          metavariable: $STREAM
+          regex: ^(out|err)$
+      - metavariable-regex:
+          metavariable: $PRINT
+          regex: ^(print|println|printf|format|write)$
+
+  # ---------------------------------------------------------------------------
+  # (e) No exported Android components without a permission (REQ-SEC-017, MASVS-PLATFORM-1)
+  # ---------------------------------------------------------------------------
+  - id: masroof-android-exported-without-permission
+    message: >-
+      Component is `android:exported="true"` without an `android:permission`.
+      Only the launcher activity may be exported without a permission; every
+      other activity/service/receiver/provider needs one or must not be
+      exported (MASVS-PLATFORM-1, REQ-SEC-017).
+    severity: ERROR
+    languages: [generic]
+    metadata:
+      category: security
+      cwe: "CWE-926: Improper Export of Android Application Components"
+      masroof-req: REQ-SEC-017
+    paths:
+      include:
+        - "**/AndroidManifest.xml"
+      exclude:
+        - "**/build/**"
+    # One tag; permission may appear before or after exported; launcher activity is exempt by name.
+    pattern-regex: '<(activity|activity-alias|service|receiver|provider)\b(?![^>]*android:permission=)(?![^>]*android:name="[^"]*(?:MainActivity|LauncherActivity)")(?=[^>]*android:exported="true")[^>]*>'

@@ -1,0 +1,4012 @@
+openapi: 3.1.0
+info:
+  title: Masroof API
+  version: 0.1.0
+  summary: Household expense tracker for Egypt (WhatsApp, SMS, receipts, analytics).
+  description: |
+    **Contract-first.** This file is the single source of truth for the Masroof backend API.
+    Spring server interfaces, the TypeScript (PWA) client and the Kotlin (Android) client are
+    generated from it; generated code is never hand-edited. Breaking changes are gated by
+    `scripts/quality/oasdiff.sh` and require an ADR (see `docs/adr/0001-contract-first-openapi.md`).
+
+    ## Conventions
+    - JSON bodies use `camelCase`.
+    - **Money is never a float.** Every monetary value is a `Money` object: integer minor units
+      (piastres for EGP, cents for USD) plus an ISO-4217 currency code.
+    - All timestamps are RFC 3339 `date-time` in UTC; calendar dates are `YYYY-MM-DD` interpreted in
+      the household timezone (`Africa/Cairo` by default).
+    - Every 4xx/5xx response is an RFC 9457 `application/problem+json` document (`Problem`).
+    - Collections are paginated with an opaque cursor: `{ items, nextCursor }`.
+    - IDs are UUIDs. Everything is scoped to the caller's household.
+    - `x-req` on an operation lists the requirement IDs (S11) it realises.
+  contact:
+    name: Masroof maintainers
+    url: https://github.com/masroof/masroof
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Masroof-Proprietary
+
+servers:
+  - url: http://localhost:8080
+    description: Local development (`make up`).
+  - url: https://{domain}
+    description: Self-hosted production behind Caddy (HTTPS is required for WhatsApp webhooks).
+    variables:
+      domain:
+        default: masroof.invalid
+        description: The public hostname configured in `infra/.env`.
+
+tags:
+  - name: Health
+    description: Liveness, readiness and build information (used by the walking skeleton).
+  - name: App
+    description: Sideloaded Android app distribution metadata.
+  - name: Auth
+    description: Email + password login, rotating refresh tokens, household invites.
+  - name: Expenses
+    description: The expense ledger (expenses, income, refunds, transfers, cash withdrawals).
+  - name: Review
+    description: Review inbox for pending, low-confidence and possible-duplicate entries.
+  - name: Ingest
+    description: Device ingestion endpoints (SMS, push notifications, receipts, free text). Authenticated with a per-device token.
+  - name: Parsing
+    description: Side-effect-free parsing endpoints used by the eval harness and the "preview" UI.
+  - name: Webhooks
+    description: Inbound webhooks from the WhatsApp Business Cloud API.
+  - name: Categories
+    description: Bilingual expense categories (tree).
+  - name: Accounts
+    description: Payment accounts (cards, bank accounts, wallets, cash) and their owner.
+  - name: Merchants
+    description: Normalised merchants and aliases.
+  - name: Merchant rules
+    description: Learned and manual merchant -> category/member rules applied before the LLM.
+  - name: Budgets
+    description: Per-category or total budgets with alert thresholds.
+  - name: Recurring
+    description: Auto-detected and manual recurring series / subscriptions.
+  - name: SMS templates
+    description: Per-sender regex templates for the deterministic SMS parser.
+  - name: Devices
+    description: Registered ingestion devices and their revocable tokens.
+  - name: Analytics
+    description: Server-computed analytics; clients only render.
+  - name: Export
+    description: Export the ledger to CSV, XLSX or PDF.
+  - name: Import
+    description: Import historical data (CSV, Google Sheets export).
+  - name: Settings
+    description: Household settings.
+  - name: Stream
+    description: Server-Sent Events so open apps update live.
+
+security:
+  - bearerJwt: []
+
+paths:
+  # ---------------------------------------------------------------- Health / App
+  /health:
+    get:
+      tags: [Health]
+      summary: Health and build information
+      description: Returns `UP` when the service and its database are reachable. No authentication.
+      operationId: getHealth
+      security: []
+      x-req: [REQ-OPS-001]
+      responses:
+        '200':
+          description: Service is up (or degraded, reported as status DOWN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Service is not ready.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/app/android/latest:
+    get:
+      tags: [App]
+      summary: Latest sideloadable Android build
+      description: Metadata for the newest signed release APK so the app can self-update.
+      operationId: getAndroidLatest
+      security: []
+      x-req: [REQ-AND-001]
+      responses:
+        '200':
+          description: Latest build metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AndroidRelease'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Auth
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email and password
+      operationId: login
+      security: []
+      x-req: [REQ-SEC-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Access and refresh tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token
+      description: Exchanges a valid refresh token for a new token pair. The old refresh token is revoked (rotation); reuse of a rotated token revokes the whole family.
+      operationId: refreshToken
+      security: []
+      x-req: [REQ-SEC-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      description: Revokes the presented refresh token (and optionally all sessions of the user).
+      operationId: logout
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Logged out.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/invite:
+    post:
+      tags: [Auth]
+      summary: Invite a member to the household
+      description: Admin only. Creates a single-use invite code delivered out of band (WhatsApp or e-mail).
+      operationId: createInvite
+      x-req: [REQ-SEC-002]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteRequest'
+      responses:
+        '201':
+          description: Invite created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/invite/accept:
+    post:
+      tags: [Auth]
+      summary: Accept an invite and create the member account
+      operationId: acceptInvite
+      security: []
+      x-req: [REQ-SEC-002]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteAcceptRequest'
+      responses:
+        '201':
+          description: Account created; tokens returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Invite expired or already used.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  # ---------------------------------------------------------------- Expenses
+  /api/expenses:
+    get:
+      tags: [Expenses]
+      summary: List expenses
+      description: Filterable, sortable, cursor-paginated ledger. Soft-deleted entries are excluded unless `includeDeleted=true`.
+      operationId: listExpenses
+      x-req: [REQ-EXP-001]
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: memberId
+          in: query
+          description: Paid-by member.
+          schema:
+            type: string
+            format: uuid
+        - name: categoryId
+          in: query
+          description: Category (includes sub-categories).
+          schema:
+            type: string
+            format: uuid
+        - name: merchantId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: accountId
+          in: query
+          description: Payment account.
+          schema:
+            type: string
+            format: uuid
+        - name: source
+          in: query
+          schema:
+            $ref: '#/components/schemas/MessageSource'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ExpenseStatus'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: minAmountMinor
+          in: query
+          description: Inclusive lower bound on the base-currency amount, in minor units.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: maxAmountMinor
+          in: query
+          description: Inclusive upper bound on the base-currency amount, in minor units.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: q
+          in: query
+          description: Free-text search over merchant, notes, item names and raw message text.
+          schema:
+            type: string
+            maxLength: 200
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: sort
+          in: query
+          description: Sort key; prefix with `-` for descending.
+          schema:
+            type: string
+            enum: [occurredAt, -occurredAt, amount, -amount, createdAt, -createdAt]
+            default: -occurredAt
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of expenses.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpensePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Expenses]
+      summary: Create an expense manually
+      operationId: createExpense
+      x-req: [REQ-EXP-002]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/expenses/{expenseId}:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    get:
+      tags: [Expenses]
+      summary: Get an expense
+      operationId: getExpense
+      responses:
+        '200':
+          description: The expense with items, sources and splits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Expenses]
+      summary: Update an expense
+      description: Partial update. Changing `categoryId` or `merchantId` records a correction and updates merchant rules (learning).
+      operationId: updateExpense
+      x-req: [REQ-EXP-003]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpensePatch'
+      responses:
+        '200':
+          description: Updated expense.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Expenses]
+      summary: Soft-delete an expense
+      description: Sets `deletedAt`; the entry can be restored with `restoreExpense`.
+      operationId: deleteExpense
+      x-req: [REQ-EXP-004]
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/expenses/{expenseId}/merge:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    post:
+      tags: [Expenses]
+      summary: Merge other expenses into this one
+      description: The target keeps the authoritative charged amount; merged entries contribute their sources (e.g. receipt line items) and are soft-deleted with status IGNORED.
+      operationId: mergeExpenses
+      x-req: [REQ-DEDUP-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeRequest'
+      responses:
+        '200':
+          description: The merged expense.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/expenses/{expenseId}/split:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    post:
+      tags: [Expenses]
+      summary: Split an expense between members
+      description: Sets `splitMode` and the per-member shares. Shares must sum exactly to the expense amount (no rounding leakage).
+      operationId: splitExpense
+      x-req: [REQ-EXP-005]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SplitRequest'
+      responses:
+        '200':
+          description: The expense with its splits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/expenses/{expenseId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    post:
+      tags: [Expenses]
+      summary: Restore a soft-deleted expense
+      operationId: restoreExpense
+      x-req: [REQ-EXP-004]
+      responses:
+        '200':
+          description: Restored expense.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------- Review
+  /api/review:
+    get:
+      tags: [Review]
+      summary: List entries awaiting review
+      operationId: listReview
+      x-req: [REQ-EXP-006]
+      parameters:
+        - name: reason
+          in: query
+          schema:
+            $ref: '#/components/schemas/ReviewReason'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Review items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/review/{expenseId}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    post:
+      tags: [Review]
+      summary: Resolve a review item
+      operationId: resolveReview
+      x-req: [REQ-EXP-006, REQ-DEDUP-002]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveRequest'
+      responses:
+        '200':
+          description: Resolved expense.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------- Ingest
+  /api/ingest/sms:
+    post:
+      tags: [Ingest]
+      summary: Ingest a bank/wallet SMS
+      description: |
+        Used by the Android app and the iOS Shortcut. Idempotent on `(deviceId, smsId)`.
+        OTP messages must be dropped on-device and are rejected server-side as a second line of defence.
+        The server answers `202` as soon as the raw message is persisted; parsing is asynchronous.
+      operationId: ingestSms
+      security:
+        - deviceToken: []
+      x-req: [REQ-SMS-001, REQ-IOS-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestSmsRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/IngestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/ingest/notification:
+    post:
+      tags: [Ingest]
+      summary: Ingest a bank-app push notification
+      description: From the Android `NotificationListenerService`. Idempotent on `(deviceId, notificationKey)`.
+      operationId: ingestNotification
+      security:
+        - deviceToken: []
+      x-req: [REQ-NTF-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestNotificationRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/IngestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/ingest/receipt:
+    post:
+      tags: [Ingest]
+      summary: Upload a receipt image or PDF
+      description: Multipart upload. Content type is sniffed server-side; only JPEG, PNG, HEIC, WEBP and PDF are accepted. Duplicate images (same SHA-256 or perceptual hash) are reported as `DUPLICATE`.
+      operationId: ingestReceipt
+      security:
+        - deviceToken: []
+        - bearerJwt: []
+      x-req: [REQ-RCPT-001]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IngestReceiptForm'
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, image/heic, image/webp, application/pdf
+      responses:
+        '202':
+          $ref: '#/components/responses/IngestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          description: Unsupported media type after sniffing.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/ingest/text:
+    post:
+      tags: [Ingest]
+      summary: Ingest free text (quick add)
+      description: Same parser as WhatsApp text. Used by the Android quick-add widget, the PWA and the iOS Shortcut.
+      operationId: ingestText
+      security:
+        - deviceToken: []
+        - bearerJwt: []
+      x-req: [REQ-PARSE-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestTextRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/IngestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  # ---------------------------------------------------------------- Parsing (dry run)
+  /api/parse/dry-run:
+    post:
+      tags: [Parsing]
+      summary: Parse text without persisting anything
+      description: |
+        Runs normalisation, classification and extraction and returns the structured result.
+        No `raw_message` or `expense` is written, no reply is sent. Used by `eval/runners/run.py --adapter http`
+        and the "preview before saving" UI. Input is treated strictly as data (S10.5).
+      operationId: parseDryRun
+      x-req: [REQ-PARSE-001, REQ-PARSE-002]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseRequest'
+      responses:
+        '200':
+          description: Structured parse result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  # ---------------------------------------------------------------- Webhooks
+  /webhooks/whatsapp:
+    get:
+      tags: [Webhooks]
+      summary: WhatsApp webhook verification handshake
+      description: Meta calls this once when the webhook URL is registered. Echoes `hub.challenge` when `hub.verify_token` matches.
+      operationId: verifyWhatsappWebhook
+      security: []
+      x-req: [REQ-WA-001]
+      parameters:
+        - name: hub.mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [subscribe]
+        - name: hub.verify_token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: hub.challenge
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The challenge, echoed verbatim.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Webhooks]
+      summary: Receive WhatsApp events
+      description: |
+        Every request must carry a valid `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with the app secret).
+        The payload is persisted as a `raw_message` and `200` is returned within 1 s; processing is asynchronous.
+        Idempotent on the WhatsApp message ID (Meta retries).
+      operationId: receiveWhatsappWebhook
+      security: []
+      x-req: [REQ-WA-002, REQ-SEC-003]
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^sha256=[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsappWebhookPayload'
+      responses:
+        '200':
+          description: Acknowledged (always, even for unknown senders, to stop retries).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  # ---------------------------------------------------------------- Categories
+  /api/categories:
+    get:
+      tags: [Categories]
+      summary: List categories
+      operationId: listCategories
+      parameters:
+        - name: includeArchived
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: All categories of the household (flat list with `parentId`).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Categories]
+      summary: Create a category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Categories]
+      summary: Get a category
+      operationId: getCategory
+      responses:
+        '200':
+          description: The category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Categories]
+      summary: Update a category
+      operationId: updateCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Categories]
+      summary: Archive a category
+      description: Categories with expenses are archived, not deleted.
+      operationId: deleteCategory
+      responses:
+        '204':
+          description: Archived.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Accounts
+  /api/accounts:
+    get:
+      tags: [Accounts]
+      summary: List payment accounts
+      operationId: listAccounts
+      responses:
+        '200':
+          description: Accounts of all household members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Accounts]
+      summary: Create a payment account
+      operationId: createAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentAccountInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/accounts/{accountId}:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Accounts]
+      summary: Get a payment account
+      operationId: getAccount
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Accounts]
+      summary: Update a payment account
+      operationId: updateAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentAccountInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Accounts]
+      summary: Delete a payment account
+      operationId: deleteAccount
+      responses:
+        '204':
+          description: Deleted (soft).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------- Merchants
+  /api/merchants:
+    get:
+      tags: [Merchants]
+      summary: List merchants
+      operationId: listMerchants
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of merchants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Merchant'
+                  nextCursor:
+                    $ref: '#/components/schemas/NextCursor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Merchants]
+      summary: Create a merchant
+      operationId: createMerchant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/merchants/{merchantId}:
+    parameters:
+      - name: merchantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Merchants]
+      summary: Get a merchant
+      operationId: getMerchant
+      responses:
+        '200':
+          description: The merchant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Merchants]
+      summary: Update a merchant
+      operationId: updateMerchant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Merchants]
+      summary: Delete a merchant
+      operationId: deleteMerchant
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------- Merchant rules
+  /api/merchant-rules:
+    get:
+      tags: [Merchant rules]
+      summary: List merchant rules
+      operationId: listMerchantRules
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of rules ordered by priority.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MerchantRule'
+                  nextCursor:
+                    $ref: '#/components/schemas/NextCursor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Merchant rules]
+      summary: Create a merchant rule
+      operationId: createMerchantRule
+      x-req: [REQ-PARSE-003]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRuleInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/merchant-rules/{ruleId}:
+    parameters:
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Merchant rules]
+      summary: Get a merchant rule
+      operationId: getMerchantRule
+      responses:
+        '200':
+          description: The rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Merchant rules]
+      summary: Update a merchant rule
+      operationId: updateMerchantRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRuleInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Merchant rules]
+      summary: Delete a merchant rule
+      operationId: deleteMerchantRule
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Budgets
+  /api/budgets:
+    get:
+      tags: [Budgets]
+      summary: List budgets
+      operationId: listBudgets
+      responses:
+        '200':
+          description: All budgets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Budget'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Budgets]
+      summary: Create a budget
+      operationId: createBudget
+      x-req: [REQ-AN-008]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/budgets/{budgetId}:
+    parameters:
+      - name: budgetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Budgets]
+      summary: Get a budget
+      operationId: getBudget
+      responses:
+        '200':
+          description: The budget.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Budgets]
+      summary: Update a budget
+      operationId: updateBudget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Budgets]
+      summary: Delete a budget
+      operationId: deleteBudget
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Recurring
+  /api/recurring:
+    get:
+      tags: [Recurring]
+      summary: List recurring series
+      operationId: listRecurring
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Recurring series, with the next expected charge first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecurringSeries'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Recurring]
+      summary: Create a recurring series manually
+      operationId: createRecurring
+      x-req: [REQ-AN-009]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringSeriesInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringSeries'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/recurring/{seriesId}:
+    parameters:
+      - name: seriesId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Recurring]
+      summary: Get a recurring series
+      operationId: getRecurring
+      responses:
+        '200':
+          description: The series.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringSeries'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Recurring]
+      summary: Update a recurring series
+      operationId: updateRecurring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringSeriesInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringSeries'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Recurring]
+      summary: Delete a recurring series
+      operationId: deleteRecurring
+      responses:
+        '204':
+          description: Deleted. Linked expenses keep their data but lose `recurringSeriesId`.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- SMS templates
+  /api/sms-templates:
+    get:
+      tags: [SMS templates]
+      summary: List SMS templates
+      operationId: listSmsTemplates
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SmsTemplateStatus'
+      responses:
+        '200':
+          description: Templates (ACTIVE, PROPOSED by template learning, DISABLED).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SmsTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [SMS templates]
+      summary: Create an SMS template
+      operationId: createSmsTemplate
+      x-req: [REQ-SMS-002]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SmsTemplateInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsTemplate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/sms-templates/{templateId}:
+    parameters:
+      - name: templateId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [SMS templates]
+      summary: Get an SMS template
+      operationId: getSmsTemplate
+      responses:
+        '200':
+          description: The template.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [SMS templates]
+      summary: Update an SMS template (approve, disable, edit regex)
+      operationId: updateSmsTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SmsTemplateInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsTemplate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [SMS templates]
+      summary: Delete an SMS template
+      operationId: deleteSmsTemplate
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Devices
+  /api/devices:
+    get:
+      tags: [Devices]
+      summary: List registered devices
+      operationId: listDevices
+      responses:
+        '200':
+          description: Devices of the household (tokens are never returned here).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Devices]
+      summary: Register a device and issue its token
+      description: The plaintext device token is returned **once** in this response; only its hash is stored.
+      operationId: createDevice
+      x-req: [REQ-SEC-004]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceInput'
+      responses:
+        '201':
+          description: Device registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Devices]
+      summary: Get a device
+      operationId: getDevice
+      responses:
+        '200':
+          description: The device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Devices]
+      summary: Rename a device
+      operationId: updateDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceInput'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Revoke a device
+      description: Revokes the device token immediately. Already-ingested messages are kept.
+      operationId: deleteDevice
+      x-req: [REQ-SEC-004]
+      responses:
+        '204':
+          description: Revoked.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- Analytics
+  /api/analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Period overview
+      description: Total, comparison with the previous period, daily average, projection, remaining budget and days left. Respects `monthStartDay` and Cairo time.
+      operationId: getAnalyticsSummary
+      x-req: [REQ-AN-001]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+        - $ref: '#/components/parameters/IncludeCashWithdrawals'
+      responses:
+        '200':
+          description: Overview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/by-category:
+    get:
+      tags: [Analytics]
+      summary: Spend by category
+      operationId: getAnalyticsByCategory
+      x-req: [REQ-AN-002]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+        - $ref: '#/components/parameters/IncludeCashWithdrawals'
+        - name: parentId
+          in: query
+          description: Drill into the sub-categories of this category.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ranked categories with month-over-month change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryBreakdown'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/by-member:
+    get:
+      tags: [Analytics]
+      summary: Spend by member
+      operationId: getAnalyticsByMember
+      x-req: [REQ-AN-003]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+        - $ref: '#/components/parameters/IncludeCashWithdrawals'
+      responses:
+        '200':
+          description: Who paid what.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberBreakdown'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/by-merchant:
+    get:
+      tags: [Analytics]
+      summary: Top merchants
+      operationId: getAnalyticsByMerchant
+      x-req: [REQ-AN-004]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Top merchants with visit frequency and average ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantBreakdown'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/trend:
+    get:
+      tags: [Analytics]
+      summary: Multi-period trend
+      operationId: getAnalyticsTrend
+      x-req: [REQ-AN-005]
+      parameters:
+        - name: months
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 36
+            default: 6
+        - $ref: '#/components/parameters/IncludeCashWithdrawals'
+      responses:
+        '200':
+          description: Per-period totals stacked by category, income and savings rate when available.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/heatmap:
+    get:
+      tags: [Analytics]
+      summary: Calendar heatmap and time patterns
+      operationId: getAnalyticsHeatmap
+      x-req: [REQ-AN-006, REQ-AN-007]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+        - $ref: '#/components/parameters/IncludeCashWithdrawals'
+      responses:
+        '200':
+          description: Spend per day plus weekday x hour matrix.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Heatmap'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/budgets:
+    get:
+      tags: [Analytics]
+      summary: Budget progress
+      operationId: getAnalyticsBudgets
+      x-req: [REQ-AN-008]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+      responses:
+        '200':
+          description: Progress per budget with threshold alerts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetStatusList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/forecast:
+    get:
+      tags: [Analytics]
+      summary: Month-end forecast
+      operationId: getAnalyticsForecast
+      x-req: [REQ-AN-001]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+      responses:
+        '200':
+          description: Linear and weekday-aware projections plus upcoming recurring charges.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Forecast'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/insights:
+    get:
+      tags: [Analytics]
+      summary: Anomalies and insights
+      operationId: getAnalyticsInsights
+      x-req: [REQ-AN-010, REQ-AN-011]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+      responses:
+        '200':
+          description: Anomalies, recurring changes, fee summary, item price history, data-quality stats and the latest AI narrative.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Insights'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/analytics/settlement:
+    get:
+      tags: [Analytics]
+      summary: Settlement between members
+      operationId: getAnalyticsSettlement
+      x-req: [REQ-AN-003]
+      parameters:
+        - $ref: '#/components/parameters/Period'
+      responses:
+        '200':
+          description: Running balance for shared expenses.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------- Export / Import
+  /api/export:
+    get:
+      tags: [Export]
+      summary: Export the ledger
+      operationId: exportLedger
+      x-req: [REQ-EXP-007]
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [csv, xlsx, pdf]
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: The file. `Content-Disposition` carries a filename.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                contentEncoding: binary
+            application/pdf:
+              schema:
+                type: string
+                contentEncoding: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/import:
+    post:
+      tags: [Import]
+      summary: Import historical expenses
+      description: Accepts the Masroof CSV format or a Google Sheets CSV export of the legacy tracker. Use `dryRun=true` to preview the mapping and row errors.
+      operationId: importLedger
+      x-req: [REQ-EXP-008]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportForm'
+            encoding:
+              file:
+                contentType: text/csv
+      responses:
+        '200':
+          description: Import result (or dry-run preview).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ---------------------------------------------------------------- Settings
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Get household settings
+      operationId: getSettings
+      responses:
+        '200':
+          description: Settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Settings]
+      summary: Update household settings
+      operationId: updateSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsPatch'
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- Stream
+  /api/stream:
+    get:
+      tags: [Stream]
+      summary: Live event stream (SSE)
+      description: |
+        `text/event-stream`. Each event has `event: <StreamEvent.type>`, `id: <StreamEvent.id>` and a JSON `data:` line
+        shaped like `StreamEvent`. Clients resume with `Last-Event-ID`. The server sends a `: ping` comment every 25 s.
+      operationId: streamEvents
+      x-req: [REQ-UI-001]
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: An open SSE stream.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/StreamEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token from `/auth/login` or `/auth/refresh`.
+    deviceToken:
+      type: http
+      scheme: bearer
+      description: Per-device, revocable token issued by `createDevice`. Only valid for `/api/ingest/*`.
+
+  parameters:
+    ExpenseId:
+      name: expenseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from a previous page's `nextCursor`.
+      schema:
+        type: string
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    FromDate:
+      name: from
+      in: query
+      description: Inclusive start date (household timezone).
+      schema:
+        type: string
+        format: date
+    ToDate:
+      name: to
+      in: query
+      description: Inclusive end date (household timezone).
+      schema:
+        type: string
+        format: date
+    Period:
+      name: period
+      in: query
+      description: |
+        Analytics period. `current` (default) and `previous` follow the household `monthStartDay`;
+        `YYYY-MM` selects the household month that starts in that calendar month; `YYYY-Www` selects an ISO week.
+      schema:
+        type: string
+        pattern: '^(current|previous|\d{4}-\d{2}|\d{4}-W\d{2})$'
+        default: current
+    IncludeCashWithdrawals:
+      name: includeCashWithdrawals
+      in: query
+      description: Count `CASH_WITHDRAWAL` entries as spending. Defaults to the household setting (off).
+      schema:
+        type: boolean
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Client-generated key; a repeated key within 24 h returns the original response.
+      schema:
+        type: string
+        maxLength: 128
+
+  responses:
+    IngestAccepted:
+      description: Raw message persisted; parsing continues asynchronously.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IngestAccepted'
+    BadRequest:
+      description: Malformed request or validation failure.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Missing, expired or invalid credentials.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Authenticated but not allowed (wrong role or household).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource not found in this household.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: State conflict (duplicate, already merged, optimistic lock).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PayloadTooLarge:
+      description: Body exceeds the configured size limit.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: Semantically invalid (e.g. split shares do not sum to the total).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Rate limited.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    # ---------------------------------------------------------------- Primitives
+    Money:
+      type: object
+      description: |
+        A monetary amount. `amountMinor` is an integer in the currency's minor unit (piastres, cents).
+        Never a float. Negative values are only used for refund deltas in analytics.
+      required: [amountMinor, currency]
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          description: Amount in minor units (EGP 12.50 = 1250).
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+      examples:
+        - amountMinor: 125000
+          currency: EGP
+
+    CurrencyCode:
+      type: string
+      description: ISO-4217 alphabetic code.
+      pattern: '^[A-Z]{3}$'
+      minLength: 3
+      maxLength: 3
+      examples: [EGP, USD]
+
+    DecimalString:
+      type: string
+      description: Exact decimal encoded as a string (used for FX rates and quantities so no float is ever transmitted).
+      pattern: '^-?\d+(\.\d{1,8})?$'
+      examples: ['48.65', '1.5']
+
+    NextCursor:
+      type: [string, 'null']
+      description: Cursor for the next page, or `null` when this is the last page.
+      maxLength: 512
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details. Every 4xx/5xx body has this shape.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Problem type URI (`about:blank` for plain HTTP semantics).
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        traceId:
+          type: string
+          description: Correlation id to find the request in logs.
+        errors:
+          type: array
+          description: Field-level validation errors.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+              rejectedValue:
+                description: The offending value, redacted for sensitive fields.
+
+    # ---------------------------------------------------------------- Enums
+    TransactionType:
+      type: string
+      enum: [EXPENSE, INCOME, REFUND, TRANSFER, CASH_WITHDRAWAL]
+    ExpenseStatus:
+      type: string
+      enum: [CONFIRMED, PENDING_REVIEW, POSSIBLE_DUPLICATE, IGNORED]
+    PaymentMethod:
+      type: string
+      enum: [CASH, CARD, WALLET, INSTAPAY, BANK_TRANSFER, UNKNOWN]
+    SplitMode:
+      type: string
+      enum: [NONE, EQUAL, CUSTOM]
+    MessageSource:
+      type: string
+      enum: [WHATSAPP, SMS, PUSH, IOS_SHORTCUT, UPLOAD, MANUAL]
+    ProcessingStatus:
+      type: string
+      enum: [RECEIVED, QUEUED, PARSED, MATCHED, DONE, IGNORED, FAILED]
+    SourceRole:
+      type: string
+      enum: [PRIMARY, SUPPORTING]
+    MemberRole:
+      type: string
+      enum: [ADMIN, MEMBER]
+    DevicePlatform:
+      type: string
+      enum: [ANDROID, IOS_SHORTCUT, WEB]
+    AccountType:
+      type: string
+      enum: [CARD, BANK, WALLET, CASH]
+    BudgetPeriod:
+      type: string
+      enum: [MONTHLY, WEEKLY, CUSTOM]
+    Cadence:
+      type: string
+      enum: [WEEKLY, BIWEEKLY, MONTHLY, QUARTERLY, YEARLY, CUSTOM]
+    SmsTemplateStatus:
+      type: string
+      enum: [ACTIVE, PROPOSED, DISABLED]
+    ReviewReason:
+      type: string
+      enum: [PENDING_REVIEW, LOW_CONFIDENCE, POSSIBLE_DUPLICATE, NEEDS_CLARIFICATION, RULE_FORCED]
+    ClassifiedType:
+      type: string
+      description: Classifier output (§6 step 2). A superset of `TransactionType`.
+      enum: [EXPENSE, INCOME, REFUND, TRANSFER, CASH_WITHDRAWAL, COMMAND, OTP, PROMO, CHITCHAT, UNKNOWN]
+    CommandName:
+      type: string
+      enum: [TOTAL, CATEGORY_SPEND, UNDO, EDIT_LAST, BUDGET, PENDING, SUMMARY, HELP]
+    Language:
+      type: string
+      enum: [ar, en, mixed]
+    WhatsappMode:
+      type: string
+      enum: [GROUP, DIRECT]
+
+    # ---------------------------------------------------------------- Health / App
+    Health:
+      type: object
+      required: [status, version, gitSha, buildTime, time]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        version:
+          type: string
+          description: Semantic version of the backend build.
+        gitSha:
+          type: string
+          pattern: '^[0-9a-f]{7,40}$'
+        buildTime:
+          type: string
+          format: date-time
+        time:
+          type: string
+          format: date-time
+          description: Server time now (UTC).
+        checks:
+          type: object
+          description: Component checks (`db`, `storage`, `queue`).
+          additionalProperties:
+            type: string
+            enum: [UP, DOWN]
+      examples:
+        - status: UP
+          version: 0.1.0
+          gitSha: 1a2b3c4
+          buildTime: '2026-10-23T10:00:00Z'
+          time: '2026-10-23T12:34:56Z'
+          checks:
+            db: UP
+
+    AndroidRelease:
+      type: object
+      required: [versionCode, versionName, url, sha256, changelog]
+      properties:
+        versionCode:
+          type: integer
+          minimum: 1
+        versionName:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Signed release APK download URL.
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        changelog:
+          type: string
+        minSupportedVersionCode:
+          type: integer
+          description: Builds older than this must update before ingesting.
+
+    # ---------------------------------------------------------------- Auth
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 256
+        deviceName:
+          type: string
+          maxLength: 80
+          description: Label for the session shown in Settings > Sessions.
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, tokenType, member]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Access-token lifetime in seconds.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        member:
+          $ref: '#/components/schemas/Member'
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+        allSessions:
+          type: boolean
+          default: false
+
+    InviteRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          maxLength: 80
+        email:
+          type: string
+          format: email
+        phoneE164:
+          type: string
+          pattern: '^\+[1-9]\d{6,14}$'
+          description: The member's WhatsApp number, so their messages map to them.
+        role:
+          $ref: '#/components/schemas/MemberRole'
+
+    Invite:
+      type: object
+      required: [id, code, expiresAt, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Single-use invite code; share out of band.
+        displayName:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    InviteAcceptRequest:
+      type: object
+      required: [code, email, password]
+      properties:
+        code:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 256
+
+    Member:
+      type: object
+      required: [id, householdId, displayName, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        phoneE164:
+          type: [string, 'null']
+          pattern: '^\+[1-9]\d{6,14}$'
+        whatsappId:
+          type: [string, 'null']
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        color:
+          type: [string, 'null']
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        avatarUrl:
+          type: [string, 'null']
+          format: uri
+
+    # ---------------------------------------------------------------- Expenses
+    Expense:
+      type: object
+      description: One ledger entry. Mirrors the `expense` table (§8) plus its child rows.
+      required:
+        - id
+        - householdId
+        - type
+        - amount
+        - occurredAt
+        - status
+        - confidence
+        - paymentMethod
+        - tags
+        - isRecurring
+        - splitMode
+        - items
+        - sources
+        - splits
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount:
+          $ref: '#/components/schemas/Money'
+          description: Amount in the household base currency (`amount_egp`).
+        amountOriginal:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+          description: Original amount when the transaction was in a foreign currency.
+        fxRate:
+          oneOf:
+            - $ref: '#/components/schemas/DecimalString'
+            - type: 'null'
+          description: Rate used to convert `amountOriginal` to `amount` (base per 1 original unit).
+        occurredAt:
+          type: string
+          format: date-time
+        merchantId:
+          type: [string, 'null']
+          format: uuid
+        merchantRaw:
+          type: [string, 'null']
+          maxLength: 200
+        merchantName:
+          type: [string, 'null']
+          description: Denormalised normalised merchant name for display.
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        paidByMemberId:
+          type: [string, 'null']
+          format: uuid
+        paymentAccountId:
+          type: [string, 'null']
+          format: uuid
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        status:
+          $ref: '#/components/schemas/ExpenseStatus'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Parser confidence (not money; a probability).
+        notes:
+          type: [string, 'null']
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        isRecurring:
+          type: boolean
+        recurringSeriesId:
+          type: [string, 'null']
+          format: uuid
+        splitMode:
+          $ref: '#/components/schemas/SplitMode'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseItem'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseSource'
+        splits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseSplit'
+        duplicateOfExpenseId:
+          type: [string, 'null']
+          format: uuid
+          description: Set when `status` is `POSSIBLE_DUPLICATE`.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: [string, 'null']
+          format: date-time
+
+    ExpenseItem:
+      type: object
+      description: A receipt line item.
+      required: [name, total]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        qty:
+          $ref: '#/components/schemas/DecimalString'
+          description: Quantity; may be fractional (e.g. `1.5` kg).
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+
+    ExpenseSource:
+      type: object
+      description: Link between an expense and a raw message that evidences it.
+      required: [rawMessageId, role, rawMessage]
+      properties:
+        rawMessageId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/SourceRole'
+        rawMessage:
+          $ref: '#/components/schemas/RawMessageSummary'
+
+    ExpenseSplit:
+      type: object
+      required: [memberId, shareAmount]
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        shareAmount:
+          $ref: '#/components/schemas/Money'
+
+    RawMessageSummary:
+      type: object
+      description: Redacted view of a `raw_message` (no full payload, sender masked).
+      required: [id, source, receivedAt, processingStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/MessageSource'
+        externalId:
+          type: [string, 'null']
+          description: SMS id, WhatsApp message id or notification key.
+        senderMasked:
+          type: [string, 'null']
+          description: Bank sender id, or a phone number with all but the last 2 digits masked.
+        memberId:
+          type: [string, 'null']
+          format: uuid
+        textPreview:
+          type: [string, 'null']
+          maxLength: 160
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        receivedAt:
+          type: string
+          format: date-time
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        error:
+          type: [string, 'null']
+
+    ExpenseCreate:
+      type: object
+      required: [type, amount, occurredAt]
+      properties:
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount:
+          $ref: '#/components/schemas/Money'
+        amountOriginal:
+          $ref: '#/components/schemas/Money'
+        occurredAt:
+          type: string
+          format: date-time
+        merchantId:
+          type: string
+          format: uuid
+        merchantRaw:
+          type: string
+          maxLength: 200
+        categoryId:
+          type: string
+          format: uuid
+        paidByMemberId:
+          type: string
+          format: uuid
+        paymentAccountId:
+          type: string
+          format: uuid
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        notes:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseItem'
+        splitMode:
+          $ref: '#/components/schemas/SplitMode'
+        splits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseSplit'
+
+    ExpensePatch:
+      type: object
+      description: All fields optional; `null` clears a nullable field.
+      properties:
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount:
+          $ref: '#/components/schemas/Money'
+        occurredAt:
+          type: string
+          format: date-time
+        merchantId:
+          type: [string, 'null']
+          format: uuid
+        merchantRaw:
+          type: [string, 'null']
+          maxLength: 200
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        paidByMemberId:
+          type: [string, 'null']
+          format: uuid
+        paymentAccountId:
+          type: [string, 'null']
+          format: uuid
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        status:
+          $ref: '#/components/schemas/ExpenseStatus'
+        notes:
+          type: [string, 'null']
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        isRecurring:
+          type: boolean
+        recurringSeriesId:
+          type: [string, 'null']
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseItem'
+        version:
+          type: integer
+          description: Optimistic-lock version; `409` when stale.
+
+    ExpensePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expense'
+        nextCursor:
+          $ref: '#/components/schemas/NextCursor'
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+          description: Sum of the whole filtered set (not only this page), excluding TRANSFER.
+
+    MergeRequest:
+      type: object
+      required: [sourceExpenseIds]
+      properties:
+        sourceExpenseIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+
+    SplitRequest:
+      type: object
+      required: [splitMode]
+      properties:
+        splitMode:
+          $ref: '#/components/schemas/SplitMode'
+        splits:
+          type: array
+          description: Required for `CUSTOM`; ignored for `EQUAL` (computed, remainder goes to the payer) and `NONE`.
+          items:
+            $ref: '#/components/schemas/ExpenseSplit'
+
+    # ---------------------------------------------------------------- Review
+    ReviewItem:
+      type: object
+      required: [expense, reason]
+      properties:
+        expense:
+          $ref: '#/components/schemas/Expense'
+        reason:
+          $ref: '#/components/schemas/ReviewReason'
+        clarificationQuestion:
+          type: [string, 'null']
+          description: The one question the parser wants answered (e.g. "Groceries or Household?").
+        candidateDuplicate:
+          oneOf:
+            - $ref: '#/components/schemas/Expense'
+            - type: 'null'
+        matchScore:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+
+    ReviewPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewItem'
+        nextCursor:
+          $ref: '#/components/schemas/NextCursor'
+
+    ResolveRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [CONFIRM, EDIT_AND_CONFIRM, MERGE, KEEP_BOTH, IGNORE]
+        patch:
+          $ref: '#/components/schemas/ExpensePatch'
+          description: Applied before confirming when `action` is `EDIT_AND_CONFIRM`.
+        mergeIntoExpenseId:
+          type: string
+          format: uuid
+          description: Target for `MERGE`; defaults to `candidateDuplicate`.
+
+    # ---------------------------------------------------------------- Ingest
+    IngestSmsRequest:
+      type: object
+      required: [sender, body, receivedAt, deviceId, smsId]
+      properties:
+        sender:
+          type: string
+          maxLength: 40
+          description: Sender id as shown on the phone (e.g. `CIB`, `InstaPay`).
+        body:
+          type: string
+          maxLength: 2000
+        receivedAt:
+          type: string
+          format: date-time
+        deviceId:
+          type: string
+          format: uuid
+        smsId:
+          type: string
+          maxLength: 64
+          description: Stable id on the device; idempotency key together with `deviceId`.
+
+    IngestNotificationRequest:
+      type: object
+      required: [packageName, text, postedAt, deviceId, notificationKey]
+      properties:
+        packageName:
+          type: string
+          maxLength: 200
+        title:
+          type: string
+          maxLength: 200
+        text:
+          type: string
+          maxLength: 4000
+        postedAt:
+          type: string
+          format: date-time
+        deviceId:
+          type: string
+          format: uuid
+        notificationKey:
+          type: string
+          maxLength: 128
+
+    IngestReceiptForm:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          contentEncoding: binary
+          description: Image or PDF, at most 15 MB.
+        note:
+          type: string
+          maxLength: 500
+          description: Optional caption typed by the user (e.g. "split with Mai").
+        occurredAt:
+          type: string
+          format: date-time
+        memberId:
+          type: string
+          format: uuid
+          description: Payer; defaults to the device owner.
+        clientId:
+          type: string
+          maxLength: 64
+          description: Client-generated idempotency id for offline outbox retries.
+
+    IngestTextRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        memberId:
+          type: string
+          format: uuid
+        receivedAt:
+          type: string
+          format: date-time
+        clientId:
+          type: string
+          maxLength: 64
+
+    IngestAccepted:
+      type: object
+      required: [rawMessageId, outcome]
+      properties:
+        rawMessageId:
+          type: string
+          format: uuid
+        outcome:
+          type: string
+          enum: [ACCEPTED, DUPLICATE, REJECTED_OTP, REJECTED_UNKNOWN_SENDER]
+          description: "`DUPLICATE` means the same external id or image hash was already ingested; the original id is returned."
+
+    # ---------------------------------------------------------------- Parsing
+    ParseRequest:
+      type: object
+      required: [text, source]
+      properties:
+        text:
+          type: string
+          maxLength: 20000
+        source:
+          $ref: '#/components/schemas/MessageSource'
+        sender:
+          type: string
+          maxLength: 40
+        receivedAt:
+          type: string
+          format: date-time
+        memberId:
+          type: string
+          format: uuid
+        history:
+          type: array
+          description: Recent prior messages of the same sender, for corrections ("no it was 250").
+          maxItems: 5
+          items:
+            type: object
+            required: [text]
+            properties:
+              text:
+                type: string
+              botReply:
+                type: string
+
+    ParseResult:
+      type: object
+      description: The LLM/rules extraction contract (§6 step 3) after normalisation and server-side bounding (S10.5).
+      required: [type, confidence, language, needsClarification, shouldIngest, injectionObeyed]
+      properties:
+        type:
+          $ref: '#/components/schemas/ClassifiedType'
+        amount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        originalAmount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        merchantRaw:
+          type: [string, 'null']
+        merchantNormalized:
+          type: [string, 'null']
+        categorySuggestion:
+          type: [string, 'null']
+          description: One of the household category names (English key), or `null`.
+        subcategory:
+          type: [string, 'null']
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseItem'
+        date:
+          type: [string, 'null']
+          format: date
+        time:
+          type: [string, 'null']
+          pattern: '^\d{2}:\d{2}$'
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        accountLast4:
+          type: [string, 'null']
+          pattern: '^\d{4}$'
+        paidByHint:
+          type: [string, 'null']
+        splitHint:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        language:
+          $ref: '#/components/schemas/Language'
+        needsClarification:
+          type: boolean
+        clarificationQuestion:
+          type: [string, 'null']
+        isCommand:
+          type: boolean
+        command:
+          oneOf:
+            - $ref: '#/components/schemas/CommandName'
+            - type: 'null'
+        commandArgs:
+          type: object
+          additionalProperties: true
+        shouldIngest:
+          type: boolean
+          description: False for OTP, PROMO, CHITCHAT, COMMAND and rejected injections.
+        injectionObeyed:
+          type: boolean
+          description: Always `false` in production; the eval harness asserts it.
+        model:
+          type: [string, 'null']
+          description: Model id used, or `null` when rules alone parsed the input.
+        costMicros:
+          type: [integer, 'null']
+          format: int64
+          description: LLM cost in micro-USD (integer; never a float).
+        latencyMs:
+          type: [integer, 'null']
+
+    # ---------------------------------------------------------------- WhatsApp webhook
+    WhatsappWebhookPayload:
+      type: object
+      description: Meta Cloud API webhook envelope; persisted verbatim in `raw_message.payload`.
+      required: [object, entry]
+      properties:
+        object:
+          type: string
+          enum: [whatsapp_business_account]
+        entry:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    # ---------------------------------------------------------------- Categories
+    Category:
+      type: object
+      required: [id, householdId, nameEn, nameAr, isEssential, sortOrder, archived]
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        nameEn:
+          type: string
+          maxLength: 60
+        nameAr:
+          type: string
+          maxLength: 60
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+        color:
+          type: [string, 'null']
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        parentId:
+          type: [string, 'null']
+          format: uuid
+        isEssential:
+          type: boolean
+        sortOrder:
+          type: integer
+        archived:
+          type: boolean
+      examples:
+        - id: 7a1a4a7e-5d3e-4a0e-9d0a-1b2c3d4e5f60
+          householdId: 0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f
+          nameEn: Fuel
+          nameAr: بنزين
+          icon: fuel
+          color: '#F59E0B'
+          parentId: null
+          isEssential: true
+          sortOrder: 3
+          archived: false
+
+    CategoryInput:
+      type: object
+      properties:
+        nameEn:
+          type: string
+          maxLength: 60
+        nameAr:
+          type: string
+          maxLength: 60
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+        color:
+          type: [string, 'null']
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        parentId:
+          type: [string, 'null']
+          format: uuid
+        isEssential:
+          type: boolean
+        sortOrder:
+          type: integer
+        archived:
+          type: boolean
+
+    # ---------------------------------------------------------------- Accounts
+    PaymentAccount:
+      type: object
+      required: [id, memberId, type, currency, isShared]
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AccountType'
+        institution:
+          type: [string, 'null']
+          maxLength: 80
+        last4:
+          type: [string, 'null']
+          pattern: '^\d{4}$'
+        nickname:
+          type: [string, 'null']
+          maxLength: 60
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        isShared:
+          type: boolean
+
+    PaymentAccountInput:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AccountType'
+        institution:
+          type: [string, 'null']
+          maxLength: 80
+        last4:
+          type: [string, 'null']
+          pattern: '^\d{4}$'
+        nickname:
+          type: [string, 'null']
+          maxLength: 60
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        isShared:
+          type: boolean
+
+    # ---------------------------------------------------------------- Merchants
+    Merchant:
+      type: object
+      required: [id, normalizedName, aliases]
+      properties:
+        id:
+          type: string
+          format: uuid
+        normalizedName:
+          type: string
+          maxLength: 120
+        aliases:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+        defaultCategoryId:
+          type: [string, 'null']
+          format: uuid
+        logoUrl:
+          type: [string, 'null']
+          format: uri
+
+    MerchantInput:
+      type: object
+      properties:
+        normalizedName:
+          type: string
+          maxLength: 120
+        aliases:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+        defaultCategoryId:
+          type: [string, 'null']
+          format: uuid
+        logoUrl:
+          type: [string, 'null']
+          format: uri
+
+    MerchantRule:
+      type: object
+      required: [id, pattern, categoryId, tags, priority, learnedFromCorrection]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pattern:
+          type: string
+          maxLength: 200
+          description: Case-insensitive match against the normalised merchant; `*` wildcard allowed.
+        categoryId:
+          type: string
+          format: uuid
+        memberId:
+          type: [string, 'null']
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        priority:
+          type: integer
+        learnedFromCorrection:
+          type: boolean
+
+    MerchantRuleInput:
+      type: object
+      properties:
+        pattern:
+          type: string
+          maxLength: 200
+        categoryId:
+          type: string
+          format: uuid
+        memberId:
+          type: [string, 'null']
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        priority:
+          type: integer
+
+    # ---------------------------------------------------------------- Budgets
+    Budget:
+      type: object
+      required: [id, householdId, categoryId, period, amount, rollover, alertThresholds]
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+          description: "`null` means the total household budget."
+        period:
+          $ref: '#/components/schemas/BudgetPeriod'
+        amount:
+          $ref: '#/components/schemas/Money'
+        rollover:
+          type: boolean
+        alertThresholds:
+          type: array
+          description: Percentages at which alerts fire.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 200
+          default: [50, 80, 100]
+
+    BudgetInput:
+      type: object
+      properties:
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        period:
+          $ref: '#/components/schemas/BudgetPeriod'
+        amount:
+          $ref: '#/components/schemas/Money'
+        rollover:
+          type: boolean
+        alertThresholds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 200
+
+    # ---------------------------------------------------------------- Recurring
+    RecurringSeries:
+      type: object
+      required: [id, cadence, expectedAmount, nextExpectedDate, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchantId:
+          type: [string, 'null']
+          format: uuid
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        label:
+          type: [string, 'null']
+          maxLength: 120
+        cadence:
+          $ref: '#/components/schemas/Cadence'
+        expectedAmount:
+          $ref: '#/components/schemas/Money'
+        nextExpectedDate:
+          type: string
+          format: date
+        lastSeenAt:
+          type: [string, 'null']
+          format: date-time
+        active:
+          type: boolean
+        autoDetected:
+          type: boolean
+          default: false
+
+    RecurringSeriesInput:
+      type: object
+      properties:
+        merchantId:
+          type: [string, 'null']
+          format: uuid
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        label:
+          type: [string, 'null']
+          maxLength: 120
+        cadence:
+          $ref: '#/components/schemas/Cadence'
+        expectedAmount:
+          $ref: '#/components/schemas/Money'
+        nextExpectedDate:
+          type: string
+          format: date
+        active:
+          type: boolean
+
+    # ---------------------------------------------------------------- SMS templates
+    SmsTemplate:
+      type: object
+      required: [id, senderPattern, regex, fieldMapping, status, hitCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        senderPattern:
+          type: string
+          maxLength: 80
+        regex:
+          type: string
+          maxLength: 2000
+          description: Java regex with named groups.
+        fieldMapping:
+          type: object
+          description: Named group -> extracted field (`amount`, `currency`, `merchant`, `last4`, `date`, `time`, `balance`, `reference`, `direction`).
+          additionalProperties:
+            type: string
+        status:
+          $ref: '#/components/schemas/SmsTemplateStatus'
+        hitCount:
+          type: integer
+          minimum: 0
+        exampleRedacted:
+          type: [string, 'null']
+          description: An anonymised sample the template matched (never a raw SMS).
+
+    SmsTemplateInput:
+      type: object
+      properties:
+        senderPattern:
+          type: string
+          maxLength: 80
+        regex:
+          type: string
+          maxLength: 2000
+        fieldMapping:
+          type: object
+          additionalProperties:
+            type: string
+        status:
+          $ref: '#/components/schemas/SmsTemplateStatus'
+
+    # ---------------------------------------------------------------- Devices
+    Device:
+      type: object
+      required: [id, memberId, platform, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        name:
+          type: string
+          maxLength: 80
+        lastSeenAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    DeviceInput:
+      type: object
+      properties:
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        name:
+          type: string
+          maxLength: 80
+
+    DeviceCreated:
+      allOf:
+        - $ref: '#/components/schemas/Device'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Plaintext device token, shown once.
+
+    # ---------------------------------------------------------------- Analytics
+    PeriodRange:
+      type: object
+      required: [label, from, to]
+      properties:
+        label:
+          type: string
+          description: Resolved period id, e.g. `2026-10`.
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+
+    AnalyticsSummary:
+      type: object
+      required: [period, total, previousTotal, deltaPercentBps, dailyAverage, projectedTotal, daysLeft, pendingReviewCount]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        total:
+          $ref: '#/components/schemas/Money'
+        previousTotal:
+          $ref: '#/components/schemas/Money'
+        deltaPercentBps:
+          type: [integer, 'null']
+          description: Change vs previous period in basis points (1250 = +12.50%); `null` when previous is zero.
+        dailyAverage:
+          $ref: '#/components/schemas/Money'
+        projectedTotal:
+          $ref: '#/components/schemas/Money'
+          description: Linear projection to period end.
+        projectedTotalWeekdayAware:
+          $ref: '#/components/schemas/Money'
+        remainingBudget:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        daysLeft:
+          type: integer
+          minimum: 0
+        income:
+          $ref: '#/components/schemas/Money'
+        topCategories:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/CategoryTotal'
+        pendingReviewCount:
+          type: integer
+          minimum: 0
+
+    CategoryTotal:
+      type: object
+      required: [categoryId, nameEn, nameAr, total, shareBps, count]
+      properties:
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+          description: "`null` for uncategorised."
+        nameEn:
+          type: string
+        nameAr:
+          type: string
+        color:
+          type: [string, 'null']
+        total:
+          $ref: '#/components/schemas/Money'
+        previousTotal:
+          $ref: '#/components/schemas/Money'
+        shareBps:
+          type: integer
+          description: Share of the period total in basis points.
+        count:
+          type: integer
+        deltaPercentBps:
+          type: [integer, 'null']
+
+    CategoryBreakdown:
+      type: object
+      required: [period, total, items]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        total:
+          $ref: '#/components/schemas/Money'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryTotal'
+
+    MemberTotal:
+      type: object
+      required: [memberId, displayName, paid, shareOfTotalBps, count]
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        color:
+          type: [string, 'null']
+        paid:
+          $ref: '#/components/schemas/Money'
+        owedShare:
+          $ref: '#/components/schemas/Money'
+          description: What this member should bear after splits.
+        shareOfTotalBps:
+          type: integer
+        count:
+          type: integer
+
+    MemberBreakdown:
+      type: object
+      required: [period, total, items]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        total:
+          $ref: '#/components/schemas/Money'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberTotal'
+
+    MerchantTotal:
+      type: object
+      required: [merchantId, name, total, visits, averageTicket]
+      properties:
+        merchantId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        total:
+          $ref: '#/components/schemas/Money'
+        visits:
+          type: integer
+        averageTicket:
+          $ref: '#/components/schemas/Money'
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+
+    MerchantBreakdown:
+      type: object
+      required: [period, items]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerchantTotal'
+
+    TrendPoint:
+      type: object
+      required: [period, total, byCategory]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        total:
+          $ref: '#/components/schemas/Money'
+        income:
+          $ref: '#/components/schemas/Money'
+        savingsRateBps:
+          type: [integer, 'null']
+          description: "`(income - total) / income` in basis points; `null` without income."
+        byCategory:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryTotal'
+
+    Trend:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'
+
+    Heatmap:
+      type: object
+      required: [period, days, weekdayHour]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, total, count]
+            properties:
+              date:
+                type: string
+                format: date
+              total:
+                $ref: '#/components/schemas/Money'
+              count:
+                type: integer
+        weekdayHour:
+          type: array
+          description: 7 x 24 matrix of totals; index 0 is Saturday (Egyptian week start), hours in Cairo time.
+          minItems: 7
+          maxItems: 7
+          items:
+            type: array
+            minItems: 24
+            maxItems: 24
+            items:
+              $ref: '#/components/schemas/Money'
+
+    BudgetStatus:
+      type: object
+      required: [budget, spent, remaining, progressBps, alertsFired, onTrack]
+      properties:
+        budget:
+          $ref: '#/components/schemas/Budget'
+        spent:
+          $ref: '#/components/schemas/Money'
+        remaining:
+          $ref: '#/components/schemas/Money'
+        rolledOver:
+          $ref: '#/components/schemas/Money'
+        progressBps:
+          type: integer
+          description: Spent / budget in basis points (may exceed 10000).
+        alertsFired:
+          type: array
+          items:
+            type: integer
+        onTrack:
+          type: boolean
+
+    BudgetStatusList:
+      type: object
+      required: [period, items]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetStatus'
+
+    Forecast:
+      type: object
+      required: [period, spentSoFar, linear, weekdayAware, upcomingRecurring]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        spentSoFar:
+          $ref: '#/components/schemas/Money'
+        linear:
+          $ref: '#/components/schemas/Money'
+        weekdayAware:
+          $ref: '#/components/schemas/Money'
+        upcomingRecurring:
+          type: array
+          items:
+            type: object
+            required: [series, expectedDate, expectedAmount]
+            properties:
+              series:
+                $ref: '#/components/schemas/RecurringSeries'
+              expectedDate:
+                type: string
+                format: date
+              expectedAmount:
+                $ref: '#/components/schemas/Money'
+
+    Insight:
+      type: object
+      required: [kind, severity, titleEn, titleAr]
+      properties:
+        kind:
+          type: string
+          enum: [LARGE_TRANSACTION, NEW_MERCHANT_LARGE, DUPLICATE_LOOKING, FEES_SUMMARY, RECURRING_AMOUNT_CHANGED, RECURRING_MISSED, PRICE_HISTORY, CATEGORY_SPIKE]
+        severity:
+          type: string
+          enum: [INFO, WARN]
+        titleEn:
+          type: string
+        titleAr:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        expenseIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        details:
+          type: object
+          additionalProperties: true
+
+    Insights:
+      type: object
+      required: [period, insights, paymentMethodMix, dataQuality]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Insight'
+        paymentMethodMix:
+          type: array
+          items:
+            type: object
+            required: [paymentMethod, total, shareBps]
+            properties:
+              paymentMethod:
+                $ref: '#/components/schemas/PaymentMethod'
+              total:
+                $ref: '#/components/schemas/Money'
+              shareBps:
+                type: integer
+        dataQuality:
+          type: object
+          required: [autoCapturedBps, pendingReviewCount, correctionRateBps]
+          properties:
+            autoCapturedBps:
+              type: integer
+              description: Share of entries that arrived from SMS/push/WhatsApp rather than manual, in basis points.
+            pendingReviewCount:
+              type: integer
+            correctionRateBps:
+              type: integer
+              description: Corrections / total parsed entries, in basis points.
+            aiCostMicrosThisPeriod:
+              type: integer
+              format: int64
+        narrative:
+          type: [object, 'null']
+          description: Latest AI monthly/weekly report.
+          required: [generatedAt, textEn, textAr]
+          properties:
+            generatedAt:
+              type: string
+              format: date-time
+            textEn:
+              type: string
+            textAr:
+              type: string
+
+    Settlement:
+      type: object
+      required: [period, balances, transfers]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodRange'
+        balances:
+          type: array
+          description: Positive `net` means the member is owed money.
+          items:
+            type: object
+            required: [memberId, displayName, paid, owedShare, net]
+            properties:
+              memberId:
+                type: string
+                format: uuid
+              displayName:
+                type: string
+              paid:
+                $ref: '#/components/schemas/Money'
+              owedShare:
+                $ref: '#/components/schemas/Money'
+              net:
+                $ref: '#/components/schemas/Money'
+        transfers:
+          type: array
+          description: Minimal set of transfers that settles all balances.
+          items:
+            type: object
+            required: [fromMemberId, toMemberId, amount]
+            properties:
+              fromMemberId:
+                type: string
+                format: uuid
+              toMemberId:
+                type: string
+                format: uuid
+              amount:
+                $ref: '#/components/schemas/Money'
+
+    # ---------------------------------------------------------------- Import
+    ImportForm:
+      type: object
+      required: [file, format]
+      properties:
+        file:
+          type: string
+          contentEncoding: binary
+        format:
+          type: string
+          enum: [MASROOF_CSV, GOOGLE_SHEETS_LEGACY]
+        dryRun:
+          type: boolean
+          default: false
+        defaultMemberId:
+          type: string
+          format: uuid
+
+    ImportResult:
+      type: object
+      required: [dryRun, totalRows, imported, skippedDuplicates, errors]
+      properties:
+        dryRun:
+          type: boolean
+        totalRows:
+          type: integer
+        imported:
+          type: integer
+        skippedDuplicates:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, message]
+            properties:
+              row:
+                type: integer
+              message:
+                type: string
+        preview:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ExpenseCreate'
+
+    # ---------------------------------------------------------------- Settings
+    Settings:
+      type: object
+      required:
+        - householdId
+        - householdName
+        - baseCurrency
+        - timezone
+        - monthStartDay
+        - whatsappMode
+        - countAtmWithdrawalsAsSpending
+        - autoConfirmThreshold
+        - weeklySummaryDay
+        - members
+      properties:
+        householdId:
+          type: string
+          format: uuid
+        householdName:
+          type: string
+          maxLength: 80
+        baseCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        timezone:
+          type: string
+          description: IANA zone id.
+          default: Africa/Cairo
+        monthStartDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+          default: 1
+        whatsappMode:
+          $ref: '#/components/schemas/WhatsappMode'
+        countAtmWithdrawalsAsSpending:
+          type: boolean
+          default: false
+        autoConfirmThreshold:
+          type: number
+          minimum: 0.5
+          maximum: 1
+          default: 0.85
+          description: Parser confidence at or above which entries are auto-CONFIRMED (tuned by the eval calibration gate).
+        weeklySummaryDay:
+          type: string
+          enum: [SAT, SUN, MON, TUE, WED, THU, FRI, OFF]
+          default: FRI
+        aiModels:
+          type: object
+          description: Configured model ids (read-only here; changed via config + `/eval`).
+          properties:
+            fast:
+              type: string
+            vision:
+              type: string
+        aiCostThisMonthMicros:
+          type: integer
+          format: int64
+          description: LLM spend this period in micro-USD.
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+
+    SettingsPatch:
+      type: object
+      properties:
+        householdName:
+          type: string
+          maxLength: 80
+        monthStartDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+        whatsappMode:
+          $ref: '#/components/schemas/WhatsappMode'
+        countAtmWithdrawalsAsSpending:
+          type: boolean
+        autoConfirmThreshold:
+          type: number
+          minimum: 0.5
+          maximum: 1
+        weeklySummaryDay:
+          type: string
+          enum: [SAT, SUN, MON, TUE, WED, THU, FRI, OFF]
+
+    # ---------------------------------------------------------------- Stream
+    StreamEvent:
+      type: object
+      required: [id, type, at]
+      properties:
+        id:
+          type: string
+          description: Monotonic event id (also sent as the SSE `id:` field).
+        type:
+          type: string
+          enum: [EXPENSE_CREATED, EXPENSE_UPDATED, EXPENSE_DELETED, REVIEW_ITEM_ADDED, REVIEW_ITEM_RESOLVED, BUDGET_ALERT, SETTINGS_CHANGED]
+        at:
+          type: string
+          format: date-time
+        expenseId:
+          type: [string, 'null']
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true

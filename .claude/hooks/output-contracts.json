@@ -1,0 +1,30 @@
+{
+  "_comment": "Single source of truth for subagent contracts. Read by check-output-contract.sh (SubagentStop hook), protect-files.sh (write_scope), sdlc-lint.py (validates agent files) and the agent definitions. Each agent's final message must END with a STATUS: line whose value is in `status` and must contain every heading in `required_sections` as `NAME:` at line start. `write_scope` (bash case patterns, * matches /) limits where that agent may Write/Edit; agents without it are unrestricted (reviewers have no Write/Edit tools at all).",
+  "agents": {
+    "product-analyst":      { "status": ["SPEC_READY", "BLOCKED"],                 "required_sections": ["STORIES", "REQS"],
+                              "write_scope": ["docs/*"] },
+    "spec-reviewer":        { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS"] },
+    "architect":            { "status": ["DESIGN_READY", "BLOCKED"],               "required_sections": ["DESIGN", "CONTRACT_IMPACT", "MIGRATION_IMPACT", "THREATS"],
+                              "write_scope": ["docs/*", "contracts/*", "*/src/test/*", "CLAUDE.md", "*/CLAUDE.md", ".claude/rules/*", "*/build.gradle.kts", "*/settings.gradle.kts", "web/package.json", "web/tsconfig*.json", "web/eslint.config.*"] },
+    "test-designer":        { "status": ["TESTS_FAILING_AS_EXPECTED", "BLOCKED"],  "required_sections": ["TESTS", "COVERAGE_OF_CRITERIA", "COMMANDS_RUN"],
+                              "write_scope": ["*/src/test/*", "*/src/androidTest/*", "*/src/testFixtures/*", "web/src/*.test.*", "web/src/*.spec.*", "web/src/test/*", "web/src/__tests__/*", "web/e2e/*", "web/playwright.config.*", "web/vitest.config.*", "web/vitest.setup.*", "android/maestro/*", "eval/datasets/*", "fixtures/*", "*/build.gradle.kts", "web/package.json", "web/package-lock.json", "scripts/quality/tests/*", ".claude/hooks/tests/*", "infra/tests/*"] },
+    "backend-engineer":     { "status": ["READY_FOR_VERIFY", "BLOCKED"],           "required_sections": ["FILES_CHANGED", "COMMANDS_RUN", "KNOWN_LIMITATIONS"] },
+    "ai-parsing-engineer":  { "status": ["READY_FOR_VERIFY", "BLOCKED"],           "required_sections": ["FILES_CHANGED", "COMMANDS_RUN", "EVAL_RESULT", "KNOWN_LIMITATIONS"] },
+    "android-engineer":     { "status": ["READY_FOR_VERIFY", "BLOCKED"],           "required_sections": ["FILES_CHANGED", "COMMANDS_RUN", "KNOWN_LIMITATIONS"] },
+    "web-engineer":         { "status": ["READY_FOR_VERIFY", "BLOCKED"],           "required_sections": ["FILES_CHANGED", "COMMANDS_RUN", "KNOWN_LIMITATIONS"] },
+    "devops-engineer":      { "status": ["READY_FOR_VERIFY", "BLOCKED"],           "required_sections": ["FILES_CHANGED", "COMMANDS_RUN", "KNOWN_LIMITATIONS"] },
+    "qa-verifier":          { "status": ["PASS", "FAIL", "BLOCKED"],               "required_sections": ["STORY", "CRITERIA", "FINDINGS", "EXPLORATORY", "TEST_INTEGRITY"] },
+    "code-reviewer":        { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS"] },
+    "security-reviewer":    { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS", "THREAT_MODEL_UPDATED"] },
+    "ux-a11y-reviewer":     { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS", "STATES_CHECKED"] },
+    "i18n-rtl-reviewer":    { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS"] },
+    "performance-engineer": { "status": ["APPROVE", "CHANGES_REQUESTED"],          "required_sections": ["FINDINGS", "MEASUREMENTS"] },
+    "ai-eval-engineer":     { "status": ["APPROVE", "REJECT", "BLOCKED"],          "required_sections": ["METRICS", "REGRESSIONS", "FINDINGS"],
+                              "write_scope": ["eval/*", "docs/*", "fixtures/*"] },
+    "docs-writer":          { "status": ["DONE", "BLOCKED"],                       "required_sections": ["FILES_CHANGED"],
+                              "write_scope": ["docs/*", "README.md", "*/README.md", "CHANGELOG.md"] },
+    "sre-observer":         { "status": ["HEALTHY", "DEGRADED", "BLOCKED"],        "required_sections": ["SIGNALS", "FINDINGS"] },
+    "retro-facilitator":    { "status": ["RETRO_DONE", "BLOCKED"],                 "required_sections": ["KEEP", "CHANGE", "TRY", "APPLIED_CHANGES"],
+                              "write_scope": ["docs/*", ".claude/*", "CLAUDE.md", "*/CLAUDE.md"] }
+  }
+}

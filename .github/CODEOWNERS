@@ -1,0 +1,12 @@
+# Masroof code owners. Reviews from owners are requested automatically on PRs.
+# Single-owner project for now; split by module when more people join.
+*                       @mohamedshehataa
+
+# Areas where a second look matters most.
+/.github/               @mohamedshehataa
+/.claude/               @mohamedshehataa
+/contracts/             @mohamedshehataa
+/docs/security/         @mohamedshehataa
+/infra/                 @mohamedshehataa
+/eval/baseline.json     @mohamedshehataa
+/backend/src/main/resources/db/migration/ @mohamedshehataa

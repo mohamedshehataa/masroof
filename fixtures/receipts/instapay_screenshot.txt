@@ -1,0 +1,7 @@
+InstaPay
+Transaction Successful
+Amount: EGP 750.00
+To: OMAR S***
+Bank: QNB Alahli
+Reference: IPN998877
+Date: 16/10/2026 18:30

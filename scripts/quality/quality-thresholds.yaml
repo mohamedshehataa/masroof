@@ -1,0 +1,40 @@
+# Quality gate thresholds — the numbers from docs/PROMPT.md S9 ("Tests" table). Read by scripts/quality/coverage-gate.py.
+# Percentages are minimums (>=); `max_quarantined` is a maximum (<=). Package/path tokens are matched as
+# substrings of the package name / file path in the reports (e.g. token `money` matches `com.masroof.domain.money`).
+# A module whose marker file is missing is SKIPPED; a module that exists but has no report FAILS.
+
+backend:
+  module_marker: backend/gradlew
+  jacoco: backend/build/reports/jacoco/test/jacocoTestReport.xml
+  pitest: backend/build/reports/pitest/mutations.xml
+  line: 85
+  branch: 75
+  packages:
+    money:     { line: 95, branch: 90, mutation: 80 }
+    parsing:   { line: 95, branch: 90, mutation: 80 }
+    dedup:     { line: 95, branch: 90, mutation: 80 }
+    analytics: { line: 95, branch: 90, mutation: 65 }
+  # mutation score for domain classes outside the packages above ("elsewhere in domain")
+  domain_token: domain
+  domain_mutation: 65
+
+android:
+  module_marker: android/gradlew
+  kover: "android/**/build/reports/kover/*.xml"
+  packages:
+    ingestion: { line: 80 }
+    filtering: { line: 80 }
+    outbox:    { line: 80 }
+    viewmodel: { line: 80 }
+
+web:
+  module_marker: web/package.json
+  vitest: web/coverage/coverage-summary.json
+  paths:
+    hooks:      { line: 85 }
+    utils:      { line: 85 }
+    components: { line: 85 }
+
+flaky:
+  file: docs/FLAKY_TESTS.md
+  max_quarantined: 5

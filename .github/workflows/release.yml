@@ -1,0 +1,330 @@
+# Masroof — release (PROMPT.md S12).
+#
+# Two triggers, one file:
+#   push to main  -> `release-please` keeps a release PR (CHANGELOG + version
+#                    bump) up to date; merging it creates the `vX.Y.Z` tag and
+#                    the GitHub Release with the changelog.
+#   push tag v*   -> signed release APK, versioned images (+ optional cosign),
+#                    DB backup, production deploy, post-deploy smoke tests with
+#                    automatic rollback, and the release assets (APK + SBOMs).
+#
+# Rules: only `make` targets (S8). Module jobs are gated through `detect`.
+#
+# ---------------------------------------------------------------------------
+# SECRETS (Settings > Secrets and variables > Actions). Missing optional
+# secrets skip their step with a notice; nothing here prints a secret.
+#   ANTHROPIC_API_KEY          not used by this workflow (listed for completeness: pr/main/nightly)
+#   ANDROID_KEYSTORE_B64       release keystore, base64 of the .jks  (optional: skips signed APK)
+#   ANDROID_KEYSTORE_PASSWORD  keystore password                      (required with the keystore)
+#   ANDROID_KEY_ALIAS          key alias inside the keystore           (required with the keystore)
+#   ANDROID_KEY_PASSWORD       key password                           (required with the keystore)
+#   PROD_SSH_KEY               private key of the deploy user on the production VPS (optional: skips deploy)
+#   PROD_HOST                  user@host of the production VPS         (required with PROD_SSH_KEY)
+#   STAGING_SSH_KEY            used by main.yml, not here
+#   STAGING_HOST               used by main.yml, not here
+#   COSIGN_KEY                 cosign private key (PEM) to sign images  (optional: skips signing)
+#   COSIGN_PASSWORD            password of COSIGN_KEY                   (optional)
+#   RELEASE_PLEASE_TOKEN       optional PAT so the tag created by release-please triggers this
+#                              workflow (events from GITHUB_TOKEN never trigger workflows)
+# VARIABLES
+#   PROD_URL                   public URL, used by `make smoke`
+#   PROD_KNOWN_HOSTS           optional pinned `ssh-keyscan` output for PROD_HOST
+#
+# Image naming contract with the Makefile (infra/README.md): `make build-images`
+# honours IMAGE_REGISTRY, IMAGE_TAG and IMAGE_PUSH=1 and produces
+# ${IMAGE_REGISTRY}/masroof-backend:${IMAGE_TAG} and .../masroof-web:${IMAGE_TAG}.
+# ---------------------------------------------------------------------------
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  JAVA_VERSION: "21"
+  NODE_VERSION: "24"
+  MAKEFLAGS: --no-print-directory
+  CI: "true"
+
+jobs:
+  # --------------------------------------------------------------------------
+  release-please:
+    name: Release PR / changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          release-type: simple
+
+  # --------------------------------------------------------------------------
+  detect:
+    name: Detect modules + version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      backend: ${{ steps.mods.outputs.backend }}
+      web: ${{ steps.mods.outputs.web }}
+      android: ${{ steps.mods.outputs.android }}
+      version: ${{ steps.mods.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: mods
+        run: |
+          flag() { if [ -f "$2" ]; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+          flag backend backend/gradlew
+          flag web     web/package.json
+          flag android android/gradlew
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  # --------------------------------------------------------------------------
+  apk-release:
+    name: Signed release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      APP_VERSION: ${{ needs.detect.outputs.version }}
+    steps:
+      - name: Skip notice
+        if: env.ANDROID_KEYSTORE_B64 == ''
+        run: |
+          echo "::warning::ANDROID_KEYSTORE_B64 missing: skipping the signed release APK."
+      - uses: actions/checkout@v5
+        if: env.ANDROID_KEYSTORE_B64 != ''
+      - uses: actions/setup-java@v5
+        if: env.ANDROID_KEYSTORE_B64 != ''
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        if: env.ANDROID_KEYSTORE_B64 != ''
+      - name: Materialise keystore (outside the workspace)
+        if: env.ANDROID_KEYSTORE_B64 != ''
+        run: |
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Build signed release APK
+        if: env.ANDROID_KEYSTORE_B64 != ''
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: make build-apk-release
+      - name: Collect APK + SHA-256 (used by /api/app/android/latest)
+        if: env.ANDROID_KEYSTORE_B64 != ''
+        run: |
+          mkdir -p release-assets
+          find android -path '*/outputs/apk/release/*' -name '*.apk' -exec cp {} release-assets/ \;
+          cd release-assets
+          for f in *.apk; do mv "$f" "masroof-${APP_VERSION}-${f}"; done
+          sha256sum ./*.apk > "masroof-${APP_VERSION}.apk.sha256"
+          cat "masroof-${APP_VERSION}.apk.sha256"
+      - uses: actions/upload-artifact@v4
+        if: env.ANDROID_KEYSTORE_B64 != ''
+        with:
+          name: release-apk
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+  # --------------------------------------------------------------------------
+  images:
+    name: Versioned images (+ cosign) and SBOMs
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless fallback is not used; kept for future
+    env:
+      IMAGE_TAG: ${{ needs.detect.outputs.version }}
+      IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      IMAGE_PUSH: "1"
+      COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        if: needs.detect.outputs.web == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push images
+        run: make build-images
+      - uses: sigstore/cosign-installer@v3
+        if: env.COSIGN_KEY != ''
+      - name: Sign images with cosign
+        if: env.COSIGN_KEY != ''
+        env:
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for svc in masroof-backend masroof-web; do
+            ref="${IMAGE_REGISTRY}/${svc}:${IMAGE_TAG}"
+            if docker image inspect "$ref" >/dev/null 2>&1; then
+              digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ref")"
+              cosign sign --yes --key env://COSIGN_KEY "$digest"
+            else
+              echo "::notice::image $ref not built; nothing to sign"
+            fi
+          done
+      - name: SBOM (CycloneDX)
+        run: make sbom
+      - name: Collect SBOMs
+        run: |
+          mkdir -p release-sbom
+          find . -type f \( -name 'bom.json' -o -name '*.cdx.json' -o -name '*.cdx.xml' \) \
+            -not -path './release-sbom/*' -not -path '*/node_modules/*' | while read -r f; do
+            cp "$f" "release-sbom/$(echo "$f" | sed 's#^\./##; s#/#__#g')"
+          done
+          ls -la release-sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sbom
+          path: release-sbom/
+          if-no-files-found: warn
+          retention-days: 90
+
+  # --------------------------------------------------------------------------
+  deploy-prod:
+    name: Backup, deploy prod, smoke (auto-rollback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [detect, images, apk-release]
+    if: >-
+      always()
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.detect.outputs.backend == 'true'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+    environment:
+      name: production
+      url: ${{ vars.PROD_URL }}
+    env:
+      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_URL: ${{ vars.PROD_URL }}
+      IMAGE_TAG: ${{ needs.detect.outputs.version }}
+      IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      DEPLOY_HOST: ${{ secrets.PROD_HOST }}
+      DEPLOY_ENV: prod
+      MASROOF_RELEASE_ACTIVE: "1" # the same flag the /release skill sets; guard-bash.sh checks it
+    steps:
+      - name: Skip notice
+        if: env.PROD_SSH_KEY == '' || env.PROD_HOST == ''
+        run: |
+          echo "::warning::PROD_SSH_KEY / PROD_HOST missing: skipping production deploy."
+      - uses: actions/checkout@v5
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+      - uses: webfactory/ssh-agent@v0.9.0
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+      - name: Known hosts
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        env:
+          KNOWN_HOSTS: ${{ vars.PROD_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            echo "::warning::vars.PROD_KNOWN_HOSTS not set; trusting the host key on first use (TODO(owner): pin it)."
+            ssh-keyscan -H "${PROD_HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+      - name: Backup database + media before deploying
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        run: make backup
+      - id: deploy
+        name: Deploy to production
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        continue-on-error: true
+        run: make deploy-prod
+      - id: smoke
+        name: Post-deploy smoke tests
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && steps.deploy.outcome == 'success'
+        continue-on-error: true
+        run: make smoke URL="${PROD_URL}"
+      - name: Automatic rollback
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && (steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure')
+        run: |
+          echo "::error::deploy=${{ steps.deploy.outcome }} smoke=${{ steps.smoke.outcome }} -> rolling back to the previous images"
+          make rollback
+          make smoke URL="${PROD_URL}" || echo "::error::smoke still failing after rollback: manual intervention required (docs/DEPLOY.md)"
+      - name: Fail the release when deploy or smoke failed
+        if: steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure'
+        run: exit 1
+
+  # --------------------------------------------------------------------------
+  github-release:
+    name: GitHub Release assets (APK + SBOMs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect, apk-release, images, deploy-prod]
+    if: >-
+      always()
+      && startsWith(github.ref, 'refs/tags/v')
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create the release if release-please did not, then upload assets
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          fi
+          if compgen -G "dist/*" >/dev/null; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            echo "::notice::no release assets (no module built yet)"
+          fi

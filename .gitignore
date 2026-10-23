@@ -1,0 +1,54 @@
+# --- secrets & local config ---
+.env
+.env.*
+!.env.example
+!*.env.example
+*.jks
+*.keystore
+*.p12
+secrets/
+.claude/settings.local.json
+.claude/state.json
+.claude/state/
+.claude/worktrees/
+.claude/agent-memory-local/
+
+# --- build outputs ---
+backend/build/
+backend/.gradle/
+backend/out/
+android/build/
+android/**/build/
+android/.gradle/
+android/local.properties
+android/captures/
+web/dist/
+web/node_modules/
+web/.vite/
+web/coverage/
+web/playwright-report/
+web/test-results/
+node_modules/
+eval/reports/*.md
+!eval/reports/.gitkeep
+eval/.cache/
+scripts/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# --- IDE / OS ---
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# --- CI / tooling artefacts ---
+.lefthook-local/
+*.log
+!docs/**/*.log
+
+# generated test reports
+scripts/quality/tests/results.xml

@@ -1,0 +1,12 @@
+{
+  "phase": 0,
+  "story": null,
+  "stage": "bootstrap",
+  "loop_count": 0,
+  "stop_blocks": 0,
+  "last_green": null,
+  "hooks_unlocked": false,
+  "release_active": false,
+  "rebaseline_allowed": false,
+  "updated_at": null
+}

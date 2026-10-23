@@ -1,0 +1,452 @@
+# Masroof — push to main (PROMPT.md S12): everything in pr.yml + e2e, Trivy,
+# SBOM, deploy to staging and smoke tests.
+#
+# Rules: only `make` targets (S8). Module jobs are gated through the `detect`
+# job so this is green on the SDLC-only skeleton.
+#
+# Repository variables (Settings > Variables):
+#   STAGING_ENABLED      "true" to turn the staging deploy on
+#   STAGING_URL          public URL of staging, used by `make smoke`
+#   STAGING_KNOWN_HOSTS  optional: `ssh-keyscan` output for the staging host
+#                        (pin it; falls back to TOFU keyscan with a warning)
+# Secrets:
+#   ANTHROPIC_API_KEY    optional (eval adapter)
+#   STAGING_SSH_KEY      private key of the deploy user on the staging VPS
+#   STAGING_HOST         user@host of the staging VPS
+#
+# Image naming contract with the Makefile (see infra/README.md):
+#   `make build-images` honours IMAGE_TAG and produces
+#   masroof/backend:${IMAGE_TAG} and masroof/web:${IMAGE_TAG}.
+name: Main
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: main-${{ github.ref }}
+  cancel-in-progress: false # never cancel a deploy half-way
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHON_VERSION: "3.12"
+  JAVA_VERSION: "21"
+  NODE_VERSION: "24"
+  MAKEFLAGS: --no-print-directory
+  CI: "true"
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # --------------------------------------------------------------------------
+  detect:
+    name: Detect modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.mods.outputs.backend }}
+      web: ${{ steps.mods.outputs.web }}
+      android: ${{ steps.mods.outputs.android }}
+      contracts: ${{ steps.mods.outputs.contracts }}
+      has_before: ${{ steps.mods.outputs.has_before }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: mods
+        name: Publish module flags
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          flag() { if [ -f "$2" ]; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+          flag backend   backend/gradlew
+          flag web       web/package.json
+          flag android   android/gradlew
+          flag contracts contracts/openapi.yaml
+          # First push to a branch has an all-zero `before` SHA: nothing to diff against.
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            echo "has_before=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_before=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::group::module flags"; cat "$GITHUB_OUTPUT"; echo "::endgroup::"
+
+  # --------------------------------------------------------------------------
+  sdlc:
+    name: SDLC (hooks, rules, traceability)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install SDLC tooling
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          sudo apt-get update -q
+          sudo apt-get install -y -q shellcheck jq
+      - run: make check-fast MODULE=sdlc
+      - run: make hooks-test
+      - run: make trace
+
+  # --------------------------------------------------------------------------
+  contract:
+    name: API contract (lint + diff vs previous commit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: detect
+    if: needs.detect.outputs.contracts == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: make contract-lint
+      - name: Diff contract against the previous commit on main
+        if: needs.detect.outputs.has_before == 'true'
+        # Breaking changes already passed the PR gate (label + ADR); on main we only report.
+        env:
+          MASROOF_ALLOW_BREAKING: "1"
+        run: make contract-diff BASE=${{ github.event.before }}
+
+  # --------------------------------------------------------------------------
+  test-integrity:
+    name: Test integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: detect
+    if: needs.detect.outputs.has_before == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: make test-integrity BASE=${{ github.event.before }}
+
+  # --------------------------------------------------------------------------
+  eval-fast:
+    name: AI eval (fast subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install eval dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip pyyaml
+          if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
+      - run: make eval-fast
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-fast-report
+          path: eval/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # --------------------------------------------------------------------------
+  backend:
+    name: Backend (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+          cache-dependency-path: |
+            backend/*.gradle*
+            backend/**/gradle-wrapper.properties
+      - run: make check-fast MODULE=backend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-reports
+          path: |
+            backend/build/reports/
+            backend/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  web:
+    name: Web (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make check-fast MODULE=web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-test-reports
+          path: |
+            web/coverage/
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  android:
+    name: Android (check-fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle*
+            android/**/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v3
+      - run: make check-fast MODULE=android
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            android/**/build/reports/
+            android/**/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  e2e:
+    name: E2E (Playwright LTR/RTL x light/dark)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [detect, backend, web]
+    if: needs.detect.outputs.backend == 'true' && needs.detect.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Playwright + Maestro against `make up`
+        run: make e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
+  security:
+    name: Security (gitleaks, semgrep, osv-scanner, Trivy fs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: "true"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      - name: semgrep (p/default + .semgrep/ custom rules)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:latest \
+            semgrep scan --config p/default --config .semgrep/ --error --quiet .
+      - name: osv-scanner (lockfiles)
+        if: hashFiles('**/package-lock.json', '**/pnpm-lock.yaml', '**/gradle.lockfile', '**/gradle/verification-metadata.xml', '**/requirements*.txt', '**/poetry.lock') != ''
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --recursive
+            --skip-git
+            ./
+      - name: Trivy filesystem + IaC scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+  # --------------------------------------------------------------------------
+  images:
+    name: Images (build, Trivy image scan, SBOM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [detect, backend]
+    if: needs.detect.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: actions/setup-node@v5
+        if: needs.detect.outputs.web == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build images
+        run: make build-images
+      - id: img
+        name: Resolve built image references
+        run: |
+          refs=""
+          for ref in "masroof/backend:${IMAGE_TAG}" "masroof/web:${IMAGE_TAG}"; do
+            if docker image inspect "$ref" >/dev/null 2>&1; then refs="$refs $ref"; fi
+          done
+          if [ -z "$refs" ]; then
+            echo "::warning::No masroof/* image tagged ${IMAGE_TAG} found; 'make build-images' must honour IMAGE_TAG (infra/README.md)."
+          fi
+          echo "refs=${refs# }" >> "$GITHUB_OUTPUT"
+      - name: Trivy image scan (backend)
+        if: contains(steps.img.outputs.refs, 'masroof/backend')
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: masroof/backend:${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Trivy image scan (web)
+        if: contains(steps.img.outputs.refs, 'masroof/web')
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: masroof/web:${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: SBOM (CycloneDX)
+        run: make sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom/
+            **/bom.json
+            **/*.cdx.json
+            **/*.cdx.xml
+          if-no-files-found: warn
+          retention-days: 90
+
+  # --------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to staging + smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    needs: [detect, sdlc, contract, test-integrity, eval-fast, backend, web, android, e2e, security, images]
+    # Run only when staging is switched on and no upstream job failed (skipped is fine).
+    if: >-
+      always()
+      && vars.STAGING_ENABLED == 'true'
+      && needs.detect.outputs.backend == 'true'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+    env:
+      STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
+      STAGING_URL: ${{ vars.STAGING_URL }}
+    steps:
+      - name: Skip notice
+        if: env.STAGING_SSH_KEY == '' || env.STAGING_HOST == ''
+        run: |
+          echo "::warning::STAGING_SSH_KEY / STAGING_HOST secrets missing: skipping staging deploy."
+      - uses: actions/checkout@v5
+        if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
+      - uses: webfactory/ssh-agent@v0.9.0
+        if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+      - name: Known hosts
+        if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
+        env:
+          KNOWN_HOSTS: ${{ vars.STAGING_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            echo "::warning::vars.STAGING_KNOWN_HOSTS not set; trusting the host key on first use (TODO(owner): pin it)."
+            ssh-keyscan -H "${STAGING_HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+      - name: Deploy
+        if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
+        env:
+          DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+          DEPLOY_ENV: staging
+        run: make deploy-staging
+      - name: Smoke tests
+        if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
+        run: make smoke URL="${STAGING_URL}"
+
+  # --------------------------------------------------------------------------
+  gate:
+    name: Main gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [sdlc, contract, test-integrity, eval-fast, backend, web, android, e2e, security, images, deploy-staging]
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"result": *"(failure|cancelled)"'; then
+            echo "::error::At least one job failed or was cancelled."
+            exit 1
+          fi
+          echo "All jobs passed or were skipped."

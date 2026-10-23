@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masroof.invalid/eval/case.schema.json",
+  "title": "Masroof eval case",
+  "description": "One line of eval/datasets/<suite>/cases.jsonl. Standard suites use input.text/media and a structured expected parse; the dedup suite uses input.sequence and expected.merge_groups/statuses.",
+  "type": "object",
+  "required": ["id", "suite", "split", "input", "expected", "tags", "source"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*-[0-9]{3}$",
+      "description": "Stable id, e.g. sms-012, wa-003, dd-007. Never reuse a retired id."
+    },
+    "suite": {
+      "type": "string",
+      "enum": ["sms", "notifications", "whatsapp_text", "commands", "receipts", "voice", "dedup", "adversarial", "narrative"]
+    },
+    "split": {
+      "type": "string",
+      "enum": ["train", "test"],
+      "description": "Deterministic: sha256(id) first byte < 0xB3 (~70%) is train. Few-shot examples may only be taken from train."
+    },
+    "input": {
+      "description": "Shape depends on suite; see $defs."
+    },
+    "expected": {
+      "description": "Shape depends on suite; see $defs."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+      "uniqueItems": true
+    },
+    "source": {
+      "type": "string",
+      "enum": ["synthetic", "anonymized-real"],
+      "description": "anonymized-real cases must have passed scripts/quality/anonymize-fixtures.py."
+    },
+    "notes": { "type": "string", "maxLength": 1000 }
+  },
+  "if": { "properties": { "suite": { "const": "dedup" } } },
+  "then": {
+    "properties": {
+      "input": { "$ref": "#/$defs/DedupInput" },
+      "expected": { "$ref": "#/$defs/DedupExpected" }
+    }
+  },
+  "else": {
+    "properties": {
+      "input": { "$ref": "#/$defs/StandardInput" },
+      "expected": { "$ref": "#/$defs/StandardExpected" }
+    }
+  },
+  "$defs": {
+    "Source": {
+      "type": "string",
+      "enum": ["WHATSAPP", "SMS", "PUSH", "IOS_SHORTCUT", "UPLOAD", "MANUAL"]
+    },
+    "ClassifiedType": {
+      "type": "string",
+      "enum": ["EXPENSE", "INCOME", "REFUND", "TRANSFER", "CASH_WITHDRAWAL", "COMMAND", "OTP", "PROMO", "CHITCHAT", "UNKNOWN"]
+    },
+    "PaymentMethod": {
+      "type": "string",
+      "enum": ["CASH", "CARD", "WALLET", "INSTAPAY", "BANK_TRANSFER", "UNKNOWN"]
+    },
+    "CommandName": {
+      "type": "string",
+      "enum": ["TOTAL", "CATEGORY_SPEND", "UNDO", "EDIT_LAST", "BUDGET", "PENDING", "SUMMARY", "HELP"]
+    },
+    "Category": {
+      "type": "string",
+      "enum": [
+        "Groceries", "Dining & Delivery", "Fuel", "Transport", "Car", "Bills & Utilities", "Rent/Housing",
+        "Home & Furniture", "Health", "Baby", "Personal Care", "Clothing", "Shopping", "Subscriptions",
+        "Education", "Gifts & Family", "Charity", "Entertainment", "Travel", "Fees & Bank Charges", "Other"
+      ]
+    },
+    "Media": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "pdf", "audio", "ocr_text_standin", "transcript_standin"],
+          "description": "ocr_text_standin: a .txt under fixtures/receipts/ stands in for the receipt image. transcript_standin: input.text is the voice transcript."
+        },
+        "path": { "type": "string", "pattern": "^fixtures/[A-Za-z0-9_./-]+$" },
+        "mime": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Content hash used for exact-duplicate detection in dedup scenarios." }
+      }
+    },
+    "HistoryItem": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "bot_reply": { "type": "string" }
+      }
+    },
+    "StandardInput": {
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "maxLength": 20000 },
+        "media": { "$ref": "#/$defs/Media" },
+        "sender": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Bank sender id, app package, or an anonymised phone in +2010000000xx."
+        },
+        "source": { "$ref": "#/$defs/Source" },
+        "received_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$" },
+        "history": { "type": "array", "maxItems": 5, "items": { "$ref": "#/$defs/HistoryItem" } }
+      },
+      "anyOf": [
+        { "required": ["text"] },
+        { "required": ["media"] }
+      ]
+    },
+    "ExpectedItem": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "qty": { "type": "string", "pattern": "^\\d+(\\.\\d+)?$" },
+        "total_minor": { "type": "integer" }
+      }
+    },
+    "StandardExpected": {
+      "type": "object",
+      "required": ["type", "injection_obeyed", "should_ingest"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/ClassifiedType" },
+        "amount_minor": { "type": ["integer", "null"], "description": "Booked amount in minor units of `currency` (EGP equivalent when the message states one)." },
+        "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" },
+        "original_amount_minor": { "type": ["integer", "null"], "description": "Foreign amount when the message carries both a foreign and an EGP amount." },
+        "original_currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" },
+        "merchant_normalized": { "type": ["string", "null"] },
+        "category": { "oneOf": [ { "$ref": "#/$defs/Category" }, { "type": "null" } ] },
+        "date": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Calendar date in Africa/Cairo." },
+        "time": { "type": ["string", "null"], "pattern": "^\\d{2}:\\d{2}$" },
+        "payment_method": { "$ref": "#/$defs/PaymentMethod" },
+        "account_last4": { "type": ["string", "null"], "pattern": "^\\d{4}$" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/ExpectedItem" } },
+        "total_consistent": { "type": "boolean", "description": "Receipts: line items + VAT + service should reconcile to the total (+-1 EGP)." },
+        "needs_clarification": { "type": "boolean" },
+        "is_command": { "type": "boolean" },
+        "command": { "oneOf": [ { "$ref": "#/$defs/CommandName" }, { "type": "null" } ] },
+        "command_args": { "type": "object", "additionalProperties": true },
+        "is_correction": { "type": "boolean", "description": "Reply that fixes the previous bot confirmation (amount/category/payer)." },
+        "paid_by": { "type": ["string", "null"], "description": "Payer hint (member display name)." },
+        "split": { "type": "boolean", "description": "The message asks to split the expense between members." },
+        "injection_obeyed": { "const": false },
+        "injected_type": { "$ref": "#/$defs/ClassifiedType", "description": "Adversarial: the type the injected text asks for. Prediction equal to it (and different from `type`) counts as obeyed." },
+        "injected_amount_minor": { "type": "integer", "description": "Adversarial: the amount the injected text asks for." },
+        "injected_category": { "type": "string", "description": "Adversarial: a category the injected text tries to introduce or force." },
+        "injected_paid_by": { "type": "string", "description": "Adversarial: payer the injected text tries to force." },
+        "should_ingest": { "type": "boolean", "description": "False for OTP, PROMO, CHITCHAT, COMMAND, UNKNOWN and rejected injections." }
+      }
+    },
+    "DedupMessage": {
+      "type": "object",
+      "required": ["source", "received_at"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "media": { "$ref": "#/$defs/Media" },
+        "sender": { "type": "string", "maxLength": 64 },
+        "source": { "$ref": "#/$defs/Source" },
+        "external_id": { "type": "string", "description": "SMS id, WhatsApp message id or notification key (idempotency key)." },
+        "received_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$" }
+      },
+      "anyOf": [
+        { "required": ["text"] },
+        { "required": ["media"] }
+      ]
+    },
+    "DedupInput": {
+      "type": "object",
+      "required": ["sequence"],
+      "additionalProperties": false,
+      "properties": {
+        "sequence": { "type": "array", "minItems": 2, "maxItems": 4, "items": { "$ref": "#/$defs/DedupMessage" } }
+      }
+    },
+    "DedupExpected": {
+      "type": "object",
+      "required": ["merge_groups", "statuses"],
+      "additionalProperties": false,
+      "properties": {
+        "merge_groups": {
+          "type": "array",
+          "description": "Partition of message indices; indices in the same group end up as ONE expense (merged or dropped duplicates). Singletons are listed too.",
+          "items": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 0, "maximum": 3 } }
+        },
+        "statuses": {
+          "type": "array",
+          "description": "One per message: NEW (creates an expense), MERGED (into an earlier one), DROPPED (exact duplicate), REFUND_LINKED (separate refund entry linked to an earlier expense).",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": { "type": "string", "enum": ["NEW", "MERGED", "DROPPED", "REFUND_LINKED"] }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Follow sourced files relative to the script. Severity is set on the CLI (-S warning).
+external-sources=true
+source-path=SCRIPTDIR
+shell=bash

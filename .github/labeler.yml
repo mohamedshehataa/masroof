@@ -1,0 +1,70 @@
+# actions/labeler v5 configuration: labels PRs by changed paths (pr.yml `labeler` job).
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "backend/**"
+
+web:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "web/**"
+
+android:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "android/**"
+
+contracts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "contracts/**"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/security/**"
+          - ".semgrep/**"
+          - ".gitleaks.toml"
+          - "backend/**/security/**"
+          - "backend/**/auth/**"
+          - "backend/**/webhook/**"
+          - "android/**/AndroidManifest.xml"
+          - "android/**/network_security_config.xml"
+
+eval:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "eval/**"
+          - "backend/**/prompts/**"
+          - "backend/**/parsing/**"
+
+sdlc:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".claude/**"
+          - "scripts/**"
+          - "Makefile"
+          - "lefthook.yml"
+          - "CLAUDE.md"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+infra:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infra/**"
+          - "docs/DEPLOY*.md"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"
+
+migration:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "backend/**/db/migration/**"
