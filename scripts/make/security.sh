@@ -15,9 +15,9 @@ if need semgrep; then
 else
   echo "hint: pip install semgrep (CI installs it)"
 fi
-if need osv-scanner; then run "osv-scanner" osv-scanner scan -r --skip-git . ; fi
+if need osv-scanner; then run "osv-scanner" osv-scanner scan source -r --no-ignore . ; fi
 if need trivy; then
-  run "trivy fs (vulns, secrets, misconfig)" trivy fs --quiet --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --exit-code 1 --skip-dirs node_modules,build,dist .
+  run "trivy fs (vulns, secrets, misconfig)" trivy fs --quiet --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --exit-code 1 --skip-dirs node_modules,dist --skip-dirs "**/build" .
   if [ -f infra/docker-compose.yml ]; then run "trivy config (IaC)" trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 infra; fi
 fi
 if [ -n "${ZAP_TARGET:-}" ] && command -v docker >/dev/null 2>&1; then
