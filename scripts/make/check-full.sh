@@ -12,6 +12,7 @@ run "check" bash scripts/make/check.sh
 run "security" bash scripts/make/security.sh
 run "eval (full)" bash scripts/make/eval.sh full
 [ -x backend/gradlew ] && run "mutation (PIT)" bash scripts/make/module.sh backend mutation
+[ -x backend/gradlew ] && run "coverage gate incl. mutation" "$PYTHON" scripts/quality/coverage-gate.py --require-mutation
 [ -x backend/gradlew ] && run "migration tests (empty + previous snapshot)" bash scripts/make/module.sh backend migrationTest
 if [ -f web/package.json ] || [ -x android/gradlew ]; then run "e2e" bash scripts/make/e2e.sh; fi
 if [ -f web/package.json ] || [ -x backend/gradlew ]; then run "perf" bash scripts/make/perf.sh; fi

@@ -141,7 +141,7 @@ def flaky_count(path: Path) -> int:
 
 
 # -------------------------------------------------------------- evaluation
-def evaluate(root: Path, th: dict) -> list[Row]:
+def evaluate(root: Path, th: dict, require_mutation: bool = False) -> list[Row]:
     rows: list[Row] = []
 
     # ---- backend
@@ -165,7 +165,10 @@ def evaluate(root: Path, th: dict) -> list[Row]:
             pit = root / b.get("pitest", "")
             muts = pit_scores(pit) if pit.is_file() else []
             if not pit.is_file():
-                rows.append(Row("backend", "PIT report", "missing", "required", "FAIL", f"{b.get('pitest')} not found"))
+                if require_mutation:
+                    rows.append(Row("backend", "PIT report", "missing", "required", "FAIL", f"{b.get('pitest')} not found"))
+                else:
+                    rows.append(Row("backend", "PIT report", "missing", "info", "SKIP", f"{b.get('pitest')} not found; mutation runs in make check-full (--require-mutation)"))
             elif not muts:
                 rows.append(Row("backend", "mutation score", "–", "–", "SKIP", "report has no mutations"))
             else:
@@ -250,6 +253,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--thresholds", default=None, help="thresholds YAML (default: quality-thresholds.yaml beside this script)")
     ap.add_argument("--root", default=None, help="repository root (default: two levels above this script)")
+    ap.add_argument("--require-mutation", action="store_true",
+                    help="fail when the PIT report is missing (make check-full after pitest); default: SKIP, because make check never runs PIT")
     try:
         args = ap.parse_args(list(argv) if argv is not None else None)
     except SystemExit as e:
@@ -266,7 +271,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     except yaml.YAMLError as e:
         print(f"coverage-gate: cannot parse {th_path}: {e}", file=sys.stderr)
         return 2
-    rows = evaluate(root, th)
+    rows = evaluate(root, th, require_mutation=args.require_mutation)
     print(render(rows))
     fails = [r for r in rows if r.status == "FAIL"]
     skips = sum(1 for r in rows if r.status == "SKIP")
