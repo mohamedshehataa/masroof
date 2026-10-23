@@ -8,7 +8,9 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import eg.masroof.archfixture.domain.BadMoney;
+import eg.masroof.archfixture.domain.BadReturn;
 import eg.masroof.archfixture.domain.GoodMoney;
+import eg.masroof.archfixture.money.BadParam;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -32,6 +34,30 @@ class MoneyRuleProbeTest {
     assertThatThrownBy(() -> ArchitectureRulesTest.MONEY_RULE.check(classes))
         .isInstanceOf(AssertionError.class)
         .hasMessageContaining("BadMoney");
+  }
+
+  @Test
+  @Tag("REQ-OPS-024")
+  @DisplayName(
+      "REQ-OPS-024 money rule rejects a `double` parameter in a money package and names BadParam")
+  void moneyRuleRejectsDoubleParameter() {
+    JavaClasses classes = new ClassFileImporter().importClasses(BadParam.class);
+
+    assertThatThrownBy(() -> ArchitectureRulesTest.MONEY_RULE.check(classes))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining("BadParam");
+  }
+
+  @Test
+  @Tag("REQ-OPS-024")
+  @DisplayName(
+      "REQ-OPS-024 money rule rejects a money-named domain method returning Double (BadReturn)")
+  void moneyRuleRejectsBoxedDoubleReturn() {
+    JavaClasses classes = new ClassFileImporter().importClasses(BadReturn.class);
+
+    assertThatThrownBy(() -> ArchitectureRulesTest.MONEY_RULE.check(classes))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining("BadReturn");
   }
 
   @Test

@@ -1,7 +1,24 @@
 // Backend build (ADR-0002, STORY-002 design notes). Versions are pinned inline on purpose: one module, no catalog.
 import com.github.spotbugs.snom.Confidence
 import net.ltgt.gradle.errorprone.errorprone
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
+// Plugin classpath is locked too (-> buildscript-gradle.lockfile). The constraints lift build-time libraries that the
+// plugins pull in above CVE-fixed versions (CWE-1395, ASVS 15.2.1); drop each once the owning plugin ships a fix.
+buildscript {
+    dependencyLocking { lockAllConfigurations() }
+    dependencies {
+        classpath(platform("com.fasterxml.jackson:jackson-bom:2.21.8")) // jackson-core/databind 2.21.4 DoS GHSAs
+        constraints {
+            classpath("org.apache.commons:commons-lang3:3.18.0") // GHSA-j288-q9x7-2f5v
+            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.5") // GHSA-hjcp-jmpx-g3qm
+            classpath("org.apache.httpcomponents.core5:httpcore5:5.4.4") // GHSA-hf6x-8p5f-cgmf
+            classpath("org.apache.httpcomponents.core5:httpcore5-h2:5.4.4") // GHSA-v3jc-474w-2wm6
+        }
+    }
+}
 
 plugins {
     java
@@ -21,8 +38,19 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 
 repositories { mavenCentral() }
 
+// Lock every resolvable configuration so SCA (osv-scanner, Dependabot) sees the full graph (CWE-1104, ASVS 15.1.2).
+// Refresh with: ./gradlew dependencies buildEnvironment --write-locks
+dependencyLocking { lockAllConfigurations() }
+
 dependencies {
     implementation(platform(SpringBootPlugin.BOM_COORDINATES))
+    // Above the Boot 3.5.16 BOM: Gradle picks the highest version across platforms and constraints.
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.21.8")) // jackson-core/databind 2.21.4 DoS GHSAs via flyway-core
+    constraints {
+        runtimeOnly("org.postgresql:postgresql:42.7.14") // GHSA-j92g-9f8w-j867 (CVE-2026-54291, CVSS 8.2) fixed in 42.7.12
+        implementation("org.apache.logging.log4j:log4j-api:2.25.5") // GHSA-qv9r-c865-cp47, transitive of spring-boot-starter
+        testImplementation("org.apache.commons:commons-compress:1.28.0") // GHSA-4265-ccf5-phj5, via Testcontainers
+    }
     testImplementation(platform("org.junit:junit-bom:5.14.4")) // > Boot's 5.12.2; jqwik 1.10.2 needs platform 1.14
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.flywaydb:flyway-core")
@@ -77,6 +105,15 @@ tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
 
+// Under -q a failing test prints its class, the assertion and the causes (default quiet logging shows only the summary).
+tasks.withType<Test>().configureEach {
+    testLogging.quiet {
+        events(TestLogEvent.FAILED)
+        exceptionFormat = TestExceptionFormat.FULL
+        showCauses = true
+    }
+}
+
 fun taggedTest(name: String, tag: String, what: String) = tasks.register<Test>(name) {
     description = what
     group = LifecycleBasePlugin.VERIFICATION_GROUP
@@ -91,6 +128,7 @@ integrationTest { finalizedBy(tasks.jacocoTestReport) }
 taggedTest("archTest", "arch", "ArchUnit rules over main classes (tag arch)")
     .configure { extensions.configure<JacocoTaskExtension> { isEnabled = false } }
 taggedTest("migrationTest", "migration", "Flyway from empty (previous-snapshot case arrives with STORY-004)")
+    .configure { extensions.configure<JacocoTaskExtension> { isEnabled = false } } // coverage comes from integrationTest
 
 jacoco { toolVersion = "0.8.13" }
 tasks.jacocoTestReport {

@@ -21,8 +21,10 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * REQ-OPS-024 architecture rules 1-7 over main classes only. Every rule allows an empty "should" so
- * the skeleton's empty layer packages pass; {@link MoneyRuleProbeTest} proves the money rule bites.
+ * REQ-OPS-024 architecture rules 1-7 over main classes only. Layer rules allow an empty "should" so
+ * the skeleton's empty layer packages pass (rule 4 does not: MasroofApplication always exists; rule
+ * 5 selects annotated fields and there are none yet); {@link MoneyRuleProbeTest} proves the money
+ * rule bites.
  */
 @AnalyzeClasses(packages = "eg.masroof", importOptions = ImportOption.DoNotIncludeTests.class)
 @ArchTag("arch")
@@ -119,7 +121,7 @@ public class ArchitectureRulesTest {
   /** Rule 4: no System.out / System.err (also bans printStackTrace). */
   @ArchTest
   public static final ArchRule NO_STANDARD_STREAMS =
-      GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS.allowEmptyShould(true);
+      GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
 
   /** Rule 5: no field injection. */
   @ArchTest

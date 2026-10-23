@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class V1BaselineMigrationTest {
 
   @Container @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16.11-alpine");
 
   private final JdbcTemplate jdbc;
 

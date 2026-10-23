@@ -25,7 +25,8 @@ cleanup() {
   if [ -n "$created_root" ] && [ -d "$created_root" ]; then find "$created_root" -depth -type d -empty -delete; fi
   rm -rf "$logdir"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 record() { # record <name> <ok|fail> <detail>
   case_names+=("$1"); case_ok+=("$2"); case_detail+=("$3")
@@ -50,16 +51,14 @@ if [ ! -x backend/gradlew ]; then
 fi
 status_before="$(git status --porcelain -- backend/src 2>/dev/null)"
 
-# Case 5, also the warm-up run for case 1: `make check-fast` with no MODULE runs the sdlc and backend gates.
+# Case 5: `make check-fast` with no MODULE dispatches to the sdlc and backend gates. Checked on the dry-run recipe, so
+# the (slow) sdlc gate is not re-run here; the real backend gate run is case 1.
 REQ_OPS_023_make_check_fast_dispatches_to_backend() {
-  local name="REQ-OPS-023 make check-fast without MODULE runs sdlc and backend gates and exits 0"
-  local log="$logdir/all.log" rc
-  env -u MODULE make check-fast > "$log" 2>&1; rc=$?
-  if [ "$rc" -ne 0 ]; then record "$name" fail "exit $rc"; show_tail "$log"
-  elif ! grep -q '===== check-fast: sdlc =====' "$log"; then record "$name" fail "no sdlc gate header"; show_tail "$log"
-  elif ! grep -q '===== check-fast: backend =====' "$log"; then record "$name" fail "no backend gate header"; show_tail "$log"
-  elif ! grep -q 'OK   backend: ./gradlew checkFast' "$log"; then
-    record "$name" fail "backend checkFast step not OK"; show_tail "$log"
+  local name="REQ-OPS-023 make check-fast without MODULE dispatches to the sdlc and backend gates"
+  local log="$logdir/dispatch.log" rc
+  env -u MODULE make -n check-fast > "$log" 2>&1; rc=$?
+  if [ "$rc" -ne 0 ]; then record "$name" fail "make -n exit $rc"; show_tail "$log"
+  elif ! grep -q 'check-fast.sh sdlc backend' "$log"; then record "$name" fail "recipe does not run 'check-fast.sh sdlc backend'"; show_tail "$log"
   else record "$name" ok ""; fi
 }
 
@@ -101,7 +100,7 @@ REQ_OPS_023_tab_indentation_rejected() {
 
 # Case 3: an unused import fails compileJava (Error Prone RemoveUnusedImports), naming the file.
 REQ_OPS_023_unused_import_rejected() {
-  local name="REQ-OPS-023 unused import rejected"
+  local name="REQ-OPS-023 unused import rejected" log="$logdir/import.log" last
   if ! plant GateProbeImport.java <<'JAVA'
 package eg.masroof;
 
@@ -113,8 +112,13 @@ final class GateProbeImport {
 }
 JAVA
   then record "$name" fail "could not plant"; return; fi
-  expect_gate_rejects "$name" GateProbeImport.java "$logdir/import.log" \
-    'compileJava' make check-fast MODULE=backend
+  expect_gate_rejects "$name" GateProbeImport.java "$log" \
+    'RemoveUnusedImports' make check-fast MODULE=backend
+  last=$((${#case_ok[@]} - 1))
+  if [ "${case_ok[$last]}" = ok ] && ! grep -q 'compileJava' "$log"; then
+    case_ok[last]=fail; case_detail[last]="RemoveUnusedImports reported, but not by compileJava"
+    printf 'FAIL  %s: RemoveUnusedImports reported, but not by compileJava\n' "$name"; show_tail "$log"
+  fi
   unplant GateProbeImport.java
 }
 

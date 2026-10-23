@@ -49,7 +49,7 @@ flowchart LR
 | B4 | iOS Shortcut -> `/api/ingest/sms`, `/api/ingest/receipt` | HTTPS; per-device token header; no interactive auth possible |
 | B5 | PWA -> `/api/*` | HTTPS; short-lived JWT access + rotating refresh token; CORS locked to `WEB_BASE_URL` |
 | B6 | backend -> Anthropic API (and B6b STT, B6c FX) | HTTPS, API key from env; outbound only |
-| B7 | backend -> PostgreSQL / MinIO | compose-internal network; DB user with least privilege; MinIO access key per bucket |
+| B7 | backend -> PostgreSQL / MinIO | compose-internal network; DB user with least privilege; MinIO access key per bucket. JDBC to Postgres must use `sslmode=verify-full` with `channelBinding=require` (SCRAM-SHA-256) once the DB is not on a private socket/network; the Flyway migration user is a separate, DDL-capable role used only at deploy time, the runtime role has no DDL (STORY-002 uses one local dev user) |
 | B8 | backend -> WhatsApp Cloud API (send) | HTTPS, permanent system-user token; only to the household group / member numbers |
 | B9 | admin -> VPS | SSH key only; `/release` skill + `MASROOF_RELEASE_ACTIVE` flag; CI deploy user |
 
@@ -147,6 +147,7 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | I | Backups readable | `age`-encrypted dumps; bucket private | REQ-SEC-012 | Planned |
 | D | Disk full, runaway media | Disk alert at 80 %, media size caps, retention for raw media (configurable) | REQ-SEC-022 | Planned |
 | E | App DB user owns everything | Separate migration role (Flyway) and runtime role without DDL | REQ-SEC-020 | Planned |
+| S | Network peer impersonates Postgres or downgrades auth (no channel binding) | `sslmode=verify-full` + `channelBinding=require` in the production JDBC URL; SCRAM-SHA-256 only; prod profile requires `POSTGRES_PASSWORD` (no empty default) | REQ-SEC-020 | Planned (prod password guard: Done STORY-002) |
 
 ### B8 backend -> WhatsApp send
 
@@ -167,6 +168,17 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | R | Who deployed what | GitHub environment `production` with deployment history; `infra/.deployed/*.env` with timestamps | REQ-SEC-024 | Planned |
 | I | `.env` readable by other users | `chmod 600`, owner `masroof`; no secrets in images | REQ-SEC-021 | Planned |
 | D | Failed deploy leaves prod down | Pre-deploy backup, smoke test, automatic `make rollback` | REQ-SEC-012 | Done (release.yml; scripts stub) |
+
+### Build supply chain (backend, STORY-002)
+
+Not a runtime boundary; it protects the artifact that crosses B1-B9.
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| T | Vulnerable transitive dependency ships in the runtime image (CWE-1395) | Overrides above the Spring Boot BOM (`jackson-bom`, `postgresql`, `log4j-api`) with a reason comment each; `osv-scanner scan source -r --no-ignore backend` reports 0 High/Critical; Dependabot | REQ-SEC-013 | Done (STORY-002) |
+| T | Dependency graph invisible to SCA or silently changing (CWE-1104) | `dependencyLocking { lockAllConfigurations() }` -> `backend/gradle.lockfile` and `buildscript-gradle.lockfile` committed | REQ-SEC-013 | Done (STORY-002) |
+| T | Tampered artifact or wrapper fetched at build time | `gradle/verification-metadata.xml` (sha256) and `gradle/actions/wrapper-validation@v4` in the backend CI jobs | REQ-SEC-013 | Done (STORY-002) |
+| T | Testcontainers image tag drifts under tests | Test database image pinned to `postgres:16.11-alpine` (digest pin Planned) | REQ-SEC-013 | Done (STORY-002) |
 
 ## 4. Requirement register (REQ-SEC)
 
@@ -208,5 +220,6 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 - Native iOS app: not built (Section 2); the PWA inherits browser sandboxing.
 - Multi-tenant SaaS threats: one household per deployment is the target; `household_id` scoping is still enforced to keep the option open.
 - Hardware wallet / banking credential storage: Masroof never holds bank credentials.
+- Build supply chain: artifact signature verification (`verify-signatures`) is off in `verification-metadata.xml` (sha256 only), the Testcontainers image is pinned by tag not digest, and no SBOM is generated for the backend yet; revisit at the first release story.
 
 TODO(owner): confirm the VPS provider's disk-encryption and snapshot policy; decide whether raw media retention is 90 days or indefinite.
