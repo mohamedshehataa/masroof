@@ -6,7 +6,7 @@ phase: 1
 status: READY
 size: M
 modules: [backend]
-depends_on: [STORY-002]
+depends_on: [STORY-002, STORY-142]
 reqs: [REQ-OPS-040, REQ-OPS-041, REQ-OPS-042]
 implements: ["PROMPT.md §8 (data model, default categories, seeds)", "PROMPT.md §14 Phase 1 (Flyway schema + seeds)"]
 owner_agent: backend-engineer
@@ -51,7 +51,7 @@ None.
 Filled at stage 3.
 
 ## Dependencies
-STORY-002.
+STORY-002 (backend module, V1 `household`), STORY-142 (`make up` stack for REQ-OPS-042).
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -68,3 +68,4 @@ STORY-002.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-142 added to depends_on (REQ-OPS-042 runs on make up) after the STORY-002 split |

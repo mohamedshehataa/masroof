@@ -6,11 +6,11 @@ REQ → story (status, phase) → tests (file · name, last result) → implemen
 ## Summary
 | metric | value |
 |---|---|
-| total REQs | 323 |
+| total REQs | 325 |
 | covered (at least one test) | 10 |
 | passing | 10 |
 | failing | 0 |
-| pending (story not DONE, no test yet) | 313 |
+| pending (story not DONE, no test yet) | 315 |
 | orphans (DONE story, no test) | 0 |
 | unknown REQ references | 0 |
 | duplicate REQ ids | 0 |
@@ -343,6 +343,7 @@ None.
 | REQ-SEC-043 | MinIO/S3 server-side encryption enabled; verified by integration test | STORY-122 | DRAFT | 9 | — | — | — |
 | REQ-SEC-044 | Only parsing-relevant fields are sent to the LLM; balances/account numbers stripped where not required; verified by prompt-content tests | STORY-123 | DRAFT | 9 | — | — | — |
 | REQ-SEC-050 | Register and authenticate with passkeys on the PWA (platform authenticator), fallback to password; may be DESCOPED with an ADR if infeasible | STORY-134 | DRAFT | 9 | — | — | — |
+| REQ-SEC-051 | Rate limiting of unauthenticated endpoints (incl. /health) | STORY-010 | READY | 1 | — | — | — |
 
 ## Area OPS
 | REQ | name | story | status | phase | tests | result | files |
@@ -357,11 +358,12 @@ None.
 | REQ-OPS-008 | budget-check warns when over budget | STORY-001 | READY | 0 | `.claude/hooks/tests/test-context-hooks.sh` · # REQ-OPS-006 inject-context, REQ-OPS-008 budget-check, REQ-OPS-009 snapshot-progress. (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_contains "$OUT" "350" "REQ-OPS-008 names the spend" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_contains "$OUT" "BUDGET EXCEEDED" "REQ-OPS-008 warns when over budget" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · echo "-- budget-check (REQ-OPS-008)" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · mk_metrics 11; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)"; assert_contains "$OUT" "EXCEEDED" "R (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · mk_metrics 11; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)"; assert_eq "$OUT" "" "REQ-OPS-008 .en (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · mk_metrics 12.5; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_e (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · mk_metrics 250; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_co (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · mk_metrics 350; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_al (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · rm -f "$M"; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)"; assert_allowed "REQ-OPS-008 missing met (PASS) | PASS | — |
 | REQ-OPS-009 | PreCompact snapshot preserves state | STORY-001 | READY | 0 | `.claude/hooks/tests/test-context-hooks.sh` · # REQ-OPS-006 inject-context, REQ-OPS-008 budget-check, REQ-OPS-009 snapshot-progress. (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_contains "$(jq -r .last_compact "$MASROOF_STATE_FILE")" "T" "REQ-OPS-009 records timestamp" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_contains "$(jq -r .last_compact_trigger "$MASROOF_STATE_FILE")" "auto" "REQ-OPS-009 records trigger" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_eq "$(find "$MASROOF_STATE_DIR/snapshots" -name 'state-*.json' \| wc -l \| tr -d ' ')" "1" "REQ-OPS-009 writes one  (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · assert_eq "$(jq -r .story "$MASROOF_STATE_FILE")" "STORY-001" "REQ-OPS-009 keeps existing state" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · echo "-- snapshot-progress (REQ-OPS-009)" (PASS)<br>`.claude/hooks/tests/test-context-hooks.sh` · run_hook snapshot-progress.sh "$(json_precompact auto)"; assert_allowed "REQ-OPS-009 exits 0" (PASS) | PASS | — |
 | REQ-OPS-010 | format-changed gives lint feedback | STORY-001 | READY | 0 | `.claude/hooks/tests/test-post-tool-hooks.sh` · # REQ-OPS-007 test-integrity warns on weakened tests; REQ-OPS-010 format-changed gives lint feedback. (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · assert_contains "$OUT" "SC2086" "REQ-OPS-010 feeds shellcheck findings back" (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · assert_contains "$OUT" "additionalContext" "REQ-OPS-010 uses hookSpecificOutput.additionalContext" (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · echo "-- format-changed (REQ-OPS-010)" (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$B")"; assert_allowed "REQ-OPS-010 never blocks" (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$G")"; assert_eq "$OUT" "" "REQ-OPS-010 silent on clean file" (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$J")"; assert_contains "$OUT" "Lint feedback" "REQ-OPS-010 reports invali (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$P/does-not-exist.ts")"; assert_eq "$OUT" "" "REQ-OPS-010 missing file is (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$PY")"; assert_contains "$OUT" "Lint feedback" "REQ-OPS-010 reports Pytho (PASS)<br>`.claude/hooks/tests/test-post-tool-hooks.sh` · run_hook format-changed.sh "$(json_post_write "$Y")"; assert_contains "$OUT" "Lint feedback" "REQ-OPS-010 reports invali (PASS) | PASS | — |
-| REQ-OPS-020 | GET /health returns build information | STORY-002 | READY | 0 | — | — | `contracts/openapi.yaml` |
-| REQ-OPS-021 | Web page renders the backend version | STORY-002 | READY | 0 | — | — | — |
-| REQ-OPS-022 | make up brings up the whole stack and smoke passes | STORY-002 | READY | 0 | — | — | — |
-| REQ-OPS-023 | Module fast gates exist and are green | STORY-002 | READY | 0 | — | — | — |
-| REQ-OPS-024 | Baseline migration and architecture rules | STORY-002 | READY | 0 | — | — | — |
+| REQ-OPS-020 | GET /health returns build information | STORY-143 | READY | 0 | — | — | `contracts/openapi.yaml` |
+| REQ-OPS-021 | Web page renders the backend version | STORY-141 | READY | 0 | — | — | — |
+| REQ-OPS-022 | make up brings up the whole stack and smoke passes | STORY-142 | READY | 0 | — | — | — |
+| REQ-OPS-023 | Backend fast gate and full check are green | STORY-002 | READY | 0 | — | — | — |
+| REQ-OPS-024 | V1 baseline migration and architecture rules | STORY-002 | READY | 0 | — | — | — |
+| REQ-OPS-025 | Web fast gate is green and enforces i18n | STORY-141 | READY | 0 | — | — | — |
 | REQ-OPS-030 | Structured JSON logs with redaction | STORY-003 | READY | 1 | — | — | — |
 | REQ-OPS-031 | Metrics endpoint and dashboards | STORY-003 | READY | 1 | — | — | — |
 | REQ-OPS-032 | Traces exported | STORY-003 | READY | 1 | — | — | — |

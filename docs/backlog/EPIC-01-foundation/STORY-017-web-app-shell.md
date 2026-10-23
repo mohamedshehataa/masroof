@@ -20,7 +20,7 @@ The PWA has its skeleton: language switch with full RTL, the brand theme in ligh
 ## Requirements and acceptance criteria
 ### REQ-UI-002 — Language switch with full RTL
 **Given** the app loads with no stored preference **When** the browser language is `ar-*` **Then** the UI renders in Arabic with `<html lang="ar" dir="rtl">`; otherwise English LTR. **When** the user switches language in More → Language **Then** every visible string changes without reload, the choice persists in `localStorage`, and the layout mirrors (bottom bar order, icons with directional meaning flipped, text alignment).
-**Given** `npm run check-fast` **Then** the i18n ESLint rule fails on any hard-coded user-facing string, and a unit test asserts `ar.json` and `en.json` have identical key sets.
+**Given** `npm run check-fast` **Then** the `i18next/no-literal-string` rule from REQ-OPS-025 (STORY-141) stays enabled and its fixture test stays green (not re-specified here), and a unit test asserts `ar.json` and `en.json` have identical key sets. The skeleton's language toggle and `navigator.language` default from STORY-141 are replaced by this REQ's More → Language with persistence.
 Unhappy path: **Given** a missing key at runtime **Then** the English fallback renders and a console warning is logged in dev only (never a raw key like `home.title` in production builds).
 
 ### REQ-UI-003 — Brand theme, light and dark
@@ -54,7 +54,7 @@ None.
 Filled at stage 3.
 
 ## Dependencies
-STORY-007.
+STORY-007 (which depends on STORY-141, where the i18n setup and lint rule originate).
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -71,3 +71,4 @@ STORY-007.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — i18n lint rule now referenced from REQ-OPS-025 (STORY-141) instead of re-specified |

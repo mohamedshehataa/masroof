@@ -6,7 +6,7 @@ phase: 1
 status: READY
 size: M
 modules: [infra, sdlc]
-depends_on: [STORY-002, STORY-006, STORY-007, STORY-008]
+depends_on: [STORY-002, STORY-143, STORY-141, STORY-142, STORY-006, STORY-007, STORY-008]
 reqs: [REQ-OPS-060, REQ-OPS-061, REQ-OPS-062]
 implements: ["PROMPT.md §14 Phase 1 (CI with real jobs)", "PROMPT.md S12 (pr.yml, main.yml, nightly.yml)", "PROMPT.md §2 (CI)"]
 owner_agent: devops-engineer
@@ -49,7 +49,7 @@ Secrets come only from GitHub Actions secrets; workflows pin third-party actions
 Filled at stage 3.
 
 ## Dependencies
-STORY-002, STORY-006, STORY-007, STORY-008.
+STORY-002 (backend gate), STORY-143 (backend image), STORY-141 (web gate), STORY-142 (compose stack for `make e2e`), STORY-006, STORY-007, STORY-008.
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -66,3 +66,5 @@ STORY-002, STORY-006, STORY-007, STORY-008.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-141/142 added to depends_on after the STORY-002 split |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-143 added to depends_on (backend image built by main.yml) |

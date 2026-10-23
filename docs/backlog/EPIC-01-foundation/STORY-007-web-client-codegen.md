@@ -6,7 +6,7 @@ phase: 1
 status: READY
 size: S
 modules: [contracts, web]
-depends_on: [STORY-002]
+depends_on: [STORY-141]
 reqs: [REQ-OPS-053]
 implements: ["PROMPT.md §9 (generated TypeScript client)", "PROMPT.md S9 (contract-first)"]
 owner_agent: web-engineer
@@ -20,7 +20,7 @@ The web app talks to the backend only through a typed client generated from `con
 ## Requirements and acceptance criteria
 ### REQ-OPS-053 — Generated TypeScript client
 **Given** `npm run generate` (also run by `npm run check-fast` and `npm run build`) **When** it runs **Then** `web/src/api/generated/` contains a fetch-based client and types for every operation and schema in the contract, `Money.amountMinor` is typed `number` with a lint rule forbidding arithmetic on it outside `src/lib/money.ts`, and `import` of `fetch` elsewhere in `src/` for `/api/*` URLs fails ESLint (`no-restricted-imports`/custom rule).
-**Given** the health page **Then** it uses `getHealth()` from the generated client (STORY-002 switched over if it was hand-written).
+**Given** the version page from STORY-141 **Then** the hand-written `web/src/api/health.ts` is deleted, the page imports `getHealth()` from the generated client (keeping runtime validation of the response shape), and STORY-141's REQ-OPS-021 tests — including the schema-invalid `200` case — pass unchanged.
 Unhappy path: **Given** a hand edit in `web/src/api/generated/` **Then** `protect-files.sh` blocks it and `npm run generate` reproduces the files byte-for-byte (CI asserts `git diff --exit-code`).
 Unhappy path: **Given** the contract has a schema the generator cannot express (e.g. unsupported `type: [string, 'null']`) **Then** `npm run generate` fails with the schema name instead of emitting `any`.
 
@@ -43,7 +43,7 @@ None.
 Filled at stage 3.
 
 ## Dependencies
-STORY-002.
+STORY-141 (web module and the hand-written `getHealth()` it replaces; STORY-141 depends on STORY-143).
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -60,3 +60,4 @@ STORY-002.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-141; switch of the hand-written getHealth() made explicit |

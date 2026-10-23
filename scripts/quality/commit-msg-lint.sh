@@ -6,7 +6,7 @@
 #   <type>(<scope>)?!?: <description> [<TAG>]
 #
 #   type   : feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert
-#   scope  : optional, lowercase [a-z0-9._/-]
+#   scope  : optional, [A-Za-z0-9._/-] (story ids like STORY-002 are fine)
 #   !      : optional breaking-change marker
 #   TAG    : STORY-NNN (3+ digits), PHASE-N or SDLC, in square brackets, last on the line
 #   length : whole subject line <= 72 characters
@@ -66,7 +66,7 @@ if [ "$len" -gt "$MAX_LEN" ]; then
   fail "subject line is ${len} characters; maximum is ${MAX_LEN}" "subject: ${subject}"
 fi
 
-header_re="^(${TYPES})(\([a-z0-9][a-z0-9._/-]*\))?(!)?: (.+)$"
+header_re="^(${TYPES})(\([A-Za-z0-9][A-Za-z0-9._/-]*\))?(!)?: (.+)$"
 uppercase_type_re='^[A-Z][a-z]+[(:!]'
 any_type_re='^([a-z]+)(\([^)]*\))?!?: '
 if ! [[ "$subject" =~ $header_re ]]; then
