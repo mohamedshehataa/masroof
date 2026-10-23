@@ -10,3 +10,5 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-23 19:05 · P0 · STORY-001 · selftest · GREEN · make selftest: 14 guards PROVEN, 1 PENDING (ArchUnit until backend exists), 0 FAILED - docs/SDLC_SELFTEST.md.
 2026-10-23 19:12 · P0 · SDLC · backlog · GREEN · Backlog sliced: 140 stories / 16 epics (40 READY for P0-P2, 100 DRAFT stubs), 323 REQ ids; sdlc-lint 0 errors; traceability gate PASS (REQ-OPS-001..010 covered by hook tests).
 2026-10-23 19:40 · P0 · STORY-002 · spec-review · INFO · spec-reviewer CHANGES_REQUESTED (26 findings); skeleton split into STORY-002/143/141/142; STORY-010 gains REQ-SEC-051 (rate limiting).
+2026-10-23 20:05 · P0 · STORY-002 · spec-review · INFO · loop 2/2 CHANGES_REQUESTED (17 findings, all with proposed text); applied verbatim, loop limit recorded as LOOP-001 (resolved); proceeding to design.
+2026-10-23 20:10 · P0 · STORY-001 · verify · RED · qa-verifier FAIL loop 1/3: 8/10 criteria fail as written, 11 MAJOR (force-push/rm/.env-read bypasses, case-variant paths, slow secret scan, settings.local.json unprotected, bash asserts invisible to test-integrity); fix loop started (devops-engineer).

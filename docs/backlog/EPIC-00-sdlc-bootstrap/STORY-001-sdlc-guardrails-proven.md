@@ -55,9 +55,9 @@ Unhappy path: **Given** `docs/PROGRESS.md` is missing **When** the hook runs **T
 Unhappy path: **Given** the edited file is not a test file **Then** no output and no log line.
 
 ### REQ-OPS-008 — budget-check warns when over budget
-**Given** `.env` sets `SDLC_AI_BUDGET_USD=300` and `.claude/state/spend.json` totals `350` **When** the `UserPromptSubmit` hook runs **Then** stdout contains `BUDGET EXCEEDED` and the spend `350`, and exit is 0 (warn, not block — S16 checkpoint 3).
+**Given** `.env` sets `SDLC_AI_BUDGET_USD=300` and the `AI spend (USD)` row of `docs/SDLC_METRICS.md` reads `350` **When** the `UserPromptSubmit` hook runs **Then** stdout contains `BUDGET EXCEEDED` and the spend `350`, and exit is 0 (warn, not block — S16 checkpoint 3).
 **Given** spend `120` **Then** no output.
-Unhappy path: **Given** the spend file is missing or malformed **Then** the hook exits 0 silently.
+Unhappy path: **Given** `docs/SDLC_METRICS.md` is missing or the spend cell is non-numeric **Then** the hook exits 0 silently; **Given** the cell reads `1,234.50` or `$350` **Then** it is parsed as 1234.50 / 350 (separators and currency signs stripped) and compared correctly.
 
 ### REQ-OPS-009 — PreCompact snapshot preserves state
 **Given** a `PreCompact` event with trigger `auto` **When** the hook runs **Then** `.claude/state.json` records `last_compact` (ISO timestamp containing `T`) and `last_compact_trigger: auto`, keeps existing keys (e.g. `story: STORY-001`), and exactly one `state-<timestamp>.json` snapshot is written under `.claude/state/snapshots/`.

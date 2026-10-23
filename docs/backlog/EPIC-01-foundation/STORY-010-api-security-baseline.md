@@ -40,7 +40,7 @@ Unhappy path: **Given** malformed JSON in a request body **Then** `400` Problem 
 **Given** a request **Then** the client IP is taken from `X-Forwarded-For` only when the request comes from the trusted Caddy network; otherwise the socket address is used.
 Unhappy path: **Given** a client on an untrusted network that sends a different `X-Forwarded-For` value on each request **When** it sends 61 requests in 60 s **Then** the 61st still gets `429` (spoofed headers are ignored).
 Unhappy path: **Given** the container's own healthcheck calls `/health` from loopback every few seconds **Then** those calls are not counted and never get `429`, so compose never marks the backend unhealthy because of the limiter.
-This takes over the rate-limit criterion removed from the walking skeleton (originally STORY-002, now STORY-143's `/health`; spec review 2026-10-23, orchestrator decision 2); the `429` response on `/health` already exists in the contract.
+This takes over the rate-limit criterion removed from the walking skeleton (originally STORY-002, now STORY-143's `/health`; spec review 2026-10-23); the `429` response on `/health` already exists in the contract.
 
 ## UX states (UI stories only)
 N/A.

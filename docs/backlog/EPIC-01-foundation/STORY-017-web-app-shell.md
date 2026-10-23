@@ -29,6 +29,7 @@ Unhappy path: **Given** the web fonts fail to load **Then** system fallbacks ren
 
 ### REQ-UI-004 — Navigation: 5 tabs on mobile, sidebar on desktop
 **Given** a viewport < 1024 px **Then** a bottom bar shows Home, Transactions, Add (centre FAB), Insights, More with 48 px touch targets, `aria-current` on the active tab, safe-area bottom padding; **Given** ≥ 1024 px **Then** a left sidebar with the same five entries and a wider content grid; routes are `/`, `/transactions`, `/add`, `/insights`, `/more` and deep links reload to the right tab.
+**Given** the Playwright matrix LTR/RTL × light/dark × `375×812` / `1280×800` **Then** the app shell and the STORY-141 version page each have zero axe `serious`/`critical` violations and match committed screenshot baselines (`maxDiffPixelRatio: 0.01`); the `1280×800` version-page renders moved here from STORY-141, which covers only `375×812`.
 Unhappy path: **Given** a route that does not exist **Then** a bilingual 404 page with a link Home; **Given** an unauthenticated visit to any tab **Then** redirect to `/login` preserving the return path (login itself is STORY-018).
 
 ### REQ-UI-005 — Amount and digit formatting
@@ -72,3 +73,4 @@ STORY-007 (which depends on STORY-141, where the i18n setup and lint rule origin
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — i18n lint rule now referenced from REQ-OPS-025 (STORY-141) instead of re-specified |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — owns the full LTR/RTL × light/dark × mobile/desktop screenshot/axe matrix incl. the 1280×800 version-page renders moved from STORY-141 |
