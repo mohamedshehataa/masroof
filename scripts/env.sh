@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Source this to get a consistent PATH on Windows (Git Bash) and Linux/macOS.
 # Hooks, Makefile and CI all go through here so "one command surface" holds.
+# Every hook sources this, so it avoids forking (cygpath / python probes cost ~30-50 ms each on
+# Windows): drive paths are converted in pure bash and Python is found by scanning PATH.
 # shellcheck shell=bash
 __masroof_add_path() {
   [ -d "$1" ] || return 0
@@ -10,8 +12,31 @@ __masroof_prepend_path() {
   [ -d "$1" ] || return 0
   case ":$PATH:" in *":$1:"*) ;; *) PATH="$1:$PATH" ;; esac
 }
+# __masroof_to_unix <out-var> <path>: C:\x\y or C:/x/y -> /c/x/y (Git Bash drive mounts), no fork.
+# Falls back to cygpath when the /<drive> mount does not exist (Cygwin's /cygdrive prefix).
+__masroof_to_unix() {
+  local p="${2//\\//}" d
+  case "$p" in
+    [A-Za-z]:/*|[A-Za-z]:)
+      d="${p:0:1}"; d="${d,,}"
+      if [ -d "/$d" ]; then p="/$d${p:2}"
+      elif command -v cygpath >/dev/null 2>&1; then p="$(cygpath -u "$2" 2>/dev/null || printf '%s' "$2")"
+      fi ;;
+  esac
+  printf -v "$1" '%s' "$p"
+}
+# __masroof_on_path <name>: sets __masroof_dir to the first PATH dir holding <name> or <name>.exe
+__masroof_on_path() {
+  local d IFS=:
+  __masroof_dir=""
+  for d in $PATH; do
+    if [ -f "$d/$1" ] || [ -f "$d/$1.exe" ]; then __masroof_dir="$d"; return 0; fi
+  done
+  return 1
+}
+_lad=""; _apd=""
 if [ -n "${LOCALAPPDATA:-}" ]; then
-  _lad="$(cygpath -u "$LOCALAPPDATA" 2>/dev/null || printf '%s' "$LOCALAPPDATA")"
+  __masroof_to_unix _lad "$LOCALAPPDATA"
   # Real Python must beat the Windows Store "python" alias stub, so prepend.
   __masroof_prepend_path "$_lad/Programs/Python/Python312/Scripts"
   __masroof_prepend_path "$_lad/Programs/Python/Python312"
@@ -24,19 +49,21 @@ __masroof_add_path "/c/Program Files (x86)/GnuWin32/bin"
 __masroof_add_path "/c/Program Files/nodejs"
 __masroof_add_path "/c/Program Files/GitHub CLI"
 __masroof_add_path "$HOME/.local/bin"
-__masroof_add_path "$(cygpath -u "${APPDATA:-}" 2>/dev/null)/npm"
+if [ -n "${APPDATA:-}" ]; then __masroof_to_unix _apd "$APPDATA"; __masroof_add_path "$_apd/npm"; fi
 export PATH
 # jq.exe prints CRLF on Windows; scripts call `jqr` when they consume jq output as text.
 jqr() { command jq "$@" | tr -d '\r'; }
-# Pick a Python that actually runs (the Store stub prints an error and exits 49).
-if python -c 'import sys' >/dev/null 2>&1; then export PYTHON=python
+# Pick a Python that actually runs (the Windows Store stub in WindowsApps prints an error and exits 49).
+# Fast path: the first `python` on PATH is a real install, not the WindowsApps stub -> no probe.
+if __masroof_on_path python && [[ "$__masroof_dir" != *[Ww]indows[Aa]pps* ]]; then export PYTHON=python
+elif python -c 'import sys' >/dev/null 2>&1; then export PYTHON=python
 elif python3 -c 'import sys' >/dev/null 2>&1; then export PYTHON=python3
 elif py -3 -c 'import sys' >/dev/null 2>&1; then export PYTHON="py -3"
 else export PYTHON=python; fi
-_env_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_env_dir}"
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then PROJECT_DIR="$CLAUDE_PROJECT_DIR"
+else PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fi
 # Normalise a Windows-style project dir (C:\x or C:/x) to the POSIX form Git Bash uses.
-if command -v cygpath >/dev/null 2>&1; then PROJECT_DIR="$(cygpath -u "$PROJECT_DIR" 2>/dev/null || printf '%s' "$PROJECT_DIR")"; fi
+__masroof_to_unix PROJECT_DIR "$PROJECT_DIR"
 export PROJECT_DIR
 # Note: MSYS argument path conversion stays ON so native tools (jq.exe, python.exe) can open
 # /tmp/... and /c/... paths. Scripts that pass path-like *strings* to native tools use env vars.

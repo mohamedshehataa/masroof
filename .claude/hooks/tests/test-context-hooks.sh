@@ -51,4 +51,29 @@ mk_metrics 11; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt
 printf 'SDLC_AI_BUDGET_USD=1000\n' > "$P/.env"
 mk_metrics 11; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)"; assert_eq "$OUT" "" "REQ-OPS-008 .env overrides .env.example"
 rm -f "$M"; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)"; assert_allowed "REQ-OPS-008 missing metrics file passes silently"
+mk_metrics '1,234.50'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_contains "$OUT" "EXCEEDED" "REQ-OPS-008 reads 1,234.50 as 1234.50 (thousands separator)"
+mk_metrics '$350'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_contains "$OUT" "EXCEEDED" "REQ-OPS-008 reads \$350 as 350 (currency sign)"
+mk_metrics 'abc'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_eq "$OUT" "" "REQ-OPS-008 non-numeric spend stays silent"
+
+echo "-- inject-context unhappy paths (STORY-001 verify F-13)"
+printf '# Esc\n## Open\n## Resolved\n- [x] old\n' > "$P/docs/ESCALATIONS.md"
+run_hook inject-context.sh "$(json_session_start resume)"; assert_contains "$OUT" "Open escalations (0)" "REQ-OPS-006 zero open escalations prints (0)"
+assert_not_contains "$OUT" "(0
+0)" "REQ-OPS-006 zero open escalations is not printed twice"
+mv "$P/docs/PROGRESS.md" "$P/docs/PROGRESS.md.bak"
+run_hook inject-context.sh "$(json_session_start startup)"; assert_allowed "REQ-OPS-006 missing PROGRESS.md exits 0"
+assert_contains "$OUT" "PROGRESS.md: none" "REQ-OPS-006 missing PROGRESS.md prints 'PROGRESS.md: none'"
+long="$(printf 'x%.0s' $(seq 1 1500))"
+{ echo "# Progress"; for i in $(seq 1 30); do echo "2026-10-23 P0 line $i $long"; done; } > "$P/docs/PROGRESS.md"
+for i in $(seq 1 12); do echo "- [ ] **OWNER-$i** $long" >> "$P/docs/ESCALATIONS.md"; done
+run_hook inject-context.sh "$(json_session_start compact)"
+assert_eq "$(( $(printf '%s' "$OUT" | wc -c) < 10000 ))" "1" "REQ-OPS-006 output stays under the 10k cap with 1500-char lines"
+rm -f "$P/docs/PROGRESS.md"; mv "$P/docs/PROGRESS.md.bak" "$P/docs/PROGRESS.md"
+
+echo "-- snapshot-progress unhappy path (F-19)"
+rm -rf "$MASROOF_STATE_DIR/snapshots"; echo "not a dir" > "$MASROOF_STATE_DIR/snapshots"
+run_hook snapshot-progress.sh "$(json_precompact manual)"; assert_allowed "REQ-OPS-009 unwritable snapshot dir still exits 0"
+assert_contains "$ERR" "snapshot-progress: could not write" "REQ-OPS-009 stderr explains the missing snapshot"
+assert_eq "$(jq -r .last_compact_trigger "$MASROOF_STATE_FILE")" "manual" "REQ-OPS-009 state.json is still updated"
+rm -f "$MASROOF_STATE_DIR/snapshots"
 finish

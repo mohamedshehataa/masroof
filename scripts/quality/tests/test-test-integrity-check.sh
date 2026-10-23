@@ -135,6 +135,15 @@ run_check main;              expect 0 "TEST_INTEGRITY: OK" "integrity: tolerance
 contains "WARN:" "integrity: tolerance warning printed"
 contains "tolerance/approximation usage increased" "integrity: tolerance warning names the cause"
 
+echo "-- bash suites: assert_* calls and expect <rc> count as assertions (REQ-OPS-007, STORY-001 F-11)"
+reset_repo bashsuite
+mkdir -p "$R/.claude/hooks/tests"
+printf 'run_hook a; assert_blocked "a"\nrun_hook b; assert_allowed "b"\nexpect 0 "OK" "c"\n' > "$R/.claude/hooks/tests/test-x.sh"
+g add -A >/dev/null && g commit -qm "bash suite [STORY-001]"
+printf 'run_hook a; assert_blocked "a"\n' > "$R/.claude/hooks/tests/test-x.sh"
+run_check main;              expect 1 "TEST_INTEGRITY: VIOLATION" "integrity: assert_* calls removed from a bash suite -> VIOLATION"
+contains "3 -> 1" "integrity: bash suite assertions are counted (3 -> 1)"
+
 echo "-- usage errors"
 reset_repo usage
 run_check;                   expect 2 "usage:" "integrity: no base ref -> usage error 2"

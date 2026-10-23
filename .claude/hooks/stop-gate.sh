@@ -5,7 +5,7 @@
 # Overrides for tests: CLAUDE_PROJECT_DIR, MASROOF_STATE_FILE, MASROOF_STATE_DIR, MAKE.
 HOOK_NAME=stop-gate
 # shellcheck source=lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 read_input
 MAKE_BIN="${MAKE:-make}"
 MAX_BLOCKS="${MASROOF_STOP_MAX_BLOCKS:-3}"
@@ -43,9 +43,20 @@ while IFS= read -r f; do
     web/*) add_mod web ;;
     android/*) add_mod android ;;
     .claude/*|scripts/*|Makefile|lefthook.yml|.github/*|contracts/*|eval/*|infra/*|.semgrep/*|.gitleaks.toml|.shellcheckrc|.editorconfig) add_mod sdlc ;;
-    *) : ;;   # docs, fixtures, root markdown: no gate
+    */*) : ;;   # docs/, fixtures/ and other directories: no gate
+    *.md|*.MD|*.txt|LICENSE*) : ;;   # root markdown / text: no gate
+    *) add_mod sdlc ;;   # other root files: docker-compose.yml, Dockerfile*, package.json, *.yml, .gitignore ...
   esac
 done <<< "$changed"
+# No last_green yet (fresh state or a new worktree): a red change may already be committed, so the
+# working-tree diff would be empty. Gate every module present in the repo once; a green run records
+# last_green and later Stops only gate what changed.
+if [ -z "$last_green" ]; then
+  for m in backend web android; do
+    [ -n "$(git ls-files -- "$m" 2>/dev/null | head -1)" ] && add_mod "$m"
+  done
+  [ -n "$(git ls-files -- Makefile scripts .claude/hooks .github 2>/dev/null | head -1)" ] && add_mod sdlc
+fi
 # shellcheck disable=SC2086
 modules="$(printf '%s
 ' $modules | sort -u | tr '

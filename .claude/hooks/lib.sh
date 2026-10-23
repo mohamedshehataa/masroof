@@ -8,7 +8,10 @@
 # Source files stay ASCII-only (shellcheck on Windows cannot print non-ASCII lines).
 # shellcheck shell=bash
 set -o pipefail
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# no $(cd ... && pwd): every hook sources this and each fork costs ~30 ms on Windows
+HOOKS_DIR="${BASH_SOURCE[0]%/*}"
+[ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR=.
+case "$HOOKS_DIR" in /*|[A-Za-z]:*) ;; *) HOOKS_DIR="$PWD/$HOOKS_DIR" ;; esac
 # shellcheck source=../../scripts/env.sh
 . "$HOOKS_DIR/../../scripts/env.sh"
 : "${HOOK_NAME:=hook}"
@@ -19,10 +22,11 @@ export CONTRACTS_FILE
 # UTF-8 middle dot: the field separator used in docs/PROGRESS.md lines (kept out of source as a literal)
 DOT=$'\302\267'
 export DOT
-mkdir -p "$STATE_DIR" 2>/dev/null || true
+[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR" 2>/dev/null || true
 HOOK_INPUT=""
 
-read_input() { HOOK_INPUT="$(cat 2>/dev/null || true)"; }
+# $(< /dev/stdin) is read by bash itself (no cat fork, unlike byte-wise `read` it is fast on pipes)
+read_input() { HOOK_INPUT="$(< /dev/stdin)" 2>/dev/null || HOOK_INPUT=""; }
 
 have_jq() { command -v jq >/dev/null 2>&1; }
 # jq.exe on Windows prints CRLF; strip CR so values compare cleanly (no-op elsewhere). pipefail keeps jq's status.
@@ -136,16 +140,57 @@ to_posix_path() {
   esac
 }
 
-# rel_to_project <path> -> path relative to PROJECT_DIR, or the canonical absolute path if outside
+# rel_to_project <path> -> path relative to PROJECT_DIR, or the canonical absolute path if outside.
+# The prefix test is case-insensitive (NTFS and APFS are case-insensitive, so C:/PERSONAL/x and
+# c:\personal\x name the same file); the returned relative part keeps the caller's spelling, so
+# callers that match patterns must lower-case it themselves (${rel,,}).
 rel_to_project() {
   local p root
   p="$(to_posix_path "$1")"
   root="$(to_posix_path "$PROJECT_DIR")"
   root="${root%/}"
-  case "$p" in
-    "$root"/*) printf '%s' "${p#"$root"/}" ;;
+  case "${p,,}" in
+    "${root,,}"/*) printf '%s' "${p:${#root}+1}" ;;
     *) printf '%s' "$p" ;;
   esac
+}
+
+# json_valid -> 0 when HOOK_INPUT is a JSON object (used to warn instead of silently passing)
+json_valid() {
+  [ -n "$HOOK_INPUT" ] || return 1
+  if have_jq; then
+    printf '%s' "$HOOK_INPUT" | command jq -e 'type == "object"' >/dev/null 2>&1
+  else
+    printf '%s' "$HOOK_INPUT" | "$PYTHON" -c 'import json,sys; sys.exit(0 if isinstance(json.loads(sys.stdin.buffer.read().decode("utf-8","replace")),dict) else 1)' >/dev/null 2>&1
+  fi
+}
+
+# json_fields '.a' '.b.c' ...  -> NUL-separated: "ok" then each value ("" when missing; non-strings as JSON).
+# Prints nothing at all when HOOK_INPUT is not a JSON object, so callers can tell a parse error apart.
+# One process for several fields (each jq/python start costs ~30-60 ms on Windows).
+json_fields() {
+  if have_jq; then
+    local prog='if type == "object" then "ok", "\u0000"' p
+    for p in "$@"; do prog+=", ($p // \"\" | if type == \"string\" then . else tojson end), \"\\u0000\""; done
+    prog+=' else empty end'
+    printf '%s' "$HOOK_INPUT" | command jq -j "$prog" 2>/dev/null
+  else
+    printf '%s' "$HOOK_INPUT" | "$PYTHON" -c '
+import json,sys
+try:
+    d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"))
+except Exception:
+    sys.exit(0)
+if not isinstance(d,dict): sys.exit(0)
+out=["ok"]
+for path in sys.argv[1:]:
+    o=d
+    for k in [x for x in path.split(".") if x]:
+        o=o.get(k) if isinstance(o,dict) else None
+    out.append("" if o is None else (o if isinstance(o,str) else json.dumps(o)))
+sys.stdout.buffer.write(("\0".join(out)+"\0").encode("utf-8"))
+' "$@" 2>/dev/null
+  fi
 }
 
 is_truthy() { case "${1,,}" in 1|true|yes|on) return 0 ;; *) return 1 ;; esac; }

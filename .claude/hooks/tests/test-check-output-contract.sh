@@ -73,4 +73,27 @@ echo "-- non-roster agents pass through"
 run_hook $H "$(json_subagent_stop general-purpose "Here is what I found: nothing.")"; assert_allowed "REQ-OPS-005 general-purpose passes without contract"
 run_hook $H "$(json_subagent_stop Explore "found 3 files")";                         assert_allowed "REQ-OPS-005 Explore passes"
 run_hook $H '{"hook_event_name":"SubagentStop","stop_hook_active":false}';           assert_allowed "REQ-OPS-005 missing agent_type passes"
+
+echo "-- unhappy paths and weak parsing (STORY-001 verify REQ-OPS-005, F-16)"
+run_hook $H "$(json_subagent_stop my-custom "done")";                                assert_allowed "REQ-OPS-005 unknown agent exits 0"
+assert_eq "$ERR" "check-output-contract: 'my-custom' is not a roster agent; not gated" "REQ-OPS-005 unknown agent prints one warning line"
+run_hook $H "$(json_subagent_stop general-purpose "x")";                             assert_contains "$ERR" "not a roster agent" "REQ-OPS-005 general-purpose gets the warning too"
+run_hook $H "$(json_subagent_stop qa-verifier "${GOOD_VERIFY/STATUS: PASS/STATUS: PASS | FAIL | BLOCKED}")"; assert_blocked "REQ-OPS-005 blocks the pasted template STATUS line"
+assert_contains "$ERR" "template" "REQ-OPS-005 template block explains why"
+FENCED='Here is the format I will use:
+```
+STORY: STORY-007
+CRITERIA:
+FINDINGS:
+EXPLORATORY: none
+TEST_INTEGRITY: OK
+```
+STATUS: PASS'
+run_hook $H "$(json_subagent_stop qa-verifier "$FENCED")";                           assert_blocked "REQ-OPS-005 sections inside a code fence do not count"
+assert_contains "$ERR" "CRITERIA" "REQ-OPS-005 fenced sections are reported missing"
+run_hook $H "$(json_subagent_stop qa-verifier "$GOOD_VERIFY
+\`\`\`
+STATUS: FAIL
+\`\`\`
+STATUS: PASS")";                                                                   assert_allowed "REQ-OPS-005 a STATUS example inside a fence is ignored"
 finish

@@ -44,7 +44,8 @@ if [ -n "$ALLOW_DELETIONS" ] && ! printf '%s' "$ALLOW_DELETIONS" | grep -Eq 'STO
 fi
 
 # --- regexes: KEEP IN SYNC with .claude/hooks/test-integrity.sh ---------------------------
-ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\('
+# The last alternatives count the bash hook/script suites: assert_* calls, `expect <rc>` and expect_*.
+ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\(|\bassert_[a-z_]+\b|\bexpect [0-9]|\bexpect_(block|allow|rc)\b'
 SKIP_RE='@Disabled|@Ignore|@Skip|\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|test\.skip|it\.skip|describe\.skip|\.only\(|@Test\(\s*enabled\s*=\s*false|pytest\.mark\.skip|@unittest\.skip|\.todo\(|fixme\(|@Tag\("skip"\)'
 TOL_RE='withinPercentage|within\(|offset\(|delta|tolerance|approximately|toBeCloseTo|isCloseTo|closeTo|assertAlmostEqual|Percentage\.withPercentage'
 # ------------------------------------------------------------------------------------------

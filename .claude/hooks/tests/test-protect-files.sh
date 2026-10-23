@@ -75,4 +75,34 @@ run_hook $H "$(json_write "$P/.claude/agents/code-reviewer.md" "$C" retro-facili
 run_hook $H "$(json_write "$P/backend/src/main/java/Svc.java" "$C" retro-facilitator)"; assert_blocked "REQ-OPS-002 retro-facilitator cannot write source"
 
 run_hook $H '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{}}'; assert_allowed "REQ-OPS-002 missing file_path passes"
+
+echo "-- key material from the AC (STORY-001 verify F-07)"
+run_hook $H "$(json_write "$P/certs/server.pem" "$C")";           assert_blocked "REQ-OPS-002 blocks *.pem"
+run_hook $H "$(json_write "$P/infra/tls/private.PEM" "$C")";      assert_blocked "REQ-OPS-002 blocks *.PEM (any case)"
+run_hook $H "$(json_write "$P/keys/deploy.ppk" "$C")";            assert_blocked "REQ-OPS-002 blocks *.ppk"
+run_hook $H "$(json_write "$P/keys/ca.der" "$C")";                assert_blocked "REQ-OPS-002 blocks *.der"
+run_hook $H "$(json_write "$P/android/release.keystore" "$C")";   assert_blocked "REQ-OPS-002 blocks *.keystore"
+
+echo "-- settings.local.json is a guardrail file (F-10)"
+run_hook $H "$(json_write "$P/.claude/settings.local.json" '{"disableAllHooks":true}')"; assert_blocked "REQ-OPS-002 blocks settings.local.json while locked"
+MASROOF_HOOKS_UNLOCK=1 run_hook $H "$(json_write "$P/.claude/settings.local.json" '{}')"; assert_allowed "REQ-OPS-002 allows settings.local.json when unlocked"
+
+echo "-- case-variant paths (F-08)"
+# the Windows form (C:/...) of the temp repo when cygpath exists, else the POSIX path
+PW="$(cygpath -m "$P" 2>/dev/null || printf '%s' "$P")"
+PL="${PW,,}"; PU="${PW^^}"
+run_hook $H "$(json_edit "$PL/.claude/hooks/guard-bash.sh" "$C")";   assert_blocked "REQ-OPS-002 blocks a lower-cased hook path"
+run_hook $H "$(json_edit "${PL//\//\\}\\.claude\\hooks\\guard-bash.sh" "$C")"; assert_blocked "REQ-OPS-002 blocks a lower-cased backslash hook path"
+run_hook $H "$(json_edit "$PU/.claude/settings.json" "$C")";         assert_blocked "REQ-OPS-002 blocks an upper-cased settings.json path"
+run_hook $H "$(json_edit "$PW/.claude/HOOKS/guard-bash.sh" "$C")";   assert_blocked "REQ-OPS-002 blocks .claude/HOOKS"
+run_hook $H "$(json_edit "$PL/docs/prompt.md" "$C")";                assert_blocked "REQ-OPS-002 blocks a lower-cased docs/PROMPT.md"
+run_hook $H "$(json_write "$PW/.ENV" "$C")";                         assert_blocked "REQ-OPS-002 blocks .ENV"
+run_hook $H "$(json_write "$PL/eval/baseline.json" "$C")";           assert_blocked "REQ-OPS-002 blocks a lower-cased eval/baseline.json"
+run_hook $H "$(json_edit "$PL/backend/src/main/resources/db/migration/v1__init.sql" "$C")"; assert_blocked "REQ-OPS-002 blocks a case-variant applied migration"
+run_hook $H "$(json_write "$PU/BACKEND/SRC/MAIN/JAVA/X.JAVA" "$C" product-analyst)"; assert_blocked "REQ-OPS-002 role scope holds for an upper-cased path"
+run_hook $H "$(json_write "$PU/DOCS/BACKLOG/EPIC-01/STORY-009.MD" "$C" product-analyst)"; assert_allowed "REQ-OPS-002 role scope allows an upper-cased docs path"
+
+echo "-- qa-verifier writes only its verify report (F-23)"
+run_hook $H "$(json_write "$P/backend/src/main/java/X.java" "$C" qa-verifier)"; assert_blocked "REQ-OPS-002 qa-verifier cannot write source"
+run_hook $H "$(json_write "$P/docs/backlog/EPIC-00/STORY-001-x.verify.md" "$C" qa-verifier)"; assert_allowed "REQ-OPS-002 qa-verifier can write its verify report"
 finish

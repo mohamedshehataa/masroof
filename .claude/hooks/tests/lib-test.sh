@@ -57,15 +57,20 @@ assert_file_exists() { if [ -e "$1" ]; then _pass "$2"; else _fail "$2" "missing
 
 # ---- JSON builders (mirror the documented hook input shapes) ----
 # Paths are passed through the environment, not --arg: MSYS would rewrite /tmp/... arguments
-# given to the native jq.exe, and env values are left alone.
+# given to the native jq.exe. MSYS also rewrites env values that start with / (so /bin/rm became
+# C:/Program Files/Git/usr/bin/rm); json_bash excludes the command (MSYS2_ENV_CONV_EXCL=J_C) so it
+# reaches the hook verbatim, as Claude Code sends it.
 json_bash() { # json_bash <command> [cwd]
-  J_C="$1" J_CWD="${2:-$CLAUDE_PROJECT_DIR}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:env.J_C},cwd:env.J_CWD,session_id:"test",permission_mode:"default"}'
+  MSYS2_ENV_CONV_EXCL=J_C J_C="$1" J_CWD="${2:-$CLAUDE_PROJECT_DIR}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:env.J_C},cwd:env.J_CWD,session_id:"test",permission_mode:"default"}'
 }
 json_write() { # json_write <file_path> <content> [agent_type]
   J_P="$1" J_C="$2" J_A="${3:-}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:env.J_P,content:env.J_C},cwd:"x",session_id:"test"} | if env.J_A=="" then . else .agent_type=env.J_A end'
 }
 json_edit() { # json_edit <file_path> <new_string> [agent_type]
   J_P="$1" J_N="$2" J_A="${3:-}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Edit",tool_input:{file_path:env.J_P,old_string:"old",new_string:env.J_N},cwd:"x",session_id:"test"} | if env.J_A=="" then . else .agent_type=env.J_A end'
+}
+json_notebook() { # json_notebook <notebook_path> <new_source>
+  J_P="$1" J_N="$2" jq -n     '{hook_event_name:"PreToolUse",tool_name:"NotebookEdit",tool_input:{notebook_path:env.J_P,cell_id:"c1",new_source:env.J_N},cwd:"x",session_id:"test"}'
 }
 json_multiedit() { # json_multiedit <file_path> <new_string>
   J_P="$1" J_N="$2" jq -n     '{hook_event_name:"PreToolUse",tool_name:"MultiEdit",tool_input:{file_path:env.J_P,edits:[{old_string:"a",new_string:"b"},{old_string:"c",new_string:env.J_N}]},cwd:"x",session_id:"test"}'

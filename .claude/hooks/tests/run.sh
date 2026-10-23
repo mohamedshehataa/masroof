@@ -11,7 +11,11 @@ command -v jq >/dev/null 2>&1 || { echo "hook tests need jq on PATH" >&2; exit 1
 
 OUT_DIR="${HOOK_TEST_OUT_DIR:-$REPO_DIR/.claude/state}"
 mkdir -p "$OUT_DIR"
-export HOOK_TEST_RESULTS_TSV="$OUT_DIR/hook-tests.tsv"
+# Results go to a per-run temp TSV, so two concurrent runs (e.g. a stop-gate check-fast in another
+# session) never mix their rows; the final TSV/XML are copied into $OUT_DIR at the end.
+RUN_DIR="$(mktemp -d)"
+trap 'rm -rf "$RUN_DIR"' EXIT
+export HOOK_TEST_RESULTS_TSV="$RUN_DIR/hook-tests.tsv"
 : > "$HOOK_TEST_RESULTS_TSV"
 
 total_fail=0
@@ -21,7 +25,7 @@ for t in "$TESTS_DIR"/test-*.sh; do
 done
 
 # ---- JUnit XML for traceability ----
-xml="$OUT_DIR/hook-tests.xml"
+xml="$RUN_DIR/hook-tests.xml"
 tests=$(wc -l < "$HOOK_TEST_RESULTS_TSV" | tr -d ' ')
 failures=$(awk -F'\t' '$2=="fail"' "$HOOK_TEST_RESULTS_TSV" | wc -l | tr -d ' ')
 {
@@ -40,7 +44,10 @@ failures=$(awk -F'\t' '$2=="fail"' "$HOOK_TEST_RESULTS_TSV" | wc -l | tr -d ' ')
   done
   printf '</testsuites>\n'
 } > "$xml"
+# copy then rename, so a reader never sees a half-written report
+cp "$xml" "$OUT_DIR/hook-tests.xml.$$" && mv -f "$OUT_DIR/hook-tests.xml.$$" "$OUT_DIR/hook-tests.xml"
+cp "$HOOK_TEST_RESULTS_TSV" "$OUT_DIR/hook-tests.tsv.$$" && mv -f "$OUT_DIR/hook-tests.tsv.$$" "$OUT_DIR/hook-tests.tsv"
 
 echo
-echo "hook tests: $((tests - failures))/$tests passed; report: $xml"
+echo "hook tests: $((tests - failures))/$tests passed; report: $OUT_DIR/hook-tests.xml"
 [ "$total_fail" -eq 0 ] && [ "$failures" -eq 0 ]
