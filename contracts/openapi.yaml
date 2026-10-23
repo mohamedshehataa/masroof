@@ -92,7 +92,7 @@ paths:
       description: Returns `UP` when the service and its database are reachable. No authentication.
       operationId: getHealth
       security: []
-      x-req: [REQ-OPS-001]
+      x-req: [REQ-OPS-020]
       responses:
         '200':
           description: Service is up (or degraded, reported as status DOWN).

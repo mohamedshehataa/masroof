@@ -8,3 +8,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-23 17:10 · P0 · SDLC · bootstrap · INFO · Claude Code docs verified (hooks, subagents, skills, rules, settings, GitHub Action) — see docs/DECISIONS.md.
 2026-10-23 19:05 · P0 · SDLC · bootstrap · GREEN · Hooks live in session (protect-files blocked an un-unlocked hook edit; format-changed returned shellcheck feedback). Hook tests 242/242; quality tests 73/73; eval 169 cases, baseline written, planted digit bug fails the gate; 19 agents, 22 skills, 6 rules, 4 workflows, contract v0.1.0 lint-clean.
 2026-10-23 19:05 · P0 · STORY-001 · selftest · GREEN · make selftest: 14 guards PROVEN, 1 PENDING (ArchUnit until backend exists), 0 FAILED - docs/SDLC_SELFTEST.md.
+2026-10-23 19:12 · P0 · SDLC · backlog · GREEN · Backlog sliced: 140 stories / 16 epics (40 READY for P0-P2, 100 DRAFT stubs), 323 REQ ids; sdlc-lint 0 errors; traceability gate PASS (REQ-OPS-001..010 covered by hook tests).

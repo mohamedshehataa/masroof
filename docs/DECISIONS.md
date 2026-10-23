@@ -20,3 +20,15 @@ One line per non-obvious decision: **decision — why**. Significant ones also g
 - 2026-10-23 — `jq.exe` on Windows emits CRLF; every script that consumes jq output as text goes through a `jq()` wrapper that strips CR — silent `\r` suffixes broke string comparisons in hooks.
 - 2026-10-23 — Paths are canonicalised with `cygpath -m` before prefix comparison in hooks — `/tmp` is a mount alias of the Windows temp dir and tool inputs arrive as `C:\...`, so naive string comparison failed.
 - 2026-10-23 — Each product module exposes exactly one fast gate entrypoint (`./gradlew checkFast`, `npm run check-fast`); `scripts/make/check-fast.sh` only dispatches — module toolchains can change without touching the SDLC.
+- 2026-10-23 — Backlog: 140 stories in 16 epics (Phase 0: 2, Phase 1: 17, Phase 2: 21 READY; Phases 3-10: 100 DRAFT stubs with reserved REQ ids) — above the 70-110 estimate because web and Android screens are separate stories; every story is shippable alone (docs/backlog/README.md).
+- 2026-10-23 — Phase 2 manual create rejects non-EGP currency with 422 until FX arrives in STORY-052 — avoids storing unconverted amounts.
+- 2026-10-23 — Analytics summary v1 (totals, previous period, month-start-day math) is pulled into Phase 2 (STORY-025) so Home has real numbers; Phase 7 extends it (STORY-093).
+- 2026-10-23 — "More tab basics" (preferences, household & members, categories, accounts) are Phase 2 stories (031/040) because their backend CRUD exists in Phase 1 and §11 lists them as screens.
+- 2026-10-23 — Either member may edit or delete any household expense; every change is attributed in audit_log — two-person household, trust is the model.
+- 2026-10-23 — Web keeps the refresh token in localStorage (no cookies) so web and Android share one auth contract; mitigated by CSP and no third-party scripts.
+- 2026-10-23 — SSE replay buffer is in-memory in v1 (RESYNC on restart); DB-backed buffer only if multi-instance deployment is needed.
+- 2026-10-23 — timezone and baseCurrency are read-only in v1 settings — changing them would re-base history.
+- 2026-10-23 — PWA offline queue is Phase 8 (STORY-115); Phase 2 Quick add disables Save while offline. Android offline PATCH queueing is out of v1 scope.
+- 2026-10-23 — Onboarding steps that need later phases are split out: Android "link WhatsApp" → STORY-083 (Phase 5), "set monthly budget" → STORY-112 (Phase 7).
+- 2026-10-23 — Passkeys (STORY-134) may be DESCOPED with an ADR if infeasible (PROMPT §9 says "if feasible").
+- 2026-10-23 — Custom agents written during a session are not available as subagent_type until Claude Code restarts; Phase 0 stories run their roster agents through general-purpose agents given the agent file, and the orchestrator checks the output contract by hand — the SubagentStop hook enforces it from the next session on.
