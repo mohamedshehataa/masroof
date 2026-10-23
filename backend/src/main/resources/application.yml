@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: masroof-backend
+  main:
+    banner-mode: "off"
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:masroof}
+    username: ${POSTGRES_USER:masroof}
+    password: ${POSTGRES_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
+    validate-migration-naming: true
+    clean-disabled: true
+    baseline-on-migrate: false

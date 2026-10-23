@@ -11,6 +11,7 @@ run() { local d="$1"; shift; printf '\n### %s\n' "$d"; if "$@"; then printf 'OK 
 mods="sdlc"; [ -x backend/gradlew ] && mods="$mods backend"; [ -f web/package.json ] && mods="$mods web"; [ -x android/gradlew ] && mods="$mods android"
 # shellcheck disable=SC2086
 run "check-fast [$mods]" bash scripts/make/check-fast.sh $mods
+[ -x backend/gradlew ] && run "backend gate probes (REQ-OPS-023)" bash scripts/quality/tests/backend-gate-probes.sh
 [ -x backend/gradlew ] && run "backend integration tests (Testcontainers)" bash -c 'cd backend && ./gradlew --console=plain -q integrationTest'
 [ -x backend/gradlew ] && run "backend architecture tests (ArchUnit)" bash -c 'cd backend && ./gradlew --console=plain -q archTest'
 [ -f web/package.json ] && run "web unit coverage" bash -c 'cd web && npm run -s test:coverage'
