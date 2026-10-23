@@ -4,10 +4,10 @@ pre-commit:
   parallel: true
   commands:
     gitleaks:
-      run: gitleaks git --pre-commit --staged --redact --config .gitleaks.toml
+      run: bash -c '. scripts/env.sh && gitleaks git --pre-commit --staged --redact --config .gitleaks.toml'
     shellcheck:
       glob: "*.sh"
-      run: shellcheck {staged_files}
+      run: bash -c '. scripts/env.sh && shellcheck -x -S warning {staged_files}'
     prettier-web:
       root: "web/"
       glob: "*.{ts,tsx,js,json,css,md}"

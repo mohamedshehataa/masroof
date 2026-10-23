@@ -42,14 +42,28 @@ for f in sys.argv[1:]:
 sys.exit(bad)' $yml_files
   fi
   [ -f scripts/quality/sdlc-lint.py ] && run "sdlc-lint (agents, skills, rules, settings, stories, workflows)" "$PYTHON" scripts/quality/sdlc-lint.py
-  [ -f .claude/hooks/tests/run.sh ] && run "hook tests" bash .claude/hooks/tests/run.sh
-  [ -f scripts/quality/tests/run.sh ] && run "quality script tests" bash scripts/quality/tests/run.sh
   local py_files
   py_files="$(find scripts eval -name '*.py' -not -path '*/.venv/*' 2>/dev/null | sort || true)"
   # shellcheck disable=SC2086
   [ -n "$py_files" ] && run "python compiles" "$PYTHON" -m py_compile $py_files
   [ -f eval/runners/run.py ] && run "eval datasets validate against schema" "$PYTHON" eval/runners/run.py --validate-only
-  [ -f contracts/openapi.yaml ] && [ -f scripts/make/contract.sh ] && run "contract lint" bash scripts/make/contract.sh lint
+  # The three slow, independent suites run in parallel to stay inside the 3-minute budget.
+  local logdir pids=() names=() n=0
+  logdir="$(mktemp -d)"
+  start_bg() { # start_bg <name> <cmd...>
+    names+=("$1"); shift; ( "$@" ) > "$logdir/$n.log" 2>&1 & pids+=($!); n=$((n + 1)); }
+  [ -f .claude/hooks/tests/run.sh ] && start_bg "hook tests" bash .claude/hooks/tests/run.sh
+  [ -f scripts/quality/tests/run.sh ] && start_bg "quality script tests" bash scripts/quality/tests/run.sh
+  [ -f contracts/openapi.yaml ] && [ -f scripts/make/contract.sh ] && start_bg "contract lint" bash scripts/make/contract.sh lint
+  local i
+  for i in "${!pids[@]}"; do
+    step "${names[$i]} (parallel)"
+    if wait "${pids[$i]}"; then tail -n 3 "$logdir/$i.log"; printf 'OK   %s
+' "${names[$i]}"
+    else cat "$logdir/$i.log"; printf 'FAIL %s
+' "${names[$i]}"; fail=1; fi
+  done
+  rm -rf "$logdir"
   return 0
 }
 

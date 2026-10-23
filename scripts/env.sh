@@ -24,6 +24,7 @@ __masroof_add_path "/c/Program Files (x86)/GnuWin32/bin"
 __masroof_add_path "/c/Program Files/nodejs"
 __masroof_add_path "/c/Program Files/GitHub CLI"
 __masroof_add_path "$HOME/.local/bin"
+__masroof_add_path "$(cygpath -u "${APPDATA:-}" 2>/dev/null)/npm"
 export PATH
 # jq.exe prints CRLF on Windows; scripts call `jqr` when they consume jq output as text.
 jqr() { command jq "$@" | tr -d '\r'; }

@@ -7,7 +7,7 @@ H=check-output-contract.sh
 GOOD_VERIFY='Verification done.
 STORY: STORY-007
 CRITERIA:
-- REQ-EXP-001: PASS - evidence: `make check-fast MODULE=backend` -> 42 tests, 0 failures
+- REQ-X-001: PASS - evidence: `make check-fast MODULE=backend` -> 42 tests, 0 failures
 FINDINGS:
 - [MINOR] backend/src/x.java:12 - message
 EXPLORATORY: 12 cases tried, 1 problem
@@ -57,7 +57,7 @@ STATUS: TESTS_FAILING_AS_EXPECTED")";                                           
 run_hook $H "$(json_subagent_stop product-analyst "STORIES:
 - STORY-001
 REQS:
-- REQ-EXP-001
+- REQ-X-002
 STATUS: SPEC_READY")";                                                             assert_allowed "REQ-OPS-005 product-analyst contract passes"
 run_hook $H "$(json_subagent_stop retro-facilitator "KEEP:
 - x
