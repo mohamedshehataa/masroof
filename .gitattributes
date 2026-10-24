@@ -10,3 +10,7 @@
 *.m4a binary
 *.jks binary
 gradlew text eol=lf
+# Append-only logs: keep both sides on merge (parallel story branches all append here).
+docs/PROGRESS.md merge=union
+docs/DECISIONS.md merge=union
+docs/LESSONS.md merge=union

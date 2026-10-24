@@ -12,9 +12,15 @@ run in their own git worktree and leave their branch on disk when they changed f
 3. Put this line in every worktree subagent prompt, because the worktree may have been created from the
    default branch rather than from the story branch:
    > First command: `git merge --no-edit story/$STORY-$SLUG` so your worktree contains the story's spec,
-   > design and tests. If it reports "Already up to date" that is fine. Then `source scripts/env.sh`.
+   > design and tests. If it reports "Already up to date" that is fine. Then `source scripts/env.sh` in the
+   > same Bash call as every `make` (`source scripts/env.sh && make check-fast MODULE=<m> < /dev/null`; make
+   > is only on PATH after env.sh, and each call starts a fresh shell). If `make` still cannot start, run the
+   > target's Makefile recipe verbatim (`. scripts/env.sh && bash scripts/make/check.sh` for `make check`) -
+   > the whole target, never one sub-step of it.
 4. Tell writers (test-designer, implementers) to commit in their worktree with a Conventional Commit ending in
-   `[$STORY]`; lefthook runs there too, so `--no-verify` is impossible and unnecessary.
+   `[$STORY]`. lefthook does NOT run there ("Can't find lefthook in PATH": no root node_modules in a
+   worktree), so the hooked commit is the orchestrator's squash commit in the main checkout (step 3 below);
+   never pass `--no-verify` anywhere.
 
 ## After the subagent returns
 1. Find its branch: `git worktree list --porcelain | diff "$TMP/wt-before.txt" -` and

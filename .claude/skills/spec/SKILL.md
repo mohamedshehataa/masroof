@@ -28,8 +28,11 @@ For each story the analyst marked READY, launch the reviewer with
 parallel, one agent each, in one message). Pass only the story path and PROMPT.md section refs.
 - `APPROVE` -> keep `status: READY`.
 - `CHANGES_REQUESTED` -> relaunch product-analyst for that story with the FINDINGS verbatim, then review
-  again. Max 2 loops per story; after that set `status: DRAFT`, add a Status log row with the open findings and
-  an escalation entry (see [../story/escalation.md](../story/escalation.md), reason "spec not converging").
+  again. Max 2 loops per story. After loop 2, if no finding is a BLOCKER and every finding carries proposed
+  text, apply the proposals verbatim, add a Status log row, and proceed without an escalation (the
+  LOOP-001/LOOP-003 policy, adopted by the Phase 0 retro). Otherwise set `status: DRAFT`, add a Status log row
+  with the open findings and an escalation entry (see [../story/escalation.md](../story/escalation.md),
+  reason "spec not converging").
 
 ## 3. Record
 1. Validate frontmatter of every touched story: `python -c "import yaml,sys,glob;[yaml.safe_load(open(f,encoding='utf-8').read().split('---')[1]) for f in glob.glob('docs/backlog/*/STORY-*.md')]"`.

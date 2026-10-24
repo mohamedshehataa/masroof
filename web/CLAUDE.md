@@ -24,4 +24,5 @@ e2e/                 Playwright (LTR/RTL x light/dark x mobile/desktop) + axe-co
 - Every list has empty, loading (skeleton), error (retry) and offline states; pull-to-refresh on mobile; 48px touch targets; AA contrast; `dir` switches with language; icons that imply direction are mirrored in RTL.
 - Amounts are integers in minor units from the API; formatting happens only in `lib/money.ts` (tabular numerals, Western or Arabic-Indic digits per setting).
 - Offline: cached app shell + last-viewed data; manual entries queue in IndexedDB and sync on reconnect; web push for budget alerts/review requests; Web Share Target for receipts.
+- Screenshot baselines are compared on Linux in CI: create or update them in `mcr.microsoft.com/playwright:v<same as @playwright/test>-noble` (as STORY-142 did), not from Windows renders.
 - Tests: Vitest + Testing Library named `describe('REQ-UI-012 ...')`; Playwright specs carry REQ ids; axe has zero serious/critical violations.

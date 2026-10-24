@@ -62,3 +62,6 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 06:30 · P0 · SDLC · review · GREEN · phase 0 gate: 12/12 criteria green (STORY-001 by owner exception); make check-full GREEN, selftest 16/16; report docs/phases/phase-0-report.md; phase -> 1
 2026-10-25 06:45 · P1 · STORY-007 · tdd · INFO · started (low tier).
 2026-10-25 08:40 · P1 · STORY-007 · verify · RED · loop 1/3 FAIL: MAJOR js-yaml 4.2.0 (3 High) via @hey-api/openapi-ts would fail the security gate; all REQ-OPS-053 clauses PASS; fix loop 2.
+2026-10-25 08:00 · P1 · SDLC · process · INFO · owner removed approvals: bypass default, empty ask list; guards unchanged (hook tests 624/624, sdlc-lint 0).
+2026-10-25 07:30 · P0 · SDLC · done · INFO · retro phase 0: 4 keep, 9 change (6 applied, 3 already fixed), 3 try; 10 files changed, 3 owner proposals in docs/retros/phase-0.md
+2026-10-25 08:20 · P1 · SDLC · process · INFO · append-only logs (PROGRESS, DECISIONS, LESSONS) use git's union merge, so parallel branches stop conflicting on them.
