@@ -207,6 +207,35 @@ jobs:
           retention-days: 14
 
   # --------------------------------------------------------------------------
+  backend-integration:
+    name: Backend (integration + ArchUnit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+          cache-dependency-path: |
+            backend/*.gradle*
+            backend/**/gradle-wrapper.properties
+      - name: Integration and ArchUnit tests (fails on zero tests)
+        run: make backend-integration
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: backend-integration-results
+          path: |
+            backend/build/test-results/integrationTest/
+            backend/build/test-results/archTest/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --------------------------------------------------------------------------
   web:
     name: Web (check-fast)
     runs-on: ubuntu-latest
@@ -374,9 +403,29 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         if: needs.detect.outputs.android == 'true'
-      - name: Build backend image
+      - name: Build images (backend, web)
         if: needs.detect.outputs.backend == 'true'
         run: make build-images
+      - name: Trivy image scan (backend)
+        if: needs.detect.outputs.backend == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: masroof/backend:${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Trivy image scan (web)
+        if: needs.detect.outputs.backend == 'true' && needs.detect.outputs.web == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: masroof/web:${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
       - name: Build web bundle
         if: needs.detect.outputs.web == 'true'
         run: make build-web
@@ -411,6 +460,7 @@ jobs:
       - test-integrity
       - eval-fast
       - backend
+      - backend-integration
       - web
       - android
       - security-fast

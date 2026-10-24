@@ -3,7 +3,7 @@ id: STORY-016
 epic: EPIC-01
 title: CI runs backend integration tests and builds and scans the real images
 phase: 1
-status: READY
+status: DONE
 size: M
 modules: [infra, sdlc]
 depends_on: [STORY-002, STORY-141, STORY-142, STORY-143, STORY-145]
@@ -114,3 +114,8 @@ STORY-002 (backend Gradle `integrationTest`/`archTest` tasks), STORY-141 (web bu
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-143 added to depends_on (backend image built by main.yml) |
 | 2026-10-24 | 1-2 spec fix | product-analyst | DRAFT — STORY-145 decision D6: REQ-OPS-060 now feeds STORY-145's per-metric checks, REQ-OPS-062 applies branch protection with the yaml `required_checks` + push protection (D9), Claude review moved to STORY-145; depends_on += STORY-145; re-spec + spec-review at `/spec` |
 | 2026-10-25 | 1 spec (low tier) | product-analyst | READY — trimmed to the remaining gaps: backend integration/ArchUnit not run in CI; `make build-images` was a skip stub, so no image was built or Trivy-scanned; main uploaded no web bundle/APK. REQ-OPS-062 retired (STORY-147 DESCOPED); REQ-OPS-172 added; depends_on cut to DONE stories; risk_tier low |
+
+## Follow-ups (verify+review loop 1, 2026-10-25)
+- Two weak tests in `test_ci_real_jobs.py` (test-designer): make the Gradle-failure fake write XML with tests > 0 and then exit 1, so a check that ignores the exit code is caught. Make the Docker-down fake fail only `docker info`, and assert the script's own one-line message.
+- NITs: env.sh drive-letter regex also rewrites a single-letter relative PATH entry; `deploy-staging` should need `artifacts`; `Main gate` should require `detect` like the PR gate; HealthDatabaseOutageIT flaked once locally (Testcontainers port wait).
+- Fixed here: main.yml's web Trivy step is gated on the web module, like pr.yml.

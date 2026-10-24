@@ -4,6 +4,18 @@
 # Every hook sources this, so it avoids forking (cygpath / python probes cost ~30-50 ms each on
 # Windows): drive paths are converted in pure bash and Python is found by scanning PATH.
 # shellcheck shell=bash
+# Git Bash only: a Windows-style PATH entry (C:/x/bin) is split at its colon by bash, so tools in it are
+# never found. Rewrite `C:/` to `/c/` (pure bash, no fork).
+if [ "${OSTYPE:-}" = msys ] || [ "${OSTYPE:-}" = cygwin ]; then
+  __masroof_p="$PATH"
+  while [[ $__masroof_p =~ (^|:)([A-Za-z]):/ ]]; do
+    __masroof_m="${BASH_REMATCH[0]}"
+    __masroof_d="${BASH_REMATCH[2]}"
+    __masroof_p="${__masroof_p/"$__masroof_m"/"${__masroof_m%%[A-Za-z]:/}/${__masroof_d,,}/"}"
+  done
+  PATH="$__masroof_p"
+  unset __masroof_p __masroof_m __masroof_d
+fi
 __masroof_add_path() {
   [ -d "$1" ] || return 0
   case ":$PATH:" in *":$1:"*) ;; *) PATH="$PATH:$1" ;; esac
