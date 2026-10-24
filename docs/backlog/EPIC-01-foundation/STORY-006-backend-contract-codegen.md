@@ -3,12 +3,13 @@ id: STORY-006
 epic: EPIC-01
 title: Backend server interfaces generated from the OpenAPI contract with lint and breaking-change gates
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [contracts, backend]
 depends_on: [STORY-143]
 reqs: [REQ-OPS-050, REQ-OPS-051, REQ-OPS-052]
 implements: ["PROMPT.md §9 (contract-first)", "PROMPT.md S9 (oasdiff gate)", "PROMPT.md §15 (docs/API.md)"]
+risk_tier: low
 owner_agent: backend-engineer
 ---
 
