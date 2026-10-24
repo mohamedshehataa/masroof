@@ -10,7 +10,7 @@ buildscript {
     dependencyLocking { lockAllConfigurations() }
     dependencies {
         constraints {
-            // GHSA-j288-q9x7-2f5v: spring-boot-gradle-plugin 4.1.2 -> buildpack-platform -> commons-compress 1.27.1 -> 3.16.0
+            // GHSA-j288-q9x7-2f5v: spring-boot-gradle-plugin 4.1.2 -> buildpack-platform -> commons-compress 1.27.1 -> commons-lang3 3.16.0
             classpath("org.apache.commons:commons-lang3:3.18.0")
         }
     }

@@ -27,7 +27,7 @@ class ProdDatabasePasswordGuard {
     if (password == null || password.isBlank() || password.contains("${")) {
       throw new IllegalStateException(
           PROPERTY
-              + " must resolve to a non-empty value when profile 'prod' is active"
+              + " must resolve to a non-empty value without '${' when profile 'prod' is active"
               + " (set POSTGRES_PASSWORD or SPRING_DATASOURCE_PASSWORD)");
     }
   }

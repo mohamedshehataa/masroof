@@ -26,7 +26,9 @@ negated() { ! "$@"; }
 # pom/module-only org.junit:junit-bom:5.14.4 (imported by commons-parent:105) is legitimately resolved.
 PYTHON="${PYTHON:-python}"
 no_stale_junit_jar() { # no_stale_junit_jar <verification-metadata.xml>; succeeds when no stale junit jar is present
-  META_PATH="$1" "$PYTHON" -I -c '
+  local -a py
+  read -ra py <<<"$PYTHON"
+  META_PATH="$1" "${py[@]}" -I -c '
 import os, sys
 import xml.etree.ElementTree as ET
 root = ET.parse(os.environ["META_PATH"]).getroot()
