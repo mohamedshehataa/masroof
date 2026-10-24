@@ -60,6 +60,8 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 05:20 · P0 · STORY-145 · verify · GREEN · loop 2/3 PASS (5 tests, 4 mutants caught, live gate run 40137648022 green); merging PR #12.
 2026-10-25 · P0 · SDLC · backlog · INFO · Phase-1 readiness pass: STORY-016 READY (trimmed: backend integration/ArchUnit in CI, real build-images + Trivy, main artifacts; REQ-OPS-062 retired, REQ-OPS-172 new); STORY-146 READY (REQ-OPS-168/169); new STORY-148 READY (REQ-OPS-170/171 split from 146); STORY-147 DESCOPED; STORY-137..140 confirmed phase 10 DRAFT; sdlc-lint to be run by the orchestrator.
 2026-10-25 06:30 · P0 · SDLC · review · GREEN · phase 0 gate: 12/12 criteria green (STORY-001 by owner exception); make check-full GREEN, selftest 16/16; report docs/phases/phase-0-report.md; phase -> 1
+2026-10-25 07:30 · P1 · STORY-016 · tdd · INFO · started (low tier); prioritised by the phase 0 retro (CI catches worktree commits that skip lefthook).
 2026-10-25 08:00 · P1 · SDLC · process · INFO · owner removed approvals: bypass default, empty ask list; guards unchanged (hook tests 624/624, sdlc-lint 0).
 2026-10-25 07:30 · P0 · SDLC · done · INFO · retro phase 0: 4 keep, 9 change (6 applied, 3 already fixed), 3 try; 10 files changed, 3 owner proposals in docs/retros/phase-0.md
+2026-10-25 09:30 · P1 · STORY-016 · integrate · GREEN · verify PASS + review APPROVE (live PR run 40142922510 green, make check GREEN, 13/15 mutants killed); web Trivy step gated in main.yml; DONE.
 2026-10-25 08:20 · P1 · SDLC · process · INFO · append-only logs (PROGRESS, DECISIONS, LESSONS) use git's union merge, so parallel branches stop conflicting on them.

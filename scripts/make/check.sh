@@ -12,8 +12,7 @@ mods="sdlc"; [ -x backend/gradlew ] && mods="$mods backend"; [ -f web/package.js
 # shellcheck disable=SC2086
 run "check-fast [$mods]" bash scripts/make/check-fast.sh $mods
 [ -x backend/gradlew ] && run "backend gate probes (REQ-OPS-023)" bash scripts/quality/tests/backend-gate-probes.sh
-[ -x backend/gradlew ] && run "backend integration tests (Testcontainers)" bash -c 'cd backend && ./gradlew --console=plain -q integrationTest'
-[ -x backend/gradlew ] && run "backend architecture tests (ArchUnit)" bash -c 'cd backend && ./gradlew --console=plain -q archTest'
+[ -x backend/gradlew ] && run "backend integration + architecture tests" bash scripts/make/backend-integration.sh
 [ -f web/package.json ] && run "web unit coverage" bash -c 'cd web && npm run -s test:coverage'
 [ -f contracts/openapi.yaml ] && run "contract diff vs ${BASE:-main}" bash scripts/quality/oasdiff.sh "${BASE:-main}"
 [ -f scripts/quality/coverage-gate.sh ] && run "coverage gates" bash scripts/quality/coverage-gate.sh
