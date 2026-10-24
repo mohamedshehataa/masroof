@@ -1,1 +1,2 @@
 - [Dependency verification](project_dependency-verification.md) — live sources for versions/CVEs/digests; jqwik removed (ADR-0004), owner picks a replacement in STORY-004
+- [CI gate pitfalls](project_ci-gate-pitfalls.md) — skipped required check = success, head-defined pull_request workflows, GITHUB_TOKEN events, Windows git cost
