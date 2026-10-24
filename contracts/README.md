@@ -44,7 +44,7 @@ npx --yes @redocly/cli@2 lint --config contracts/redocly.yaml contracts/openapi.
 
 The ruleset is `recommended` plus the tightenings in `contracts/redocly.yaml`. The result must be
 "valid" with **zero errors**. The only rule turned off is `no-server-example.com`, because the first
-server is intentionally `http://localhost:8080` (the `make up` stack) so generated clients default to
+server is intentionally `http://localhost` (the `make up` stack) so generated clients default to
 it in development. Node 24 is required; if the network blocks `npx`, install `@redocly/cli@2` once
 into `web/node_modules` and run `web/node_modules/.bin/redocly lint --config contracts/redocly.yaml contracts/openapi.yaml`.
 

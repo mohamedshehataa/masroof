@@ -9,6 +9,8 @@ RUN --mount=type=cache,target=/root/.gradle \
     sh ./gradlew --no-daemon --console=plain -q bootJar -PgitSha="${GIT_SHA}" -PbuildTime="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 FROM eclipse-temurin:21.0.12.1_1-jre-alpine-3.24@sha256:b48e02e0ea88d7bfb305335df94923bdef394905f4147dccd52e873cf17b1088
+# Fixed HIGH in brotli-libs (CVE-2026-111497) until the base image digest is bumped; drop when trivy is clean without it.
+RUN apk upgrade --no-cache brotli-libs
 RUN addgroup -S -g 10001 masroof && adduser -S -D -H -u 10001 -G masroof masroof
 WORKDIR /app
 COPY --from=build /src/backend/build/libs/masroof-backend.jar app.jar

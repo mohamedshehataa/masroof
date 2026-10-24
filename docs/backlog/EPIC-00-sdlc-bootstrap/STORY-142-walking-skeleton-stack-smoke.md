@@ -3,12 +3,13 @@ id: STORY-142
 epic: EPIC-00
 title: "Walking skeleton (stack): make up with Caddy, MinIO, web; make smoke"
 phase: 0
-status: READY
+status: DONE
 size: M
 modules: [infra, sdlc, web, contracts]
 depends_on: [STORY-143, STORY-141]
 reqs: [REQ-OPS-022]
 implements: ["PROMPT.md S15 item 7", "PROMPT.md §2 (compose: Postgres, MinIO, backend, web, Caddy)", "PROMPT.md §12 (actuator not public, non-root images)", "PROMPT.md S8 (make up, make smoke, make e2e)", "PROMPT.md S9 (image hardening)"]
+risk_tier: low
 owner_agent: devops-engineer
 ---
 
@@ -85,3 +86,8 @@ Caddyfile ≈ 20, `web/Dockerfile` + static-server config ≈ 30, compose additi
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-143 + STORY-141 (size split of STORY-002) |
 | 2026-10-23 | 2 spec review (loop 2) | spec-reviewer | CHANGES_REQUESTED |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — start-up resilience moved here, concurrent smoke, make e2e, published-port check, servers[0], web module; ≈ 295 lines |
+
+## Follow-ups (verify+review loop 2, 2026-10-25)
+- Caddy runs as root, and its image has 6 fixable HIGH findings with no upstream fix yet (STORY-121). MinIO default credentials appear in its WARN log (STORY-010/121). Security headers (STORY-010).
+- `scripts/quality/oasdiff.sh` fails on Windows Git Bash (tmp mount); CI is unaffected.
+- NITs: the e2e.sh pre-flight only probes HTTP on port 80; the web runtime still ships curl; the favicon gets the SPA fallback.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # smoke.sh <base-url>
 #
-# Post-deploy smoke test used by `make smoke URL=<url>` (S2 stage 9, S12).
-#   1. GET <url>/health      -> HTTP 200 and body contains "UP" (Spring Actuator style)
-#   2. GET <url>/            -> HTTP 200 (web root / PWA shell)
-# Whole run is bounded to SMOKE_TIMEOUT seconds (default 10). Retries inside the
-# budget so a container that is still starting gets a fair chance.
+# Post-deploy smoke test used by `make smoke URL=<url>` (S2 stage 9, S12). Two checks run concurrently:
+#   health    GET <url>/health -> HTTP 200 and body contains "status":"UP"
+#   web-root  GET <url>/       -> HTTP 200 and body contains <div id="root">
+# Both share one SMOKE_TIMEOUT budget and retry inside it so a container that is still starting gets a fair chance.
+# Output, one line per check: `OK <name> <url>` or `FAIL <name> <url> last-status=<code|000>` (000 = no connection).
 #
 # Env: SMOKE_TIMEOUT (seconds, default 10), SMOKE_HEALTH_PATH (default /health),
-#      SMOKE_WEB_URL (default: same origin as <url>; set when web is on another host).
+#      SMOKE_WEB_URL (default: <url>/; set when web is on another host).
 # Exit: 0 all checks passed, 1 a check failed, 2 usage error.
 set -euo pipefail
 
@@ -23,48 +23,39 @@ case "$base" in
 esac
 
 timeout_s="${SMOKE_TIMEOUT:-10}"
-health_path="${SMOKE_HEALTH_PATH:-/health}"
+case "$timeout_s" in
+  ""|*[!0-9]*|0) echo "smoke: SMOKE_TIMEOUT must be a positive integer (seconds), got: $timeout_s" >&2; exit 2 ;;
+esac
+health_url="${base}${SMOKE_HEALTH_PATH:-/health}"
 web_url="${SMOKE_WEB_URL:-$base/}"
 deadline=$(( $(date +%s) + timeout_s ))
-failures=0
+out_dir="$(mktemp -d)"
+trap 'rm -rf "$out_dir"' EXIT
 
-remaining() { local r=$(( deadline - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
-
-# fetch <url> -> prints "<status>\t<body-first-200-chars>" ; never exits the script
-fetch() {
-  local url="$1" max="$2" out status body
-  out="$(curl -sS --max-time "$max" --location --write-out '\n%{http_code}' "$url" 2>/dev/null || true)"
-  status="$(printf '%s' "$out" | tail -n 1)"
-  body="$(printf '%s' "$out" | sed '$d' | tr -d '\r\n' | cut -c1-200)"
-  printf '%s\t%s\n' "${status:-000}" "$body"
-}
-
-# check <name> <url> <expected-body-substring or ''>
+# check <name> <url> <body-regex>: retries until OK or the deadline; writes its single result line to $out_dir/<name>.
 check() {
-  local name="$1" url="$2" expect="$3" res status body
+  local name="$1" url="$2" re="$3" status="000" got body left
   while :; do
-    local left; left="$(remaining)"
-    if [ "$left" -le 0 ]; then
-      echo "FAIL  $name  $url  (timed out after ${timeout_s}s)"
-      failures=$((failures + 1)); return
-    fi
-    local per=$(( left < 5 ? left : 5 ))
-    res="$(fetch "$url" "$per")"
-    status="${res%%	*}"; body="${res#*	}"
-    if [ "$status" = "200" ] && { [ -z "$expect" ] || [[ "$body" == *"$expect"* ]]; }; then
-      echo "OK    $name  $url  (200${expect:+, body contains \"$expect\"})"
-      return
+    left=$(( deadline - $(date +%s) ))
+    [ "$left" -gt 0 ] || break
+    body="$(curl -sS --max-time "$(( left < 5 ? left : 5 ))" -w '\n%{http_code}' "$url" 2>/dev/null || true)"
+    got="$(printf '%s' "$body" | tail -n 1)"
+    case "$got" in 000|*[!0-9]*) ;; *) status="$got" ;; esac   # keep the last status actually observed
+    if [ "$status" = "200" ] && grep -Eq "$re" <<<"$body"; then
+      echo "OK $name $url" >"$out_dir/$name"; return 0
     fi
     sleep 1
   done
+  echo "FAIL $name $url last-status=$status" >"$out_dir/$name"
 }
 
-echo "smoke: $base (budget ${timeout_s}s)"
-check "health" "${base}${health_path}" "UP"
-check "web root" "$web_url" ""
+check health "$health_url" '"status"[[:space:]]*:[[:space:]]*"UP"' &
+check web-root "$web_url" '<div id="root">' &
+wait
 
-if [ "$failures" -gt 0 ]; then
-  echo "smoke: ${failures} check(s) failed" >&2
+cat "$out_dir/health" "$out_dir/web-root"
+if grep -q '^FAIL' "$out_dir/health" "$out_dir/web-root"; then
+  echo "smoke: FAILED" >&2
   exit 1
 fi
 echo "smoke: all checks passed"

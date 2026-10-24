@@ -27,8 +27,8 @@ info:
     identifier: LicenseRef-Masroof-Proprietary
 
 servers:
-  - url: http://localhost:8080
-    description: Local development (`make up`).
+  - url: http://localhost
+    description: Local stack (`make up`, via Caddy on port 80).
   - url: https://{domain}
     description: Self-hosted production behind Caddy (HTTPS is required for WhatsApp webhooks).
     variables:

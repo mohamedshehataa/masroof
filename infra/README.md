@@ -9,13 +9,13 @@ Operator runbook: [`docs/DEPLOY.md`](../docs/DEPLOY.md). Security posture:
 
 | Path | Status | Purpose |
 |---|---|---|
-| `docker-compose.yml` | TODO (Phase 1) | Base stack: `caddy`, `backend`, `web`, `postgres` (16), `minio`, `otel-collector`; non-root images, read-only FS where possible, pinned digests (S9) |
-| `docker-compose.dev.yml` | done (STORY-143) | Dev-only overlay: backend on `127.0.0.1:8080`; never loaded by `make up` or deploys |
+| `docker-compose.yml` | partly done (STORY-143, 142) | Base stack: `postgres`, `minio`, `backend`, `web`, `caddy` (only caddy publishes a port, 80); every service has a healthcheck; pinned digests; `otel-collector` still TODO |
+| `docker-compose.dev.yml` | done (STORY-143) | Dev-only overlay on top of the base file: publishes the backend on `127.0.0.1:8080`; never loaded by `make up` or deploys |
 | `docker-compose.staging.yml` | TODO | Staging overlay: separate compose project `masroof-staging`, own DB/bucket, Meta test number |
 | `docker-compose.prod.yml` | TODO | Production overlay: resource limits, log rotation, restart policies |
-| `Caddyfile` | TODO | `DOMAIN` -> web + `/api/*`, `/webhooks/*` -> backend; HSTS, security headers, request body limits, rate-limit on `/api/ingest/*` and `/webhooks/*` (REQ-SEC-001, REQ-SEC-004) |
+| `Caddyfile` | partly done (STORY-142) | `DOMAIN` empty -> plain HTTP :80; `/health`, `/api/*` -> backend, everything else (never `/actuator/*`) -> web. TODO: HSTS, headers, body limits, rate limits (REQ-SEC-001, REQ-SEC-004) |
 | `env/local.env.example`, `env/staging.env.example`, `env/prod.env.example` | TODO | Per-environment examples; the real `*.env` files live only on the VPS (`chmod 600`) and are gitignored |
-| `scripts/smoke.sh` | done | `make smoke URL=<url>`: `/health` must say `UP`, web root must be 200, within 10 s |
+| `scripts/smoke.sh` | done | `make smoke URL=<url>`: `/health` must say `"status":"UP"`, web root must hold `<div id="root">`, concurrently within 10 s |
 | `scripts/rollback.sh` | done (stub until first deploy) | `make rollback`: redeploys the tags recorded in `.deployed/previous.env` |
 | `scripts/deploy.sh` | TODO | Used by `make deploy-staging` / `make deploy-prod`: `ssh` to the host, pull images for `IMAGE_TAG`, `compose up -d`, write `.deployed/current.env` + rotate `previous.env`, run migrations via the backend's Flyway on start |
 | `scripts/backup.sh` | TODO | `make backup`: `pg_dump` + MinIO `mc mirror`, encrypted with `age` using `BACKUP_ENCRYPTION_PASSPHRASE`, pushed to `BACKUP_S3_BUCKET`; nightly cron on the VPS + before every prod deploy (REQ-SEC-012) |
@@ -44,14 +44,14 @@ must honour the following environment variables:
 | | local | staging | prod |
 |---|---|---|---|
 | How | `make up` (compose, seeded demo data) | separate compose project on the same VPS, own Postgres DB + MinIO bucket, Meta test number | compose project `masroof` |
-| URL | `http://localhost:8080` (API), `http://localhost:5173` (web dev) | `vars.STAGING_URL` | `vars.PROD_URL` = `https://$DOMAIN` |
+| URL | `http://localhost` (via Caddy; Vite dev on `http://localhost:5173`) | `vars.STAGING_URL` | `vars.PROD_URL` = `https://$DOMAIN` |
 | Deploy | — | `main.yml` on every push to `main` when `vars.STAGING_ENABLED == 'true'` | `release.yml` on tag `v*`, with backup before and smoke + auto-rollback after |
 | Secrets | `.env` (gitignored) | `/opt/masroof-staging/.env` on the VPS | `/opt/masroof/.env` on the VPS |
 
 ## Image hardening checklist (S9)
 
 - [ ] Backend: distroless or `eclipse-temurin:21-jre` with a non-root user, `JAVA_TOOL_OPTIONS` for container memory, read-only root FS, `tmpfs` for `/tmp`
-- [ ] Web: static bundle served by Caddy (no node at runtime)
+- [x] Web: static bundle served by the non-root `web` nginx-unprivileged image (no node at runtime)
 - [ ] All base images pinned by digest; Dependabot `docker` ecosystem keeps them fresh
 - [ ] Trivy image scan green (HIGH/CRITICAL with a fix = fail) in `main.yml`
 - [ ] SBOM (CycloneDX) attached to each release
