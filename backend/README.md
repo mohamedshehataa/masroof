@@ -10,4 +10,4 @@ Run from `backend/`; any JDK 21 works (no toolchain auto-download):
 - Do not hand-edit `gradle/wrapper/*`, `gradlew*` or `config/checkstyle/google_checks.xml` (generated/vendored).
 - Do not run two builds in one tree at once, especially with `--rerun-tasks`: they race on `build/` and fail with spurious file-lock or missing-class errors.
 - Dependencies are locked: after changing a version or plugin run `./gradlew dependencies buildEnvironment --write-locks` and commit `gradle.lockfile`, `buildscript-gradle.lockfile` and `gradle/verification-metadata.xml` (refresh with `./gradlew --write-verification-metadata sha256 checkFast archTest integrationTest pitest dependencies buildEnvironment`).
-- Deployments run with `SPRING_PROFILES_ACTIVE=prod`, which requires `POSTGRES_PASSWORD` (no empty default).
+- Deployments run with `SPRING_PROFILES_ACTIVE=prod` (lowercase: profile names are case-sensitive, so `PROD`/`Prod` do not activate the guard). The guard requires an effective `spring.datasource.password`: `POSTGRES_PASSWORD` or `SPRING_DATASOURCE_PASSWORD` alone is accepted, an empty value fails the start.
