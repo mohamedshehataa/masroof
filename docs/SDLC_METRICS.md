@@ -15,7 +15,7 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | escaped defects | 1 |
 | gate failures | 31 |
 | flaky tests quarantined | 0 |
-| AI spend (USD) | 0.00 |
+| AI spend (USD) | 83.00 |
 
 ## Stories by status
 | status | count |
@@ -154,10 +154,11 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 ## AI spend by story/phase
 | story/phase | USD |
 |---|---|
-| – | 0.00 |
+| PHASE-0 bootstrap | 45.00 |
+| STORY-002 | 38.00 |
 
 ## AI spend ledger
 | date | story/phase | model mix | USD | note |
 |---|---|---|---|---|
-| 2026-10-24 | STORY-002 | opus (design, verify x2, review x3), sonnet (implement x2, test design via opus) | 38.00 (est.) | first story through the full pipeline; 2 spec loops, 1 fix loop |
-| 2026-10-23 | PHASE-0 bootstrap | opus/sonnet mix | 45.00 (est.) | hooks, agents, skills, CI, eval, backlog scaffolding |
+| 2026-10-24 | STORY-002 | opus (design, verify x2, review x3), sonnet (implement x2, test design via opus) | 38.00 | estimate (no per-call cost export); first story through the full pipeline; 2 spec loops, 1 fix loop |
+| 2026-10-23 | PHASE-0 bootstrap | opus/sonnet mix | 45.00 | estimate; hooks, agents, skills, CI, eval, backlog scaffolding |
