@@ -33,5 +33,5 @@ paths:
   fraction or decimal strings. DB: `BIGINT` + `CHAR(3)`; `NUMERIC(20,10)` only for FX rates.
 - Business dates in `Africa/Cairo`, stored as `timestamptz`; period math via the household `month_start_day`
   helper, never ad hoc. Details and examples: `.claude/skills/money-and-dates/SKILL.md`.
-- Every change here needs a jqwik property test (money arithmetic, splits, FX round-trip, period tiling) and
+- Every change here needs a property-based test (library: pending OWNER-010, decided in STORY-004) (money arithmetic, splits, FX round-trip, period tiling) and
   keeps the `money`/`analytics` packages at >= 95% line / >= 90% branch coverage and >= 80% mutation score.
