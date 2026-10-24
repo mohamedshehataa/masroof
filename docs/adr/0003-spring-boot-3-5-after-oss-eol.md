@@ -1,6 +1,6 @@
 # ADR-0003: Spring Boot 3.5.16 for the skeleton although 3.5.x OSS support ended — upgrade decision needed before a public endpoint ships
 
-- **Status:** accepted (orchestrator, 2026-10-23): keep 3.5.16 for STORY-002 only; the STORY-143 design moves the module to Spring Boot 4.1.x before the first endpoint ships
+- **Status:** superseded by [ADR-0004](0004-spring-boot-4-1-upgrade.md) (2026-10-24). 3.5.16 was used for STORY-002 only. STORY-143 moves the module to Spring Boot 4.1.2 in its first commit, before the first endpoint ships. The 3.5.16 fallback and its "Accepted risk" line apply only if ADR-0004's fallback triggers.
 - **Date:** 2026-10-23
 - **Story:** STORY-002 (affects STORY-143 onward)
 - **Deciders:** architect (proposal), owner (decision)

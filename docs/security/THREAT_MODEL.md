@@ -81,6 +81,20 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | D | Request floods, slowloris, oversized bodies | Caddy rate limit per IP on `/api/ingest/*` and `/webhooks/*`; body size limits (text 64 KB, media 10 MB); timeouts | REQ-SEC-004 | Planned |
 | E | Direct access to backend/Postgres/MinIO ports | Only Caddy publishes ports; `ufw` default deny; compose internal network | REQ-SEC-020, REQ-SEC-021 | Planned |
 
+### B1a compose network / loopback -> backend `GET /health` (STORY-143)
+
+In STORY-143 the endpoint is reachable only from the compose network and, through the dev-only overlay, on
+`127.0.0.1:8080`. The base compose publishes no port. Internet exposure through Caddy arrives with STORY-142.
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| S | Anyone calls `/health` | Unauthenticated by design; no state, no household data | — | Accepted (DECISIONS 2026-10-23) |
+| T | Query parameters or headers change the response (reflection, content-type confusion) | Nothing is bound from the request; Content-Type is preset, so Accept is ignored; tests cover a 2,000-character query and XML/HTML Accept | REQ-SEC-001 | In progress (STORY-143) |
+| I | `version`, `gitSha`, `buildTime` disclosed | Accepted for the owner's private deployment | — | Accepted (DECISIONS 2026-10-23) |
+| I | DB-down response leaks a JDBC URL, host:port, credentials or a stack trace | Fixed Problem body (`Database unavailable`); the probe catches everything and logs only the exception class name; tests apply the leak regex to body and headers | REQ-SEC-001 | In progress (STORY-143) |
+| D | `/health` floods turn into DB load, or hang threads while Postgres is unreachable | One `isValid` per call under a 2 s hard deadline; Hikari pool (10), `connection-timeout` 2 s, pgjdbc `connectTimeout` 2 s; per-IP rate limit (healthcheck exempt) | REQ-SEC-051 | In progress (STORY-143: bounds); Planned (STORY-010: rate limit) |
+| E | Container compromise escalates, or actuator exposes internals | Non-root uid 10001, `read_only` root FS + `/tmp` tmpfs, `cap_drop: ALL`, `no-new-privileges`; actuator not on the classpath (STORY-003 adds it, internal only) | REQ-SEC-020 | In progress (STORY-143) |
+
 ### B2 Meta webhook -> backend
 
 | STRIDE | Threat | Mitigation | REQ | Status |
@@ -146,6 +160,7 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | I | DB dump or disk theft exposes texts | `raw_message.text`, OCR text encrypted with `APP_ENCRYPTION_KEY` (AES-GCM, key outside DB); MinIO SSE | REQ-SEC-007, REQ-SEC-008 | Planned |
 | I | Backups readable | `age`-encrypted dumps; bucket private | REQ-SEC-012 | Planned |
 | D | Disk full, runaway media | Disk alert at 80 %, media size caps, retention for raw media (configurable) | REQ-SEC-022 | Planned |
+| D | DB outage or hang blocks request threads indefinitely | Hikari `connection-timeout` 2000 ms, `validation-timeout` 1000 ms, pgjdbc `connectTimeout` 2 s; the health probe has a hard 2 s deadline | REQ-SEC-022 | In progress (STORY-143) |
 | E | App DB user owns everything | Separate migration role (Flyway) and runtime role without DDL | REQ-SEC-020 | Planned |
 | S | Network peer impersonates Postgres or downgrades auth (no channel binding) | `sslmode=verify-full` + `channelBinding=require` in the production JDBC URL; SCRAM-SHA-256 only; prod profile requires `POSTGRES_PASSWORD` (no empty default) | REQ-SEC-020 | Planned (prod password guard: Done STORY-002) |
 
@@ -175,10 +190,14 @@ Not a runtime boundary; it protects the artifact that crosses B1-B9.
 
 | STRIDE | Threat | Mitigation | REQ | Status |
 |---|---|---|---|---|
-| T | Vulnerable transitive dependency ships in the runtime image (CWE-1395) | Overrides above the Spring Boot BOM (`jackson-bom`, `postgresql`, `log4j-api`) with a reason comment each; `osv-scanner scan source -r --no-ignore backend` reports 0 High/Critical; Dependabot | REQ-SEC-013 | Done (STORY-002) |
+| T | Vulnerable transitive dependency ships in the runtime image (CWE-1395) | Spring Boot 4.1.2 BOM (OSS-supported, ADR-0004) replaces the STORY-002 overrides above the 3.5.16 BOM; an override comes back only for a finding, with a reason comment; `osv-scanner scan source -r --no-ignore backend` reports 0 findings; Dependabot | REQ-SEC-013 | Done (STORY-002); re-validated in STORY-143 |
+| T | Unpinned or drifting base image in the backend image or compose | `eclipse-temurin` JDK/JRE and `postgres:16.15-alpine3.24` pinned by exact tag + multi-arch digest; Dependabot `docker` for `/backend` (`docker-compose` ecosystem for `/infra`: follow-up); Trivy image scan in main.yml | REQ-SEC-013, REQ-SEC-020 | In progress (STORY-143) |
+| T | Image built from the wrong or unknown source revision | Docker build fails unless build arg `GIT_SHA` matches `^[0-9a-f]{7,40}$`; `/health` reports it; never `unknown` | REQ-SEC-013 | In progress (STORY-143) |
+| I | Secrets (`.env`) or `.git` copied into the build context or image | Root `.dockerignore` is a whitelist (`backend/` only); compose passes an explicit env list, never `env_file: .env` | REQ-SEC-021, REQ-SEC-027 | In progress (STORY-143) |
+| T | Tampered artifact fetched during the image build | The Docker build runs the same Gradle wrapper (`distributionSha256Sum`) and `verification-metadata.xml`, regenerated to cover `bootJar`/`bootBuildInfo` | REQ-SEC-013 | In progress (STORY-143) |
 | T | Dependency graph invisible to SCA or silently changing (CWE-1104) | `dependencyLocking { lockAllConfigurations() }` -> `backend/gradle.lockfile` and `buildscript-gradle.lockfile` committed | REQ-SEC-013 | Done (STORY-002) |
 | T | Tampered artifact or wrapper fetched at build time | `gradle/verification-metadata.xml` (sha256) and `gradle/actions/wrapper-validation@v4` in the backend CI jobs | REQ-SEC-013 | Done (STORY-002) |
-| T | Testcontainers image tag drifts under tests | Test database image pinned to `postgres:16.11-alpine` (digest pin Planned) | REQ-SEC-013 | Done (STORY-002) |
+| T | Testcontainers image tag drifts under tests | Test database image pinned to `postgres:16.15-alpine3.24@sha256:f461…` (same pin as compose) | REQ-SEC-013 | Done (STORY-002, tag); digest In progress (STORY-143) |
 
 ## 4. Requirement register (REQ-SEC)
 
@@ -220,6 +239,7 @@ Not a runtime boundary; it protects the artifact that crosses B1-B9.
 - Native iOS app: not built (Section 2); the PWA inherits browser sandboxing.
 - Multi-tenant SaaS threats: one household per deployment is the target; `household_id` scoping is still enforced to keep the option open.
 - Hardware wallet / banking credential storage: Masroof never holds bank credentials.
-- Build supply chain: artifact signature verification (`verify-signatures`) is off in `verification-metadata.xml` (sha256 only), the Testcontainers image is pinned by tag not digest, and no SBOM is generated for the backend yet; revisit at the first release story.
+- Build supply chain: artifact signature verification (`verify-signatures`) is off in `verification-metadata.xml` (sha256 only), and no SBOM is generated for the backend yet; revisit at the first release story. Image digests are pinned from STORY-143 on.
+- Framework support window: Spring Boot 3.5.16 (OSS support ended 2026-06-30) was accepted for STORY-002 only, which had no network surface. STORY-143 replaces it with 4.1.2 before the first endpoint ships (ADR-0004). If ADR-0004's fallback triggers, this becomes "Accepted risk (ADR-0003)" with manual tracking of Spring advisories.
 
 TODO(owner): confirm the VPS provider's disk-encryption and snapshot policy; decide whether raw media retention is 90 days or indefinite.

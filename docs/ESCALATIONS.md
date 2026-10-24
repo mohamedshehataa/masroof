@@ -13,5 +13,7 @@ Items only the owner can unblock, and stories that failed the 3-loop limit. Each
 - [ ] **OWNER-008 · Error tracking DSN** (GlitchTip/Sentry) — optional (Phase 9).
 - [ ] **OWNER-009 · Budgets** — defaults set in `.env.example`: `SDLC_AI_BUDGET_USD=300`, `INFRA_BUDGET_USD=30`. Adjust if needed.
 
+- [ ] **OWNER-010 · Property-testing library** — PROMPT S9 names jqwik, but jqwik's maintainers now ask AI coding agents not to use it (ADR-0004 notes the per-run message). Default decision unless you object before STORY-004 starts: QuickTheories (Apache-2.0, JUnit 5). Alternatives: keep jqwik (your call as the human user of the tool), or hand-rolled generators with JUnit 5 @ParameterizedTest.
+
 ## Resolved
 - [x] **LOOP-001 · Spec-review loop limit (2) reached for STORY-002/143/141/142** — Tried: loop 1 (26 findings) → split into four stories; loop 2 (17 findings, 3 MAJOR, all with concrete proposed text). Evidence: reviewer reports in this session. Options: (a) third review, (b) apply proposals verbatim and proceed, (c) block. Decision (orchestrator, 2026-10-23): (b) — the remaining findings were wording with proposed text, not design disagreements; applied verbatim, design proceeds; the Phase 0 retro decides whether multi-story reviews get a higher limit.
