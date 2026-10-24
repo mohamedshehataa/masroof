@@ -40,4 +40,7 @@ security-reviewer: loop-1 #1, #3, #4, #5 resolved (osv 0 findings on both lockfi
 ## Threat model delta (from security-reviewer, to apply in fix loop 1)
 B7 backend→Postgres: channel-binding downgrade row (pgjdbc ≥ 42.7.12); Flyway shares the runtime DB user (split before prod). New "Build supply chain" rows: distribution checksum (done), wrapper validation + verification-metadata (planned), lockfile + SCA (planned). §5: Boot 3.5.16 past OSS EOL accepted for STORY-002 only; CVE fixes overridden above the BOM until the 4.1 move (ADR-0003).
 
-STATUS: CHANGES_REQUESTED
+## Final verdict (loop 2)
+code-reviewer: APPROVE (loop 1). security-reviewer: APPROVE after 476eacf (CI osv args fixed); NITs 16-18 ticketed to STORY-143. Threat-model delta applied in 3f5ac58 plus the §5/B7/supply-chain wording below is for the architect to merge in STORY-143.
+
+STATUS: APPROVE
