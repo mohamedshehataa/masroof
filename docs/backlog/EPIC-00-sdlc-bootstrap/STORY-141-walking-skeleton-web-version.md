@@ -3,12 +3,13 @@ id: STORY-141
 epic: EPIC-00
 title: "Walking skeleton (web): version page with i18n/RTL, states, web fast gate"
 phase: 0
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [web]
 depends_on: [STORY-143]
 reqs: [REQ-OPS-021, REQ-OPS-025]
 implements: ["PROMPT.md S15 item 7", "PROMPT.md §1 (bilingual, RTL)", "PROMPT.md §2 (web stack)", "PROMPT.md §11 (design language, states)", "PROMPT.md S8 (make check-fast, make e2e matrix)", "PROMPT.md S9 (web gates)"]
+risk_tier: low
 owner_agent: web-engineer
 ---
 
