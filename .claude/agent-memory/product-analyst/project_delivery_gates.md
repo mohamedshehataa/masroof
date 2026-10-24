@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Owner decision 2026-10-24 (lighter, risk-tiered process aimed at a working vertical slice): the delivery-gates addendum is mostly deferred. In force now: CI on every PR (`pr.yml`, aggregate job `gate`) and branch protection on main (STORY-145, cut to REQ-OPS-150/151). Deferred until there is a real product to protect: per-metric `gate/Mn` checks, delivery-gates.yaml / delivery-gate.py, generated PR body + pr-body-lint, revert-on-red, release/hotfix/dependabot profiles, pre-push M1/M5, the "Sanctioned test changes" table, the strict HEAD rule. REQ-OPS-152..167 are retired; the old full spec/design is at commit 56c4a4f.
+Owner decision 2026-10-24 (lighter, risk-tiered process aimed at a working vertical slice): the delivery-gates addendum is mostly deferred. In force now: CI on every PR (`pr.yml`, aggregate job `gate`; STORY-145 REQ-OPS-150). Branch protection (REQ-OPS-151) is not in force: STORY-147 DESCOPED 2026-10-25. Deferred until there is a real product to protect: per-metric `gate/Mn` checks, delivery-gates.yaml / delivery-gate.py, generated PR body + pr-body-lint, revert-on-red, release/hotfix/dependabot profiles, pre-push M1/M5, the "Sanctioned test changes" table, the strict HEAD rule. REQ-OPS-152..167 are retired; the old full spec/design is at commit 56c4a4f.
 
 **Why:** the SDLC had grown far beyond the product (STORY-145 alone was estimated at ~7,600 lines while the product was a skeleton); the owner wants the vertical slice first.
 
