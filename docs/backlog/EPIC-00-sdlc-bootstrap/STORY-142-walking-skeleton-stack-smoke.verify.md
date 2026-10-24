@@ -124,4 +124,21 @@ Loop 1 result: FAIL (superseded by Loop 2 below)
 ## Test integrity (loop 2)
 OK. The diff 7210dc0..392de9c over infra/tests, web/e2e and web/src test files is empty. No skips added, no assertions changed.
 
+Loop 2 result at 392de9c: PASS (re-judged at 9bc5235 below)
+
+## Loop 2 addendum - new tip 9bc5235 (fix(web): set cache headers once at server level)
+- Head: 9bc52350d89d0f401cfb470be02b675453757593. Diff from 392de9c: only web/nginx.conf (a map on uri sets Cache-Control; add_header at server level with "always").
+- Fresh stack (compose.sh up, project masroof-qa142l2b) rc 0; nginx -t in the web container: "test is successful".
+- curl -sI http://localhost/: 200, Cache-Control: no-cache, Content-Type: text/html, Server: nginx
+- /assets/index-DGb3k_TL.js: 200 application/javascript, "public, max-age=31536000, immutable"; the css asset is the same; a 304 on If-None-Match keeps the immutable header
+- /some/client/route, /index.html, /actuator/health, /favicon.ico: 200 text/html, no-cache (SPA fallback intact; the map sees the rewritten uri /index.html)
+- /ASSETS/x.js and /x/assets/y.js: 200 html, no-cache (the regex is anchored and case-sensitive, as intended)
+- smoke OK/OK rc 0; Playwright through Caddy: 19 passed
+- semgrep (docker semgrep/semgrep, p/default + p/owasp-top-ten + r/generic.nginx) on web/nginx.conf and web/Dockerfile: no findings printed (--error --quiet)
+- Teardown: down -v; docker ps -aq count 0
+
+| Severity | Location | Problem | Reproduce |
+|---|---|---|---|
+| MINOR | web/nginx.conf add_header ... always | "always" also puts the one-year immutable header on 404 responses under /assets/. A cache or browser can then keep a 404 for a missing chunk (rolling deploy, stale index.html) for a year. Loop 1 had no "always" and sent no header on a 404. Fix: drop "always" (nginx then adds it only on 2xx/3xx), or map the 404 case to no-store | curl -sD- -o /dev/null http://localhost/assets/nope.js shows 404 plus "public, max-age=31536000, immutable" |
+
 STATUS: PASS

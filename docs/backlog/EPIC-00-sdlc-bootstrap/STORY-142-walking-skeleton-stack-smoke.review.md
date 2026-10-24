@@ -76,4 +76,13 @@ Loop 1 result: CHANGES_REQUESTED (superseded by Loop 2 below)
 - main.yml e2e: npm ci and playwright install --with-deps chromium in web, before make e2e. Correct for ubuntu-latest. The Linux Playwright 1.64.1 noble container passed the 4 screenshot baselines within maxDiffPixelRatio 0.01.
 - Invariants: no secrets added, no new logging, no migrations, generated code untouched.
 
+Loop 2 result at 392de9c: APPROVE (re-judged at 9bc5235 below)
+
+## Loop 2 addendum - new tip 9bc5235
+- web/nginx.conf now sets Cache-Control once at server level through a map, which resolves the semgrep header-redefinition finding (semgrep run: no findings). Behaviour verified live: no-cache on html and the SPA fallback, immutable on /assets, 304 keeps the header.
+
+| # | Severity | Reviewer | Location | Why it matters | Suggested fix | Resolution |
+|---|---|---|---|---|---|---|
+| 17 | MINOR | code-reviewer | web/nginx.conf add_header always | a 404 under /assets/ is sent with "max-age=31536000, immutable", so a missing chunk can be cached for a year | drop "always", or map 404 to no-store | open |
+
 STATUS: APPROVE
