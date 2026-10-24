@@ -175,5 +175,49 @@ class CoverageGateTests(CoverageGateFixture):
         self.assertEqual(rc, 2)
 
 
+class RequireMutationTests(CoverageGateFixture):
+    """--require-mutation (make check-full): SKIP only with PIT's own no-mutations marker, strict otherwise."""
+
+    def run_strict(self) -> tuple[int, str]:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gate.main(["--root", str(self.root), "--thresholds", str(THRESHOLDS), "--require-mutation"])
+        return rc, buf.getvalue()
+
+    def marker(self) -> None:
+        write(self.root / "backend" / "build" / "reports" / "pitest" / "no-mutations.txt",
+              "PIT found no mutations: no classes in the mutation target packages yet\n")
+
+    def test_coverage_gate_require_mutation_marker_without_report_skips(self) -> None:
+        self.backend(pit_xml=None)
+        self.marker()
+        rc, out = self.run_strict()
+        self.assertEqual(rc, 0, out)
+        line = next(l for l in out.splitlines() if "mutation score" in l)
+        self.assertIn("SKIP", line)
+        self.assertIn("no classes in the mutation target packages yet", line)
+
+    def test_coverage_gate_require_mutation_no_marker_no_report_fails(self) -> None:
+        self.backend(pit_xml=None)
+        rc, out = self.run_strict()
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL", next(l for l in out.splitlines() if "PIT report" in l))
+
+    def test_coverage_gate_require_mutation_report_wins_over_stale_marker_low_score_fails(self) -> None:
+        self.backend(pit_xml=pit({"com.masroof.domain.parsing.Parser": (70, 30)}))
+        self.marker()
+        rc, out = self.run_strict()
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL", next(l for l in out.splitlines() if "mutation score (parsing)" in l))
+
+    def test_coverage_gate_require_mutation_score_at_threshold_passes(self) -> None:
+        self.backend(pit_xml=pit({"com.masroof.domain.parsing.Parser": (80, 20), "com.masroof.domain.money.Money": (80, 20),
+                                  "com.masroof.domain.dedup.Matcher": (80, 20), "com.masroof.application.analytics.Calc": (65, 35),
+                                  "com.masroof.domain.household.Rules": (65, 35)}))
+        rc, out = self.run_strict()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("PASS", next(l for l in out.splitlines() if "mutation score (parsing)" in l))
+
+
 if __name__ == "__main__":
     unittest.main()
