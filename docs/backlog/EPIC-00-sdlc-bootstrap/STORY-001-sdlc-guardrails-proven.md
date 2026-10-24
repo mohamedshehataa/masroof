@@ -3,7 +3,7 @@ id: STORY-001
 epic: EPIC-00
 title: SDLC guardrails are proven
 phase: 0
-status: BLOCKED
+status: IN_PROGRESS
 size: M
 modules: [sdlc]
 depends_on: []
@@ -250,3 +250,4 @@ None (first story of Phase 0).
 | 2026-10-24 | 1-2 spec fix | product-analyst | READY — after verify loop 2 FAIL (F-01..F-10, F-15, F-16). REQ-OPS-001 is rewritten as a closed set of classes B1–B14 with an allow-list and explicit non-goals. REQ-OPS-002 gains canonicalisation (8.3, `::$DATA`, `\\?\`/`\\.\`) plus `*.ppk`, `*.der` and `settings.local.json`. REQ-OPS-003 gains bounded PAN candidates, normalisation and timing cases. REQ-OPS-010 gains one skip line per tool and the file-name injection case. New REQ-OPS-011: integrity backstop and pre-push guard. Nothing already proven was removed. |
 
 | 2026-10-24 | 6 verify | qa-verifier | FAIL loop 3/3 (1 BLOCKER: backstop sources the files it protects; 3 MAJOR) -> BLOCKED, ESCALATION LOOP-002 |
+| 2026-10-24 | 5 implement | orchestrator | owner granted loop 4 (LOOP-002 option a): scope = loop-3 findings F-01..F-04 only; hook self-integrity vs git HEAD, fail closed |

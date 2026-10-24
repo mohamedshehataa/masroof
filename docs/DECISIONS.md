@@ -167,3 +167,4 @@ One line per non-obvious decision: **decision — why**. Significant ones also g
 - 2026-10-24 — STORY-145 pre-push base for `refs/heads/maint/v*` is `origin/maint/vX.Y`, or the tag `vX.Y.Z` when the branch is new.
 - 2026-10-24 — STORY-145 restore-test freshness (≤ 30 days) is metric M17, not G7; the `release` check reports it as row `M17 restore test`.
 - 2026-10-24 — STORY-145 size estimate is ≈ 4,300 hand-written lines incl. tests in ten increments; any increment estimated > 450 is split a/b before /tdd.
+- 2026-10-24 — STORY-001 gets a 4th implement/verify loop (owner decision on LOOP-002, option a), scoped strictly to the loop-3 findings (backstop sources the files it protects; shared snapshot; case-sensitive B13 interpreter writes; backtick delete targets); the fix anchors hook integrity in git HEAD and fails closed — the loop limit is the owner's to extend, and this is the only exception granted.
