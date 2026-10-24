@@ -144,6 +144,17 @@ printf 'run_hook a; assert_blocked "a"\n' > "$R/.claude/hooks/tests/test-x.sh"
 run_check main;              expect 1 "TEST_INTEGRITY: VIOLATION" "integrity: assert_* calls removed from a bash suite -> VIOLATION"
 contains "3 -> 1" "integrity: bash suite assertions are counted (3 -> 1)"
 
+echo "-- flips and comment-only checks with an unchanged count (REQ-OPS-007, STORY-001 loop 3 F-14)"
+reset_repo flip
+mkdir -p "$R/.claude/hooks/tests"
+printf 'run_hook a; assert_blocked "a"\nrun_hook b; assert_allowed "b"\nexpect 0 "OK" "c"\n' > "$R/.claude/hooks/tests/test-x.sh"
+g add -A >/dev/null && g commit -qm "bash suite [STORY-001]"
+printf 'run_hook a; assert_allowed "a"\nrun_hook b; assert_allowed "b"\nexpect 0 "OK" "c"\n' > "$R/.claude/hooks/tests/test-x.sh"
+run_check main;              contains "assert_blocked 1 -> 0" "integrity: assert_blocked -> assert_allowed flip is reported"
+contains "WARN:" "integrity: a flip with an equal count is a WARN for the verifier"
+printf 'run_hook a; assert_blocked "a"\n# run_hook b; assert_allowed "b"\nexpect 0 "OK" "c"\n' > "$R/.claude/hooks/tests/test-x.sh"
+run_check main;              expect 1 "TEST_INTEGRITY: VIOLATION" "integrity: a check left only in a comment is a removed check -> VIOLATION"
+
 echo "-- usage errors"
 reset_repo usage
 run_check;                   expect 2 "usage:" "integrity: no base ref -> usage error 2"

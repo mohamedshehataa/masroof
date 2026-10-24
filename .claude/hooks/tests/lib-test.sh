@@ -31,8 +31,13 @@ RC=0; OUT=""; ERR=""
 # run_hook <hook-file> <stdin-json>
 run_hook() {
   local hook="$1" json="$2" errf="$TMP_ROOT/err.txt"
-  OUT="$(printf '%s' "$json" | bash "$HOOKS_DIR/$hook" 2>"$errf")"; RC=$?
-  ERR="$(cat "$errf")"
+  local outf="$TMP_ROOT/out.txt"
+  # a here-string and files instead of $( ... | ... ): one process per case (forks are slow on Windows)
+  bash "$HOOKS_DIR/$hook" <<< "$json" > "$outf" 2> "$errf"; RC=$?
+  OUT=""; IFS= read -r -d '' OUT < "$outf" || true
+  ERR=""; IFS= read -r -d '' ERR < "$errf" || true   # no cat fork; drop trailing newlines like $( )
+  while [[ "$OUT" == *$'\n' ]]; do OUT="${OUT%$'\n'}"; done
+  while [[ "$ERR" == *$'\n' ]]; do ERR="${ERR%$'\n'}"; done
 }
 
 _record() { # _record <ok|fail> <name> <detail>
@@ -60,14 +65,28 @@ assert_file_exists() { if [ -e "$1" ]; then _pass "$2"; else _fail "$2" "missing
 # given to the native jq.exe. MSYS also rewrites env values that start with / (so /bin/rm became
 # C:/Program Files/Git/usr/bin/rm); json_bash excludes the command (MSYS2_ENV_CONV_EXCL=J_C) so it
 # reaches the hook verbatim, as Claude Code sends it.
-json_bash() { # json_bash <command> [cwd]
-  MSYS2_ENV_CONV_EXCL=J_C J_C="$1" J_CWD="${2:-$CLAUDE_PROJECT_DIR}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:env.J_C},cwd:env.J_CWD,session_id:"test",permission_mode:"default"}'
+# json_str <text> -> JSTR, the text as a JSON string literal. Pure bash (STORY-001 loop 3): a jq process per
+# test case cost ~60 ms on Windows; the hot builders below use it. Non-ASCII passes through as UTF-8.
+json_str() {
+  local s="$1" k c r
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+  if [[ "$s" == *[$'\001'-$'\037']* ]]; then
+    for (( k = 1; k < 32; k++ )); do printf -v c '%02x' "$k"; printf -v c "\\x$c"; printf -v r '\\u%04x' "$k"; s="${s//"$c"/$r}"; done
+  fi
+  JSTR="\"$s\""
 }
+json_bash() { # json_bash <command> [cwd]
+  local c; json_str "$1"; c="$JSTR"; json_str "${2:-$CLAUDE_PROJECT_DIR}"
+  printf '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":%s},"cwd":%s,"session_id":"test","permission_mode":"default"}\n' "$c" "$JSTR"
+}
+_agent_field() { AF=""; if [ -n "${1:-}" ]; then json_str "$1"; AF=",\"agent_type\":$JSTR"; fi; }
 json_write() { # json_write <file_path> <content> [agent_type]
-  J_P="$1" J_C="$2" J_A="${3:-}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:env.J_P,content:env.J_C},cwd:"x",session_id:"test"} | if env.J_A=="" then . else .agent_type=env.J_A end'
+  local p; _agent_field "${3:-}"; json_str "$1"; p="$JSTR"; json_str "$2"
+  printf '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":%s,"content":%s},"cwd":"x","session_id":"test"%s}\n' "$p" "$JSTR" "$AF"
 }
 json_edit() { # json_edit <file_path> <new_string> [agent_type]
-  J_P="$1" J_N="$2" J_A="${3:-}" jq -n     '{hook_event_name:"PreToolUse",tool_name:"Edit",tool_input:{file_path:env.J_P,old_string:"old",new_string:env.J_N},cwd:"x",session_id:"test"} | if env.J_A=="" then . else .agent_type=env.J_A end'
+  local p; _agent_field "${3:-}"; json_str "$1"; p="$JSTR"; json_str "$2"
+  printf '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":%s,"old_string":"old","new_string":%s},"cwd":"x","session_id":"test"%s}\n' "$p" "$JSTR" "$AF"
 }
 json_notebook() { # json_notebook <notebook_path> <new_source>
   J_P="$1" J_N="$2" jq -n     '{hook_event_name:"PreToolUse",tool_name:"NotebookEdit",tool_input:{notebook_path:env.J_P,cell_id:"c1",new_source:env.J_N},cwd:"x",session_id:"test"}'

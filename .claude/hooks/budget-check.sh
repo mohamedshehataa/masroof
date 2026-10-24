@@ -16,8 +16,15 @@ for f in .env .env.example; do
   [ -n "$budget" ] && break
 done
 budget="${MASROOF_AI_BUDGET_USD:-${budget:-300}}"
-# "1,234.50" and "$350" are how people write money: awk would read them as 1 and 0
-spend="${spend//[,\$[:space:]]/}"; budget="${budget//[,\$[:space:]]/}"
+# "1,234.50", "$350", "350 USD", "EGP 350" and Arabic-Indic digits are how people write money: awk would
+# read them as 1, 0 or nothing. Arabic-Indic/Persian digits and separators are built at runtime (ASCII source).
+for i in 0 1 2 3 4 5 6 7 8 9; do
+  printf -v ch "\\xd9\\xa$i"; spend="${spend//"$ch"/$i}"; budget="${budget//"$ch"/$i}"
+  printf -v ch "\\xdb\\xb$i"; spend="${spend//"$ch"/$i}"; budget="${budget//"$ch"/$i}"
+done
+printf -v ch '\xd9\xab'; spend="${spend//"$ch"/.}"   # Arabic decimal separator
+printf -v ch '\xd9\xac'; spend="${spend//"$ch"/,}"   # Arabic thousands separator
+spend="${spend//[,\$[:space:][:alpha:]]/}"; budget="${budget//[,\$[:space:][:alpha:]]/}"
 num_re='^[0-9]+([.][0-9]+)?$'
 [[ "$spend" =~ $num_re ]] || exit 0
 [[ "$budget" =~ $num_re ]] || budget=300

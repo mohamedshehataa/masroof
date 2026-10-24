@@ -54,6 +54,10 @@ rm -f "$M"; MASROOF_METRICS_FILE="$M" run_hook budget-check.sh "$(json_prompt)";
 mk_metrics '1,234.50'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_contains "$OUT" "EXCEEDED" "REQ-OPS-008 reads 1,234.50 as 1234.50 (thousands separator)"
 mk_metrics '$350'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_contains "$OUT" "EXCEEDED" "REQ-OPS-008 reads \$350 as 350 (currency sign)"
 mk_metrics 'abc'; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"; assert_eq "$OUT" "" "REQ-OPS-008 non-numeric spend stays silent"
+for v in '350 USD' 'USD 350' 'EGP 350' "$(printf '\xd9\xa3\xd9\xa5\xd9\xa0')"; do   # the last one is 350 in Arabic-Indic digits
+  mk_metrics "$v"; MASROOF_METRICS_FILE="$M" MASROOF_AI_BUDGET_USD=300 run_hook budget-check.sh "$(json_prompt)"
+  assert_contains "$OUT" "\$350 > budget \$300" "REQ-OPS-008 reads a currency code / Arabic-Indic spend as 350 (case $(printf '%s' "$v" | od -An -c | tr -s ' ' | cut -c1-24))"
+done
 
 echo "-- inject-context unhappy paths (STORY-001 verify F-13)"
 printf '# Esc\n## Open\n## Resolved\n- [x] old\n' > "$P/docs/ESCALATIONS.md"
@@ -69,6 +73,18 @@ for i in $(seq 1 12); do echo "- [ ] **OWNER-$i** $long" >> "$P/docs/ESCALATIONS
 run_hook inject-context.sh "$(json_session_start compact)"
 assert_eq "$(( $(printf '%s' "$OUT" | wc -c) < 10000 ))" "1" "REQ-OPS-006 output stays under the 10k cap with 1500-char lines"
 rm -f "$P/docs/PROGRESS.md"; mv "$P/docs/PROGRESS.md.bak" "$P/docs/PROGRESS.md"
+
+echo "-- Arabic text is cut by characters, never mid-character (STORY-001 loop 3, F-13)"
+cp "$P/docs/PROGRESS.md" "$P/docs/PROGRESS.md.bak"
+arw="$(printf '\xd8\xaa\xd9\x85 \xd8\xaa\xd8\xb3\xd8\xac\xd9\x8a\xd9\x84 \xd8\xa7\xd9\x84\xd9\x85\xd8\xb5\xd8\xb1\xd9\x88\xd9\x81 ')"
+dot="$(printf '\xc2\xb7')"
+{ echo "# Progress"; for i in $(seq 1 25); do printf '2026-10-23 %s P1 %s STORY-001 %s implement %s ' "$dot" "$dot" "$dot" "$dot"; for _ in $(seq 1 30); do printf '%s' "$arw"; done; echo; done; } > "$P/docs/PROGRESS.md"
+run_hook inject-context.sh "$(json_session_start compact)"
+printf '%s' "$OUT" > "$TMP_ROOT/ctx.txt"
+# shellcheck disable=SC2086
+assert_eq "$($PYTHON -c 'import sys; open(sys.argv[1],"rb").read().decode("utf-8"); print("utf8-ok")' "$TMP_ROOT/ctx.txt" 2>&1)" "utf8-ok" "REQ-OPS-006 the injected context is valid UTF-8 with long Arabic lines"
+assert_contains "$OUT" "STORY-001" "REQ-OPS-006 the Arabic PROGRESS lines are still shown"
+mv "$P/docs/PROGRESS.md.bak" "$P/docs/PROGRESS.md"
 
 echo "-- snapshot-progress unhappy path (F-19)"
 rm -rf "$MASROOF_STATE_DIR/snapshots"; echo "not a dir" > "$MASROOF_STATE_DIR/snapshots"

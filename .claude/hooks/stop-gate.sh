@@ -30,9 +30,12 @@ last_green_sha="${last_green##*@}"
 [ "$fp" = "$last_green_fp" ] && exit 0
 
 # ---- which modules changed since the last green? ----
-changed="$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)"
+# -z and core.quotePath=false: git would otherwise print non-ASCII names quoted ("backend/src/\331...")
+# and they would map to no module (STORY-001 loop 3, F-11)
+gitq() { git -c core.quotePath=false "$@" 2>/dev/null | tr '\0' '\n'; }
+changed="$(gitq diff -z --name-only HEAD; gitq ls-files -z --others --exclude-standard)"
 if [ -n "$last_green_sha" ] && [ "$last_green_sha" != "$last_green_fp" ] && git cat-file -e "$last_green_sha" 2>/dev/null; then
-  changed+=$'\n'"$(git diff --name-only "$last_green_sha" HEAD 2>/dev/null)"
+  changed+=$'\n'"$(gitq diff -z --name-only "$last_green_sha" HEAD)"
 fi
 modules=""
 add_mod() { case " $modules " in *" $1 "*) ;; *) modules="${modules:+$modules }$1" ;; esac; }

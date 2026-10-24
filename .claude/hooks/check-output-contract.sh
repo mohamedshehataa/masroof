@@ -50,10 +50,15 @@ while IFS= read -r s; do
 done <<< "$sections"
 [ -n "$missing" ] && block "final message is missing required section(s): $missing. $contract_help"
 
-# STATUS must be the last non-empty line (so the orchestrator can parse it reliably)
+# STATUS must be the last non-empty line (so the orchestrator can parse it reliably), and it must be the
+# same line that was validated above: an unclosed fence counts as closed at the end of the message, so a
+# last line inside it is code, not the contract (STORY-001 loop 3, F-12)
 last_line="$(printf '%s\n' "$msg" | grep -vE '^[[:space:]]*$' | tail -1)"
+last_body="$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*$' | tail -1)"
 printf '%s' "$last_line" | grep -Eq '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' \
   || block "the 'STATUS:' line must be the LAST line of your final message (found other text after it). $contract_help"
+[ "$last_line" = "$last_body" ] \
+  || block "the last line is inside an unclosed code fence; close the fence and end with the 'STATUS:' line outside it. $contract_help"
 
 log_hook "OK agent=$agent status=$status_val"
 exit 0

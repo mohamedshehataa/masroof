@@ -1,0 +1,1 @@
+- [Dependency verification](project_dependency-verification.md) — live sources for versions/CVEs/digests; jqwik removed (ADR-0004), owner picks a replacement in STORY-004

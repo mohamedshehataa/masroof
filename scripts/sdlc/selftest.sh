@@ -170,6 +170,16 @@ record G8 "SubagentStop (check-output-contract.sh) blocks a subagent reply witho
 run_hook guard-bash.sh "$(jq -n '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"git push --force origin main"},cwd:"."}')"
 record G9 "guard-bash.sh blocks git push --force to main" "Bash: git push --force origin main" "guard-bash.sh <- PreToolUse Bash JSON" "exit $RC; ${ERR:0:120}" "$(verdict 2)"
 
+# ---------------------------------------------------------------- G10 a shell write to a hook is undone (REQ-OPS-011)
+R="$(temp_repo)"
+mkdir -p "$R/.claude/hooks" && printf '#!/usr/bin/env bash\necho guard\n' > "$R/.claude/hooks/guard-bash.sh"
+(cd "$R" && git add . && git commit -q -m "feat: guard [PHASE-0]")
+printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"x"}}' | CLAUDE_PROJECT_DIR="$R" bash "$HOOKS/restore-protected.sh" --snapshot >/dev/null 2>&1
+printf 'exit 0\n' > "$R/.claude/hooks/guard-bash.sh"   # the write guard-bash would have blocked, done directly
+post_out="$(printf '%s' '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"x"}}' | CLAUDE_PROJECT_DIR="$R" bash "$HOOKS/restore-protected.sh" 2>/dev/null)"
+if [[ "$post_out" == *'"decision":"block"'* ]] && grep -q 'echo guard' "$R/.claude/hooks/guard-bash.sh"; then v=PROVEN; else v=FAILED; fi
+record G10 "restore-protected.sh undoes a shell write to a hook while locked" "overwrote .claude/hooks/guard-bash.sh in a temp repo between the PreToolUse snapshot and the PostToolUse check" "restore-protected.sh --snapshot / restore-protected.sh <- Bash JSON" "decision: $(printf '%s' "$post_out" | cut -c1-90); file restored: $(grep -c 'echo guard' "$R/.claude/hooks/guard-bash.sh")" "$v"
+
 # ---------------------------------------------------------------- extras that the spec implies
 run_hook protect-files.sh "$(J_P="$PWD/.env" jq -n '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:env.J_P,content:"X=1"}}')"
 record X1 "protect-files.sh blocks writing .env" "Write .env" "protect-files.sh <- Write JSON" "exit $RC; ${ERR:0:100}" "$(verdict 2)"

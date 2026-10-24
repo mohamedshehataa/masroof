@@ -29,3 +29,11 @@ commit-msg:
   commands:
     conventional-with-story:
       run: bash scripts/quality/commit-msg-lint.sh {1}
+
+# REQ-OPS-011: reject deleting main/master and non-fast-forward updates of them (git passes the ref
+# lines on stdin; an unfetched remote sha fails closed). The remote guard is branch protection.
+pre-push:
+  commands:
+    protect-main:
+      use_stdin: true
+      run: bash scripts/quality/pre-push-guard.sh {1} {2}

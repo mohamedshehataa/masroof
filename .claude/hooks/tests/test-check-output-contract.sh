@@ -96,4 +96,13 @@ run_hook $H "$(json_subagent_stop qa-verifier "$GOOD_VERIFY
 STATUS: FAIL
 \`\`\`
 STATUS: PASS")";                                                                   assert_allowed "REQ-OPS-005 a STATUS example inside a fence is ignored"
+
+echo "-- an unclosed fence: the validated STATUS is the last line (STORY-001 loop 3, F-12)"
+run_hook $H "$(json_subagent_stop qa-verifier "${GOOD_VERIFY/STATUS: PASS/STATUS: FAIL}
+\`\`\`
+STATUS: PASS")";                                                                   assert_blocked "REQ-OPS-005 a STATUS: PASS inside an unclosed fence after STATUS: FAIL is blocked"
+assert_contains "$ERR" "unclosed code fence" "REQ-OPS-005 the unclosed fence is named"
+run_hook $H "$(json_subagent_stop qa-verifier "$GOOD_VERIFY
+\`\`\`
+STATUS: BOGUS")";                                                                  assert_blocked "REQ-OPS-005 a STATUS: BOGUS inside an unclosed fence is blocked"
 finish

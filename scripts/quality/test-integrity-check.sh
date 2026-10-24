@@ -45,7 +45,9 @@ fi
 
 # --- regexes: KEEP IN SYNC with .claude/hooks/test-integrity.sh ---------------------------
 # The last alternatives count the bash hook/script suites: assert_* calls, `expect <rc>` and expect_*.
-ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\(|\bassert_[a-z_]+\b|\bexpect [0-9]|\bexpect_(block|allow|rc)\b'
+ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\(|\bassert_rc [0-9]+|\bassert_[a-z_]+\b|\bexpect [0-9]+|\bexpect_(block|allow|rc)\b'
+# whole-line comments do not count (a check left only in a comment is a removed check)
+COMMENT_RE='^[[:space:]]*(#|//|/\*|\*)'
 SKIP_RE='@Disabled|@Ignore|@Skip|\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|test\.skip|it\.skip|describe\.skip|\.only\(|@Test\(\s*enabled\s*=\s*false|pytest\.mark\.skip|@unittest\.skip|\.todo\(|fixme\(|@Tag\("skip"\)'
 TOL_RE='withinPercentage|within\(|offset\(|delta|tolerance|approximately|toBeCloseTo|isCloseTo|closeTo|assertAlmostEqual|Percentage\.withPercentage'
 # ------------------------------------------------------------------------------------------
@@ -60,6 +62,9 @@ is_test_file() {
 
 # count_re <regex>  (reads stdin; counts MATCHES, not lines, so several assertions on one line all count)
 count_re() { local n; n="$(grep -oE "$1" 2>/dev/null | wc -l | tr -d '[:space:]')"; printf '%s' "${n:-0}"; }
+# assertion identifiers with counts ("3 assert_blocked", "1 expect 0"), comments excluded: a flip such as
+# assert_blocked -> assert_allowed keeps the total but changes this multiset
+assert_ids() { grep -vE "$COMMENT_RE" 2>/dev/null | grep -oE "$ASSERT_RE" 2>/dev/null | sed -E 's/[[:space:]]*\($//' | sort | uniq -c; }
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "not inside a git repository" >&2; exit 2; }
 cd "$ROOT" || exit 2
@@ -87,12 +92,12 @@ violations=(); warnings=(); rows=0
 analyze() { # analyze <status> <old-path|-> <new-path|->
   local st="$1" oldp="$2" newp="$3" old_a=0 old_s=0 old_t=0 new_a=0 new_s=0 new_t=0 note="" oldc=""
   if [ "$oldp" != "-" ] && oldc="$(git show "$MB:$oldp" 2>/dev/null)"; then
-    old_a="$(printf '%s\n' "$oldc" | count_re "$ASSERT_RE")"
+    old_a="$(printf '%s\n' "$oldc" | grep -vE "$COMMENT_RE" | count_re "$ASSERT_RE")"
     old_s="$(printf '%s\n' "$oldc" | count_re "$SKIP_RE")"
     old_t="$(printf '%s\n' "$oldc" | count_re "$TOL_RE")"
   fi
   if [ "$newp" != "-" ] && [ -f "$newp" ]; then
-    new_a="$(count_re "$ASSERT_RE" < "$newp")"
+    new_a="$(grep -vE "$COMMENT_RE" "$newp" | count_re "$ASSERT_RE")"
     new_s="$(count_re "$SKIP_RE" < "$newp")"
     new_t="$(count_re "$TOL_RE" < "$newp")"
   fi
@@ -110,6 +115,17 @@ analyze() { # analyze <status> <old-path|-> <new-path|->
     violations+=("${newp}: skip/disable/only markers increased $old_s -> $new_s")
   fi
   if (( new_a < old_a )) && [ "$st" != "D" ]; then note="${note:+$note; }assertions decreased"; fi
+  if (( new_a >= old_a )) && [ "$oldp" != "-" ] && [ "$newp" != "-" ] && [ -f "$newp" ]; then
+    local -A oc=() nc=()
+    local c id o n flips=""
+    while read -r c id; do [ -n "$id" ] && oc["$id"]="$c"; done < <(printf '%s\n' "$oldc" | assert_ids)
+    while read -r c id; do [ -n "$id" ] && nc["$id"]="$c"; done < <(assert_ids < "$newp")
+    for id in "${!oc[@]}"; do o="${oc[$id]}"; n="${nc[$id]:-0}"; (( n < o )) && flips+="${flips:+, }$id $o -> $n"; done
+    if [ -n "$flips" ]; then
+      note="${note:+$note; }assertion kinds changed (WARN)"
+      warnings+=("${newp}: assertion kinds changed while the total did not drop ($flips) - e.g. assert_blocked flipped to assert_allowed; the verifier judges it")
+    fi
+  fi
   if (( new_t > old_t )); then
     note="${note:+$note; }tolerance usage increased (WARN)"
     warnings+=("${newp}: tolerance/approximation usage increased $old_t -> $new_t (possible loosened test)")

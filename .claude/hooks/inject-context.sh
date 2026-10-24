@@ -7,6 +7,10 @@ HOOK_NAME=inject-context
 read_input
 source_kind="$(json_get '.source')"
 cd "$PROJECT_DIR" 2>/dev/null || exit 0
+# cut by CHARACTERS, not bytes: `cut -c` counts bytes on Git Bash, so Arabic text and the middle dot were
+# split mid-character (invalid UTF-8 in the context). bash ${x:0:n} counts characters in a UTF-8 locale.
+export LC_ALL=C.UTF-8
+cutc() { local l; while IFS= read -r l; do printf '%s\n' "${l:0:$1}"; done; }
 
 context() {
   local phase story stage loops unlocked release ready inprog blocked done_ open_count
@@ -30,7 +34,7 @@ context() {
   echo
   if [ -f docs/PROGRESS.md ]; then
     echo "### Last 20 lines of docs/PROGRESS.md"
-    grep -vE '^[[:space:]]*$' docs/PROGRESS.md | tail -n 20 | cut -c1-300
+    grep -vE '^[[:space:]]*$' docs/PROGRESS.md | tail -n 20 | cutc 300
   else
     echo "PROGRESS.md: none"
   fi
@@ -39,16 +43,21 @@ context() {
     # grep -c prints 0 itself when nothing matches (and exits 1), so no `|| echo 0`
     open_count="$(grep -cE '^- \[ \]' docs/ESCALATIONS.md 2>/dev/null)"
     echo; echo "### Open escalations (${open_count:-0})"
-    grep -E '^- \[ \]' docs/ESCALATIONS.md | cut -c1-160 | head -12
+    grep -E '^- \[ \]' docs/ESCALATIONS.md | head -12 | cutc 160
   fi
 
   if [ -f CLAUDE.md ]; then
     echo; echo "### Invariants (from CLAUDE.md)"
-    sed -n '/^## Invariants/,/^## /p' CLAUDE.md | grep -E '^[-*] ' | cut -c1-220 | head -12
+    sed -n '/^## Invariants/,/^## /p' CLAUDE.md | grep -E '^[-*] ' | head -12 | cutc 220
   fi
 
   echo; echo "Workflow reminder: spec -> spec-review -> design -> failing tests -> implement -> qa-verifier (fresh) -> reviewers -> make check -> merge. Max 3 verify/review loops, then docs/ESCALATIONS.md. Evidence or it didn't happen."
 }
 
-context | head -c 9500
+# cap at 9500 bytes on a line boundary, so the cap never splits a character either
+out="$(context)"
+if [ "$(LC_ALL=C; printf '%s' "${#out}")" -gt 9500 ]; then
+  out="$(LC_ALL=C; o="${out:0:9500}"; printf '%s' "${o%$'\n'*}")"
+fi
+printf '%s\n' "$out"
 exit 0

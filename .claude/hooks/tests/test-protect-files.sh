@@ -102,6 +102,27 @@ run_hook $H "$(json_edit "$PL/backend/src/main/resources/db/migration/v1__init.s
 run_hook $H "$(json_write "$PU/BACKEND/SRC/MAIN/JAVA/X.JAVA" "$C" product-analyst)"; assert_blocked "REQ-OPS-002 role scope holds for an upper-cased path"
 run_hook $H "$(json_write "$PU/DOCS/BACKLOG/EPIC-01/STORY-009.MD" "$C" product-analyst)"; assert_allowed "REQ-OPS-002 role scope allows an upper-cased docs path"
 
+echo "-- canonical names: streams, device prefixes, 8.3 short names (STORY-001 loop 3)"
+PB="${PW//\//\\}"
+run_hook $H "$(json_edit "$PW/.claude/settings.json::\$DATA" "$C")";        assert_blocked "REQ-OPS-002 blocks settings.json::\$DATA"
+run_hook $H "$(json_edit "$PW/.claude/settings.json:x:\$DATA" "$C")";       assert_blocked "REQ-OPS-002 blocks settings.json:x:\$DATA"
+run_hook $H "$(json_edit "\\\\.\\$PB\\.claude\\hooks\\guard-bash.sh" "$C")"; assert_blocked "REQ-OPS-002 blocks the \\\\.\\ device prefix"
+run_hook $H "$(json_edit "\\\\?\\$PB\\.claude\\settings.json" "$C")";      assert_blocked "REQ-OPS-002 blocks the \\\\?\\ prefix"
+run_hook $H "$(json_edit "//?/$PW/docs/PROMPT.md" "$C")";                    assert_blocked "REQ-OPS-002 blocks the //?/ prefix"
+run_hook $H "$(json_edit "$PW/.claude/x/../hooks/lib.sh" "$C")";             assert_blocked "REQ-OPS-002 blocks .claude/x/../hooks"
+run_hook $H "$(json_write "$PW/.Env" "$C")";                                 assert_blocked "REQ-OPS-002 blocks .Env"
+run_hook $H "$(json_write "$PW/keys/id.PPK" "$C")";                          assert_blocked "REQ-OPS-002 blocks *.PPK"
+run_hook $H "$(json_write "$PW/certs/a.der" "$C")";                          assert_blocked "REQ-OPS-002 blocks *.der"
+mkdir -p "$P/eval"; printf '{}' > "$P/eval/baseline.json"; printf '{}' > "$P/.claude/settings.json"; printf 'x' > "$P/.claude/hooks/guard-bash.sh"
+if command -v cygpath >/dev/null 2>&1; then
+  for f in .claude/hooks/guard-bash.sh .claude/settings.json eval/baseline.json; do
+    short="$(cygpath -s -m "$P/$f" 2>/dev/null)"
+    [[ "$short" == *'~'* ]] || continue   # 8.3 name generation may be off on this volume
+    run_hook $H "$(json_edit "$short" "$C")"; assert_blocked "REQ-OPS-002 blocks the 8.3 short name of $f"
+  done
+fi
+run_hook $H "$(json_write "$PW/backend/src/main/resources/db/migration/V7__x.sql" "$C")"; assert_allowed "REQ-OPS-002 a new V7 migration stays editable"
+
 echo "-- qa-verifier writes only its verify report (F-23)"
 run_hook $H "$(json_write "$P/backend/src/main/java/X.java" "$C" qa-verifier)"; assert_blocked "REQ-OPS-002 qa-verifier cannot write source"
 run_hook $H "$(json_write "$P/docs/backlog/EPIC-00/STORY-001-x.verify.md" "$C" qa-verifier)"; assert_allowed "REQ-OPS-002 qa-verifier can write its verify report"

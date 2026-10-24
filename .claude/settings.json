@@ -45,7 +45,8 @@
       {
         "matcher": "Bash|PowerShell",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-bash.sh", "timeout": 20 }
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-bash.sh", "timeout": 20 },
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-protected.sh --snapshot", "timeout": 20 }
         ]
       },
       {
@@ -62,6 +63,20 @@
         "hooks": [
           { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-changed.sh", "timeout": 120 },
           { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/test-integrity.sh", "timeout": 30 }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-protected.sh", "timeout": 30 }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-protected.sh", "timeout": 30 }
         ]
       }
     ],

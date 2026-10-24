@@ -40,6 +40,16 @@ printf 'run_hook a; assert_blocked "x"\nrun_hook b; assert_allowed "y"\nassert_c
 printf 'run_hook a; assert_blocked "x"\n' > "$BT"
 run_hook test-integrity.sh "$(json_post_write "$BT" devops-engineer)"; assert_contains "$OUT" "assertions decreased 4 -> 1" "REQ-OPS-007 counts assert_* and expect <rc> in bash suites"
 
+echo "-- flips and comment-only checks with an unchanged count (STORY-001 loop 3, F-14)"
+(cd "$P" && git checkout -q -- tests/test-guard.sh)
+printf 'run_hook a; assert_allowed "x"\nrun_hook b; assert_allowed "y"\nassert_contains "$ERR" "z" "w"\nexpect 0 "OK" "v"\n' > "$BT"
+run_hook test-integrity.sh "$(json_post_write "$BT" devops-engineer)"; assert_contains "$OUT" "assert_blocked 1 -> 0" "REQ-OPS-007 an assert_blocked -> assert_allowed flip warns although the count is equal"
+printf 'run_hook a; assert_blocked "x"\nrun_hook b; assert_allowed "y"\nassert_contains "$ERR" "z" "w"\nexpect 1 "OK" "v"\n' > "$BT"
+run_hook test-integrity.sh "$(json_post_write "$BT" devops-engineer)"; assert_contains "$OUT" "expect 0 1 -> 0" "REQ-OPS-007 an expect 0 -> expect 1 flip warns"
+printf 'run_hook a; assert_blocked "x"\nrun_hook b; assert_allowed "y"\n# assert_contains "$ERR" "z" "w"\nexpect 0 "OK" "v"\nassert_eq 1 1 "extra"\n' > "$BT"
+run_hook test-integrity.sh "$(json_post_write "$BT" devops-engineer)"; assert_contains "$OUT" "TEST INTEGRITY WARNING" "REQ-OPS-007 a check kept only in a comment counts as removed"
+(cd "$P" && git checkout -q -- tests/test-guard.sh)
+
 echo "-- case-variant path still compares against HEAD (F-12)"
 (cd "$P" && git checkout -q -- tests/test-guard.sh)
 cp "$T" "$T.orig"
@@ -81,4 +91,35 @@ assert_contains "$OUT" "invalid YAML" "REQ-OPS-010 YAML finding says what is wro
 MASROOF_SHELLCHECK=no-such-shellcheck run_hook format-changed.sh "$(json_post_write "$B")"; assert_allowed "REQ-OPS-010 missing shellcheck exits 0"
 assert_eq "$ERR" "format-changed: shellcheck not installed, skipped" "REQ-OPS-010 missing shellcheck prints exactly one skip line"
 assert_eq "$OUT" "" "REQ-OPS-010 missing shellcheck gives no lint feedback"
+
+echo "-- one skip line per absent tool; built-in checks still run (STORY-001 loop 3, F-15)"
+MASROOF_RUFF=no-such-ruff run_hook format-changed.sh "$(json_post_write "$PY")"
+assert_eq "$ERR" "format-changed: ruff not installed, skipped" "REQ-OPS-010 .py without ruff: exactly one skip line"
+assert_contains "$OUT" "scripts/bad.py:1: SyntaxError" "REQ-OPS-010 .py without ruff: the compile check still reports"
+MASROOF_YAMLLINT=no-such-yamllint run_hook format-changed.sh "$(json_post_write "$Y")"
+assert_eq "$ERR" "format-changed: yamllint not installed, skipped" "REQ-OPS-010 .yaml without yamllint: exactly one skip line"
+assert_contains "$OUT" "invalid YAML" "REQ-OPS-010 .yaml without yamllint: the parse check still reports"
+MASROOF_KTLINT=no-such-ktlint run_hook format-changed.sh "$(json_post_write "$(printf '%s/backend/A.kt' "$P"; mkdir -p "$P/backend"; printf 'class A\n' > "$P/backend/A.kt")")"
+assert_eq "$ERR" "format-changed: ktlint not installed, skipped" "REQ-OPS-010 .kt without ktlint: exactly one skip line"
+TS="$P/web/src/a.ts"; printf 'export const a = 1\n' > "$TS"
+run_hook format-changed.sh "$(json_post_write "$TS")"
+assert_eq "$(printf '%s\n' "$ERR" | sort | tr '\n' '|')" "format-changed: eslint not installed, skipped|format-changed: prettier not installed, skipped|" "REQ-OPS-010 .ts without prettier and eslint: exactly two skip lines"
+
+echo "-- file names are data, never code (STORY-001 loop 3, F-07)"
+FAKEBIN="$TMP_ROOT/fakebin"; mkdir -p "$FAKEBIN"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do f="$a"; done\nprintf "%%s:1:1: Unexpected blank line\\n" "$f"\n' > "$FAKEBIN/ktlint"; chmod +x "$FAKEBIN/ktlint"
+WD="$TMP_ROOT/hookcwd"; mkdir -p "$WD"
+for name in 'backend/x#;e touch PWNED;#.kt' 'backend/y$(touch PWNED).kt' "backend/z'\`touch PWNED\`.kt"; do   # no '"': NTFS cannot store it
+  if printf 'class X\n' > "$P/$name" 2>/dev/null; then
+    OUT="$(cd "$WD" && json_post_write "$P/$name" | PATH="$FAKEBIN:$PATH" bash "$HOOKS_DIR/format-changed.sh" 2>"$TMP_ROOT/err.txt")"
+    assert_contains "$OUT" "$name:1: Unexpected blank line" "REQ-OPS-010 the finding starts with the literal name: $name"
+    assert_eq "$(find "$WD" "$P" "$TMP_ROOT" -name PWNED 2>/dev/null | wc -l | tr -d ' ')" "0" "REQ-OPS-010 no PWNED file for: $name"
+  fi
+done
+if command -v shellcheck >/dev/null 2>&1; then
+  SN="$P/scripts/\$(touch PWNED).sh"; printf '#!/usr/bin/env bash\necho $1\n' > "$SN"
+  OUT="$(cd "$WD" && json_post_write "$SN" | bash "$HOOKS_DIR/format-changed.sh" 2>/dev/null)"
+  assert_contains "$OUT" "scripts/\$(touch PWNED).sh:2: " "REQ-OPS-010 a \$(...) shell name is reported literally"
+  assert_eq "$(find "$WD" "$P" "$TMP_ROOT" -name PWNED 2>/dev/null | wc -l | tr -d ' ')" "0" "REQ-OPS-010 no PWNED file for a \$(...) shell name"
+fi
 finish

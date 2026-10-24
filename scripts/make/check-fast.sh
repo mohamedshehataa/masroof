@@ -20,7 +20,8 @@ run() { # run <desc> <cmd...>
 
 check_sdlc() {
   local sh_files
-  sh_files="$( { git ls-files -- '*.sh' 2>/dev/null; find .claude scripts infra -name '*.sh' 2>/dev/null; } | sort -u | grep -v node_modules || true)"
+  # .claude/worktrees holds other agents' checkouts (gitignored): their files belong to their own gate
+  sh_files="$( { git ls-files -- '*.sh' 2>/dev/null; find .claude scripts infra -path .claude/worktrees -prune -o -name '*.sh' -print 2>/dev/null; } | sort -u | grep -v node_modules || true)"
   # shellcheck disable=SC2086
   [ -n "$sh_files" ] && run "shellcheck ($(printf '%s\n' "$sh_files" | wc -l | tr -d ' ') scripts)" shellcheck -x -S warning $sh_files
   if [ -f .claude/settings.json ]; then run "settings.json is valid JSON" jq empty .claude/settings.json; fi
@@ -28,7 +29,7 @@ check_sdlc() {
     case "$f" in *.json) [ -f "$f" ] && run "valid JSON: $f" jq empty "$f" ;; esac
   done
   local yml_files
-  yml_files="$(find .github eval .claude lefthook.yml .semgrep -name '*.yml' -o -name '*.yaml' 2>/dev/null | sort -u || true)"
+  yml_files="$(find .github eval .claude lefthook.yml .semgrep -path .claude/worktrees -prune -o \( -name '*.yml' -o -name '*.yaml' \) -print 2>/dev/null | sort -u || true)"
   if [ -n "$yml_files" ]; then
     # shellcheck disable=SC2086
     run "YAML parses ($(printf '%s\n' "$yml_files" | wc -l | tr -d ' ') files)" "$PYTHON" -c '
