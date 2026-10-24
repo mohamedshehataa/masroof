@@ -11,9 +11,10 @@ BASE ?= main
 SUITE ?=
 URL ?= http://localhost
 VERSION ?= dev
+IMAGE_TAG ?= dev
 
 .PHONY: help bootstrap up down logs check-fast check check-full e2e eval eval-fast security mutation perf trace metrics \
-        contract-lint contract-diff hooks-test hooks-unlock hooks-lock test-integrity sbom build-images build-web \
+        contract-lint contract-diff hooks-test hooks-unlock hooks-lock test-integrity sbom build-images build-web backend-integration \
         build-apk build-apk-release deploy-staging deploy-prod smoke rollback backup selftest sdlc-lint status
 
 help: ## List targets
@@ -71,8 +72,10 @@ sdlc-lint: ## Validate agents, skills, rules, settings, stories, workflows
 
 sbom: ## CycloneDX SBOMs for backend, web, android into build/sbom/
 	@$(ENV) bash scripts/make/sbom.sh
-build-images: ## Build backend + web docker images tagged VERSION=$(VERSION)
-	@$(ENV) bash scripts/make/build.sh images $(VERSION)
+backend-integration: ## Backend Testcontainers integrationTest + ArchUnit archTest; fails on zero tests (CI job)
+	@$(ENV) bash scripts/make/backend-integration.sh
+build-images: ## Build masroof/backend + masroof/web docker images tagged IMAGE_TAG (default dev)
+	@$(ENV) IMAGE_TAG=$(IMAGE_TAG) bash scripts/make/build.sh images
 build-web: ## Production web bundle
 	@$(ENV) bash scripts/make/build.sh web
 build-apk: ## Debug APK

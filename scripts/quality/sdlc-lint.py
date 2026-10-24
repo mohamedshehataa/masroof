@@ -234,7 +234,7 @@ def lint_stories() -> None:
         return
     req_owner: dict[str, str] = {}
     for s in sorted(backlog.rglob("STORY-*.md")):
-        if s.name.endswith((".verify.md", ".review.md", ".bug.md")):
+        if s.name.endswith((".verify.md", ".review.md", ".spec-review.md", ".bug.md")):
             continue
         fm = frontmatter(s)
         if fm is None:
