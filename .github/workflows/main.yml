@@ -55,7 +55,7 @@ jobs:
       contracts: ${{ steps.mods.outputs.contracts }}
       has_before: ${{ steps.mods.outputs.has_before }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: mods
         name: Publish module flags
         env:
@@ -80,10 +80,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install SDLC tooling
@@ -103,13 +103,13 @@ jobs:
     needs: detect
     if: needs.detect.outputs.contracts == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: make contract-lint
@@ -128,10 +128,10 @@ jobs:
     needs: detect
     if: needs.detect.outputs.has_before == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: make test-integrity BASE=${{ github.event.before }}
@@ -144,8 +144,8 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install eval dependencies
@@ -153,7 +153,7 @@ jobs:
           python -m pip install --quiet --upgrade pip pyyaml
           if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
       - run: make eval-fast
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: eval-fast-report
@@ -169,8 +169,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -179,7 +179,7 @@ jobs:
             backend/*.gradle*
             backend/**/gradle-wrapper.properties
       - run: make check-fast MODULE=backend
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-reports
@@ -197,14 +197,14 @@ jobs:
     needs: detect
     if: needs.detect.outputs.web == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: make check-fast MODULE=web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: web-test-reports
@@ -223,8 +223,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.android == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -232,9 +232,9 @@ jobs:
           cache-dependency-path: |
             android/*.gradle*
             android/**/gradle-wrapper.properties
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - run: make check-fast MODULE=android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-test-reports
@@ -252,20 +252,20 @@ jobs:
     needs: [detect, backend, web]
     if: needs.detect.outputs.backend == 'true' && needs.detect.outputs.web == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Playwright + Maestro against `make up`
         run: make e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-report
@@ -281,11 +281,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks (full history)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_SUMMARY: "true"
@@ -296,14 +296,14 @@ jobs:
             semgrep scan --config p/default --config .semgrep/ --error --quiet .
       - name: osv-scanner (lockfiles)
         if: hashFiles('**/package-lock.json', '**/pnpm-lock.yaml', '**/gradle.lockfile', '**/gradle/verification-metadata.xml', '**/requirements*.txt', '**/poetry.lock') != ''
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.0
         with:
           scan-args: |-
             --recursive
             --skip-git
             ./
       - name: Trivy filesystem + IaC scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -321,13 +321,13 @@ jobs:
     needs: [detect, backend]
     if: needs.detect.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: needs.detect.outputs.web == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -348,7 +348,7 @@ jobs:
           echo "refs=${refs# }" >> "$GITHUB_OUTPUT"
       - name: Trivy image scan (backend)
         if: contains(steps.img.outputs.refs, 'masroof/backend')
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: masroof/backend:${{ env.IMAGE_TAG }}
@@ -358,7 +358,7 @@ jobs:
           format: table
       - name: Trivy image scan (web)
         if: contains(steps.img.outputs.refs, 'masroof/web')
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: masroof/web:${{ env.IMAGE_TAG }}
@@ -368,7 +368,7 @@ jobs:
           format: table
       - name: SBOM (CycloneDX)
         run: make sbom
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: |
@@ -404,9 +404,9 @@ jobs:
         if: env.STAGING_SSH_KEY == '' || env.STAGING_HOST == ''
         run: |
           echo "::warning::STAGING_SSH_KEY / STAGING_HOST secrets missing: skipping staging deploy."
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@v0.10.0
         if: env.STAGING_SSH_KEY != '' && env.STAGING_HOST != ''
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}

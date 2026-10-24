@@ -52,7 +52,7 @@ jobs:
       android: ${{ steps.mods.outputs.android }}
       contracts: ${{ steps.mods.outputs.contracts }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: mods
         name: Publish module flags
         run: |
@@ -74,7 +74,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/labeler@v5
+      - uses: actions/labeler@v7
         with:
           configuration-path: .github/labeler.yml
           sync-labels: true
@@ -85,10 +85,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install SDLC tooling
@@ -111,13 +111,13 @@ jobs:
     needs: detect
     if: needs.detect.outputs.contracts == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Allow breaking changes only with the `breaking-change` label
@@ -136,10 +136,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Compare tests with the base branch
@@ -155,8 +155,8 @@ jobs:
       # then runs with the deterministic reference adapter.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install eval dependencies
@@ -165,7 +165,7 @@ jobs:
           if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
       - name: Run fast eval suite
         run: make eval-fast
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: eval-fast-report
@@ -181,8 +181,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -192,7 +192,7 @@ jobs:
             backend/**/gradle-wrapper.properties
       - name: Fast checks for backend
         run: make check-fast MODULE=backend
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-reports
@@ -210,15 +210,15 @@ jobs:
     needs: detect
     if: needs.detect.outputs.web == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Fast checks for web
         run: make check-fast MODULE=web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: web-test-reports
@@ -237,8 +237,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.android == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -246,10 +246,10 @@ jobs:
           cache-dependency-path: |
             android/*.gradle*
             android/**/gradle-wrapper.properties
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Fast checks for android
         run: make check-fast MODULE=android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-test-reports
@@ -267,11 +267,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history for secret scanning
       - name: gitleaks (full history)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_SUMMARY: "true"
@@ -283,7 +283,7 @@ jobs:
       - name: osv-scanner (lockfiles)
         # Skipped until a lockfile exists: osv-scanner exits non-zero on "no package sources found".
         if: hashFiles('**/package-lock.json', '**/pnpm-lock.yaml', '**/gradle.lockfile', '**/gradle/verification-metadata.xml', '**/requirements*.txt', '**/poetry.lock') != ''
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.0
         with:
           scan-args: |-
             --recursive
@@ -309,7 +309,7 @@ jobs:
         if: env.ANTHROPIC_API_KEY == ''
         run: |
           echo "::notice::ANTHROPIC_API_KEY not configured (or fork PR): skipping Claude review."
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.ANTHROPIC_API_KEY != ''
         with:
           fetch-depth: 0
@@ -357,20 +357,20 @@ jobs:
     env:
       IMAGE_TAG: pr-${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         if: needs.detect.outputs.backend == 'true' || needs.detect.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: needs.detect.outputs.web == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         if: needs.detect.outputs.android == 'true'
       - name: Build backend image
         if: needs.detect.outputs.backend == 'true'
@@ -378,7 +378,7 @@ jobs:
       - name: Build web bundle
         if: needs.detect.outputs.web == 'true'
         run: make build-web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: needs.detect.outputs.web == 'true'
         with:
           name: web-bundle
@@ -388,7 +388,7 @@ jobs:
       - name: Build debug APK
         if: needs.detect.outputs.android == 'true'
         run: make build-apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: needs.detect.outputs.android == 'true'
         with:
           name: android-debug-apk
