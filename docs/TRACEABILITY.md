@@ -6,11 +6,11 @@ REQ → story (status, phase) → tests (file · name, last result) → implemen
 ## Summary
 | metric | value |
 |---|---|
-| total REQs | 346 |
+| total REQs | 348 |
 | covered (at least one test) | 15 |
 | passing | 14 |
 | failing | 0 |
-| pending (story not DONE, no test yet) | 331 |
+| pending (story not DONE, no test yet) | 333 |
 | orphans (DONE story, no test) | 0 |
 | unknown REQ references | 0 |
 | duplicate REQ ids | 0 |
@@ -382,9 +382,9 @@ None.
 | REQ-OPS-053 | Generated TypeScript client | STORY-007 | READY | 1 | — | — | — |
 | REQ-OPS-054 | Android module with fast gate | STORY-008 | READY | 1 | — | — | — |
 | REQ-OPS-055 | Generated Kotlin client | STORY-008 | READY | 1 | — | — | — |
-| REQ-OPS-060 | pr.yml runs the gates per module in parallel | STORY-016 | READY | 1 | — | — | — |
-| REQ-OPS-061 | main.yml builds and publishes artifacts | STORY-016 | READY | 1 | — | — | — |
-| REQ-OPS-062 | Traceability and test-integrity gates block the merge | STORY-016 | READY | 1 | — | — | — |
+| REQ-OPS-060 | pr.yml runs the gates per module in parallel | STORY-016 | DRAFT | 1 | — | — | — |
+| REQ-OPS-061 | main.yml builds and publishes artifacts | STORY-016 | DRAFT | 1 | — | — | — |
+| REQ-OPS-062 | Branch protection on main uses the delivery-gates required checks | STORY-016 | DRAFT | 1 | — | — | — |
 | REQ-OPS-070 | docs/SETUP_WHATSAPP.md: Meta app, number registration, webhook config, Groups API, invite link, direct fallback, costs/limits as of build date | STORY-078 | DRAFT | 5 | — | — | — |
 | REQ-OPS-090 | Dependabot/Renovate, CodeQL, Trivy, osv-scanner, gitleaks all gating in CI; license check (no AGPL/GPL without ADR) | STORY-121 | DRAFT | 9 | — | — | — |
 | REQ-OPS-100 | infra/backup.sh: nightly encrypted dump + media sync to configurable target; `make backup` | STORY-124 | DRAFT | 9 | — | — | — |
@@ -414,9 +414,11 @@ None.
 | REQ-OPS-157 | `delivery-gate.py pr-open` composite (G3) | STORY-145 | READY | 0 | — | — | — |
 | REQ-OPS-158 | Generated PR body with the `gate:v1` marker, and `pr-body-lint` | STORY-145 | READY | 0 | — | — | — |
 | REQ-OPS-159 | `approve` and `merge` composites (G5, G6) | STORY-145 | READY | 0 | — | — | — |
-| REQ-OPS-160 | Local git hooks (G1) | STORY-145 | READY | 0 | — | — | — |
-| REQ-OPS-161 | `pr.yml`: one check run per metric, `pr-body-lint`, AI review and Action approval | STORY-145 | READY | 0 | — | — | — |
+| REQ-OPS-160 | Local git hooks and local Claude hooks (G1) | STORY-145 | READY | 0 | — | — | — |
+| REQ-OPS-161 | `pr.yml`: one check run per metric, `pr-body-lint`, AI review, Action approval; `main.yml` baselines | STORY-145 | READY | 0 | — | — | — |
 | REQ-OPS-162 | `main.yml` `revert-on-red` | STORY-145 | READY | 0 | — | — | — |
-| REQ-OPS-163 | guard-bash: no push to main, no self-approval, PR create/merge only inside `/story` | STORY-145 | READY | 0 | — | — | — |
+| REQ-OPS-163 | guard-bash: no push to main, no self-approval, PR create/merge only inside a gate flow | STORY-145 | READY | 0 | — | — | — |
 | REQ-OPS-164 | `/story` stage 8 and `/release` call `delivery-gate.py` and refuse on red; G7, M17 and M18 as checks | STORY-145 | READY | 0 | — | — | — |
 | REQ-OPS-165 | `make gate`, `docs/DELIVERY_GATES.md` linked from CLAUDE.md, five new self-test rows PROVEN | STORY-145 | READY | 0 | — | — | — |
+| REQ-OPS-166 | Branch-class gate profiles | STORY-145 | READY | 0 | — | — | — |
+| REQ-OPS-167 | Hotfix flow (G8) | STORY-145 | READY | 0 | — | — | — |
