@@ -3,7 +3,7 @@ id: STORY-145
 epic: EPIC-00
 title: "CI on every PR and branch protection on main (delivery gates, cut down)"
 phase: 0
-status: READY
+status: IN_PROGRESS
 size: S
 modules: [sdlc]
 depends_on: [STORY-001]
