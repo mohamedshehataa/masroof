@@ -1,0 +1,66 @@
+:root {
+  color-scheme: light dark;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #e4e6ea;
+  --accent: #0b5cad;
+  --accent-foreground: #ffffff;
+  font-family: Inter, 'IBM Plex Sans Arabic', system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121417;
+    --foreground: #f1f2f4;
+    --muted: #2a2e34;
+    --accent: #7db7f0;
+    --accent-foreground: #0a0a0a;
+  }
+}
+
+body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding-block: 2rem;
+  padding-inline: 1.5rem;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.version-line,
+.stack p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton {
+  inline-size: 14rem;
+  block-size: 1.5rem;
+  border-radius: 0.375rem;
+  background-color: var(--muted);
+}
+
+.btn {
+  min-block-size: 48px;
+  min-inline-size: 48px;
+  padding-inline: 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+  font: inherit;
+  cursor: pointer;
+}

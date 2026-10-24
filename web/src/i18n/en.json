@@ -1,0 +1,11 @@
+{
+  "health": {
+    "version": "Backend {{version}} ({{sha}})",
+    "error": "Can't reach the server.",
+    "offline": "You're offline. Check your connection."
+  },
+  "common": {
+    "retry": "Retry",
+    "language": { "en": "English", "ar": "العربية" }
+  }
+}
