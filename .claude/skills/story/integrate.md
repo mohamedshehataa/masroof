@@ -24,7 +24,10 @@ Commit: `docs($STORY): mark done [${STORY}]`.
 With a remote and `gh auth status` OK:
 ```bash
 git push -u origin "story/$STORY-$SLUG"
-gh pr create --fill --title "<type>(<scope>): <story title> [$STORY]" \
+# Always `--base main`, never a stacked PR: GitHub merges a stacked PR into its base branch, not into
+# main (lesson 2026-10-24, #3/#4). A story that depends on an unmerged one waits for that merge, then
+# rebases onto main before opening its PR.
+gh pr create --base main --fill --title "<type>(<scope>): <story title> [$STORY]" \
   --body-file <(bash -c 'cat .github/pull_request_template.md')   # then fill the template sections in the PR body
 gh pr checks --watch                                              # wait for pr.yml (job `gate` must be green)
 # STOP: the owner squash-merges the PR personally (OWNER-011). Tell the owner the PR URL and the

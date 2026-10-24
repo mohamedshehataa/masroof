@@ -50,3 +50,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-24 23:40 · P0 · STORY-141 · verify · RED · loop 1/3 FAIL: 1 MAJOR (lint.test.ts times out under npm run test:coverage, 3 of 4 runs), 3 MINOR, 4 NIT; all REQ-OPS-021 browser criteria PASS, test integrity OK; fix loop 2 started.
 2026-10-24 23:59 · P0 · STORY-141 · integrate · GREEN · loop 2/3 verify PASS + review APPROVE (loop-1 MAJOR coverage timeout fixed; coverage-summary reporter added for the gate); make check GREEN; DONE; PR stacked on PR #3.
 2026-10-25 00:05 · P0 · STORY-142 · tdd · INFO · started (low tier, infra); branched from STORY-141; PR #4 (STORY-141) stacked on PR #3.
+2026-10-25 00:40 · P0 · SDLC · integrate · INFO · owner merged #2 into main (878a2b0); #3/#4 were stacked, so they merged into PR branches, not main; re-opened STORY-143+141 as #8 to main; integrate skill now requires --base main.
