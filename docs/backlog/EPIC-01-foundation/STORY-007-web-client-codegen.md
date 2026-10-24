@@ -3,12 +3,13 @@ id: STORY-007
 epic: EPIC-01
 title: TypeScript API client generated from the contract
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: S
 modules: [contracts, web]
 depends_on: [STORY-141]
 reqs: [REQ-OPS-053]
 implements: ["PROMPT.md §9 (generated TypeScript client)", "PROMPT.md S9 (contract-first)"]
+risk_tier: low
 owner_agent: web-engineer
 ---
 
