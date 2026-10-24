@@ -405,6 +405,7 @@ jobs:
     timeout-minutes: 5
     if: always()
     needs:
+      - detect
       - sdlc
       - contract
       - test-integrity
@@ -420,6 +421,11 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTS"
+          # detect must succeed: if it fails, every module job is skipped and nothing would be checked.
+          if ! printf '%s' "$RESULTS" | jq -e '.detect.result == "success"' >/dev/null 2>&1; then
+            echo "::error::detect did not succeed, so the module checks did not run."
+            exit 1
+          fi
           if echo "$RESULTS" | grep -Eq '"result": *"(failure|cancelled)"'; then
             echo "::error::At least one required job failed or was cancelled."
             exit 1

@@ -1,9 +1,9 @@
 # Masroof — release (PROMPT.md S12).
 #
 # Two triggers, one file:
-#   push to main  -> `release-please` keeps a release PR (CHANGELOG + version
-#                    bump) up to date; merging it creates the `vX.Y.Z` tag and
-#                    the GitHub Release with the changelog.
+#   manual run on main (workflow_dispatch) -> `release-please` opens or updates
+#                    the release PR (CHANGELOG + version bump); merging it
+#                    creates the `vX.Y.Z` tag. Push to main runs nothing (2026-10-25).
 #   push tag v*   -> signed release APK, versioned images (+ optional cosign),
 #                    DB backup, production deploy, post-deploy smoke tests with
 #                    automatic rollback, and the release assets (APK + SBOMs).
@@ -40,6 +40,9 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # release-please runs only on demand until the first real release (owner decision 2026-10-25:
+  # no "Allow GitHub Actions to create pull requests" setting change). Tag pushes still release.
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -64,7 +67,7 @@ jobs:
     name: Release PR / changelog
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       pull-requests: write
@@ -79,7 +82,7 @@ jobs:
     name: Detect modules + version
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     outputs:
       backend: ${{ steps.mods.outputs.backend }}
       web: ${{ steps.mods.outputs.web }}
