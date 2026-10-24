@@ -23,6 +23,8 @@ const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const SLOW = 120_000;
 
 function npm(args: string[], cwd = WEB) {
+  // Reason: fixed npm arguments, no user input; npm.cmd needs a shell on Windows.
+  // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
   return spawnSync(NPM, args, { cwd, encoding: 'utf8', shell: process.platform === 'win32' });
 }
 
@@ -42,6 +44,11 @@ function digest(dir: string): string {
     h.update(readFileSync(f));
   }
   return h.digest('hex');
+}
+
+/** Whole-word identifier set (same as a \b match for [A-Za-z0-9_] names, without building a RegExp from input). */
+function identifiers(src: string): Set<string> {
+  return new Set(src.match(/[A-Za-z0-9_]+/g) ?? []);
 }
 
 function generatedSource(dir = GENERATED): string {
@@ -88,13 +95,15 @@ describe('REQ-OPS-053 generated client covers the contract', () => {
 
   it('REQ-OPS-053 every operationId in the contract has a generated function', () => {
     const src = generatedSource();
-    const missing = operationIds.filter((id) => !new RegExp(`\\b${id}\\b`).test(src));
+    const tokens = identifiers(src);
+    const missing = operationIds.filter((id) => !tokens.has(id));
     expect(missing).toEqual([]);
   });
 
   it('REQ-OPS-053 every schema in the contract has a generated type', () => {
     const src = generatedSource();
-    const missing = schemaNames.filter((n) => !new RegExp(`\\b${n}\\b`).test(src));
+    const tokens = identifiers(src);
+    const missing = schemaNames.filter((n) => !tokens.has(n));
     expect(missing).toEqual([]);
   });
 
