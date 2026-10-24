@@ -1,0 +1,4 @@
+# Dev-only overlay (STORY-143): backend on loopback for curl and the Vite proxy (STORY-141). Never loaded by make up or deploys.
+services:
+  backend:
+    ports: ["127.0.0.1:8080:8080"]
