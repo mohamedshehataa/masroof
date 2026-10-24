@@ -3,7 +3,7 @@ id: STORY-016
 epic: EPIC-01
 title: CI runs backend integration tests and builds and scans the real images
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [infra, sdlc]
 depends_on: [STORY-002, STORY-141, STORY-142, STORY-143, STORY-145]
