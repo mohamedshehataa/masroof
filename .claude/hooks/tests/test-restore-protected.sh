@@ -21,7 +21,7 @@ printf '#!/usr/bin/env bash\necho guard v2\n' > "$P/.claude/hooks/guard-bash.sh"
 export CLAUDE_PROJECT_DIR="$P"
 SNAP="$MASROOF_STATE_DIR/protected-snapshot.json"
 GUARD_V2="$(cat "$P/.claude/hooks/guard-bash.sh")"
-WATCH=(.claude/hooks .claude/settings.json docs/PROMPT.md eval/baseline.json)
+WATCH=(.claude/hooks .claude/settings.json docs/PROMPT.md docs/PROMPT_DELIVERY_GATES.md eval/baseline.json)
 
 J_PRE='{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"x"},"session_id":"t"}'
 J_POST='{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"x"},"tool_response":{},"session_id":"t"}'
@@ -64,6 +64,9 @@ assert_eq "$(porcelain)" "" "REQ-OPS-011 git checkout HEAD~1 -- hook: git status
 in_p 'printf "{}" > .claude/settings.json; printf "# none" > docs/PROMPT.md; printf "{}" > eval/baseline.json'
 assert_contains "$OUT" "docs/PROMPT.md" "REQ-OPS-011 several files in one call are all named"
 assert_eq "$(porcelain)" "" "REQ-OPS-011 settings.json, PROMPT.md and baseline.json restored"
+in_p 'printf "# none" > docs/PROMPT_DELIVERY_GATES.md'
+assert_contains "$OUT" "docs/PROMPT_DELIVERY_GATES.md" "REQ-OPS-011 a write to the delivery-gates addendum is undone and named"
+assert_eq "$(porcelain)" "" "REQ-OPS-011 delivery-gates addendum restored"
 in_p 'rm -f .claude/hooks/lib.sh'
 assert_eq "$(cat "$P/.claude/hooks/lib.sh" 2>/dev/null)" "# lib" "REQ-OPS-011 a deleted hook is restored"
 in_p 'echo "exit 0" > .claude/hooks/evil.sh'

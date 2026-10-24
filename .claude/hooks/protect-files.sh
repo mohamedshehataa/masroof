@@ -60,7 +60,7 @@ fi
 # 6. the guardrails themselves, and the source spec. settings.local.json is included because it can
 #    carry disableAllHooks or env overrides (MASROOF_SKIP_STOP_GATE) that switch every guard off.
 case "$rel_l" in
-  .claude/hooks|.claude/hooks/*|.claude/settings.json|.claude/settings.local.json|docs/prompt.md)
+  .claude/hooks|.claude/hooks/*|.claude/settings.json|.claude/settings.local.json|docs/prompt.md|docs/prompt_delivery_gates.md)
     if [ "$unlocked" != true ]; then
       block "'$rel' is protected (hooks/settings/settings.local/spec). Unlock deliberately with 'make hooks-unlock' (or via /retro, /sdlc-selftest), edit, then 'make hooks-lock'. Every change must be noted in docs/DECISIONS.md."
     fi ;;

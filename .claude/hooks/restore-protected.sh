@@ -3,7 +3,7 @@
 # first, friendlier line; this hook makes a protected-file write that guard-bash missed harmless.
 #   restore-protected.sh --snapshot   PreToolUse(Bash|PowerShell): record the pre-call state
 #   restore-protected.sh              PostToolUse / PostToolUseFailure(Bash|PowerShell): undo the call's changes
-# Protected set (= B13): .claude/hooks/**, .claude/settings.json, .claude/settings.local.json, docs/PROMPT.md,
+# Protected set (= B13): .claude/hooks/**, .claude/settings.json, .claude/settings.local.json, docs/PROMPT.md, docs/PROMPT_DELIVERY_GATES.md,
 # eval/baseline.json, .env and .env.* (repo root and one directory down; *.example is not protected).
 # Files are found by globbing the real directory entries, so they always carry their canonical long name:
 # the spelling a command used to write them (8.3 short name, ::$DATA, \\?\ prefix) does not matter.
@@ -86,7 +86,7 @@ C_REFLOG=${#RL[@]}
 # ---------- the protected set (real directory entries = canonical names) ----------
 P=()
 for f in .claude/hooks/**; do [ -f "$f" ] && P+=("$f"); done
-for f in .claude/settings.json .claude/settings.local.json docs/PROMPT.md eval/baseline.json; do [ -f "$f" ] && P+=("$f"); done
+for f in .claude/settings.json .claude/settings.local.json docs/PROMPT.md docs/PROMPT_DELIVERY_GATES.md eval/baseline.json; do [ -f "$f" ] && P+=("$f"); done
 for f in .env .env.* */.env */.env.*; do
   case "${f,,}" in *.example) continue ;; esac
   [ -f "$f" ] && P+=("$f")

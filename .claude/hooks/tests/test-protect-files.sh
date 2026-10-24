@@ -53,6 +53,8 @@ run_hook $H "$(json_edit "$P/.claude/hooks/guard-bash.sh" "$C")";   assert_block
 run_hook $H "$(json_write "$P/.claude/hooks/tests/test-x.sh" "$C")"; assert_blocked "REQ-OPS-002 blocks adding hook tests while locked"
 run_hook $H "$(json_edit "$P/.claude/settings.json" "$C")";         assert_blocked "REQ-OPS-002 blocks editing settings.json while locked"
 run_hook $H "$(json_edit "$P/docs/PROMPT.md" "$C")";                assert_blocked "REQ-OPS-002 blocks editing docs/PROMPT.md while locked"
+run_hook $H "$(json_edit "$P/docs/PROMPT_DELIVERY_GATES.md" "$C")";  assert_blocked "REQ-OPS-002 blocks editing docs/PROMPT_DELIVERY_GATES.md while locked"
+run_hook $H "$(json_write "$P/docs/prompt_delivery_gates.md" "$C")"; assert_blocked "REQ-OPS-002 blocks a lower-case alias of the delivery-gates addendum"
 assert_contains "$ERR" "hooks-unlock" "REQ-OPS-002 block message explains how to unlock"
 jq '.hooks_unlocked=true' "$MASROOF_STATE_FILE" > "$MASROOF_STATE_FILE.tmp" && mv "$MASROOF_STATE_FILE.tmp" "$MASROOF_STATE_FILE"
 run_hook $H "$(json_edit "$P/.claude/hooks/guard-bash.sh" "$C")";   assert_allowed "REQ-OPS-002 allows hook edits when state.hooks_unlocked"

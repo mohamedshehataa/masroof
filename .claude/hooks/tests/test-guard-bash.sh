@@ -160,6 +160,7 @@ run_hook $H "$(json_bash "sed -i 's/exit 2/exit 0/' .claude/hooks/lib.sh")"; ass
 run_hook $H "$(json_bash 'cp /tmp/x.json .claude/settings.json')";      assert_blocked "REQ-OPS-001 blocks cp onto settings.json"
 run_hook $H "$(json_bash "printf '{}' > .claude/settings.local.json")"; assert_blocked "REQ-OPS-001 blocks writing settings.local.json"
 run_hook $H "$(json_bash 'mv docs/PROMPT.md /tmp/p.md')";               assert_blocked "REQ-OPS-001 blocks moving docs/PROMPT.md"
+run_hook $H "$(json_bash 'echo x > docs/PROMPT_DELIVERY_GATES.md')";    assert_blocked "REQ-OPS-001 blocks overwriting docs/PROMPT_DELIVERY_GATES.md"
 run_hook $H "$(json_bash 'rm .claude/hooks/lib.sh')";                   assert_blocked "REQ-OPS-001 blocks deleting a hook"
 run_hook $H "$(json_bash 'echo x | tee .claude/hooks/x.sh')";           assert_blocked "REQ-OPS-001 blocks tee onto a hook"
 run_hook $H "$(json_bash 'Set-Content -Path .claude\settings.local.json -Value x')"; assert_blocked "REQ-OPS-001 blocks PowerShell Set-Content on settings.local.json"

@@ -1,4 +1,4 @@
-# PROMPT — Delivery gates: strict, measurable rules for push, PR, review, merge, release
+# Delivery gates: strict, measurable rules for push, PR, review, merge, release
 *(Paste into the orchestrator session as an addendum to `docs/PROMPT.md`. It extends S2, S7, S9, S12 and S16. Where it conflicts with the original prompt, this file wins. Save it as `docs/PROMPT_DELIVERY_GATES.md`; protect it like `docs/PROMPT.md`.)*
 
 ## 0. Principle

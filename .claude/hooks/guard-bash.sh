@@ -168,14 +168,14 @@ is_env_path() {
   return 1
 }
 # guarded_target <token> [ancestors] -> 0 when the token names a locked guardrail file of THIS checkout
-# (B13 set: .claude/hooks/**, settings.json, settings.local.json, docs/PROMPT.md, eval/baseline.json);
+# (B13 set: .claude/hooks/**, settings.json, settings.local.json, docs/PROMPT.md, docs/PROMPT_DELIVERY_GATES.md, eval/baseline.json);
 # with "ancestors", also a directory holding them (.claude, docs, eval, the root, their globs)
 guarded_target() {
   local t="${1//\\//}" tl
   tl="${t,,}"
   case "$tl" in *'$'*|*%*%*)   # a variable we cannot resolve: fall back to the (normalised) suffix
     norm_lex "$tl"; tl="$NORM"
-    case "$tl" in *.claude/hooks|*.claude/hooks/*|*.claude/settings.json|*.claude/settings.local.json|*docs/prompt.md|*eval/baseline.json) return 0 ;; esac
+    case "$tl" in *.claude/hooks|*.claude/hooks/*|*.claude/settings.json|*.claude/settings.local.json|*docs/prompt.md|*docs/prompt_delivery_gates.md|*eval/baseline.json) return 0 ;; esac
     return 1 ;;
   esac
   if [ -z "$cd_seen" ] && [ -z "${2:-}" ]; then
@@ -184,7 +184,7 @@ guarded_target() {
   resolve "$t" || return 1
   [ "$R_IN" = 1 ] || return 1
   case "${R_REL,,}" in
-    .claude/hooks|.claude/hooks/*|.claude/settings.json|.claude/settings.local.json|docs/prompt.md|eval/baseline.json) return 0 ;;
+    .claude/hooks|.claude/hooks/*|.claude/settings.json|.claude/settings.local.json|docs/prompt.md|docs/prompt_delivery_gates.md|eval/baseline.json) return 0 ;;
   esac
   if [ -n "${2:-}" ]; then
     case "${R_REL,,}" in .|'*'|.claude|'.claude/*'|'.*'|docs|'docs/*'|eval|'eval/*') return 0 ;; esac
