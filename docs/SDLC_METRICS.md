@@ -167,7 +167,7 @@ Owner decision 2026-10-24: every phase has a time cap and an AI-spend cap, revie
 
 | phase | scope | time cap | AI-spend cap (USD) | spent so far (USD, est.) | delivered | status |
 |---|---|---|---|---|---|---|
-| P0 | SDLC bootstrap + walking skeleton (STORY-001, 002, 143, 144 done; 145 in progress; 141, 142) | ends 2026-10-27 | 200 | 101 | 4 of 7 stories DONE | open |
+| P0 | SDLC bootstrap + walking skeleton (STORY-001, 002, 141, 143, 144 done; 145 in progress; 142) | ends 2026-10-27 | 200 | 115 | 5 of 7 stories DONE | open |
 | P1+P2 slice | manual expense entry end to end (backend + web: schema, auth, expense create/list, web Home/Add/Transactions) | 7 days after P0 closes | 250 | 0 | – | not started |
 
 ## AI spend ledger
@@ -177,3 +177,4 @@ Owner decision 2026-10-24: every phase has a time cap and an AI-spend cap, revie
 | 2026-10-23 | PHASE-0 bootstrap | opus/sonnet mix | 45.00 | estimate; hooks, agents, skills, CI, eval, backlog scaffolding |
 | 2026-10-24 | STORY-145 | sonnet (devops x2) | 6.00 | estimate; CI green on PR #2, branch protection blocked (OWNER-014) |
 | 2026-10-24 | STORY-143 | opus (test design, verify+review), sonnet (implement) | 12.00 | estimate; low tier, one combined verify+review (resumed once at turn limit) |
+| 2026-10-24 | STORY-141 | opus (test design x2, verify+review x2), sonnet (implement x2) | 14.00 | estimate; low tier, 2 verify loops (coverage timeout), 1 test-matcher defect fixed by the test-designer |

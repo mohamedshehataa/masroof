@@ -81,3 +81,42 @@ REQ tags: `describe('REQ-OPS-021 ...')` in App.test.tsx, health.test.ts, Version
 
 ## Verdict
 STATUS: FAIL (one MAJOR: test:coverage, the `make check` web step, is red in 3 of 4 runs).
+
+---
+
+## Loop 2 (2026-10-24, loop 2 of 3)
+- Base 7fc1d46, head 36cca85 (d40c166 reports, 825ff32 implementer fixes, 36cca85 orchestrator json-summary coverage reporter). Isolated worktree detached at 36cca85; scope = loop-1 findings + regression pass.
+
+### Environment
+- `npm ci` -> 373 packages. `npm run test:coverage` x5 -> 5/5 exit 0, 31/31 tests each; All files 96.51 stmts / 90.38 branch / 100 funcs / 98.64 lines; `web/coverage/coverage-summary.json` produced.
+- `BASE=7fc1d46 bash scripts/make/check.sh < /dev/null` (the script behind `make check`) -> exit 0, `check GREEN`: check-fast GREEN [sdlc backend web] in 70s, backend gate probes, Testcontainers integration, ArchUnit, `OK web unit coverage`, contract diff, `OK coverage gates`, traceability, `OK test integrity vs 7fc1d46`. (The regenerated docs/TRACEABILITY.md was restored in the throwaway worktree.)
+- `npx playwright test --grep-invert "real backend"` -> 18 passed, incl. the 4 matrix renders against the unchanged baselines (no PNG touched since 8917b3f). The real-backend spec was not re-run: no change touches the fetch/proxy path.
+
+### Loop-1 findings re-checked
+| Loop-1 finding | Result | Evidence |
+|---|---|---|
+| MAJOR lint.test.ts timeout under coverage | FIXED | `testTimeout: 30_000` in vitest.config.ts; coverage 5/5 green; `make check` script GREEN |
+| MINOR attribute literals pass the i18n gate | FIXED (NIT remains) | plant with `aria-label="Close" title="Close dialog"`, `alt="Logo"`, `placeholder="Search"` -> 4 x `no-restricted-syntax` errors at 4:40, 4:54, 5:28, 6:26, exit 1; no false positives on `className`, `type`, `dir`, `role`, `lang`, `src`, `aria-describedby` in the same file. Braced forms `aria-label={"Braced"}` and template literal `` title={`Tpl`} `` are NOT flagged (NIT below). Fixture test `src/lint.test.ts` still passes (exactly one i18next/no-literal-string on the h1 line). |
+| MINOR toggle lacks lang | FIXED | real browser: toggle innerHTML `<span lang="ar">العربية</span>`; `getByRole('button', { name: 'العربية' })` count 1 (name unchanged); e2e ar-EG test still finds the `English` button |
+| NIT online refetch in success state | FIXED | real browser (Vite + Playwright, `/health` mocked): success state then `setOffline(true)` / `setOffline(false)` -> requests 1 -> 1, version stays; error state (first 503) then offline/online -> 1 -> 2 and `Backend 0.1.0 (1a2b3c4)` renders; committed e2e offline test (Retry while offline, then online -> exactly one) passes |
+| MINOR size (1059 vs about 395) | NOTED | orchestrator decision; not counted against STATUS |
+| NIT empty status region, proxy prefix match, eslint deprecated | OPEN (NIT) | unchanged, not blocking |
+
+### New / remaining findings
+| Sev | Where | What | Reproduce |
+|---|---|---|---|
+| NIT | web/eslint.config.js:33 | Selector `JSXAttribute[...] > Literal` misses `aria-label={"x"}` (JSXExpressionContainer > Literal) and `` title={`x`} `` (TemplateLiteral). Adding `JSXAttribute[...] > JSXExpressionContainer > :matches(Literal, TemplateLiteral[expressions.length=0])` would close it without flagging `t('key')`. | plant `<button type="button" aria-label={"Braced"} />` -> no error |
+| NIT | web/vitest.config.ts:10 | `testTimeout: 30_000` is global; a hung test now takes 30 s to fail. A per-test timeout on lint.test.ts would be narrower. Time-only change, no assertion loosened. | config read |
+
+### Test integrity (loop 2)
+- 825ff32 changes only eslint.config.js, App.tsx, vitest.config.ts; 36cca85 only vitest.config.ts. No `*.test.*`, `web/e2e`, `web/test` or PNG file changed between 8917b3f and 36cca85 (name-only listing empty). The test-integrity step inside `check.sh` -> OK.
+- The global timeout raise is a runner-config change, explained in the commit and in a comment; assertions are unchanged.
+
+### Exploratory (loop 2 inputs)
+1. `aria-label="Close"` -> flagged. 2. `title="Close dialog"` -> flagged. 3. `alt="Logo"` -> flagged. 4. `placeholder="Search"` -> flagged. 5. `className="x" dir="ltr" role="note" lang="ar" type="button" src="a.png" aria-describedby="h"` -> not flagged (correct). 6. `aria-label={"Braced"}` -> not flagged (NIT). 7. `` title={`Tpl`} `` -> not flagged (NIT). 8. success state + offline/online -> 0 requests. 9. error state + offline/online -> exactly 1 request, version renders. 10. toggle markup and accessible name in en page -> `lang="ar"`, name unchanged. 11. coverage x5 -> green. 
+- 11 cases, 1 problem (NIT).
+
+### Loop 2 verdict
+All criteria PASS (REQ-OPS-021 regression green; REQ-OPS-025 now including `make check` web part), TEST_INTEGRITY OK, no open BLOCKER/MAJOR.
+
+STATUS: PASS

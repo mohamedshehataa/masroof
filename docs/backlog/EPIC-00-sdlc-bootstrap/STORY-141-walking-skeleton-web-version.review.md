@@ -51,3 +51,28 @@
 
 ## Verdict
 CHANGES_REQUESTED: one MAJOR (unreliable coverage run) blocks; MINORs should be fixed or accepted explicitly.
+
+---
+
+## Loop 2 (2026-10-24, head 36cca85)
+Scope: loop-1 findings plus a regression pass over 825ff32 (fixes) and 36cca85 (json-summary coverage reporter). Evidence in the verify report, Loop 2 section.
+
+### Review of the fixes
+- vitest.config.ts: `testTimeout: 30_000` fixes the coverage flake (5/5 green). It is global; a per-test timeout on src/lint.test.ts would keep fast failure for the other tests (NIT). `reporter: ['text', 'json-summary']` produces the summary that the coverage gate reads; `make check` script GREEN.
+- eslint.config.js: `no-restricted-syntax` on `JSXAttribute[name.name=/^(aria-label|aria-description|aria-placeholder|title|alt|placeholder)$/] > Literal` correctly flags the plain-string forms and has no false positives on className / type / dir / role / lang / src / aria-describedby. Gap (NIT): braced literals `aria-label={"x"}` and plain template literals are not covered; extend the selector via JSXExpressionContainer before STORY-017 leans on it.
+- App.tsx toggle: `<span lang={target}>` inside the button gives the label its own language (WCAG 3.1.2) while the button accessible name stays `العربية` / `English`; verified in a real browser.
+- App.tsx online handler: `if (isError) void refetch();` with `isError` in the effect deps. Correct: the listener is re-bound when the state changes, so a reconnect from the success state no longer refetches (observed 1 -> 1) and from the error state refetches exactly once (observed 1 -> 2). Offline Retry still lands in `isError` (fetchHealth rejects), so the spec path holds.
+- Correctness, i18n/RTL and a11y conclusions from loop 1 otherwise unchanged; no regression in the 18 mocked Playwright specs or the 4 screenshot baselines.
+
+### Findings after loop 2
+| Sev | Where | What |
+|---|---|---|
+| NIT | web/eslint.config.js:33 | Attribute rule misses braced / template-literal strings. |
+| NIT | web/vitest.config.ts:10 | Global 30 s timeout rather than per-test. |
+| NIT | web/src/App.tsx:72 | Empty status region while loading (carried over). |
+| NIT | web/vite.config.ts:9 | `/health` proxy prefix match (carried over). |
+| NIT | web/package.json:36 | eslint 9.39.5 deprecated (carried over). |
+| NOTE | story size | 1059 hand-written lines vs about 395; orchestrator decision, not counted. |
+
+### Verdict (loop 2)
+APPROVE: no BLOCKER/MAJOR/MINOR open; NITs may be taken now or in STORY-017.

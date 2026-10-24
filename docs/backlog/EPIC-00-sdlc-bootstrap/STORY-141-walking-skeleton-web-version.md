@@ -3,7 +3,7 @@ id: STORY-141
 epic: EPIC-00
 title: "Walking skeleton (web): version page with i18n/RTL, states, web fast gate"
 phase: 0
-status: IN_PROGRESS
+status: DONE
 size: M
 modules: [web]
 depends_on: [STORY-143]
@@ -101,3 +101,10 @@ Excluded: the `npm create vite` React-TS template files, lockfile, screenshot ba
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-143 (orchestrator size split of STORY-002) |
 | 2026-10-23 | 2 spec review (loop 2) | spec-reviewer | CHANGES_REQUESTED |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — status DOWN case, proxy 127.0.0.1, `npm run e2e` + real-backend spec, matrix reduced to 375×812 (desktop renders → STORY-017), lint wording; ≈ 395 lines |
+
+## Follow-ups (verify+review loop 2, 2026-10-24; NIT only)
+- Make the attribute i18n lint rule also catch braced and template-literal strings (`aria-label={"x"}`); STORY-017 relies on it.
+- Move the 30 s timeout from the global config onto `src/lint.test.ts`, which belongs to the test-designer.
+- Give the loading status region an accessible text (needs an i18n key; STORY-017).
+- Match only exactly `/health` with the Vite proxy key, not other paths starting with it.
+- Upgrade eslint 9.39.5 (deprecated) when jsx-a11y supports ESLint 10.
