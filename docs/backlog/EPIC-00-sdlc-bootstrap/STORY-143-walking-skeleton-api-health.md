@@ -3,7 +3,7 @@ id: STORY-143
 epic: EPIC-00
 title: "Walking skeleton (API): GET /health + backend Dockerfile + compose postgres+backend"
 phase: 0
-status: IN_PROGRESS
+status: DONE
 size: M
 modules: [backend, infra, contracts]
 depends_on: [STORY-144]
@@ -357,3 +357,11 @@ Production + config ≈ 240 (health use case + DB probe + controller + 503 Probl
 | 2026-10-24 | 3 design | architect | BLOCKED (size only): design complete (ADR-0004 Boot 4.1.2, /health, image, compose, tests, NITs 16-18). The total is ≈ 480 lines, and the REQ-OPS-020 part is ≈ 400. Decide: the Boot upgrade + NITs as a separately counted prerequisite, or split them out as STORY-144. Contract description-only; lint valid, oasdiff no breaking changes |
 | 2026-10-24 | 1-2 spec fix | product-analyst | READY — the Boot 4.1.2 upgrade and NITs 16-18 split out to STORY-144 (REQ-OPS-142/143); depends_on -> STORY-144; REQ-OPS-020 only; ≈ 400 (architect) / ≈ 430 (itemised), size flagged to the orchestrator |
 | 2026-10-24 | 0 start | orchestrator | IN_PROGRESS, risk_tier low (infra; no auth/money/ingestion): failing tests -> implement -> one combined verify+review |
+
+## Follow-ups (from the combined verify+review, 2026-10-24; all MINOR/NIT, none blocking)
+- Add `HealthServiceTest` (fail-fast on bad build info) and `JdbcDatabaseProbeTest` (timeout/cancel path) from the design's Tests table. Do this in the next backend story that touches `application/health`.
+- `JdbcDatabaseProbe`: move `executor.submit` inside the try, so a `RejectedExecutionException` after close still returns DOWN, and log the cause's class rather than `ExecutionException`.
+- Make the Gradle build-info fallback fail with a clear message when git or a work tree is missing, or default to `0000000` outside CI.
+- Lower the HikariPool outage stack-trace logging below WARN, or confirm it carries no data (STORY-142 logging pass).
+- Fix the hikari-password guard hint so it names the right variables, and add an unresolved-placeholder case.
+- Make the compose test accept `buildTime == time`. Have the Dockerfile reject a multi-line `GIT_SHA`.
