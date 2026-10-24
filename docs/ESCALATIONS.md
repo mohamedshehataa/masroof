@@ -4,7 +4,6 @@ Items only the owner can unblock, and stories that failed the 3-loop limit. Each
 
 ## Open
 - [ ] **OWNER-001 · Anthropic API key** — needed for real-API eval runs and the parsing engine (Phase 3). Until then evals run with the deterministic reference adapter. Action: put `ANTHROPIC_API_KEY` in `.env`.
-- [ ] **OWNER-002 · GitHub remote** — `gh` is authenticated as `mohamedshehataa`. Phase 0 will create a **private** repo `masroof` and push `main` unless you object; branch protection + Dependabot + secret scanning + CodeQL will be enabled. Nothing is pushed until the SDLC self-test is green.
 - [ ] **OWNER-003 · WhatsApp Business** — Meta app, dedicated number, access token, app secret, test number (Phase 5).
 - [ ] **OWNER-004 · Server + domain** — VPS and domain for Caddy HTTPS (Phase 10). Also `PROD_HOST` for the production guard.
 - [ ] **OWNER-005 · Android signing keystore + FCM project** (Phase 4/10).
@@ -16,5 +15,6 @@ Items only the owner can unblock, and stories that failed the 3-loop limit. Each
 - [ ] **OWNER-010 · Property-testing library** — PROMPT S9 names jqwik, but jqwik's maintainers now ask AI coding agents not to use it (ADR-0004 notes the per-run message). Default decision unless you object before STORY-004 starts: QuickTheories (Apache-2.0, JUnit 5). Alternatives: keep jqwik (your call as the human user of the tool), or hand-rolled generators with JUnit 5 @ParameterizedTest.
 
 ## Resolved
+- [x] **OWNER-002 · GitHub remote** — Resolved 2026-10-24 on the owner's instruction: private repo https://github.com/mohamedshehataa/masroof created, `main` + story branch pushed, default branch main, Dependabot alerts on. Branch protection (required checks, linear history) is applied by STORY-016 once CI has real jobs.
 - [x] **LOOP-001 · Spec-review loop limit (2) reached for STORY-002/143/141/142** — Tried: loop 1 (26 findings) → split into four stories; loop 2 (17 findings, 3 MAJOR, all with concrete proposed text). Evidence: reviewer reports in this session. Options: (a) third review, (b) apply proposals verbatim and proceed, (c) block. Decision (orchestrator, 2026-10-23): (b) — the remaining findings were wording with proposed text, not design disagreements; applied verbatim, design proceeds; the Phase 0 retro decides whether multi-story reviews get a higher limit.
 - [ ] **GATE-20261024100811 stop-gate RED** - `make check-fast MODULE="backend sdlc"` failed 3 consecutive times (story: STORY-144, stage: implement). Tried: the agent attempted fixes across 3 stop attempts. Evidence: `.claude/state/last-check.log`. Options: (a) fix in the next session, (b) revert the change, (c) descope. Decision needed by the orchestrator/owner.
