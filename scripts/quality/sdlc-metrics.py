@@ -52,6 +52,7 @@ STORY_ID_RE = re.compile(r"\bSTORY-\d{3,}\b")
 SEV_RE = re.compile(r"\b(BLOCKER|MAJOR|MINOR|NIT)\b")
 AGENT_RE = re.compile(r"^[a-z]+(?:-[a-z0-9]+)+$")
 LEDGER_HEADING = "## AI spend ledger"
+BUDGETS_HEADING = "## Phase budgets"  # hand-maintained caps per phase (owner decision 2026-10-24), preserved verbatim
 DEFAULT_LEDGER = (
     f"{LEDGER_HEADING}\n"
     "| date | story/phase | model mix | USD | note |\n"
@@ -362,6 +363,17 @@ def fmt_days(v: float | None) -> str:
     return "–" if v is None else f"{v:.1f} d"
 
 
+# ----------------------------------------------------------------- preserved sections
+def extract_section(old_text: str, heading: str) -> str:
+    """A `## heading` section verbatim (heading included, to the next `## ` or EOF); '' if absent."""
+    lines = (old_text or "").splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == heading), None)
+    if start is None:
+        return ""
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+    return "\n".join(lines[start:end]).rstrip("\n") + "\n"
+
+
 # ----------------------------------------------------------------- ledger
 def extract_ledger(old_text: str) -> str:
     """The `## AI spend ledger` section verbatim (heading included, to the next `## ` or EOF)."""
@@ -544,6 +556,10 @@ def render(root: Path, old_text: str) -> str:
         o.append("| – | 0.00 |")
     o.append("")
 
+    budgets = extract_section(old_text, BUDGETS_HEADING)
+    if budgets:
+        o.append(budgets.rstrip("\n"))
+        o.append("")
     o.append(ledger.rstrip("\n"))
     return "\n".join(o) + "\n"
 

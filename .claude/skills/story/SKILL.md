@@ -29,11 +29,16 @@ squash merging), [integrate.md](integrate.md) (stage 8 commands), [escalation.md
 5. Branch: `SLUG=<slug from the file name>`; `git switch main && git pull --ff-only 2>/dev/null || true`;
    `git switch -c story/$STORY-$SLUG` (or `git switch` it if it exists); `BASE=$(git rev-parse main)`.
    Commit the status change: `docs($STORY): start [${STORY}]` (lefthook needs the `[STORY-NNN]` tag).
+6. **Risk tier** (owner decision 2026-10-24; see CLAUDE.md Workflow). Read frontmatter `risk_tier`. If absent,
+   decide it: `high` when the story's modules, REQ areas (PARSE, DEDUP, SMS, NTF, IOS, RCPT, WA, SEC) or touched
+   paths involve parsing, dedup, money, auth or ingestion (incl. webhooks and LLM prompts); otherwise `low`.
+   Write it into the frontmatter. **Low tier skips:** stage 1-2 step 2 (spec-reviewer), stage 3 unless the
+   story names an open design decision, and stage 7 as a separate stage (see stage 6 low-tier rule).
 
 ## 1-2. Specification (only if status was DRAFT or the spec is incomplete)
 1. Agent `product-analyst` with [prompts/product-analyst.md](prompts/product-analyst.md). Pass: story path,
    epic path, the Part I sections it implements, `docs/templates/story.md`. Expect `STATUS: SPEC_READY`.
-2. `state set stage spec-review`. Agent `spec-reviewer` with [prompts/spec-reviewer.md](prompts/spec-reviewer.md).
+2. **High tier only.** `state set stage spec-review`. Agent `spec-reviewer` with [prompts/spec-reviewer.md](prompts/spec-reviewer.md).
    Pass ONLY the story path and `docs/PROMPT.md` section refs; never the analyst's reasoning.
    `APPROVE` -> continue. `CHANGES_REQUESTED` -> back to product-analyst with the FINDINGS list verbatim.
    Max 2 spec loops; then [escalate](escalation.md) (reason: spec not converging) and stop this story.
@@ -41,6 +46,8 @@ squash merging), [integrate.md](integrate.md) (stage 8 commands), [escalation.md
    Commit `docs($STORY): spec [${STORY}]`.
 
 ## 3. Design
+Low tier: skip unless the story names an open design decision; then a single architect pass, no ADR unless
+significant. High tier: always.
 1. `state set stage design`. Agent `architect` with [prompts/architect.md](prompts/architect.md).
    Pass: story path, `contracts/openapi.yaml`, module `CLAUDE.md`s, `docs/adr/` (next ADR number),
    `docs/templates/adr.md`, `docs/security/THREAT_MODEL.md`. Expect `STATUS: DESIGN_READY`.
@@ -72,6 +79,13 @@ squash merging), [integrate.md](integrate.md) (stage 8 commands), [escalation.md
    Never forward the implementer's summary or reasoning to the verifier or reviewers.
 
 ## 6. Verification
+**Low tier:** ONE combined agent replaces stages 6 and 7: agent `qa-verifier` (worktree, fresh context) with
+[prompts/qa-verifier.md](prompts/qa-verifier.md) plus the code-review checklist from
+[prompts/code-reviewer.md](prompts/code-reviewer.md) appended ("also review the diff for correctness, design,
+test quality and the CLAUDE.md invariants; report review findings in FINDINGS with severities"). Write both
+`<story>.verify.md` and `<story>.review.md` from that one report (review report reviewer column:
+`qa-verifier (combined, low tier)`); `PASS` with zero BLOCKER/MAJOR -> stage 8.
+**High tier:** as follows.
 1. `state set stage verify`. Agent `qa-verifier` (worktree, fresh context) with [prompts/qa-verifier.md](prompts/qa-verifier.md).
    Pass: story path, branch, `BASE`, `HEAD`, make targets, "Claims to verify:" (one line per REQ + each
    KNOWN_LIMITATION rewritten as a claim to test). Nothing else from the implementer.
@@ -81,7 +95,7 @@ squash merging), [integrate.md](integrate.md) (stage 8 commands), [escalation.md
    If N > 3 -> [escalate](escalation.md), `status: BLOCKED`, `make check-fast`, clear state (step 8.7), stop.
    Else back to stage 5 step 2 with the FINDINGS list.
 
-## 7. Review (parallel)
+## 7. Review (parallel) — high tier only
 1. `state set stage review`. In ONE message launch agent `code-reviewer` ([prompts/code-reviewer.md](prompts/code-reviewer.md))
    plus every specialist whose trigger in [triggers.md](triggers.md) matches `git diff --name-only $BASE...HEAD`
    ([prompts/specialist-reviewers.md](prompts/specialist-reviewers.md)). Same inputs as the verifier: story, diff
@@ -93,8 +107,11 @@ squash merging), [integrate.md](integrate.md) (stage 8 commands), [escalation.md
    MINORs/NITs not fixed: list them in the story's Status log as follow-ups; never silently drop them.
 
 ## 8. Integration
+Merges to `main` go through a PR the **owner merges personally** (OWNER-011: GitHub forbids author approval);
+never run `gh pr merge` yourself. CI job `gate` must be green on the PR. Add the AI spend row and compare the
+phase's running total with its cap in `docs/SDLC_METRICS.md` ("Phase budgets"); over the cap -> owner checkpoint.
 Follow [integrate.md](integrate.md) exactly: rebase on main, `make check`, `make trace`, Conventional Commit
-squash merge (PR via `gh` when a remote exists, else local squash merge), story `status: DONE` with a Status
+PR to `main` via `gh pr create` (the owner squash-merges it personally), story `status: DONE` with a Status
 log row, PROGRESS line `... · $STORY · integrate · GREEN · merged <sha>`, AI spend ledger row in
 `docs/SDLC_METRICS.md`, then `state set story null; set stage done; set loop_count 0`.
 

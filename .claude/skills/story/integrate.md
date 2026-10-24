@@ -26,8 +26,10 @@ With a remote and `gh auth status` OK:
 git push -u origin "story/$STORY-$SLUG"
 gh pr create --fill --title "<type>(<scope>): <story title> [$STORY]" \
   --body-file <(bash -c 'cat .github/pull_request_template.md')   # then fill the template sections in the PR body
-gh pr checks --watch                                              # wait for pr.yml
-gh pr merge --squash --delete-branch --subject "<type>(<scope>): <story title> [$STORY]"
+gh pr checks --watch                                              # wait for pr.yml (job `gate` must be green)
+# STOP: the owner squash-merges the PR personally (OWNER-011). Tell the owner the PR URL and the
+# squash subject "<type>(<scope>): <story title> [$STORY]"; never run `gh pr merge` yourself.
+# After the owner merges:
 git switch main && git pull --ff-only
 ```
 Without a remote (local-only mode):

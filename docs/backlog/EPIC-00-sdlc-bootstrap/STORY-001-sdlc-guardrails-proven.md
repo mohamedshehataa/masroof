@@ -3,7 +3,7 @@ id: STORY-001
 epic: EPIC-00
 title: SDLC guardrails are proven
 phase: 0
-status: IN_PROGRESS
+status: DONE
 size: M
 modules: [sdlc]
 depends_on: []
@@ -243,6 +243,15 @@ None (first story of Phase 0).
 - [x] Size ≤ 400 changed lines. The hooks exist. Loop 3 is the deltas to guard-bash, protect-files, scan-secrets and format-changed, plus one new PostToolUse hook, one pre-push script and their tests, estimated ≈ 350–400 lines. Split REQ-OPS-011 into its own story if the design estimate exceeds 400.
 - [x] Dependencies listed
 
+## Accepted residual risk (owner decision 2026-10-24)
+The owner closed this story after verify loop 3 rather than run loop 4 (lighter, risk-tiered process). REQ-OPS-003..010 passed verification; REQ-OPS-001, -002 and -011 pass for every case except the four findings below, which are accepted risk and tracked in STORY-146:
+- **F-01 (was BLOCKER):** the restore backstop runs from and sources `.claude/hooks/lib.sh`; a shell write to a hook file is not undone and the hooks then fail open. Mitigation in place: Claude Code permission prompts, `make hooks-lock` state, git history, and reviewers diffing `.claude/hooks/**`.
+- **F-02:** one shared snapshot per checkout; a write between or across overlapping calls becomes the new baseline.
+- **F-03:** B13 interpreter/.NET writes to `docs/PROMPT*.md` are matched case-sensitively and pass.
+- **F-04:** backtick / `$()` delete targets are not analysed.
+An unverified loop-4 fix (HEAD-anchored self-integrity, fail closed) is preserved on local branch `story-001-loop4` (commit f54c33a) as STORY-146's starting point; it was not merged.
+Also: `make check-fast MODULE=sdlc` with the 619-case hook suite takes about 70-200 s.
+
 ## Status log
 | date | stage | agent | result |
 |---|---|---|---|
@@ -251,3 +260,4 @@ None (first story of Phase 0).
 
 | 2026-10-24 | 6 verify | qa-verifier | FAIL loop 3/3 (1 BLOCKER: backstop sources the files it protects; 3 MAJOR) -> BLOCKED, ESCALATION LOOP-002 |
 | 2026-10-24 | 5 implement | orchestrator | owner granted loop 4 (LOOP-002 option a): scope = loop-3 findings F-01..F-04 only; hook self-integrity vs git HEAD, fail closed |
+| 2026-10-24 | 8 close | orchestrator | DONE as accepted risk (owner decision, lighter process); loop 4 stopped; findings F-01..F-04 -> STORY-146 |

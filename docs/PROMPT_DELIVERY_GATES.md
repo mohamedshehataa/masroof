@@ -1,4 +1,7 @@
 # Delivery gates: strict, measurable rules for push, PR, review, merge, release
+
+> **Status (owner decision, 2026-10-24): partially deferred.** Only CI on every PR plus branch protection on `main` is in force now (STORY-145, cut down). Everything else below — the per-metric `gate/Mn` checks, `delivery-gates.yaml` and `delivery-gate.py`, the generated PR body and `pr-body-lint`, AI-review approval, revert-on-red, release/hotfix/dependabot profiles, pre-push M1/M5 and selftest rows D1–D5 — is **deferred until there is a real product to protect**, and will return as a new story built from the design kept at commit 56c4a4f (ADR-0005, ADR-0006). Until then, merges to `main` go through a PR the owner merges personally (OWNER-011), and the process is risk-tiered as described in `CLAUDE.md` (Workflow).
+
 *(Paste into the orchestrator session as an addendum to `docs/PROMPT.md`. It extends S2, S7, S9, S12 and S16. Where it conflicts with the original prompt, this file wins. Save it as `docs/PROMPT_DELIVERY_GATES.md`; protect it like `docs/PROMPT.md`.)*
 
 ## 0. Principle

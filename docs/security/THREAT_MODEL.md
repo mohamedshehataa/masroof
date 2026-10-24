@@ -266,6 +266,7 @@ the 14 `required_checks` of `delivery-gates.yaml` (STORY-016).
 | REQ-SEC-030 | WhatsApp send only to allowlisted recipients | B8 | Unit tests |
 
 ## 5. Out of scope / accepted for now
+- Local guardrail self-integrity (owner decision 2026-10-24): the Claude Code hooks can be disabled by a shell write to `.claude/hooks/**` (STORY-001 F-01), a write between/across calls can survive (F-02), interpreter writes to `docs/PROMPT*.md` and command-substitution delete targets are not caught (F-03, F-04). Accepted risk until STORY-146; mitigations: Claude Code permission prompts, git history, and review of every `.claude/hooks/**` diff.
 
 - Native iOS app: not built (Section 2); the PWA inherits browser sandboxing.
 - Multi-tenant SaaS threats: one household per deployment is the target; `household_id` scoping is still enforced to keep the option open.
