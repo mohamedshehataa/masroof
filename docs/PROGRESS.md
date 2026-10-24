@@ -64,3 +64,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 08:00 · P1 · SDLC · process · INFO · owner removed approvals: bypass default, empty ask list; guards unchanged (hook tests 624/624, sdlc-lint 0).
 2026-10-25 07:30 · P0 · SDLC · done · INFO · retro phase 0: 4 keep, 9 change (6 applied, 3 already fixed), 3 try; 10 files changed, 3 owner proposals in docs/retros/phase-0.md
 2026-10-25 09:30 · P1 · STORY-016 · integrate · GREEN · verify PASS + review APPROVE (live PR run 40142922510 green, make check GREEN, 13/15 mutants killed); web Trivy step gated in main.yml; DONE.
+2026-10-25 08:20 · P1 · SDLC · process · INFO · append-only logs (PROGRESS, DECISIONS, LESSONS) use git's union merge, so parallel branches stop conflicting on them.
