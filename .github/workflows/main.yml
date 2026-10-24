@@ -426,6 +426,7 @@ jobs:
           exit-code: "1"
           format: table
       - name: Trivy image scan (web)
+        if: needs.detect.outputs.web == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
