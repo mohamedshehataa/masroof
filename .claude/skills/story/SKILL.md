@@ -107,11 +107,11 @@ test quality and the CLAUDE.md invariants; report review findings in FINDINGS wi
    MINORs/NITs not fixed: list them in the story's Status log as follow-ups; never silently drop them.
 
 ## 8. Integration
-Merges to `main` go through a PR the **owner merges personally** (OWNER-011: GitHub forbids author approval);
-never run `gh pr merge` yourself. CI job `gate` must be green on the PR. Add the AI spend row and compare the
+Merges to `main` go through a PR that you **squash-merge yourself** (owner decision 2026-10-25) once the gate is green
+on the PR head, the verify report is PASS without open BLOCKER/MAJOR and you have read the diff. CI job `gate` must be green on the PR. Add the AI spend row and compare the
 phase's running total with its cap in `docs/SDLC_METRICS.md` ("Phase budgets"); over the cap -> owner checkpoint.
 Follow [integrate.md](integrate.md) exactly: rebase on main, `make check`, `make trace`, Conventional Commit
-PR to `main` via `gh pr create` (the owner squash-merges it personally), story `status: DONE` with a Status
+PR to `main` via `gh pr create` (squash-merged by you after the checks above), story `status: DONE` with a Status
 log row, PROGRESS line `... · $STORY · integrate · GREEN · merged <sha>`, AI spend ledger row in
 `docs/SDLC_METRICS.md`, then `state set story null; set stage done; set loop_count 0`.
 

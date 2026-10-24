@@ -30,9 +30,10 @@ git push -u origin "story/$STORY-$SLUG"
 gh pr create --base main --fill --title "<type>(<scope>): <story title> [$STORY]" \
   --body-file <(bash -c 'cat .github/pull_request_template.md')   # then fill the template sections in the PR body
 gh pr checks --watch                                              # wait for pr.yml (job `gate` must be green)
-# STOP: the owner squash-merges the PR personally (OWNER-011). Tell the owner the PR URL and the
-# squash subject "<type>(<scope>): <story title> [$STORY]"; never run `gh pr merge` yourself.
-# After the owner merges:
+# Merge (owner decision 2026-10-25): only when `PR gate` is green on the PR head, the verify report is
+# PASS with no open BLOCKER/MAJOR, and you have read the diff. Squash only, pinned to the checked head:
+gh pr merge <n> --squash --match-head-commit "$(git rev-parse HEAD)" --subject "<type>(<scope>): <story title> [$STORY]"
+# Then rebase any branch that depends on this one onto the new main before opening its PR.
 git switch main && git pull --ff-only
 ```
 Without a remote (local-only mode):
