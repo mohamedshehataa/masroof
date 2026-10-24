@@ -25,6 +25,7 @@ import statistics
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
 from typing import Any, Callable, Optional
@@ -155,12 +156,15 @@ def adapter_http(case: Case) -> Prediction:
         "receivedAt": inp.get("received_at"),
         "history": [{"text": h["text"], "botReply": h.get("bot_reply")} for h in inp.get("history", [])],
     }
+    if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
+        raise AdapterError(f"http adapter: EVAL_PARSE_URL must be http(s), got {url!r}")
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     token = os.environ.get("EVAL_PARSE_TOKEN")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     start = time.perf_counter()
     try:
+        # nosemgrep: dynamic-urllib-use-detected - scheme restricted to http(s) above; URL comes from the operator's env
         with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
             result = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:

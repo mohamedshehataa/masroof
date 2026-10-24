@@ -82,7 +82,7 @@ def jacoco_package(root: ET.Element, token: str, kind: str) -> float | None:
 
 def load_xml(path: Path) -> ET.Element | None:
     try:
-        return ET.parse(path).getroot()
+        return ET.parse(path).getroot()  # nosemgrep: use-defused-xml-parse - local build/test report written by our own tools, not untrusted input
     except (ET.ParseError, OSError):
         return None
 

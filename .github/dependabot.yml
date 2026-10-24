@@ -8,6 +8,8 @@ version: 2
 updates:
   - package-ecosystem: gradle
     directory: /backend
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -28,6 +30,8 @@ updates:
 
   - package-ecosystem: gradle
     directory: /android
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -48,6 +52,8 @@ updates:
 
   - package-ecosystem: npm
     directory: /web
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -68,6 +74,8 @@ updates:
 
   - package-ecosystem: pip
     directory: /scripts
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -81,6 +89,8 @@ updates:
 
   - package-ecosystem: pip
     directory: /eval
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -94,6 +104,8 @@ updates:
 
   - package-ecosystem: docker
     directory: /infra
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -107,6 +119,8 @@ updates:
 
   - package-ecosystem: docker
     directory: /backend
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -120,6 +134,8 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday

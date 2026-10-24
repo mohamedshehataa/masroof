@@ -27,9 +27,10 @@ __masroof_to_unix() {
 }
 # __masroof_on_path <name>: sets __masroof_dir to the first PATH dir holding <name> or <name>.exe
 __masroof_on_path() {
-  local d IFS=:
+  local d dirs
   __masroof_dir=""
-  for d in $PATH; do
+  IFS=: read -r -a dirs <<< "$PATH"
+  for d in "${dirs[@]}"; do
     if [ -f "$d/$1" ] || [ -f "$d/$1.exe" ]; then __masroof_dir="$d"; return 0; fi
   done
   return 1

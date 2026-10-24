@@ -255,7 +255,7 @@ def load_junit(root: Path) -> list[CaseResult]:
                 continue
             seen.add(xml_path)
             try:
-                tree = ET.parse(xml_path)
+                tree = ET.parse(xml_path)  # nosemgrep: use-defused-xml-parse - local build/test report written by our own tools, not untrusted input
             except (ET.ParseError, OSError):
                 continue
             for tc in tree.iter("testcase"):

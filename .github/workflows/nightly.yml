@@ -48,7 +48,7 @@ jobs:
       web: ${{ steps.mods.outputs.web }}
       android: ${{ steps.mods.outputs.android }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - id: mods
         run: |
           flag() { if [ -f "$2" ]; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
@@ -66,10 +66,10 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install SDLC tooling
@@ -78,22 +78,22 @@ jobs:
           if [ -f eval/requirements.txt ]; then python -m pip install --quiet -r eval/requirements.txt; fi
           sudo apt-get update -q
           sudo apt-get install -y -q shellcheck jq
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         if: needs.detect.outputs.backend == 'true' || needs.detect.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: needs.detect.outputs.web == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         if: needs.detect.outputs.android == 'true'
       - run: make check-full
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: check-full-reports
@@ -114,14 +114,14 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
       - run: make mutation
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: pitest-report
@@ -137,8 +137,8 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install eval dependencies
@@ -150,7 +150,7 @@ jobs:
         run: |
           echo "::warning::ANTHROPIC_API_KEY missing: full eval runs with the reference adapter only."
       - run: make eval
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: eval-full-report
@@ -166,25 +166,25 @@ jobs:
     needs: detect
     if: needs.detect.outputs.android == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Enable KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Maestro CLI (pinned release)
         run: |
           curl -fsSLo /tmp/maestro.zip "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
           unzip -q /tmp/maestro.zip -d "$HOME/.maestro-dist"
           echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
       - name: Run Maestro flows
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
           target: google_apis
@@ -193,7 +193,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: make e2e MODULE=android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: maestro-report
@@ -214,8 +214,8 @@ jobs:
       contents: read
       issues: write # action-baseline can file an issue; disabled below, kept for opt-in
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -225,7 +225,7 @@ jobs:
       - name: Wait for health
         run: make smoke URL=http://localhost:8080
       - name: ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
         with:
           target: http://localhost:8080
           cmd_options: "-a -j"
@@ -244,18 +244,18 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend == 'true' && needs.detect.outputs.web == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: grafana/setup-k6-action@v1
+      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1
       - name: Install Lighthouse CI
         run: npm install --global @lhci/cli
       - name: Start the stack
@@ -263,7 +263,7 @@ jobs:
       - name: Wait for health
         run: make smoke URL=http://localhost:8080
       - run: make perf
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: perf-reports
@@ -286,13 +286,13 @@ jobs:
     needs: detect
     if: needs.detect.outputs.android == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Build debug APK
         run: make build-apk
       - name: Run MobSF and scan the APK
@@ -320,7 +320,7 @@ jobs:
           # Gate (S9): no HIGH findings. Tune via MobSF's own suppression once the APK exists.
           high="$(jq '.high|length' mobsf-report/scorecard.json)"
           if [ "$high" -gt 0 ]; then echo "::error::MobSF reported ${high} HIGH findings"; exit 1; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: mobsf-report
@@ -343,7 +343,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Collect open Dependabot PRs and alerts
         run: |
           set -euo pipefail
@@ -367,7 +367,7 @@ jobs:
               -not -path '*/node_modules/*' | sed 's/^/- /' || true
           } > reports/dependency-updates.md
           cat reports/dependency-updates.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dependency-updates-report
           path: reports/dependency-updates.md
@@ -401,7 +401,7 @@ jobs:
           } > reports/flaky-tests.md
           if [ "$(wc -l < reports/flaky-tests.md)" -le 5 ]; then echo "- none" >> reports/flaky-tests.md; fi
           cat reports/flaky-tests.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: flaky-test-report
           path: reports/flaky-tests.md
@@ -418,17 +418,17 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: python -m pip install --quiet --upgrade pip pyyaml
       - run: make metrics
       - run: make trace
       - name: Open or update the metrics PR (never push to main directly)
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: sdlc/nightly-metrics
           delete-branch: true

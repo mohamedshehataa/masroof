@@ -280,7 +280,7 @@ def flaky_count(root: Path) -> int:
 def jacoco_pct(xml_path: Path) -> dict[str, float | None]:
     out: dict[str, float | None] = {"line": None, "branch": None}
     try:
-        tree = ET.parse(xml_path)
+        tree = ET.parse(xml_path)  # nosemgrep: use-defused-xml-parse - local build/test report written by our own tools, not untrusted input
     except (ET.ParseError, OSError):
         return out
     for counter in tree.getroot().findall("counter"):
@@ -293,7 +293,7 @@ def jacoco_pct(xml_path: Path) -> dict[str, float | None]:
 
 def pit_score(xml_path: Path) -> float | None:
     try:
-        tree = ET.parse(xml_path)
+        tree = ET.parse(xml_path)  # nosemgrep: use-defused-xml-parse - local build/test report written by our own tools, not untrusted input
     except (ET.ParseError, OSError):
         return None
     muts = list(tree.iter("mutation"))
