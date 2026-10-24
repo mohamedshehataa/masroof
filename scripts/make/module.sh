@@ -20,8 +20,14 @@ case "$mod" in
       rc="${PIPESTATUS[0]}"
       set -e
       if [ "$rc" -eq 0 ] && [ ! -f "$pitdir/mutations.xml" ] && grep -q "No mutations found" "$log"; then
-        mkdir -p "$pitdir"
-        echo "PIT found no mutations: no classes in the mutation target packages yet" > "$pitdir/no-mutations.txt"
+        ntargets="$("$PYTHON" scripts/quality/pit-targets.py 2>/dev/null)" || ntargets=error
+        if [ "$ntargets" = 0 ]; then
+          mkdir -p "$pitdir"
+          echo "PIT found no mutations: no classes in the mutation target packages yet" > "$pitdir/no-mutations.txt"
+        else
+          echo "module.sh: PIT found no mutations although target classes exist ($ntargets): check the classpath/filters" >&2
+          rc=1
+        fi
       fi
       rm -f "$log"
       exit "$rc"
