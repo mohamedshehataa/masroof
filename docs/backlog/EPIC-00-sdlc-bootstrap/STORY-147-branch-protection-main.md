@@ -3,7 +3,7 @@ id: STORY-147
 epic: EPIC-00
 title: "Branch protection on main (deferred: needs GitHub Pro or a public repo)"
 phase: 0
-status: DRAFT
+status: DESCOPED
 size: XS
 modules: [sdlc]
 depends_on: [STORY-145]
@@ -28,3 +28,4 @@ Unhappy path: **Given** the protection call fails (scope or plan limits) **Then*
 | date | stage | agent | note |
 |---|---|---|---|
 | 2026-10-25 | spec | orchestrator | split out of STORY-145; the protection call returned HTTP 403 (needs GitHub Pro on a private repo) |
+| 2026-10-25 | descope | product-analyst | owner decision 2026-10-25: stay unprotected (OWNER-014 option c); revive if the account moves to GitHub Pro or the repo becomes public |

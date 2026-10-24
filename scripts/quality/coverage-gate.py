@@ -164,7 +164,14 @@ def evaluate(root: Path, th: dict, require_mutation: bool = False) -> list[Row]:
                          f"no package containing '{token}'")
             pit = root / b.get("pitest", "")
             muts = pit_scores(pit) if pit.is_file() else []
-            if not pit.is_file():
+            marker = pit.parent / "no-mutations.txt"
+            if not pit.is_file() and marker.is_file():
+                # PIT ran and itself reported zero mutations (no classes in the target packages): nothing to measure.
+                # The marker is deleted before every PIT run, and a real report always wins, so this turns strict
+                # automatically once any target class exists.
+                reason = marker.read_text(encoding="utf-8-sig", errors="replace").strip() or "PIT found no mutations"
+                rows.append(Row("backend", "mutation score", "–", "–", "SKIP", reason))
+            elif not pit.is_file():
                 if require_mutation:
                     rows.append(Row("backend", "PIT report", "missing", "required", "FAIL", f"{b.get('pitest')} not found"))
                 else:
