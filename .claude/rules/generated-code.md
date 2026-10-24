@@ -14,7 +14,7 @@ paths:
   a diff.
 - To change an API type or endpoint: edit `contracts/openapi.yaml` (architect, stage 3), run the generator
   (`make contract-lint` validates; the module build regenerates: `./gradlew openApiGenerate`,
-  `npm run gen:api`), then adapt hand-written adapters. A breaking change needs an ADR and passes
+  `npm run generate` in web/), then adapt hand-written adapters. A breaking change needs an ADR and passes
   `make contract-diff BASE=main` only with the PR label.
 - Never copy generated code into hand-written packages to "fix" it; write an adapter or a mapper beside it.
 - Generated output is committed only where the build needs it offline (document which in the module CLAUDE.md);

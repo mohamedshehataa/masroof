@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { createInstance, type i18n } from 'i18next';
 import { useEffect, useState, type FC } from 'react';
 import { I18nextProvider, initReactI18next, useTranslation } from 'react-i18next';
-import { getHealth } from './api/health';
+import { getHealth } from './api/generated';
 import { VersionLine } from './features/health/VersionLine';
 import ar from './i18n/ar.json';
 import en from './i18n/en.json';
