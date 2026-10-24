@@ -51,3 +51,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-24 23:59 · P0 · STORY-141 · integrate · GREEN · loop 2/3 verify PASS + review APPROVE (loop-1 MAJOR coverage timeout fixed; coverage-summary reporter added for the gate); make check GREEN; DONE; PR stacked on PR #3.
 2026-10-25 00:05 · P0 · STORY-142 · tdd · INFO · started (low tier, infra); branched from STORY-141; PR #4 (STORY-141) stacked on PR #3.
 2026-10-25 00:40 · P0 · SDLC · integrate · INFO · owner merged #2 into main (878a2b0); #3/#4 were stacked, so they merged into PR branches, not main; re-opened STORY-143+141 as #8 to main; integrate skill now requires --base main.
+2026-10-25 01:30 · P0 · STORY-142 · implement · GREEN · tests 32a25bf + impl d62dcd9 (caddy, web nginx-unprivileged, minio chainguard, smoke rewrite); agent ran req-ops-022 x3 + req-ops-020 green; combined verify+review started.
