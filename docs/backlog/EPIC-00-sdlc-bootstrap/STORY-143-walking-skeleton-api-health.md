@@ -3,12 +3,13 @@ id: STORY-143
 epic: EPIC-00
 title: "Walking skeleton (API): GET /health + backend Dockerfile + compose postgres+backend"
 phase: 0
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [backend, infra, contracts]
 depends_on: [STORY-144]
 reqs: [REQ-OPS-020]
 implements: ["PROMPT.md S15 item 7", "PROMPT.md §2 (stack, compose)", "PROMPT.md §9 (contract-first)", "PROMPT.md §12 (no leakage, non-root)", "PROMPT.md S9 (image hardening)"]
+risk_tier: low
 owner_agent: backend-engineer
 ---
 
@@ -355,3 +356,4 @@ Production + config ≈ 240 (health use case + DB probe + controller + 503 Probl
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — gitSha provenance outside Docker, compose-check location, start-up resilience moved to STORY-142; ≈ 390 lines |
 | 2026-10-24 | 3 design | architect | BLOCKED (size only): design complete (ADR-0004 Boot 4.1.2, /health, image, compose, tests, NITs 16-18). The total is ≈ 480 lines, and the REQ-OPS-020 part is ≈ 400. Decide: the Boot upgrade + NITs as a separately counted prerequisite, or split them out as STORY-144. Contract description-only; lint valid, oasdiff no breaking changes |
 | 2026-10-24 | 1-2 spec fix | product-analyst | READY — the Boot 4.1.2 upgrade and NITs 16-18 split out to STORY-144 (REQ-OPS-142/143); depends_on -> STORY-144; REQ-OPS-020 only; ≈ 400 (architect) / ≈ 430 (itemised), size flagged to the orchestrator |
+| 2026-10-24 | 0 start | orchestrator | IN_PROGRESS, risk_tier low (infra; no auth/money/ingestion): failing tests -> implement -> one combined verify+review |
