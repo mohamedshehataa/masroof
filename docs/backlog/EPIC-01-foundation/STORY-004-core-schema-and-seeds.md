@@ -3,12 +3,13 @@ id: STORY-004
 epic: EPIC-01
 title: Core schema (household, members, auth, devices, accounts, categories, merchants) with seeds
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-002, STORY-142]
 reqs: [REQ-OPS-040, REQ-OPS-041, REQ-OPS-042, REQ-OPS-046, REQ-OPS-047]
 implements: ["PROMPT.md §8 (data model, default categories, seeds)", "PROMPT.md §14 Phase 1 (Flyway schema + seeds)", "CLAUDE.md money invariant (ArchUnit + semgrep; STORY-002 review #9, verify X17)", "STORY-002 review #14 (household DDL hardening)"]
+risk_tier: high
 owner_agent: backend-engineer
 ---
 
