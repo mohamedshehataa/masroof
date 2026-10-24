@@ -6,7 +6,7 @@ phase: 0
 status: READY
 size: M
 modules: [backend, infra, contracts]
-depends_on: [STORY-002]
+depends_on: [STORY-144]
 reqs: [REQ-OPS-020]
 implements: ["PROMPT.md S15 item 7", "PROMPT.md §2 (stack, compose)", "PROMPT.md §9 (contract-first)", "PROMPT.md §12 (no leakage, non-root)", "PROMPT.md S9 (image hardening)"]
 owner_agent: backend-engineer
@@ -17,7 +17,7 @@ owner_agent: backend-engineer
 ## Goal
 The first HTTP slice of the S15 item 7 walking skeleton: the gated backend module from STORY-002 answers `GET /health` from a container talking to Postgres, so the web page (STORY-141) and the full `make up` stack (STORY-142) complete the path **browser → Caddy → (web bundle | backend → Postgres)**.
 
-Split (spec review 2026-10-23): the original STORY-002 became STORY-002 (module, gate, V1, ArchUnit), STORY-143 (this story), STORY-141 (web) and STORY-142 (stack). Rate limiting of `/health` moved to STORY-010 (REQ-SEC-051); container start-up resilience when Postgres is late moved to STORY-142.
+Split (spec review 2026-10-23): the original STORY-002 became STORY-002 (module, gate, V1, ArchUnit), STORY-143 (this story), STORY-141 (web) and STORY-142 (stack). Rate limiting of `/health` moved to STORY-010 (REQ-SEC-051); container start-up resilience when Postgres is late moved to STORY-142. On 2026-10-24 (design size ≈ 480) the Spring Boot 4.1.2 upgrade and STORY-002 review NITs 16-18 moved to STORY-144 (REQ-OPS-142/143), which this story depends on.
 
 ## Requirements and acceptance criteria
 ### REQ-OPS-020 — GET /health returns build information
@@ -69,15 +69,13 @@ Trust boundary: **internet → Caddy → backend `/health`** (Caddy and its rout
 None (no parsing).
 
 ## Design notes (architect)
-ADRs: [ADR-0004 Spring Boot 4.1.2](../../adr/0004-spring-boot-4-1-upgrade.md) (accepted; it supersedes [ADR-0003](../../adr/0003-spring-boot-3-5-after-oss-eol.md)).
+ADRs: [ADR-0004 Spring Boot 4.1.2](../../adr/0004-spring-boot-4-1-upgrade.md) (accepted; it supersedes [ADR-0003](../../adr/0003-spring-boot-3-5-after-oss-eol.md)). **STORY-144 applies the upgrade** (REQ-OPS-142), so this story starts on 4.1.2. If `spring-boot-starter-webmvc`/`-webmvc-test` did not land in STORY-144, they are added here.
 Contract: description-only (see "Contract" below). Migration: none.
 
 ### Commit order (each commit keeps `make check` green)
-1. `build(backend): Spring Boot 4.1.2 [STORY-143]`: ADR-0004's table, the lockfile/verification/osv refresh, the
-   V1-test Testcontainers 2 change, ArchUnit rule 1 + `tools.jackson..`, jqwik removed, `backend/CLAUDE.md` "3.x" -> "4.x (ADR-0004)".
-2. `fix(backend): prod password guard checks the effective datasource password [STORY-143]`: NITs 16 and 17. NIT 18 is closed by commit 1.
-3. `feat(backend): GET /health with build info and DB probe [STORY-143]`: build-info wiring, use case, probe, controller, yml, ArchUnit rule 8, JUnit tests.
-4. `feat(infra): backend image, compose postgres+backend, dev overlay, e2e runner [STORY-143]`: Dockerfile, `.dockerignore`, compose files, `compose.sh`, `infra/scripts/e2e.sh`, `infra/tests/req-ops-020-backend-compose.sh`.
+Prerequisite, now in **STORY-144** (merged first): `build(backend): Spring Boot 4.1.2` (ADR-0004's table and refresh, jqwik removed, ArchUnit rule 1 + `tools.jackson..`) and `fix(backend): prod password guard checks the effective datasource password` (NITs 16-17; NIT 18 closed by the BOM).
+1. `feat(backend): GET /health with build info and DB probe [STORY-143]`: build-info wiring, use case, probe, controller, yml, ArchUnit rule 8, JUnit tests.
+2. `feat(infra): backend image, compose postgres+backend, dev overlay, e2e runner [STORY-143]`: Dockerfile, `.dockerignore`, compose files, `compose.sh`, `infra/scripts/e2e.sh`, `infra/tests/req-ops-020-backend-compose.sh`.
 
 ### Hexagonal placement (REQ-OPS-020)
 | Layer / package | Type | Responsibility |
@@ -246,21 +244,14 @@ services:
 `infra/tests/*.sh` (`nullglob`, sorted), prints `===== e2e: <file>` and `FAIL <file>`, and exits 1 if any test failed.
 STORY-142 adds the Playwright step and the `make up` precondition.
 
-### STORY-002 review NITs ticketed here
-- **NIT 16:** `ProdDatabasePasswordGuard` checks the **effective** `spring.datasource.password`. It reads
-  `environment.getProperty("spring.datasource.password")` and catches `IllegalArgumentException` (unresolvable
-  placeholder) as missing. It rejects null, blank, or a value still containing `${`. The message names
-  `spring.datasource.password` / `POSTGRES_PASSWORD`, never a value. `SPRING_DATASOURCE_PASSWORD` set directly is valid.
-  The existing unit tests switch to `withProperty("spring.datasource.password", ...)`, and one case adds an unresolved `${POSTGRES_PASSWORD}`.
-- **NIT 17:** new `ProdDatabasePasswordGuardContextTest` with `ApplicationContextRunner().withUserConfiguration(ProdDatabasePasswordGuard.class)`:
-  (a) `withPropertyValues("spring.profiles.active=prod")`, no password -> `context.getStartupFailure()` has an `IllegalStateException` in its cause chain naming `spring.datasource.password`;
-  (b) prod + `spring.datasource.password=s3cret-test` -> it starts and `hasSingleBean(ProdDatabasePasswordGuard.class)`;
-  (c) no profile -> it starts and `doesNotHaveBean`. Tag `REQ-OPS-020` is not appropriate here; tag `@Tag("REQ-SEC-020")`.
-- **NIT 18:** closed by ADR-0004. The Boot 4.1.2 BOM imports `log4j-bom` 2.25.5, and the single constraint is deleted.
-  The proof is the lockfile grep in ADR-0004 step 1.
+### STORY-002 review NITs 16-18
+Moved to **STORY-144** (REQ-OPS-143 for NITs 16-17; NIT 18 is closed by the 4.1.2 BOM under REQ-OPS-142). The
+architect's guard sketch (effective `spring.datasource.password`, unresolved `${` counts as missing,
+`ApplicationContextRunner` cases) carries over to STORY-144's design. This story relies on the guard because
+compose sets `SPRING_PROFILES_ACTIVE: prod`.
 
 ### Guardrails
-- ArchUnit rule 1 + `"tools.jackson.."` (commit 1).
+- ArchUnit rule 1 + `"tools.jackson.."` (already done in STORY-144).
 - **New rule 8, `JDBC_ONLY_IN_OUTBOUND_ADAPTERS`:** `noClasses().that().resideOutsideOfPackage("eg.masroof.adapters.out..").should().dependOnClassesThat().resideInAnyPackage("java.sql..", "javax.sql..", "org.springframework.jdbc..", "com.zaxxer.hikari..").allowEmptyShould(true)`.
   This story introduces the first JDBC use, and the rule keeps the probe's JDBC out of application and rest.
 - The `@RestController`-placement rule is deferred to STORY-006 (generated interfaces).
@@ -283,8 +274,7 @@ STORY-142 adds the Playwright step and the `make up` precondition.
 | unit | `application/health/HealthServiceTest` | Missing gitSha, `unknown`, missing version, missing time -> `IllegalStateException` naming the key. Valid -> `check()` passes the probe result through, with `time` = the clock truncated to seconds. | `test` |
 | unit | `adapters/out/persistence/JdbcDatabaseProbeTest` (Mockito `DataSource` and `Connection`) | `isValid` true -> true. `getConnection` throws `SQLException` -> false. `isValid` throws `RuntimeException` -> false. `getConnection` sleeps 5 s -> false, and the call takes < 2.5 s. | `test` |
 | integration (Testcontainers) | `adapters/in/rest/HealthDatabaseOutageIT`: `@SpringBootTest(webEnvironment = RANDOM_PORT)`, `@Testcontainers`, `@Tag("integration")`. `PostgreSQLContainer` (the compose image pin) with a **fixed host port**: pick a free port via `new ServerSocket(0)`, then `withCreateContainerCmdModifier(c -> c.getHostConfig().withPortBindings(new PortBinding(Ports.Binding.bindPort(port), new ExposedPort(5432))))`. That way a docker stop/start keeps the JDBC URL from `@ServiceConnection` valid. HTTP via the JDK `HttpClient` (5 s timeout) against `@LocalServerPort`. | (a) Baseline 200: `checks.db` UP, gitSha matches the contract pattern, version matches semver (real build-info). (b) `DockerClientFactory.instance().client().stopContainerCmd(id).exec()`, then GET -> elapsed < 3 s, 503, `application/problem+json`, the exact body, and the leak regex on body and headers. (c) `startContainerCmd(id).exec()`, then poll every 500 ms for ≤ 30 s until 200 with `checks.db` UP. Assert `ManagementFactory.getRuntimeMXBean().getStartTime()` and the `ApplicationContext` startup date are unchanged (the JVM equivalent of "no restart"). | `integrationTest` |
-| integration (context) | `adapters/out/persistence/ProdDatabasePasswordGuardContextTest` (NIT 17) and the updated `ProdDatabasePasswordGuardTest` (NIT 16) | as listed above | `test` |
-| architecture | `ArchitectureRulesTest` rule 1 (+ `tools.jackson..`) and rule 8 | The existing probes still bite. | `archTest`, `test` |
+| architecture | `ArchitectureRulesTest` rule 8 (rule 1 + `tools.jackson..` is STORY-144) | The existing probes still bite; `archTest` reports 8 rules. | `archTest`, `test` |
 | e2e (compose) | `infra/tests/req-ops-020-backend-compose.sh` (comment `# REQ-OPS-020`), run by `make e2e` | It runs the AC dev-overlay command and, on EXIT, `... -f infra/docker-compose.dev.yml down` (no `-v`). STORY-142's port test must not see the overlay. (1) `docker compose config --format json` has a `healthcheck.test` for `postgres` and `backend`. (2) `docker compose ps --format json` (`jq -s` handles both line and array output) shows both `healthy`. (3) `docker inspect -f '{{.Config.User}}' masroof/backend:dev` is non-empty and its user part is neither `root` nor `0`. (4) `curl -sS -D -` on `127.0.0.1:8080/health` -> 200, `application/json`. jq: status UP; version == `sed -n 's/^version = "\([^"]*\)".*/\1/p' backend/build.gradle.kts` and semver; gitSha == `git rev-parse HEAD \| cut -c1-7`; `checks` keys == `["db"]` and UP; both times end in `Z`; `\|time - date -u +%s\| <= 5` (GNU `date -d`); `buildTime <= time`. (5) Accept `application/xml` and `text/html` -> 200 `application/json`. (6) For GIT_SHA missing, `""` and `unknown`: `docker build --progress=plain -f backend/Dockerfile -t masroof/backend:gitsha-probe [--build-arg GIT_SHA=…] .` -> rc ≠ 0, the output contains `GIT_SHA`, and afterwards `docker image inspect masroof/backend:gitsha-probe` fails (`docker image rm -f` it first). | `make e2e` (needs Docker) |
 
 - No contract test: STORY-006 adds schema validation against `openapi.yaml`.
@@ -308,15 +298,13 @@ the base compose publishes nothing.
 - **D:** each call costs one DB round trip, bounded at 2 s with Hikari's pool. Rate limiting is STORY-010 (REQ-SEC-051).
 - **E:** uid 10001, `read_only`, `cap_drop: ALL`, `no-new-privileges`, no actuator on the classpath.
 - **Supply chain:** base images pinned by digest; GIT_SHA validated; whitelist build context; Gradle artifacts checked
-  against the verification metadata inside the image build; Boot 4.1.2 BOM with 0 OSV findings.
-- B7 is unchanged apart from Hikari timeouts.
-- **security-reviewer: required.** This is the first network listener, the first container image and a framework major upgrade, and it closes NITs 16-18.
+  against the verification metadata inside the image build. The Boot 4.1.2 BOM with 0 OSV findings is STORY-144's (REQ-OPS-142).
+- B7 is unchanged apart from Hikari timeouts. The prod password guard (STORY-144 REQ-OPS-143) is relied on through compose's `SPRING_PROFILES_ACTIVE: prod`.
+- **security-reviewer: required.** This is the first network listener and the first container image. The framework upgrade and NITs 16-18 are reviewed in STORY-144.
 
 ### Size re-estimate (hand-written)
 | Part | Lines |
 |---|---|
-| Upgrade (commit 1, additions only) | ≈ 16 |
-| NIT 16 | ≈ 6 |
 | Health production Java | ≈ 115 |
 | yml | 6 |
 | Gradle build info | 10 |
@@ -326,24 +314,24 @@ the base compose publishes nothing.
 | `compose.sh` | 3 |
 | `e2e.sh` | 8 |
 | README | 1 |
-| **Production / config total** | **≈ 240** |
-| Tests (MockMvc 60, HealthService 20, probe 25, IT 60, NIT 17 context test 25, arch 10, infra test 40) | **≈ 240** |
-| **Total** | **≈ 480** |
+| **Production / config total** | **≈ 218** |
+| Tests (MockMvc 60, HealthService 20, probe 25, IT 60, arch rule 8 ≈ 8, infra test 40) | **≈ 213** |
+| **Total** | **≈ 430** |
 
-**This exceeds ~400**, because the Boot upgrade and the NITs (about 75 lines with their tests) were not in the
-story's 390 estimate. To stay under the cap without losing an AC, commits 1-2 (the upgrade plus NITs 16-18, about
-80 lines) are a **prerequisite counted separately**, the same way STORY-002 handled its `[SDLC]` prerequisite. They
-go to code review as their own diff. Commits 3-4 (REQ-OPS-020 itself) come to about 400. If the orchestrator does not
-accept the prerequisite, the split is: **STORY-144 "Backend on Spring Boot 4.1.2 + prod guard NITs"** (commits 1-2,
-REQ-OPS-023/024 regression, about 80 lines), which STORY-143 then depends on.
+The architect's first total was ≈ 480. The upgrade, NIT 16 and the NIT 17 context test (≈ 50 in this table; the
+architect put commits 1-2 at ≈ 80, counting the regression edits) moved to **STORY-144** (split decided 2026-10-24,
+`docs/DECISIONS.md`). That leaves REQ-OPS-020's commits at ≈ 400 by the architect's figure. The itemised table above
+sums to ≈ 430, which is slightly over the ~400 cap (backlog rule 6). The implementer reports the actual hand-written
+count at stage 5. If it is over 400, the orchestrator decides at that point: accept it, or move the compose e2e
+script into STORY-142. No AC is dropped.
 
 ### Open items for the orchestrator
-- **Owner:** the property-testing tool for STORY-004. jqwik is removed in commit 1 (ADR-0004 option c), and S9 names jqwik.
+- **Owner:** the property-testing tool for STORY-004 (OWNER-010). jqwik is removed in STORY-144 (ADR-0004 option c), and S9 names jqwik.
 - devops follow-up: Dependabot `docker-compose` ecosystem for `/infra`. The `docker` ecosystem does not update image digests in compose files.
-- The prerequisite-vs-split decision above.
+- Prerequisite-vs-split: **resolved 2026-10-24**, split into STORY-144.
 
 ## Dependencies
-STORY-002 (gated backend module, V1 baseline). Unblocks STORY-141 (its Vite dev proxy needs a running `/health` on `127.0.0.1:8080`), STORY-142 (full stack), STORY-006 (switches this controller to the generated interface).
+STORY-144 (Spring Boot 4.1.2 and the effective-password prod guard, on top of STORY-002's gated module and V1 baseline). Unblocks STORY-141 (its Vite dev proxy needs a running `/health` on `127.0.0.1:8080`), STORY-142 (full stack), STORY-006 (switches this controller to the generated interface).
 
 ## Size estimate (hand-written lines incl. tests; generated scaffolding excluded)
 Production + config ≈ 240 (health use case + DB probe + controller + 503 Problem ≈ 150, Gradle build-info / git SHA wiring ≈ 15, Dockerfile ≈ 25, compose `postgres`+`backend` + dev overlay ≈ 40, `infra/scripts/e2e.sh` ≈ 10); tests ≈ 150 (controller tests incl. Accept/leakage/query ≈ 65, Testcontainers DB-down + recovery ≈ 60, `infra/tests` compose checks for healthy/non-root/`GIT_SHA` ≈ 25). **Total ≈ 390.**
@@ -356,7 +344,7 @@ Production + config ≈ 240 (health use case + DB probe + controller + 503 Probl
 - [x] Data / migration impact
 - [x] Security / privacy / LLM-safety impact
 - [x] Eval impact
-- [x] Size ≤ 400 changed lines (≈ 390; generated scaffolding excluded)
+- [x] Size ≤ 400 changed lines (spec ≈ 390; design ≈ 400 per architect / ≈ 430 itemised after the STORY-144 split — see "Size re-estimate"; generated scaffolding excluded)
 - [x] Dependencies listed
 
 ## Status log
@@ -366,3 +354,4 @@ Production + config ≈ 240 (health use case + DB probe + controller + 503 Probl
 | 2026-10-23 | 2 spec review (loop 2) | spec-reviewer | CHANGES_REQUESTED |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — gitSha provenance outside Docker, compose-check location, start-up resilience moved to STORY-142; ≈ 390 lines |
 | 2026-10-24 | 3 design | architect | BLOCKED (size only): design complete (ADR-0004 Boot 4.1.2, /health, image, compose, tests, NITs 16-18). The total is ≈ 480 lines, and the REQ-OPS-020 part is ≈ 400. Decide: the Boot upgrade + NITs as a separately counted prerequisite, or split them out as STORY-144. Contract description-only; lint valid, oasdiff no breaking changes |
+| 2026-10-24 | 1-2 spec fix | product-analyst | READY — the Boot 4.1.2 upgrade and NITs 16-18 split out to STORY-144 (REQ-OPS-142/143); depends_on -> STORY-144; REQ-OPS-020 only; ≈ 400 (architect) / ≈ 430 (itemised), size flagged to the orchestrator |
