@@ -51,9 +51,10 @@ Terms used below:
 | M14 | dependency-file globs (REQ-OPS-155) |
 | M15 | flaky quarantine ≤ 5 |
 | M16 | verify/review loops ≤ 3; story AI spend ≤ 3 × the median of DONE stories |
-| M17 | k6 p95 reads < 200 ms, writes < 400 ms (S9); Lighthouse performance ≥ 90, accessibility = 100, best practices ≥ 95; rollback tested ≤ 30 days ago |
+| M17 | k6 p95 reads < 200 ms, writes < 400 ms (S9); Lighthouse performance ≥ 90, accessibility = 100, best practices ≥ 95; rollback tested ≤ 30 days ago; restore test ≤ 30 days ago |
 | M18 | error rate < 1 %; parse-failure rate < 5 %; window ≥ 30 min |
-| G7 | last 3 `main.yml` runs green; nightly ≤ 24 h ago; selftest GREEN ≤ 7 days ago; restore test ≤ 30 days ago |
+| G7 | last 3 `main.yml` runs green; nightly ≤ 24 h ago; selftest GREEN ≤ 7 days ago |
+| `release_paths` | the only paths a `release/v*` branch may change: `CHANGELOG.md`, the version files (named by the architect at design), `docs/DEPLOY.md`, `docs/PROGRESS.md`, `docs/SDLC_METRICS.md` (incl. the AI spend ledger) |
 | `required_checks` | exactly: `gate/M1 check-fast`, `gate/M2 check`, `gate/M3 coverage`, `gate/M4 mutation`, `gate/M5 test-integrity`, `gate/M6 traceability`, `gate/M7 contract`, `gate/M8 security`, `gate/M9 eval`, `gate/M11 ai-review`, `gate/M12 size`, `gate/M13 commits`, `gate/M14 docs`, `pr-body-lint` (14; addendum G5; `gate/M15 ci` is never in it, because it cannot wait for itself) |
 | `approvers` | `[github-actions[bot], mohamedshehataa]` (G5; approval must come from a listed login that is not the PR author) |
 | `profiles` | branch-class profiles (REQ-OPS-166) |
@@ -95,7 +96,7 @@ Non-functional: warm `make check-fast MODULE=sdlc` stays **< 180 s**; it is run 
 2. its last non-empty line is `STATUS: PASS`;
 3. its `**Head:**` sha satisfies the strict HEAD rule;
 4. its Findings table has 0 rows with severity `BLOCKER` or `MAJOR`;
-5. in `## Exploratory`, the integer immediately before the word `cases` is ≥ 10;
+5. in `## Exploratory`, the first integer that is immediately followed by the word `cases` is ≥ 10;
 6. the `## Test integrity` section starts with `OK`, and the report has no line `TEST_INTEGRITY: VIOLATION`;
 7. the `**Verifier:**` name is `qa-verifier` and differs from the story's `owner_agent`.
 
@@ -200,7 +201,7 @@ Whether a design note is "significant" enough for an ADR stays a judgement for t
 ### REQ-OPS-156 — `delivery-gate.py ci` (M15)
 **Given** the PR with head sha `S` **When** `delivery-gate.py ci` runs **Then** it PASSes only if:
 1. for every name in `required_checks` (which never includes `gate/M15 ci` itself), the **latest check run on `S` from a `pull_request`-event workflow run** is completed with conclusion `success`. Push-event runs on the same sha are ignored. A missing, pending, `failure`, `cancelled`, `skipped`, `neutral` or `timed_out` run → FAIL naming the check and its state;
-2. **no silent flaky re-run**: for each `pull_request` workflow run on `S` with `run_attempt > 1`, every job that concluded `failure` in an earlier attempt and `success` in a later one is a violation, unless `docs/FLAKY_TESTS.md` at `S` has a row naming that check and a `STORY-NNN`. In CI this comparison runs as step `flaky-guard` of check `gate/M15 ci`;
+2. **no silent flaky re-run**: for each `pull_request` workflow run on `S` with `run_attempt > 1`, a job is a violation when an earlier attempt concluded `failure` or `timed_out` and a later attempt concluded `success`. A prior `cancelled` attempt is not a violation. The violation stands unless `docs/FLAKY_TESTS.md` at `S` has a row naming that check and a `STORY-NNN`. In CI this comparison runs as step `flaky-guard` of check `gate/M15 ci`;
 3. quarantine rows in `docs/FLAKY_TESTS.md` are ≤ 5.
 
 Recorded-JSON fixtures:
@@ -209,6 +210,8 @@ Recorded-JSON fixtures:
 - one `pending` → FAIL;
 - `gate/M1 check-fast` failed in attempt 1 and passed in attempt 2, with no quarantine row → FAIL `M15 ci: gate/M1 check-fast passed only on re-run (attempt 2) without a quarantine entry`;
 - the same with a quarantine row → PASS;
+- attempt 1 `timed_out`, attempt 2 `success`, no quarantine row → FAIL;
+- attempt 1 `cancelled`, attempt 2 `success` → PASS (not a violation);
 - 6 quarantine rows → FAIL `6 > 5`;
 - `S` has a red push-event `gate/M1 check-fast` and a green pull_request-event one → PASS (only the pull_request run counts).
 
@@ -229,12 +232,13 @@ M2 runs last; after an earlier FAIL it is `SKIP not run: earlier failure`, and t
 - `breaking-change` only when oasdiff reported a breaking change **and** the ADRs section lists one;
 - `size-exception` when M12 passed by exception.
 
-On `revert/*` or `dependabot/*` branches, it exits 2 with `pr-open is not used for profile <p>`.
+On `revert/*` or `dependabot/*` branches, it exits 2 with `pr-open is not used for profile <p>`. **Re-entry:** when an open PR already exists for the branch (a stage-8 fix loop), pr-open runs every row and writes the body, but the skill does not run `gh pr create`; it updates the existing PR with `gh pr edit --body-file` (REQ-OPS-164).
 Unhappy paths:
 - status `READY` → FAIL `G3 status`;
 - `story/STORY-144-x` while the story is STORY-145 → FAIL `G3 branch`;
 - no verify report → FAIL `M10`, and no body file is written;
 - a stale verify Head → FAIL `M10`;
+- these fixtures pass `--story STORY-145` explicitly;
 - a `make check` stub exits 1 → FAIL `M2`, with the log path;
 - 901 s → FAIL `M2 901 s > 900 s`;
 - an 80-character title → FAIL `M13`.
@@ -255,6 +259,13 @@ Unhappy paths:
 - **Migration notes:** added `V*__*.sql` files with expand/migrate/contract notes from the story, or `no migration`;
 - **Rollback plan:** the story's `## Rollback plan` section, or a generated `git revert <squash sha>` plus the migrations, or `no migration`;
 - **Definition of Done:** the S2 DoD checklist, each box ticked from the gate results.
+
+**Sources per profile:**
+- **release:** Story is `none: release vX.Y.Z`; Summary is the version's CHANGELOG section; REQs and Verify/Review are `not applicable: release bookkeeping`;
+- **revert:** Story is the reverted story, or `none` for `[SDLC]`/`[PHASE-N]`; Summary is `revert of <sha>: run <url> red`; Verify/Review are `not applicable: revert of <sha>`;
+- **story and hotfix** use the sources listed above.
+
+There is one byte-exact expected-body fixture per profile (story, hotfix, release, revert).
 
 The last line is `<!-- gate:v1 sha=<40-hex HEAD> body=<64-hex sha256 of the LF-normalised text above the marker> -->`. Rules:
 - generating twice for the same HEAD and inputs gives byte-identical output;
@@ -309,6 +320,7 @@ A green main run with the baseline job but no baseline artifact → M3 FAIL.
 - any other branch update runs:
   - **M1**: the modules changed in `origin/main...<local sha>` are found through the module map. If, under one of them, there are tracked modifications or untracked non-ignored files, the push is rejected with `[M1] commit or stash changes in <module>/ before pushing`. Then `make check-fast MODULE=<modules>` must exit 0 within ≤ 180 s;
   - **M5**: `test-integrity-check.sh origin/main` evaluated on the **pushed commit**, with `--require-increase` on the hotfix profile (REQ-OPS-167);
+  - for `refs/heads/maint/v*`, the M1/M5 base is `origin/maint/vX.Y`, or the tag `vX.Y.Z` when the branch is new on the remote. Fixtures: a cherry-pick pushed to an existing `maint/v1.1` is compared with `origin/maint/v1.1`; the first push of `maint/v1.1` is compared with `v1.1.0`;
   - reports: an untracked `STORY-NNN*.verify.md` or `*.review.md` for the branch's story → rejected with `[M10]` or `[M11]`;
 - `origin/main` unknown → rejected with `run git fetch origin`.
 
@@ -320,7 +332,8 @@ The block uses exit 2 with `[M8] suppression without reason: + STORY id`. Its te
 
 **M5 semantics** (pre-commit, pre-push, `make test-integrity`, `gate/M5`):
 - an assertion flip is a `VIOLATION` (exit 1). A flip is a drop in one assertion id's count while the total does not drop. The `WARN:` line is still printed;
-- a flip or deletion is allowed only when the story file has a Sanctioned test changes row matching **file + assertion id as printed by test-integrity** (kinds `flip` or `deletion` only), **and** a DECISIONS line for `sanctioned test change` exists. Such a change is printed as `SANCTIONED (<story> <superseded-by REQ>)`;
+- a flip or deletion is allowed only when the story file has a Sanctioned test changes row matching **file + assertion id as printed by test-integrity** (kinds `flip` or `deletion` only), **and** a DECISIONS line `STORY-NNN sanctioned test change: <file> <assertion id>` exists (phrase matching is case-insensitive). Such a change is printed as `SANCTIONED (<story> <superseded-by REQ>)`;
+- the allowance per (file, assertion id) equals the number of matching rows, and a larger drop is a VIOLATION. Fixture: 2 rows for (`test-pre-push-guard.sh`, `expect 0`) and 3 dropped `expect 0` → VIOLATION;
 - `--allow-deletions` keeps working.
 
 Every rejection is one line starting with `[<id>]`, plus a `Re-run:` command. Tests run the hooks as real git hooks in temp repos with a bare remote.
@@ -352,6 +365,8 @@ The architect chooses between one job per metric and the Checks API from a share
 - `APPROVE` → success.
 - `CHANGES_REQUESTED`, or no parsable last line → failure.
 - No `ANTHROPIC_API_KEY` → failure `ANTHROPIC_API_KEY secret missing (OWNER-012)`. The old skip behaviour is removed.
+- The prompt requires every inline comment to start with `[BLOCKER]`, `[MAJOR]`, `[MINOR]` or `[NIT]`. A static test asserts that the prompt text contains this rule and the `STATUS:` last-line rule.
+- On Dependabot-triggered runs, GitHub exposes only **Dependabot secrets**, so `ANTHROPIC_API_KEY` must also be set as a Dependabot secret (OWNER-012). A static test asserts that the ai-review job reads `secrets.ANTHROPIC_API_KEY` without a condition that excludes the `dependabot[bot]` actor, so the key reaches the job on dependabot runs.
 
 **Action approval.** When every `required_checks` entry is `success` on the head, `gate/M11 ai-review` is APPROVE, and `delivery-gate.py approve` (for the profile) exits 0, a job submits an `APPROVED` review on the head sha as `github-actions[bot]`. GitHub 403/422 → the job fails with `GitHub refused the Action's approval: enable "Allow GitHub Actions to create and approve pull requests" (OWNER-011)`.
 
@@ -367,12 +382,13 @@ Static tests check names, triggers, the early exit, the checkout ref, permission
 **Given** a squash commit `M` on `main` whose `main.yml` run concludes `failure` or `timed_out`, and no `revert/*` PR is open **When** the job `revert-on-red` runs **Then**:
 - it creates branch `revert/<short M>` from main;
 - it makes a revert commit with `git revert -s --no-edit M`, then amends the subject to `revert(<scope>): <description> [TAG]`. The scope comes from `M`; TAG is `M`'s `[STORY-NNN]`, `[SDLC]` or `[PHASE-N]`; the subject is ≤ 72 characters with the description truncated; Signed-off-by is present;
-- for a `[STORY-NNN]` tag, a second signed-off commit sets that story to `status: IN_PROGRESS`, appends `| <date> | revert-on-red | main.yml | reverted <short M>: run <url> red |` and a PROGRESS line `… · STORY-NNN · integrate · RED · reverted <short M> …`;
+- for a `[STORY-NNN]` tag, a second signed-off commit with subject `revert(<scope>): reopen STORY-NNN after red main [STORY-NNN]` (≤ 72 characters) sets that story to `status: IN_PROGRESS`, appends `| <date> | revert-on-red | main.yml | reverted <short M>: run <url> red |` and a PROGRESS line `… · STORY-NNN · integrate · RED · reverted <short M> …`;
 - the PR (revert profile, REQ-OPS-166) gets the same title, a generated body with marker, and squash auto-merge, so it merges after the Action approval and its required checks.
 
 Unhappy paths:
 - the run is `cancelled` → no revert, and a notice;
 - a `revert/*` PR is already open → no new revert; instead a comment on that PR names `M` and the run URL;
+- on each push to main while a `revert/*` PR is open and behind main, `revert-on-red` rebases the revert branch onto main, re-signs its commits (`-s`), and force-pushes **the revert branch only**. A rebase conflict → an issue labelled `revert-failed`, and the branch is left unchanged;
 - `M` is itself a revert → no revert of the revert; an issue `revert-on-red: main red after revert <sha>` with label `revert-failed`;
 - `[SDLC]`/`[PHASE-N]` → reverted, with no story change;
 - a conflict → an issue labelled `revert-failed` with the run URL, and no PR;
@@ -381,10 +397,12 @@ Unhappy paths:
 
 Tests: the procedure runs as a script against a temp repo with a stub `gh` that records its calls. The tests assert:
 - the branch;
-- both commits (subject form, Signed-off-by, story-file diff);
+- both commits (subject form including `revert(<scope>): reopen STORY-NNN after red main [STORY-NNN]`, Signed-off-by, story-file diff);
 - the title length;
 - the recorded `gh` arguments;
-- the comment path when a revert PR is open.
+- the comment path when a revert PR is open;
+- the rebase path: a revert branch 1 commit behind main is rebased, with every commit still carrying Signed-off-by, and the push targets only `revert/<short M>`;
+- the rebase-conflict path, which opens an issue and leaves the branch unchanged.
 
 A static test asserts that the job runs only after the main gate fails, and that `contents: write`, `pull-requests: write` and `issues: write` are granted only to this job within `main.yml`.
 
@@ -392,7 +410,7 @@ A static test asserts that the job runs only after the main gate fails, and that
 Scope, normalisation, the "Blocked" format (exit 2, rule, `Safe alternative:`) and non-goals are as in REQ-OPS-001. Messages start with the gate id.
 
 **B1b (extends B1).** Every `git push` whose destination is main or master is blocked, with or without force:
-- `main`, `refs/heads/main`, `HEAD:main`, `story/x:main`, `-u origin main`;
+- `main`, `refs/heads/main`, `HEAD:main`, `story/x:main`, `-u origin main`, `+main`, `:main`, `@:main`;
 - no refspec or `HEAD` while main is checked out;
 - `--all`, and `--mirror` (or a prefix of it) from any branch;
 - a glob refspec that can match main (`'refs/heads/*:refs/heads/*'`, `'*:*'`, `'refs/heads/m*'`).
@@ -410,7 +428,7 @@ Message: `[G1] pushing to main is forbidden; only PR merges create commits on ma
 - A gate flow is active when `.claude/state.json` has `pr_flow_active: true` and `pr_flow_branch` matches a profile, with:
   - `story/` and `hotfix/`: state `story` equals the branch's story id;
   - `release/v*`: `release_active: true`;
-  - `dependabot/*`: the PR is merged only, never created.
+  - `dependabot/*`: the PR is merged only, never created (the actor is `/next`, REQ-OPS-166).
 - `gh alias set` whose expansion contains a blocked form is blocked.
 - Always allowed: `gh pr view|checks|list|diff|status|edit`, `gh pr review --comment|--request-changes`, `gh run view|list|rerun`.
 
@@ -426,12 +444,12 @@ Unhappy path: malformed hook JSON never blocks (REQ-OPS-001). The flag is not a 
 ### REQ-OPS-164 — `/story` stage 8 and `/release` call `delivery-gate.py` and refuse on red; G7, M17 and M18 as checks
 **`/story` stage 8** (`.claude/skills/story/SKILL.md` and `integrate.md`) runs in this order:
 1. `git rebase origin/main`. If HEAD's sha changed and non-bookkeeping commits were rewritten, stages 6–7 re-run as loop k+1 (it counts toward M16; above 3 → escalate);
-2. `make gate STAGE=pr-open`. On FAIL, `gh pr create` is **not** run, and the failing rows go to the implementer as a fix loop;
+2. `make gate STAGE=pr-open TITLE="<title>"`. On FAIL, `gh pr create` is **not** run, and the failing rows go to the implementer as a fix loop;
 3. `state.sh pr-flow-on`, with a trap that runs `pr-flow-off` on every exit path;
-4. push, then `gh pr create --title <title> --body-file <generated> --label <labels>`;
+4. push, then `gh pr create --title <title> --body-file <generated> --label <labels>`. On re-entry with an open PR for the branch, it runs `gh pr edit --body-file <generated>` instead;
 5. bookkeeping commits, all before approval:
    - story `status: DONE` with the Status log row `| <date> | integrate | orchestrator | PR #<n>; verify PASS loop <k>; review APPROVE |`;
-   - the PROGRESS line, the ledger row and `make trace`;
+   - the PROGRESS line, the ledger row, `make trace` and `make metrics`;
    - for every DONE story whose merge sha is not yet in PROGRESS, a line `… · STORY-NNN · merged · INFO · <sha>`;
    - then `make gate STAGE=pr-body`, `gh pr edit --body-file` and a push;
 6. `gh pr checks --watch`;
@@ -439,21 +457,28 @@ Unhappy path: malformed hook JSON never blocks (REQ-OPS-001). The flag is not a 
 8. `make gate STAGE=merge PR=<n>`. If it FAILs **only** on G5 after `gh pr checks --watch` has completed:
    - the orchestrator adds a note to `docs/ESCALATIONS.md`;
    - a branch commit sets the story to `status: BLOCKED`, with a Status log row naming OWNER-011/012;
+   - the `make gate STAGE=merge` output is posted as a PR comment;
    - `pr-flow-off` runs, and the orchestrator moves on.
 
-   On any other FAIL → fix loop. On FAIL there is no merge;
+   Until OWNER-011 is resolved, the owner may merge such a PR personally after reading that comment. The next stage-8 bookkeeping commit then records `… · STORY-NNN · merged · INFO · owner merge (G5 manual, OWNER-011)` (decision E1). On any other FAIL → fix loop. On FAIL there is no merge;
 9. `gh pr merge --squash --delete-branch --subject <title> --body <trailers>`, where the trailers are `Story:`, `Reqs:`, `Verify: <path>@<sha>`, `Review: <path>@<sha>` and `Co-Authored-By:`;
 10. `pr-flow-off`, `git switch main && git pull --ff-only`, and the state is cleared.
+
+**Fix loop after step 5.** When stage 8 sends a fix loop after step 5:
+- a bookkeeping commit sets `status: IN_PROGRESS`, with the row `| <date> | integrate | orchestrator | fix loop k: <failing ids> |`;
+- on re-entry with an open PR for the branch, pr-open runs without create, and steps 4–5 use `gh pr edit --body-file`.
+
+Fixture: a story with an open PR at `status: DONE` and a red M3 → after the fix loop, the story file shows `IN_PROGRESS` plus that row. On re-entry, the recorded `gh` calls contain `pr edit --body-file` and no `pr create`.
 
 The local-only `git merge --squash` path is removed: with no remote, the story ends BLOCKED and an escalation is written. The exit gate adds two conditions: `git show origin/main:<story file>` has `status: DONE`, and `state.sh get pr_flow_active` prints `false`.
 
 **`/release`** (`.claude/skills/release/SKILL.md`, `release.yml`):
 1. `make gate STAGE=release` (G7). On FAIL, the skill stops before `release-on`.
 2. The changelog and version bump go to branch `release/vX.Y.Z` as commit `chore(release): vX.Y.Z [SDLC]`. That PR passes G3–G6 under the release profile. `release_active` is on, and `pr-flow-on release/vX.Y.Z` is set.
-3. The tag is created only when HEAD equals origin/main and the tree is clean. The command is `git tag -a vX.Y.Z -F <changelog section file>`, and the tag is pushed alone with `git push origin vX.Y.Z`. The skill never runs `git push origin main`.
+3. After the `release/vX.Y.Z` PR merges, `git switch main && git pull --ff-only` runs and `make gate STAGE=release` is **run again**. Only on PASS is the tag created: HEAD equals origin/main, the tree is clean, `git tag -a vX.Y.Z -F <changelog section file>`, and the tag is pushed alone with `git push origin vX.Y.Z`. The skill never runs `git push origin main`.
 4. After staging: `make gate STAGE=release-staging` (M17). On FAIL, staging is rolled back and the skill stops.
 5. After the production deploy and its 30-minute window: `make gate STAGE=post-deploy` (M18). On FAIL, `make rollback` runs without asking, an incident file is written, and `/bug` is opened. In `release.yml`, `deploy-prod` runs the same check and `make rollback` on failure.
-6. Post-deploy bookkeeping goes through PR `release/vX.Y.Z-deployed`: the `docs/DEPLOY.md` `prod-deployed vX.Y.Z …` marker, PROGRESS, the ledger, and commit `docs(release): vX.Y.Z notes [SDLC]`. The S16 first-deploy check reads the marker on origin/main; the checkpoint itself is unchanged.
+6. Post-deploy bookkeeping goes through PR `release/vX.Y.Z-deployed`: the `docs/DEPLOY.md` `prod-deployed vX.Y.Z …` marker, PROGRESS, the ledger, and commit `docs(release): vX.Y.Z notes [SDLC]`. `release-off` runs only after that PR has merged, and also on every failure path. The S16 first-deploy check reads the marker on origin/main; the checkpoint itself is unchanged.
 7. The `release-please` job is removed from `release.yml`'s route, because PRs it opens with `GITHUB_TOKEN` run no `pull_request` checks.
 8. The hotfix mode is in REQ-OPS-167.
 
@@ -463,7 +488,7 @@ The local-only `git merge --squash` path is removed: with no remote, the story e
   - the latest `nightly.yml` run on main is `success` and ≤ 24 h old;
   - no `.review.md` on main has an open BLOCKER/MAJOR row (Resolution not `fixed <sha>`);
   - `docs/SDLC_SELFTEST.md` shows `Verdict: **GREEN**`, generated ≤ 7 days ago;
-  - the restore-test evidence (yaml path; produced by STORY-124) is ≤ 30 days old;
+  - row `M17 restore test`: the restore-test evidence (yaml path under M17; produced by STORY-124) is ≤ 30 days old. It is a precondition reported in the `release` check;
   - HEAD equals origin/main and the tree is clean;
 - `release-staging` (M17) PASSes only if:
   - the smoke exit is 0;
@@ -495,12 +520,20 @@ A static test over the skill bash blocks checks:
 - `make gate STAGE=merge` comes before `gh pr merge`;
 - `pr-flow-off` appears in a trap;
 - there is no `git merge --squash` into main and no `git push origin main`;
-- `/release` runs `make gate STAGE=release` before `release-on`;
+- `/release` runs `make gate STAGE=release` before `release-on`, and again between the release PR merge and `git tag`;
 - the tag uses `git tag -a … -F`;
+- `release-off` comes after the `-deployed` PR merge;
 - `release.yml` has no `release-please` job on the release route.
 
 ### REQ-OPS-165 — `make gate`, `docs/DELIVERY_GATES.md` linked from CLAUDE.md, five new self-test rows PROVEN
-**`make gate STAGE=<x> [PR=<n>]`** runs `delivery-gate.py <x>` (adding `--pr <n>` when `PR` is given) and passes its exit code through. The valid stages are `pr-open`, `approve`, `merge`, `verify`, `review`, `size`, `commits`, `docs`, `ci`, `pr-body`, `pr-body-lint`, `suppressions`, `release`, `release-staging` and `post-deploy`. A missing or unknown `STAGE` exits 2 and lists them. `make help` lists `gate`.
+**`make gate STAGE=<x> [PR=<n>] [TITLE=<t>] [STORY=<id>] [HOTFIX_OF=<tag>] [HOTFIX=<squash sha>]`** runs `delivery-gate.py <x>` and passes its exit code through. The variables map to options:
+- `PR` → `--pr <n>`;
+- `TITLE` → `--title "<t>"`;
+- `STORY` → `--story <id>`;
+- `HOTFIX_OF` → `--hotfix-of <tag>`;
+- `HOTFIX` → `--hotfix <squash sha>`.
+
+There is one test per variable, asserting the option reaches `delivery-gate.py` with quoting preserved (a title with spaces and `[STORY-145]`). The valid stages are `pr-open`, `approve`, `merge`, `verify`, `review`, `size`, `commits`, `docs`, `ci`, `pr-body`, `pr-body-lint`, `suppressions`, `release`, `release-staging` and `post-deploy`. A missing or unknown `STAGE` exits 2 and lists them. `make help` lists `gate`.
 **`docs/DELIVERY_GATES.md`** is the human version of addendum §1–§3. It contains:
 - the M1–M18 table;
 - G1–G8 sections;
@@ -531,10 +564,10 @@ Unhappy path: a planted violation that is not blocked gives a `FAILED` row, and 
 | profile | branch | applies | M13 form | not applicable (`SKIP not applicable: …` / CI success) |
 |---|---|---|---|---|
 | story | `story/STORY-NNN-<slug>` | M1–M16, pr-body-lint, ai-review | `type(scope): … [STORY-NNN]`, Signed-off-by, `Story:` | — |
-| revert | `revert/<7-40 hex>` | M1–M9, M13, M15, pr-body-lint, ai-review | `revert(<scope>): … [STORY-NNN\|SDLC\|PHASE-N]`, Signed-off-by from `git revert -s` | M10, M11, M16: `revert of <sha>`; M12, M14: `revert of <sha>` |
-| release | `release/v<X.Y.Z>[-deployed]` | M1–M9, M13, M15, pr-body-lint, ai-review | tag `[SDLC]` or `[PHASE-N]`, Signed-off-by | M10, M11, M12, M14, M16: `release bookkeeping` |
+| revert | `revert/<7-40 hex>` | M1–M9 (M5 and M7 vs `M^`), M13, M15, `revert content`, pr-body-lint, ai-review | `revert(<scope>): … [STORY-NNN\|SDLC\|PHASE-N]`, Signed-off-by from `git revert -s` | M10, M11, M16: `revert of <sha>`; M12, M14: `revert of <sha>` |
+| release | `release/v<X.Y.Z>[-deployed]` | M1–M9, M13, M15, `G7 release content` (`release_paths` only), pr-body-lint, ai-review | tag `[SDLC]` or `[PHASE-N]`, Signed-off-by | M10, M11, M12, M14, M16: `release bookkeeping` |
 | hotfix | `hotfix/STORY-NNN-<slug>` | as story, plus M5 `--require-increase` (REQ-OPS-167) | as story | — |
-| dependabot | `dependabot/**` | M1–M9, M15, ai-review | the merge step rewrites the squash title to `build(deps): <subject> [SDLC]` (≤ 72, subject truncated) | M10, M11, M12, M13, M14, M16, pr-body-lint: `dependency bot PR` |
+| dependabot | `dependabot/**` (merged by `/next`) | M1–M9, M15, ai-review (Dependabot secret) | the merge step rewrites the squash title to `build(deps): <subject> [SDLC]` (≤ 72, subject truncated) | M10, M11, M12, M13, M14, M16, pr-body-lint: `dependency bot PR` |
 
 Routes:
 - pr-open serves story, hotfix and release;
@@ -543,6 +576,20 @@ Routes:
 - the Action approval job evaluates `approve` for the PR's profile;
 - /release bookkeeping reaches main only through `release/v*` PRs (REQ-OPS-164).
 
+**Revert content.** On the revert profile, M5 and M7 compare HEAD with `M^` (the parent of the reverted squash `M`), not with origin/main, which still contains `M`. The row `revert content` passes only when `git diff --name-only M^ HEAD` lists bookkeeping paths only. Otherwise FAIL `revert profile: diff is not the inverse of <short M>`.
+
+**Release content.** On the release profile, the row `G7 release content` passes only when every path in the branch diff is in yaml `release_paths`. Otherwise FAIL `release branch changes non-release path <p>`.
+
+**Dependabot actor and steps.** `/next` handles open Dependabot PRs before picking a story (this edits `.claude/skills/next/SKILL.md` in 145.9). For each open `dependabot/**` PR whose checks have completed, it runs:
+1. `state.sh pr-flow-on <head branch>`;
+2. `make gate STAGE=merge PR=<n>`;
+3. on PASS, `gh pr merge <n> --squash --delete-branch --subject "build(deps): <subject> [SDLC]"`, with the title truncated to 72;
+4. `pr-flow-off`, in a trap.
+
+On FAIL it leaves the PR open, comments the gate output on it, and continues with stories. Approval comes from a listed approver: `github-actions[bot]`, or `mohamedshehataa`, who is not the author. The ai-review on Dependabot runs needs `ANTHROPIC_API_KEY` as a **Dependabot secret** (OWNER-012, REQ-OPS-161). The M14 exemption is deviation 20.
+
+**Branch matching.** A `hotfix/*` branch that does not match `hotfix/STORY-NNN-<slug>` exits **1** with the FAIL row `G8 branch must be hotfix/STORY-NNN-<slug>` (REQ-OPS-167). Exit 2 `no gate profile` is only for branches matching no profile glob at all.
+
 Fixtures (one passing approve+merge fixture per profile) plus:
 - a revert PR whose commit subject is `Revert "x"` → FAIL `M13`;
 - a revert commit without Signed-off-by → FAIL `M13`;
@@ -550,6 +597,12 @@ Fixtures (one passing approve+merge fixture per profile) plus:
 - a dependabot merge prints the squash title `build(deps): bump x from 1 to 2 [SDLC]`;
 - a 90-character dependabot subject → the title is truncated to 72;
 - the release profile shows M12 as `SKIP not applicable: release bookkeeping`;
+- the revert of a squash that added 2 test files and 1 endpoint → M5 and M7 PASS against `M^`, and `revert content` PASSes;
+- the same revert plus one extra code line → FAIL `revert profile: diff is not the inverse of <short M>`;
+- `release/v1.2.3` touching `backend/src/…` → FAIL `release branch changes non-release path backend/src/…`;
+- `release/v1.2.3` touching only `CHANGELOG.md` and `docs/PROGRESS.md` → PASS;
+- `/next` with one open dependabot PR (stub `gh`) → the recorded calls are `pr-flow-on`, `make gate STAGE=merge`, `gh pr merge … --subject "build(deps): … [SDLC]"` and `pr-flow-off`;
+- `hotfix/quick-fix` → exit 1 with the G8 row;
 - branch `feature/x` → exit 2 `no gate profile for branch feature/x`.
 
 ### REQ-OPS-167 — Hotfix flow (G8)
@@ -559,7 +612,7 @@ Fixtures (one passing approve+merge fixture per profile) plus:
 - **M5** runs `test-integrity-check.sh origin/main --require-increase`. Net assertions (now − base) must be > 0, or FAIL `[M5] hotfix needs net assertion increase (n -> n)`. The same applies in pre-push and `gate/M5`;
 - B15 allows create and merge for the hotfix flow (REQ-OPS-163); M13 applies as for a story;
 - after the squash merge, `/release vX.Y.(Z+1) --hotfix <squash sha>`:
-  - creates `maint/vX.Y` from `vX.Y.Z` if it is absent (the addendum's "release branch", named so it does not match the `release/v*` PR profile);
+  - creates `maint/vX.Y` from `vX.Y.Z` if it is absent (the addendum's "release branch", named so it does not match the `release/v*` PR profile). Pre-push bases for `maint/v*` are in REQ-OPS-160;
   - runs `git cherry-pick -x -s <squash sha>` and pushes `maint/vX.Y` (not main; pre-push M1/M5 apply);
   - runs `make gate STAGE=release --hotfix`: G7 applies, with "HEAD equals origin/main" replaced by "HEAD equals origin/maint/vX.Y, whose tip's patch-id equals the squash commit's";
   - tags `vX.Y.(Z+1)` with `git tag -a -F <changelog section>` and pushes only the tag.
@@ -569,13 +622,13 @@ Unhappy fixtures:
 - 120 → 118 → FAIL;
 - `--hotfix-of v9.9.9` (no tag) → FAIL `G8 tag v9.9.9 not found`;
 - `--hotfix-of v1.0.0` when `v1.1.0` exists → FAIL `G8 not the latest release tag`;
-- branch `hotfix/quick-fix` → FAIL `G8 branch must be hotfix/STORY-NNN-<slug>`;
+- branch `hotfix/quick-fix` → exit 1, FAIL `G8 branch must be hotfix/STORY-NNN-<slug>`;
 - patch version `v1.1.2` after `v1.1.0` → FAIL `G8 expected v1.1.1`;
 - a cherry-pick conflict → `/release` stops BLOCKED with an escalation, and no tag is created;
 - a maint tip whose patch-id differs → FAIL `G8`.
 
 ## Sanctioned test changes
-These rows are read by the M5 consumers (REQ-OPS-160). Kinds are `flip` or `deletion` only. The match key is the file plus the assertion id as printed by `test-integrity-check.sh`. The test-designer lists each change of an existing assertion in its report; the orchestrator adds the row (the test-designer cannot write `docs/backlog/`) and the DECISIONS line, before the increment's verify. The rows below are pre-filled from known changes.
+These rows are read by the M5 consumers (REQ-OPS-160). Kinds are `flip` or `deletion` only. The match key is the file plus the assertion id as printed by `test-integrity-check.sh`. The test-designer lists each change of an existing assertion in its report; the orchestrator adds the row (the test-designer cannot write `docs/backlog/`) and one DECISIONS line per row, `STORY-145 sanctioned test change: <file> <assertion id>`, before the increment's verify. The allowance per (file, assertion id) equals the number of matching rows, so the two `expect 0` rows below allow a drop of exactly 2. The rows below are pre-filled from known changes.
 
 | kind | file | assertion id | case | was → now | superseded by |
 |---|---|---|---|---|---|
@@ -621,7 +674,10 @@ Filled at stage 3. Open for design:
 - the `revert-on-red` token and whether the procedure is a script;
 - the structure of `delivery-gate.py` and its GitHub read adapter;
 - the restore/rollback evidence paths;
-- the a/b splits of increments estimated > 450.
+- the a/b splits of increments estimated > 450;
+- the version files listed in `release_paths` (decision E3);
+- the CHANGELOG generator `/release` uses;
+- where a hotfix patch release bumps versions (on `maint/vX.Y`, with or without a forward PR to main).
 
 ## Implementation increments (all on `story/STORY-145-delivery-gates`)
 Each increment is its own TDD → implement → verify → review cycle:
@@ -639,13 +695,13 @@ After the last increment:
 |---|---|---|---|---|
 | 145.1 | 150 (yaml, loader, output, duplicates, commit-msg-lint + coverage-gate legs, config/usage) | `delivery-gates.yaml`, `quality-thresholds.yaml` keys, loader | ≈ 380 | — |
 | 145.2 | 151, 153, 154; 150 (commits + size legs) | `verify`, `size`, `commits` | ≈ 400 | 145.1 |
-| 145.3 | 152, 155 | `review` (+ GitHub read adapter), `docs`, review template `## Verdicts` | ≈ 400 | 145.2 |
+| 145.3 | 152, 155 | `review` (+ GitHub read adapter), `docs`, review template `## Verdicts`; `docs/templates/story.md` gains an optional frontmatter `tags:` and optional `## Rollback plan` / `## Sanctioned test changes` sections, and `sdlc-lint.py` accepts them (test: a story with all three passes sdlc-lint, and one without them still passes) | ≈ 420 | 145.2 |
 | 145.4 | 156 | `ci` (event filter, attempts, quarantine) | ≈ 330 | 145.3 |
 | 145.5 | 157, 158 | `pr-open`, body generator, `pr-body`, `pr-body-lint`, PR template | ≈ 450 | 145.4 |
 | 145.6 | 159, 166 (composites, profile fixtures), 167 (`pr-open --hotfix-of`) | `approve`, `merge`, `coverage-gate.py --diff-base`, `traceability.py` story-strict, profiles | > 450 (split a/b) | 145.5 |
 | 145.7 | 160, 163; 150 (pre-push leg); 166 (B15 legs); 167 (`--require-increase`) | lefthook, `pre-push-guard.sh`, M5 semantics, scan-secrets rule, guard-bash B1b/B15, `state.sh` (hooks unlock) | > 450 (split a/b) | 145.1 **and LOOP-002 resolved** |
 | 145.8 | 161, 162; 150 (workflow static leg) | `pr.yml`, AI review STATUS, Action approval, labeler, `main.yml` baselines + `revert-on-red` | > 450 (split a/b) | 145.6, 145.7 |
-| 145.9 | 164, 167 (/release hotfix mode); 166 (release route) | `/story` stage 8, `/release`, `release.yml`, `release`/`release-staging`/`post-deploy` | > 450 (split a/b) | 145.8 |
+| 145.9 | 164, 167 (/release hotfix mode); 166 (release route, release content, `/next` dependabot steps) | `/story` stage 8 incl. fix-loop re-entry, `/release`, `/next`, `release.yml`, `release`/`release-staging`/`post-deploy` | > 450 (split a/b) | 145.8 |
 | 145.10 | 165 | `make gate`, `docs/DELIVERY_GATES.md` + test, CLAUDE.md link, selftest D1–D5 | ≈ 350 | 145.9 |
 
 Increments 145.1–145.6 change no hook and no `lefthook.yml`, so they may start before LOOP-002 is resolved. 145.7 and later wait for LOOP-002 (decision D3).
@@ -656,10 +712,10 @@ Increments 145.1–145.6 change no hook and no `lefthook.yml`, so they may start
 - **OWNER-011: G5 approval identity** (open). Every PR author is `mohamedshehataa`, and GitHub forbids authors approving their own PRs. The approval that `merge` requires must come from a listed non-author in `approvers` (D7):
   - (a) `github-actions[bot]`, which needs "Allow GitHub Actions to create and approve pull requests" (`can_approve_pull_request_reviews` was false on 2026-10-24) **and** OWNER-012;
   - or `mohamedshehataa` approving a PR opened by another account (options b and c).
-- **OWNER-012: the `ANTHROPIC_API_KEY` repository secret** (open). Without it, `gate/M11 ai-review` fails by design.
+- **OWNER-012: `ANTHROPIC_API_KEY` as an Actions secret and a Dependabot secret** (open). Without the Actions secret, `gate/M11 ai-review` fails by design on every PR. Without the Dependabot secret, it fails on Dependabot PRs.
 - **Proposed OWNER-013:** a workflow-triggering token and "Allow auto-merge" for `revert-on-red`. It is not needed for STORY-145's own merge.
 - **Push protection** (D9): the owner enables it, or STORY-016 does.
-- **Interim route caveat (D4):** resolved by the orchestrator's correction in Dependencies (the owner merges interim PRs personally; no author approval is needed).
+- **Interim route (D4 as corrected, E1):** the owner merges interim PRs personally (no author approval is needed). The route lasts until OWNER-011 is resolved; see Dependencies.
 
 ## Definition of Done for this story (addendum §5)
 - All §4 deliverables exist (REQ-OPS-150..167).
@@ -670,7 +726,7 @@ Increments 145.1–145.6 change no hook and no `lefthook.yml`, so they may start
 That last criterion is **blocked on OWNER-011 and OWNER-012**. Until both are settled, the orchestrator:
 - finishes all increments and the final verify and review;
 - runs pr-open and opens the PR;
-- when `merge` FAILs only on G5, sets `status: BLOCKED` (REQ-OPS-164 step 8). That status reaches main through the interim route.
+- when `merge` FAILs only on G5, sets `status: BLOCKED` with an escalation and posts the merge output on the PR (REQ-OPS-164 step 8). The owner may then merge personally (E1). That merge is logged as `… · STORY-145 · merged · INFO · owner merge (G5 manual, OWNER-011)`, but it does **not** satisfy the final DoD criterion. That criterion needs an approval by a listed non-author.
 
 **Demonstration, once both are settled** (evidence in the final `.review.md` and the Status log):
 - `gh pr checks <n>`: all 18 checks pass;
@@ -698,13 +754,24 @@ That last criterion is **blocked on OWNER-011 and OWNER-012**. Until both are se
 17. **DECISIONS lines count anywhere in the file at HEAD.** Lines for the story are accepted at HEAD even when committed outside the branch diff (M5, M12, M14, M16).
 18. **The hotfix maintenance branch is `maint/vX.Y`**, not `release/vX.Y`, so it does not match the release PR profile. Hotfix tags come from the maint tip rather than main's HEAD.
 19. **Gate flows in guard-bash** are identified by `pr_flow_branch` plus the profile condition, not only by the current branch.
+20. **Profile exemptions** (each with its reason):
+    - **revert:** M10, M11, M16 (the reverted commit already passed them, and a revert has no new spec); M12, M14 (the diff is the inverse of a gated diff, checked by `revert content`).
+    - **release:** M10, M11, M12, M14, M16 (bookkeeping limited to `release_paths`, checked by `G7 release content`).
+    - **dependabot:** M10, M11, M12, M13, M16 and pr-body-lint (a bot PR with no story, commits or generated body). M14 too, because Dependabot cannot add DECISIONS lines; the version change is recorded by the lockfile/manifest diff and the PR title (decision E2).
+21. **`ref:` entries** replace literal values for M3, M4 and M9 in `delivery-gates.yaml`. The values stay in `quality-thresholds.yaml` and `eval/thresholds.yaml`, so each is defined once.
+22. **M12 extra exclusions** beyond the addendum's "generated, wrapper, vendored": lockfiles and `verification-metadata.xml` (machine-written), `docs/backlog/**` (spec and report artefacts) and the generated docs `docs/TRACEABILITY.md`, `docs/SDLC_METRICS.md` and `docs/SDLC_SELFTEST.md`.
 
 ## Dependencies
 - **STORY-001** is **BLOCKED on LOOP-002**: verification loop 3/3 failed. The options are (a) one extra loop scoped to the 4 findings (recommended), (b) DONE-with-known-defects plus a new story, and (c) accept the risk.
   - Increments 145.1–145.6 change no hooks or lefthook config, so they may start before LOOP-002 resolves. This is an orchestrator exception (D3) to `/story` step 0.2, which requires `depends_on` to be DONE.
   - 145.7 and later wait for LOOP-002.
 - **Branch base (D3).** `story/STORY-145-delivery-gates` is cut from the current tip of `story/STORY-002-walking-skeleton-health-version`, because main lacks the SDLC until that branch merges. Before pr-open, once that branch has merged, STORY-145 is moved with `git rebase --onto origin/main <STORY-002 tip at the cut> HEAD`. Its branch diff then holds only STORY-145 commits. Until then, M12 and M13 are measured from the cut point.
-- **Interim route (D4, corrected by the orchestrator 2026-10-24).** Until STORY-145 merges, other stories reach main through a PR to main that the **owner merges personally** in the GitHub UI after reading the manual delivery-gate table in that story's `.review.md`; the owner's merge is the manual G5 approval (GitHub forbids the author's APPROVED review, and every PR is opened by the owner's account). The orchestrator never runs `gh pr merge` on the interim route. STORY-145's own BLOCKED status reaches main the same way. Once OWNER-011 is decided, G5 follows REQ-OPS-159.
+- **Interim route (D4, corrected by the orchestrator 2026-10-24).** Until STORY-145 merges, other stories reach main through a PR to main that the **owner merges personally** in the GitHub UI after reading the manual delivery-gate table in that story's `.review.md`; the owner's merge is the manual G5 approval (GitHub forbids the author's APPROVED review, and every PR is opened by the owner's account). The orchestrator never runs `gh pr merge` on the interim route. STORY-145's own BLOCKED status reaches main the same way. **The interim route ends when OWNER-011 is resolved, not when STORY-145's code reaches main (E1).** After STORY-145 merges and until OWNER-011 is resolved:
+- a G5-only FAIL at stage 8 step 8 marks the story BLOCKED with an escalation;
+- the owner may merge personally after reading the `make gate STAGE=merge` output posted on the PR;
+- the merge is logged as `… · STORY-NNN · merged · INFO · owner merge (G5 manual, OWNER-011)`.
+
+Once OWNER-011 is resolved, G5 follows REQ-OPS-159 only.
 - No dependency on Phase 1+ work. STORY-016 (Phase 1, now DRAFT) later applies branch protection with this story's `required_checks`, `approvers` and push protection. STORY-124 (Phase 9) produces the restore evidence; until then G7 FAILs by design.
 - Owner: OWNER-011, OWNER-012, proposed OWNER-013, push protection.
 
@@ -724,3 +791,4 @@ That last criterion is **blocked on OWNER-011 and OWNER-012**. Until both are se
 |---|---|---|---|
 | 2026-10-24 | 1-2 spec | product-analyst | READY: addendum specified as REQ-OPS-150..165; size L under the M12 exception in 10 increments; final DoD criterion blocked on OWNER-011/012 |
 | 2026-10-24 | 2 spec fix loop 1 | product-analyst | READY: all 42 spec-review findings applied with orchestrator decisions D1–D10; new REQ-OPS-166 (branch-class profiles) and REQ-OPS-167 (hotfix G8); strict HEAD rule; required checks (14) and approvers in the yaml; STORY-016 back to DRAFT; D5 row-3 assertion id corrected to `assert_allowed` (flagged); D4 owner-approval caveat flagged |
+| 2026-10-24 | 2 spec fix loop 2 (final) | product-analyst | READY: all 21 loop-2 proposals applied verbatim with decisions E1–E3: revert content vs `M^`, `release_paths` + `G7 release content`, deviations 20–22, stage-8 fix-loop re-entry, `maint/v*` pre-push base, count-based sanctioned allowance, interim route ends at OWNER-011, Dependabot via `/next` + Dependabot secret, make gate variables, per-profile PR body fixtures, restore test as M17, M15 timed_out/cancelled, AI-review severity prefix, story template sections |
