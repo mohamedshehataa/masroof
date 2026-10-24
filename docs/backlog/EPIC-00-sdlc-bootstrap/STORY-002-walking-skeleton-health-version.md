@@ -3,7 +3,7 @@ id: STORY-002
 epic: EPIC-00
 title: "Walking skeleton (backend): Gradle module + fast gate + V1 baseline + ArchUnit rules and probe"
 phase: 0
-status: READY
+status: DONE
 size: M
 modules: [backend]
 depends_on: [STORY-001]
@@ -311,6 +311,16 @@ Excluded: Gradle wrapper, Spring Initializr base files, vendored Checkstyle conf
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 2 spec-review | spec-reviewer | CHANGES_REQUESTED x2 -> split 002/143/141/142; loop limit recorded (LOOP-001) |
+| 2026-10-23 | 3 design | architect | DESIGN_READY (ADR-0002, ADR-0003) |
+| 2026-10-23 | 4 tdd | test-designer | TESTS_FAILING_AS_EXPECTED (db2d8a2) |
+| 2026-10-23 | 5 implement | backend-engineer | READY_FOR_VERIFY (d86e255) |
+| 2026-10-24 | 6 verify | qa-verifier | PASS loop 1 (4 MINOR, 4 NIT) |
+| 2026-10-24 | 7 review | code-reviewer / security-reviewer | APPROVE / CHANGES_REQUESTED (2 MAJOR: CVEs, no lockfile) |
+| 2026-10-24 | 5 implement | backend-engineer | READY_FOR_VERIFY fix loop 1 (3f5ac58) |
+| 2026-10-24 | 6 verify | qa-verifier | PASS loop 2 (3 MINOR, 5 NIT) |
+| 2026-10-24 | 7 review | security-reviewer | APPROVE (476eacf) |
+| 2026-10-24 | 8 integrate | orchestrator | DONE; follow-ups: money-rule constructor gap + V1 CHECKs -> STORY-004; guard/profile NITs -> STORY-143 |
 | 2026-10-23 | 2 spec review | spec-reviewer | CHANGES_REQUESTED (split, rate limit, DB down, provenance, ArchUnit scope, V1 DDL) |
 | 2026-10-23 | 1-2 spec fix | product-analyst | DRAFT — split into STORY-002/141/142, findings applied; size ≈ 615 lines > 400 |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — orchestrator accepted the size split: REQ-OPS-020 moved to STORY-143; ≈ 285 lines |

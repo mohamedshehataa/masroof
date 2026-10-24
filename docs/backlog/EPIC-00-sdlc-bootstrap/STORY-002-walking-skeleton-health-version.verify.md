@@ -1,73 +1,98 @@
 # Verification report — STORY-002
 
-- **Verifier:** qa-verifier (fresh context)  ·  **Date:** 2026-10-23  ·  **Base:** `68008e6d546b285f0541f06cca4b8115ec0ccc76`  ·  **Tests:** `db2d8a251864e22dd3a5372d08434361433ec236`  ·  **Head:** `d86e255b7a4caef3fbb79b13a071864c0e6138cd`
-- **Loop:** 1 of 3
+- **Verifier:** qa-verifier (fresh context)  ·  **Date:** 2026-10-24  ·  **Base:** `68008e6d546b285f0541f06cca4b8115ec0ccc76`  ·  **Tests:** `db2d8a251864e22dd3a5372d08434361433ec236`  ·  **Head:** `3f5ac581e40cfc68f487eb6c22f5a9c8e908604a` (fix commit)
+- **Loop:** 2 of 3
 
 ## Environment
-Windows 11, Git Bash, `source scripts/env.sh`, JAVA_HOME = Temurin 21.0.12.1, Docker Engine 29.9.2. Branch `story/STORY-002-walking-skeleton-health-version`, not committed. Exploratory plants were made in an isolated copy (`git archive HEAD backend` into the scratchpad, with its own `git init` and the repo `.gitattributes`). Nothing was planted in the real tree by hand. Only the gate probes and selftest planted files there, and both reverted them: `git status --porcelain backend/src` is clean afterwards.
-- `./gradlew --console=plain checkFast --rerun-tasks --no-build-cache` -> BUILD SUCCESSFUL in 15 s. These tasks ran: compileJava, checkstyleMain, compileTestJava, spotlessJava/spotlessJavaCheck/spotlessCheck, spotbugsMain, test, checkFast, jacocoTestReport. The unit `test` task ran 4 tests (MoneyRuleProbeTest), 0 failed.
-- `make check-fast MODULE=backend` x2 -> rc 0, 2 s / 2 s (warm).
-- `make check-fast` (no MODULE) -> rc 0, "check-fast GREEN [sdlc backend] in 217s".
-- `make check` -> rc 0 in 545 s, "check GREEN". It covered check-fast [sdlc backend], the gate probes (6/6 PASS), integrationTest, archTest, contract diff, the coverage gates, traceability and test integrity.
-- `./gradlew archTest integrationTest migrationTest --rerun-tasks` -> archTest 9/9 (rules 1-7; rules 2 and 6 have two constants each), integrationTest 7/7, migrationTest 7/7.
-- `make selftest` -> rc 0, "15 proven, 0 pending, 0 failed". The G4 row is now **PROVEN**. This run updated docs/SDLC_SELFTEST.md, which is selftest's own output.
-- `make trace` -> "325 REQs, 12 covered, 12 passing, 0 unknown, gate PASS". REQ-OPS-023 and REQ-OPS-024 are both PASS.
-- `python scripts/quality/sdlc-lint.py` -> "0 error(s), 0 warning(s)".
-- `./gradlew pitest` (scratch copy) -> BUILD SUCCESSFUL, "No mutations found", no mutations.xml (accepted). With a planted domain class it generated 3 mutations and wrote mutations.xml, so targetClasses is wired.
-- JaCoCo: `backend/build/reports/jacoco/test/jacocoTestReport.xml` is produced (sessioninfo only). The coverage gate reads it, and its backend rows are SKIP "no data for token". The PIT row is SKIP and points at make check-full (accepted).
-- docs/DECISIONS.md:85 records google-java-format 1.36.0 (Spotless 8.10.4 + 1.37.0 fails), and build.gradle.kts pins `googleJavaFormat("1.36.0")`. DECISIONS:51 records the text vs varchar resolution in favour of the story.
-- V1__baseline.sql is byte-for-byte the story DDL (text columns), plus the header comment.
-- backend/README.md is 10 lines and covers checkFast, archTest, spotlessApply, integrationTest/migrationTest, pitest, the JaCoCo path, the root make targets and the do-not-edit files.
+Windows 11, Git Bash, `source scripts/env.sh`, JAVA_HOME = Temurin 21.0.12.101, Docker running. Branch `story/STORY-002-walking-skeleton-health-version`; nothing was committed. All plants were made in isolated copies made with `git archive HEAD` in the scratchpad (one backend-only copy and one full-repo copy, each with its own `git init`). The only real-tree side effect is `docs/TRACEABILITY.md`, which `make check` regenerates. `git status --porcelain backend/src scripts` is clean. A network outage hit during the run. Every result below was re-run or confirmed after it; one `--refresh-dependencies` run that the outage broke is excluded.
+- `./gradlew --console=plain checkFast archTest integrationTest migrationTest --rerun-tasks` -> rc 0 in 43 s. Results:
+  - test 9/9: MoneyRuleProbeTest 6, ProdDatabasePasswordGuardTest 3
+  - archTest 9/9
+  - integrationTest 7/7 and migrationTest 7/7, on `postgres:16.11-alpine` (Testcontainers log line "Container postgres:16.11-alpine started")
+- `make check-fast MODULE=backend` x2 (warm) -> rc 0 in 3 s / 3 s.
+- `make check` -> rc 0 in **436 s** (previously 545 s), "check GREEN". Some of my scratch-copy builds overlapped this run, so 436 s is an upper bound. Steps:
+  - check-fast [sdlc backend] OK in 365 s
+  - gate probes 6/6 PASS; case 5 is now `make -n`
+  - integrationTest OK, archTest OK, contract diff OK
+  - coverage gates PASS
+  - traceability "326 REQs, 13 covered, 13 passing, gate PASS"
+  - test integrity OK
+- `bash scripts/quality/tests/backend-gate-probes.sh` standalone -> rc 0 in 18 s, "6 case(s), 0 failed".
+- `make security` x2 -> rc 0 / rc 0 (5 s each), "security GREEN". gitleaks reported "no leaks found". osv-scanner reported "No issues found". trivy fs OK. semgrep was skipped (not installed). The output was identical across both runs, so it is not flaky.
+- `osv-scanner scan source -r --no-ignore backend` -> rc 0, "No issues found". It scanned `gradle.lockfile` (183 packages), `buildscript-gradle.lockfile` (53) and `gradle/verification-metadata.xml` (373).
+- `bash scripts/quality/test-integrity-check.sh db2d8a2` -> "assertions: 34 (base) -> 99 (now)", "TEST_INTEGRITY: OK". `.claude/state/test-integrity.log` has no STORY-002 entries; its 6 entries are STORY-001 work on test-test-integrity-check.sh.
+- Lockfiles:
+  - runtime: jackson-core/databind 2.21.8, postgresql 42.7.14 and log4j-api 2.25.5 on the runtime/compile classpaths
+  - test classpath: commons-compress 1.28.0
+  - buildscript: jackson 2.21.8, commons-lang3 3.18.0, httpclient5 5.6.5, httpcore5/-h2 5.4.4
+  - `verification-metadata.xml` has `verify-metadata=true` (sha256) and `verify-signatures=false` (documented).
+- Fix-loop claims checked in the diff and present:
+  - `.github/workflows/pr.yml` and `main.yml` both have the `gradle/actions/wrapper-validation@v4` step.
+  - THREAT_MODEL has the B7 channel-binding / migration-user text, the new S row and the "Build supply chain" table (4 rows).
+  - ASVS_CHECKLIST has the `V13.1.x (backend)` row.
+  - application.yml uses `${POSTGRES_PASSWORD:}` only under `on-profile: "!prod"` and `${POSTGRES_PASSWORD}` under `prod`.
+- Architecture: ProdDatabasePasswordGuard sits in `eg.masroof.adapters.out.persistence`. That fits backend/CLAUDE.md: adapters/out/persistence owns the datasource and Flyway, and the guard protects that connection. archTest passes with it (9/9), including ADAPTER_SLICES_INDEPENDENT, which now has a real `out.persistence` slice. No placement finding.
 
 ## Criteria
 | REQ | Result | Evidence (command -> observed) |
 |---|---|---|
-| REQ-OPS-023 | PASS | `./gradlew checkFast --rerun-tasks --no-build-cache` -> exit 0. All listed tasks executed. `-Werror` + Error Prone + NullAway (AnnotatedPackages=eg.masroof) are present on all JavaCompile tasks. Exploratory runs confirmed each one bites: an EP warning (MissingOverride), a rawtypes lint, NullAway and SpotBugs HIGH (IL infinite recursion) all fail the build. `make check-fast MODULE=backend` warm -> rc 0 in 2 s (< 180 s). `make check-fast` -> rc 0, sdlc + backend headers present. `make check` -> rc 0 in 545 s (< 15 min). Inside it, `backend-gate-probes.sh` gave PASS for the tab file (named + spotless/checkstyleMain/compileJava), the unused import (named + compileJava), the NullAway nullable dereference (`GateProbeNull.java:N` + `[NullAway]`), dispatch, warm < 3 min, and the clean tree. archTest and integrationTest are green there. |
-| REQ-OPS-024 | PASS | `./gradlew integrationTest migrationTest --rerun-tasks` -> 7/7 each on postgres:16-alpine. flyway_schema_history has exactly (1, true, V1__baseline.sql). The columns, types, NOT NULL and PK match. Defaults are EGP / Africa/Cairo / 1 / non-null timestamps. month_start_day 0 and 29 -> 23514; 1 and 28 are accepted. `./gradlew archTest` -> 9 rule constants for rules 1-7, all pass on the skeleton with allowEmptyShould. MoneyRuleProbeTest (in `test`/checkFast) -> the BadMoney AssertionError contains "BadMoney". `make selftest` -> G4 PROVEN. Reproducing the G4 plant in the scratch copy fails archTest in MONEY_RULE with "Field <eg.masroof.domain.SelftestPlant.amount> has raw type double" in the JUnit XML. |
+| REQ-OPS-023 | PASS | **Gradle gates:** `./gradlew checkFast archTest integrationTest migrationTest --rerun-tasks` -> rc 0. These tasks ran: compileJava, checkstyleMain, compileTestJava, spotlessCheck, spotbugsMain, test, checkFast. **Warm budget:** `make check-fast MODULE=backend` warm -> rc 0 in 3 s (< 180 s). **Full check:** `make check` -> rc 0 in 436 s (< 15 min). Its first step "check-fast [sdlc backend]" proves the no-MODULE dispatch exits 0. **Probes:** `backend-gate-probes.sh` -> 6/6 PASS. Case 3 now requires `RemoveUnusedImports` + `compileJava`; case 5 is `make -n` and greps `check-fast.sh sdlc backend`. **Locking and verification:** both are on and the build stays green. A tampered lock, a tampered sha256 or an unlocked new dependency each fail the build (X9-X12). **Test logging:** a failing test under `-q` now prints its class and assertion (X13). |
+| REQ-OPS-024 | PASS | **Migrations:** `./gradlew integrationTest migrationTest --rerun-tasks` -> 7/7 + 7/7 on postgres:16.11-alpine. **ArchUnit:** `./gradlew archTest` -> 9/9 rule constants pass. **Money-rule probes:** MoneyRuleProbeTest 6/6. MONEY_RULE throws an AssertionError naming BadMoney (field), BadParam (a `double` parameter in a money package) and BadReturn (a money-named method returning `Double`). **G4 replica:** `SelftestPlant { public double amount; }` in domain, `./gradlew -q archTest` -> rc 1. The console now names "MONEY_RULE FAILED" and "Field <eg.masroof.domain.SelftestPlant.amount>" (the loop-1 MINOR is resolved). **NO_STANDARD_STREAMS without allowEmptyShould:** passes on the skeleton and fails on a planted `System.err` (X16). |
 
 ## Findings
 | Severity | Location | Problem | Reproduce |
 |---|---|---|---|
-| MINOR | commits db2d8a2 + d86e255 | The hand-written size is about 812 code/test/script lines (+39 docs), against the ~400 budget (story DoR, design estimate ≈ 388). Tests are 607 lines (gate probes 178 vs ~55 estimated, V1BaselineMigrationTest 174 vs ~65, ArchitectureRulesTest 162 vs ~70). Implementation is about 205 lines (within its ≈173 estimate). | `git diff --stat db2d8a2~1..d86e255` excluding gradlew, gradlew.bat, gradle/wrapper and config/checkstyle -> 835 insertions |
-| MINOR | scripts/quality/traceability.py:49 (`EXCLUDED_DIRS` contains "out") | Pre-existing, first hit by this story: every file under `.../adapters/out/...` is skipped by the REQ scanner. V1BaselineMigrationTest, the only test for the DB half of REQ-OPS-024, is missing from the REQ-OPS-024 evidence. Results are still matched by JUnit case name, so a failure would still turn the row FAIL. But a REQ tested only by an outbound-adapter test would show as uncovered. | `make trace`, then count V1Baseline on line 365 of docs/TRACEABILITY.md -> 0 |
-| MINOR | ArchitectureRulesTest MONEY_RULE (design-acknowledged scope) | A floating-point money **parameter** passes archTest when the method name is not money-like, and so does any **constructor** parameter in domain/application: (a) `public static long pay(float fee)` in `eg.masroof.application.PayFee`; (b) `public Expense(double egp)` in `eg.masroof.domain.Expense`. Case (a) would be caught only by semgrep `masroof-money-not-floating-java` (not installed locally; CI/`make security` only). Case (b) is caught by nothing. | Plant either class in main sources, run `./gradlew archTest` -> BUILD SUCCESSFUL |
-| MINOR | backend/build.gradle.kts test tasks (no `testLogging`) | archTest/test console output never names the violating class or rule. Under `-q` (make check, selftest) it only says "There were failing tests", so the SDLC_SELFTEST G4 evidence cell reads "exit 1; " with no detail. The class and rule are only visible in build/test-results XML / HTML. | Plant `SelftestPlant` (`public double amount`) in domain, run `./gradlew -q archTest` -> 0 occurrences of SelftestPlant/MONEY_RULE in the output |
-| NIT | MONEY_RULE NAME regex | Substring false positive: `record Scale(double multiplier)` in domain fails MONEY_RULE, because "mul-tip-lier" matches `tip`. | Plant that record in `eg.masroof.domain`, run `./gradlew archTest` -> MONEY_RULE FAILED |
-| NIT | V1__baseline.sql (matches spec DDL verbatim) | The schema accepts `base_currency` "egp" and "EG" (stored padded), `timezone` "Mars/Phobos", and an empty `name`. `id` has no default. Validation is for later stories / the API layer. | psql against V1 on postgres:16-alpine; the inserts are listed under Exploratory |
-| NIT | `make check-fast` (all modules) | 217 s and 231 s (> the Makefile's "< 3 min" headline). The sdlc gate dominates; backend is 2 s. The REQ-OPS-023 budget only covers MODULE=backend, so this is not a criterion failure. A concurrent verifier may have added load. | `make check-fast < /dev/null` -> "check-fast GREEN [sdlc backend] in 217s" |
-| NIT | Gradle (same project dir) | `./gradlew test --rerun-tasks` run concurrently with `./gradlew checkFast --rerun-tasks` made `MoneyRuleProbeTest.archTestImportSeesMainClassesOnly` (MoneyRuleProbeTest.java:58) fail, because the other build rewrote build/classes. 3 rounds of normal (non-rerun) concurrent runs after a source edit were all green. | Two `--rerun-tasks` runs in parallel in backend/ |
+| MINOR | scripts/quality/tests/backend-gate-probes.sh:93 (`printf ... \| plant GateProbeTabs.java`) | Case 2 calls `plant` on the right-hand side of a pipe, so it runs in a subshell. `planted+=` therefore never reaches the parent shell, and the new `trap 'exit 130' INT TERM` exits 130 **without removing GateProbeTabs.java**. A Ctrl-C/TERM during case 2 leaves a tab-indented file in `backend/src/main/java/eg/masroof/`, which turns the next check-fast red. Cases 3 and 4 use heredocs and clean up correctly. | In a full-repo copy: `bash scripts/quality/tests/backend-gate-probes.sh &`, wait for `GateProbeTabs.java` to appear, `kill -TERM $!` -> rc 130. `git status --porcelain backend/src` -> `?? backend/src/main/java/eg/masroof/GateProbeTabs.java`. The same test during case 3 (GateProbeImport) -> rc 130 and a clean tree. |
+| MINOR | backend/src/main/java/eg/masroof/adapters/out/persistence/ProdDatabasePasswordGuard.java:17 | The guard checks the `POSTGRES_PASSWORD` property, not the effective `spring.datasource.password`. With `SPRING_DATASOURCE_PASSWORD=` (empty) overriding the yml value, `prod` starts and runs Flyway with an empty password (CWE-1188 remains reachable). The reverse also happens: `SPRING_DATASOURCE_PASSWORD` set without `POSTGRES_PASSWORD` is rejected. | Throwaway `postgres:16.11-alpine` with `POSTGRES_HOST_AUTH_METHOD=trust` on port 55432. `POSTGRES_PASSWORD=x-test SPRING_DATASOURCE_PASSWORD= POSTGRES_PORT=55432 java -jar build/libs/masroof-backend-0.1.0.jar --spring.profiles.active=prod` -> "Successfully applied 1 migration", "Started MasroofApplication", rc 0 |
+| MINOR | docs/backlog/EPIC-01-foundation/STORY-004-core-schema-and-seeds.md (review findings 9 and 14, "ticketed -> STORY-004") | The known money-rule gap has not regressed, and it is still open: a `float` constructor parameter in domain passes checkFast and archTest. But STORY-004 does not mention it. Neither the camelCase/constructor money-rule extension nor the V2 CHECKs/updated_at trigger appears in STORY-004; the "ticket" exists only in the review report. | Plant `eg.masroof.domain.Expense` with `public Expense(float egp)`, run `./gradlew checkFast archTest` -> rc 0. `grep -niE 'archunit\|float\|constructor\|trigger' docs/backlog/EPIC-01-foundation/STORY-004-core-schema-and-seeds.md` -> no money-rule or trigger item |
+| NIT | backend/src/test/java/eg/masroof/adapters/out/persistence/ProdDatabasePasswordGuardTest.java:11 | The new test has no `@Tag("REQ-...")`. backend/CLAUDE.md says to "Tag every test with its REQ id", and THREAT_MODEL cites REQ-SEC-020. The test is invisible to `make trace`. | `grep -n '@Tag' ProdDatabasePasswordGuardTest.java` -> none |
+| NIT | application.yml / ProdDatabasePasswordGuard `@Profile("prod")` | Profile names are case-sensitive. `--spring.profiles.active=PROD` activates the `!prod` document and starts with an empty password. | `java -jar ... --spring.profiles.active=PROD` with no password against the trust DB -> "Started MasroofApplication" |
+| NIT | ArchitectureRulesTest.java:26 (Javadoc) | The stated reason for keeping `allowEmptyShould` on rule 5 is imprecise. Removing it does fail ("failed to check any classes"), as claimed. But the rule's subject is **all** fields, not annotated fields: one plain `private final int days` in main makes it pass without allowEmptyShould. So STORY-004 (Money.amountMinor) can drop it. | Remove `.allowEmptyShould(true)` from NO_FIELD_INJECTION -> archTest FAIL. Then add `eg.masroof.domain.Plain` with one unannotated field -> archTest rc 0 |
+| NIT | backend-gate-probes.sh case 5 (now `make -n`) | No JUnit/trace case asserts that a real no-MODULE `make check-fast` exits 0 any more. That fact is now carried only by `make check`'s first step ("OK check-fast [sdlc backend]"), which is not trace-visible. The change was requested by review finding 10. | `make trace`; the REQ-OPS-023 row lists only "dispatches" for case 5 |
+| NIT | `make check-fast` (all modules) | Took 365 s inside `make check` (> the Makefile's "< 3 min" headline). My concurrent scratch builds added load. This is the loop-1 NIT carried over. The REQ budget covers MODULE=backend only (3 s). | `make check < /dev/null` -> "check-fast GREEN [sdlc backend] in 365s" |
 
 ## Exploratory
-29 cases tried, 5 problems (E1, E12, E13, E10 lax values, E11a). Inputs, verbatim, run in the isolated scratch copy unless noted:
-- E1 `eg.masroof.application.PayFee`: `public static long pay(float fee)` -> checkFast + archTest GREEN (**gap**, see Findings)
-- E2 `eg.masroof.domain.SpringyDomain` annotated `@org.springframework.stereotype.Component` -> archTest FAIL in DOMAIN_IS_FRAMEWORK_FREE
-- E2b `eg.masroof.domain.JpaDomain` importing `jakarta.persistence.Entity` -> compileJava FAIL (JPA is not on the classpath yet)
-- E3 `eg.masroof.adapters.out.log.Printer`: `static final PrintStream OUT = System.out;` -> archTest FAIL in NO_STANDARD_STREAMS (XML names Printer.java:7)
-- E4 `eg.masroof.adapters.out.persistence.Repo`: `@Autowired private JdbcTemplate jdbc;` -> checkFast green, archTest FAIL in NO_FIELD_INJECTION
-- E5 `V2__dup_household.sql` = `CREATE TABLE household (id uuid PRIMARY KEY);` -> migrationTest FAIL, "relation household already exists"
-- E5b `V2_bad_name.sql` = `SELECT 1;` -> context fails, "FlywayException: Invalid SQL filenames found"
-- E6 checkFast with JAVA_HOME unset -> green (java on PATH is Temurin 21)
-- E6b JAVA_HOME = Android Studio JBR 21.0.10, `--rerun-tasks` -> green
-- E7 `./gradlew --offline checkFast` warm -> green, 1 s
-- E8 `Crlf.java` with CRLF line endings, otherwise well formatted -> spotlessJavaCheck FAIL, file named
-- E9 `adapters.in.rest.Ctl` calling `adapters.out.persistence.Store.id()` -> archTest FAIL in ADAPTERS_IN_NOT_TO_OUT + ADAPTER_SLICES_INDEPENDENT
-- E10 (throwaway postgres:16-alpine, V1 applied via psql):
-  - rejected: month_start_day NULL -> 23502, -1 -> 23514, 2147483647 -> 23514, id NULL -> 23502, insert without id -> 23502
-  - accepted: name "" / base_currency "egp" / base_currency "EG" / timezone "Mars/Phobos" / an Arabic name with Arabic-Indic digits
-- E11a `./gradlew test --rerun-tasks` concurrently with `./gradlew checkFast --rerun-tasks` -> test FAIL (MoneyRuleProbeTest.java:58, race on build/classes)
-- E11b 3 rounds of concurrent `./gradlew test` + `./gradlew checkFast` after editing MasroofApplication.java -> all green
-- E12 `eg.masroof.domain.Expense(double egp)` constructor -> archTest GREEN (**gap**)
-- E13 `eg.masroof.domain.Scale(double multiplier)` record -> MONEY_RULE FAIL (false positive)
-- E14 `Loop.f(int)` infinite recursion with `@SuppressWarnings("InfiniteRecursion")` -> spotbugsMain FAIL "H C IL ... Loop.java:[line 9]"
-- E15 unused `import java.util.List;` in a **test** source -> compileTestJava FAIL [RemoveUnusedImports]
-- E16 raw `List l = new ArrayList();` -> compileJava FAIL (-Xlint rawtypes + -Werror)
-- E17 tab-indented **test** source -> spotlessJavaCheck FAIL, file named (checkstyleTest is disabled, but Spotless covers it)
-- E19 `eg.masroof.application.Quote(Double amount)` with `Double totalPrice()` -> MONEY_RULE FAIL (field, accessor and method named)
-- E20 PIT with planted `eg.masroof.domain.Clamp.day(int)` -> 3 mutations generated, mutations.xml written
-- E21 `toString()` without `@Override` -> compileJava FAIL ([MissingOverride] under -Werror)
-- G4 replica: `SelftestPlant` with `public double amount` in domain, `./gradlew -q archTest` -> exit 1. The XML names SelftestPlant.amount; the console does not.
+24 cases tried, 6 problems (X6, X7, X8, X15b, X17, X22). Unless noted, they ran in the scratch copy. Inputs, verbatim:
+- X1 `./gradlew --offline checkFast bootJar` -> rc 0, 3 s
+- X2 `env -u POSTGRES_PASSWORD java -jar build/libs/masroof-backend-0.1.0.jar --spring.profiles.active=prod` -> rc 1, "IllegalStateException: POSTGRES_PASSWORD must be set to a non-empty value when profile 'prod' is active"
+- X3 `POSTGRES_PASSWORD=" "` with the same command -> rc 1, same message
+- X4 `POSTGRES_PASSWORD=x-test POSTGRES_PORT=59999`, prod -> rc 1, flywayInitializer "Connection to localhost:59999 refused". The guard passed and the app went on to the DB attempt.
+- X5 prod with no password against a **reachable** trust DB (55432) -> rc 1 from the guard, and `flyway_schema_history` does not exist. The guard runs before Flyway connects.
+- X6 `SPRING_DATASOURCE_PASSWORD=real-test` without POSTGRES_PASSWORD, prod -> rc 1 from the guard (false positive)
+- X7 `POSTGRES_PASSWORD=x-test SPRING_DATASOURCE_PASSWORD=` (empty), prod, trust DB -> started and applied V1 with an empty password (**problem**)
+- X8 `--spring.profiles.active=PROD` without a password -> started (**NIT**)
+- X9 lockfile `org.postgresql:postgresql:42.7.14=` -> `42.7.13=`:
+  - `./gradlew dependencies --configuration runtimeClasspath` -> rc 0, but the report says "postgresql:{strictly 42.7.13} FAILED". The report task never fails; that is how Gradle behaves.
+  - `./gradlew bootJar --rerun-tasks` -> rc 1, "Dependency version enforced by Dependency Locking" conflict with 42.7.14
+- X10 lockfile `jackson-databind:2.21.8` -> `2.21.7`, then `./gradlew compileJava --rerun-tasks` -> rc 1, "Dependency verification failed for configuration ':compileClasspath'"
+- X11 verification-metadata: postgresql-42.7.14.jar sha256 first char `7` -> `f`, then `./gradlew checkFast` -> rc 1, "Dependency verification failed for configuration ':testRuntimeClasspath'"
+- X12 `implementation("org.apache.commons:commons-lang3:3.18.0")` added without `--write-locks`, then `./gradlew compileJava` -> rc 1, "Resolved 'org.apache.commons:commons-lang3:3.18.0' which is not part of the dependency lock state"
+- X13 planted `eg.masroof.qa.QaPlantedFailTest` (`assertThat(1).as("qa planted marker").isEqualTo(2)`), `./gradlew -q test` -> rc 1. The console prints "QaPlantedFailTest > plantedFailure() FAILED", the assertion and the line.
+- X14 `SelftestPlant { public double amount; }` in domain, `./gradlew -q archTest` -> rc 1, "MONEY_RULE FAILED ... SelftestPlant.amount"
+- X15 NO_FIELD_INJECTION with `.allowEmptyShould(true)` removed -> archTest FAIL "failed to check any classes" (the stated reason holds)
+- X15b the same plus `eg.masroof.domain.Plain` holding `private final int days = 1;` -> archTest rc 0 (so the Javadoc reason is imprecise; **NIT**)
+- X16 `eg.masroof.adapters.out.persistence.Shout` calling `System.err.println("x")` -> archTest FAIL in NO_STANDARD_STREAMS, naming Shout.java:7
+- X17 `eg.masroof.domain.Expense(float egp)` constructor -> checkFast + archTest rc 0 (known gap, not regressed; not in STORY-004, see Findings)
+- X18 `./gradlew pitest` -> rc 0, "No mutations found" (accepted for the skeleton, failWhenNoMutations=false)
+- X19 `sha256sum gradle/wrapper/gradle-wrapper.jar` = `ad16bca46cb71bb5887c546860d93992aeee35c1fdaf4a242b0a612375d937e0`, which equals the official https://services.gradle.org/distributions/gradle-8.14.6-wrapper.jar.sha256. `distributionSha256Sum` `7988ed07...7bd24` equals the official gradle-8.14.6-bin.zip.sha256.
+- X20 `make security` twice in the real tree -> GREEN / GREEN, identical output (trivy is not flaky)
+- X21 two `make check-fast MODULE=backend` runs at once in the real tree -> rc 0 / rc 0, 11 s, tree clean
+- X22 full-repo copy: probes script sent SIGTERM while `GateProbeTabs.java` was planted -> rc 130, file **left behind** (**problem**)
+- X23 full-repo copy: SIGTERM while `GateProbeImport.java` was planted -> rc 130, tree clean
+- X24 `osv-scanner scan source -r --no-ignore backend` -> finds both lockfiles + verification-metadata, "No issues found"
+- (Not counted: SIGINT to a backgrounded probes run is ignored by non-interactive bash, which is an invalid harness; TERM was used instead. One `dependencies --refresh-dependencies` run failed during the network outage with "Did not resolve ... part of the dependency lock state".)
 
 ## Test integrity
-OK. `bash scripts/quality/test-integrity-check.sh 68008e6` -> "assertions: 323 (base) -> 549 (now)", "TEST_INTEGRITY: OK". `git diff --stat db2d8a2..d86e255 -- backend/src/test scripts/quality/tests` is empty: the implementer touched no test-designer file. `git log 68008e6..HEAD -- backend/src/test scripts/quality/tests/backend-gate-probes.sh` lists only db2d8a2. `.claude/state/test-integrity.log` has 6 entries, all from STORY-001 work on test-test-integrity-check.sh, none for STORY-002 files.
+OK. `bash scripts/quality/test-integrity-check.sh db2d8a2` -> "TEST_INTEGRITY: OK", assertions 34 -> 99. Since db2d8a2, only 3f5ac58 touched test files. Each change:
+- V1BaselineMigrationTest: the image is pinned `postgres:16-alpine` -> `postgres:16.11-alpine` (stronger).
+- ArchitectureRulesTest: `allowEmptyShould` removed from NO_STANDARD_STREAMS (stronger), plus a Javadoc change. Assertion count 9 -> 9. NO_FIELD_INJECTION keeps allowEmptyShould, justified by X15.
+- MoneyRuleProbeTest: +2 probes (BadParam, BadReturn) with their fixtures (stronger, 8 -> 12 assertions).
+- ProdDatabasePasswordGuardTest: new, 3 assertions (an addition).
+- backend-gate-probes.sh:
+  - case 3 now requires RemoveUnusedImports + compileJava (stronger)
+  - the trap now exits 130 (stronger, except for the case-2 leak above)
+  - case 5 is narrowed from a real no-MODULE run to `make -n`. Review finding 10 requested this, and the real run is still executed and gated by `make check` step 1 (observed OK). It is not counted as an unexplained weakening.
+
+`.claude/state/test-integrity.log` has no STORY-002 entries.
 
 STATUS: PASS
