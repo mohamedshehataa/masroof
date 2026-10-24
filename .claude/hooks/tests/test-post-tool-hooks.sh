@@ -87,7 +87,13 @@ fi
 run_hook format-changed.sh "$(json_post_write "$PY")"; assert_contains "$OUT" "scripts/bad.py:1: SyntaxError" "REQ-OPS-010 Python finding is file:line: message"
 run_hook format-changed.sh "$(json_post_write "$J")"; assert_contains "$OUT" "web/bad.json:1: invalid JSON" "REQ-OPS-010 JSON finding is file:line: message"
 run_hook format-changed.sh "$(json_post_write "$Y")"; assert_contains "$OUT" ".github/bad.yml:" "REQ-OPS-010 YAML finding names the file"
-assert_contains "$OUT" "invalid YAML" "REQ-OPS-010 YAML finding says what is wrong"
+# With yamllint on PATH (ubuntu CI runners ship it) the hook reports yamllint's own wording
+# ("syntax error"); without it the built-in parse check says "invalid YAML". Both name the problem.
+if command -v yamllint >/dev/null 2>&1; then
+  assert_contains "$OUT" "syntax error" "REQ-OPS-010 YAML finding says what is wrong (yamllint wording)"
+else
+  assert_contains "$OUT" "invalid YAML" "REQ-OPS-010 YAML finding says what is wrong"
+fi
 MASROOF_SHELLCHECK=no-such-shellcheck run_hook format-changed.sh "$(json_post_write "$B")"; assert_allowed "REQ-OPS-010 missing shellcheck exits 0"
 assert_eq "$ERR" "format-changed: shellcheck not installed, skipped" "REQ-OPS-010 missing shellcheck prints exactly one skip line"
 assert_eq "$OUT" "" "REQ-OPS-010 missing shellcheck gives no lint feedback"

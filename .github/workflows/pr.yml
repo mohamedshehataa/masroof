@@ -272,12 +272,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # full history for secret scanning
-      - name: gitleaks (full history)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_SUMMARY: "true"
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      - name: gitleaks (full history, same command as make security)
+        # The CLI needs no GitHub API token (the action fails with "Resource not accessible by integration").
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.0 \
+            git --redact --config .gitleaks.toml --no-banner .
       - name: semgrep (p/default + .semgrep/ custom rules)
         run: |
           docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:latest \
