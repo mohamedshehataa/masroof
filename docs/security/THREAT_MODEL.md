@@ -49,7 +49,7 @@ flowchart LR
 | B4 | iOS Shortcut -> `/api/ingest/sms`, `/api/ingest/receipt` | HTTPS; per-device token header; no interactive auth possible |
 | B5 | PWA -> `/api/*` | HTTPS; short-lived JWT access + rotating refresh token; CORS locked to `WEB_BASE_URL` |
 | B6 | backend -> Anthropic API (and B6b STT, B6c FX) | HTTPS, API key from env; outbound only |
-| B7 | backend -> PostgreSQL / MinIO | compose-internal network; DB user with least privilege; MinIO access key per bucket |
+| B7 | backend -> PostgreSQL / MinIO | compose-internal network; DB user with least privilege; MinIO access key per bucket. JDBC to Postgres must use `sslmode=verify-full` with `channelBinding=require` (SCRAM-SHA-256) once the DB is not on a private socket/network; the Flyway migration user is a separate, DDL-capable role used only at deploy time, the runtime role has no DDL (STORY-002 uses one local dev user) |
 | B8 | backend -> WhatsApp Cloud API (send) | HTTPS, permanent system-user token; only to the household group / member numbers |
 | B9 | admin -> VPS | SSH key only; `/release` skill + `MASROOF_RELEASE_ACTIVE` flag; CI deploy user |
 
@@ -80,6 +80,20 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | I | Verbose errors, stack traces, server headers | Problem+JSON errors without internals; Caddy strips `Server`; security headers (CSP, X-Content-Type-Options, Referrer-Policy) | REQ-SEC-001 | Planned |
 | D | Request floods, slowloris, oversized bodies | Caddy rate limit per IP on `/api/ingest/*` and `/webhooks/*`; body size limits (text 64 KB, media 10 MB); timeouts | REQ-SEC-004 | Planned |
 | E | Direct access to backend/Postgres/MinIO ports | Only Caddy publishes ports; `ufw` default deny; compose internal network | REQ-SEC-020, REQ-SEC-021 | Planned |
+
+### B1a compose network / loopback -> backend `GET /health` (STORY-143)
+
+In STORY-143 the endpoint is reachable only from the compose network and, through the dev-only overlay, on
+`127.0.0.1:8080`. The base compose publishes no port. Internet exposure through Caddy arrives with STORY-142.
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| S | Anyone calls `/health` | Unauthenticated by design; no state, no household data | — | Accepted (DECISIONS 2026-10-23) |
+| T | Query parameters or headers change the response (reflection, content-type confusion) | Nothing is bound from the request; Content-Type is preset, so Accept is ignored; tests cover a 2,000-character query and XML/HTML Accept | REQ-SEC-001 | In progress (STORY-143) |
+| I | `version`, `gitSha`, `buildTime` disclosed | Accepted for the owner's private deployment | — | Accepted (DECISIONS 2026-10-23) |
+| I | DB-down response leaks a JDBC URL, host:port, credentials or a stack trace | Fixed Problem body (`Database unavailable`); the probe catches everything and logs only the exception class name; tests apply the leak regex to body and headers | REQ-SEC-001 | In progress (STORY-143) |
+| D | `/health` floods turn into DB load, or hang threads while Postgres is unreachable | One `isValid` per call under a 2 s hard deadline; Hikari pool (10), `connection-timeout` 2 s, pgjdbc `connectTimeout` 2 s; per-IP rate limit (healthcheck exempt) | REQ-SEC-051 | In progress (STORY-143: bounds); Planned (STORY-010: rate limit) |
+| E | Container compromise escalates, or actuator exposes internals | Non-root uid 10001, `read_only` root FS + `/tmp` tmpfs, `cap_drop: ALL`, `no-new-privileges`; actuator not on the classpath (STORY-003 adds it, internal only) | REQ-SEC-020 | In progress (STORY-143) |
 
 ### B2 Meta webhook -> backend
 
@@ -146,7 +160,9 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | I | DB dump or disk theft exposes texts | `raw_message.text`, OCR text encrypted with `APP_ENCRYPTION_KEY` (AES-GCM, key outside DB); MinIO SSE | REQ-SEC-007, REQ-SEC-008 | Planned |
 | I | Backups readable | `age`-encrypted dumps; bucket private | REQ-SEC-012 | Planned |
 | D | Disk full, runaway media | Disk alert at 80 %, media size caps, retention for raw media (configurable) | REQ-SEC-022 | Planned |
+| D | DB outage or hang blocks request threads indefinitely | Hikari `connection-timeout` 2000 ms, `validation-timeout` 1000 ms, pgjdbc `connectTimeout` 2 s; the health probe has a hard 2 s deadline | REQ-SEC-022 | In progress (STORY-143) |
 | E | App DB user owns everything | Separate migration role (Flyway) and runtime role without DDL | REQ-SEC-020 | Planned |
+| S | Network peer impersonates Postgres or downgrades auth (no channel binding) | `sslmode=verify-full` + `channelBinding=require` in the production JDBC URL; SCRAM-SHA-256 only; prod profile requires `POSTGRES_PASSWORD` (no empty default) | REQ-SEC-020 | Planned (prod password guard: Done STORY-002) |
 
 ### B8 backend -> WhatsApp send
 
@@ -167,6 +183,52 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | R | Who deployed what | GitHub environment `production` with deployment history; `infra/.deployed/*.env` with timestamps | REQ-SEC-024 | Planned |
 | I | `.env` readable by other users | `chmod 600`, owner `masroof`; no secrets in images | REQ-SEC-021 | Planned |
 | D | Failed deploy leaves prod down | Pre-deploy backup, smoke test, automatic `make rollback` | REQ-SEC-012 | Done (release.yml; scripts stub) |
+
+### Build supply chain (backend, STORY-002)
+
+Not a runtime boundary; it protects the artifact that crosses B1-B9.
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| T | Vulnerable transitive dependency ships in the runtime image (CWE-1395) | Spring Boot 4.1.2 BOM (OSS-supported, ADR-0004) replaces the STORY-002 overrides above the 3.5.16 BOM; an override comes back only for a finding, with a reason comment; `osv-scanner scan source -r --no-ignore backend` reports 0 findings; Dependabot | REQ-SEC-013 | Done (STORY-002); re-validated in STORY-143 |
+| T | Unpinned or drifting base image in the backend image or compose | `eclipse-temurin` JDK/JRE and `postgres:16.15-alpine3.24` pinned by exact tag + multi-arch digest; Dependabot `docker` for `/backend` (`docker-compose` ecosystem for `/infra`: follow-up); Trivy image scan in main.yml | REQ-SEC-013, REQ-SEC-020 | In progress (STORY-143) |
+| T | Image built from the wrong or unknown source revision | Docker build fails unless build arg `GIT_SHA` matches `^[0-9a-f]{7,40}$`; `/health` reports it; never `unknown` | REQ-SEC-013 | In progress (STORY-143) |
+| I | Secrets (`.env`) or `.git` copied into the build context or image | Root `.dockerignore` is a whitelist (`backend/` only); compose passes an explicit env list, never `env_file: .env` | REQ-SEC-021, REQ-SEC-027 | In progress (STORY-143) |
+| T | Tampered artifact fetched during the image build | The Docker build runs the same Gradle wrapper (`distributionSha256Sum`) and `verification-metadata.xml`, regenerated to cover `bootJar`/`bootBuildInfo` | REQ-SEC-013 | In progress (STORY-143) |
+| T | Dependency graph invisible to SCA or silently changing (CWE-1104) | `dependencyLocking { lockAllConfigurations() }` -> `backend/gradle.lockfile` and `buildscript-gradle.lockfile` committed | REQ-SEC-013 | Done (STORY-002) |
+| T | Tampered artifact or wrapper fetched at build time | `gradle/verification-metadata.xml` (sha256) and `gradle/actions/wrapper-validation@v4` in the backend CI jobs | REQ-SEC-013 | Done (STORY-002) |
+| T | Testcontainers image tag drifts under tests | Test database image pinned to `postgres:16.15-alpine3.24@sha256:f461…` (same pin as compose) | REQ-SEC-013 | Done (STORY-002, tag); digest In progress (STORY-143) |
+
+### B10 agents / CI -> git + GitHub (delivery gates, STORY-145)
+
+Actors: the orchestrator and implementer agents (local shell, `gh` signed in as the owner's account), the `pr.yml` /
+`pr-meta.yml` / `main.yml` jobs (`GITHUB_TOKEN` per job), the Claude Code Action (`ANTHROPIC_API_KEY`), the
+`revert-on-red` job (`GATE_BOT_TOKEN`, OWNER-013) and Dependabot. Assets: `main`, the approval (G5), the required
+checks, the PR body marker, repository secrets. Design: ADR-0005, ADR-0006, story STORY-145 Design notes §E.
+`pr_flow_active` and guard-bash are advisory. The boundary is GitHub branch protection (STORY-016: required checks
+from `delivery-gates.yaml`, one approval from a listed non-author, stale-approval dismissal, linear history, admins
+included, push protection).
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| S | The PR author approves their own PR (G5) | GitHub refuses author approvals. `approvers` lists only `github-actions[bot]` and `mohamedshehataa` as a non-author. guard-bash B15 blocks `gh pr review --approve`, `gh api …/reviews` with `event=APPROVE` and GraphQL review mutations, with every flag on | REQ-OPS-159, REQ-OPS-163 | In progress (STORY-145) |
+| S | A PR edits `pr.yml` (head-defined for `pull_request`) to fake green `gate/*` jobs or make the Action approve unconditionally | Accepted for now: `.github/workflows/**`, `scripts/quality/delivery-gate*`, `scripts/quality/gates/**` and the threshold files trigger security-reviewer locally and label `security-review` for the AI review. Follow-ups: code-owner review on those paths (STORY-016) and moving the approval to a `workflow_run` workflow that runs from main | REQ-OPS-161 | Accepted risk (ADR-0005) until STORY-016 |
+| T | A push to main bypasses the PR (`git push origin main`, `HEAD:main`, `--all`, `--mirror`, glob refspecs, `remote.<r>.push` config) | pre-push `[G1]` rejects any update of `refs/heads/main` or `refs/heads/master`. guard-bash B1b covers the listed forms and blocks a destination built from a variable or command substitution (fail closed, like B5). Branch protection is the boundary | REQ-OPS-160, REQ-OPS-163 | In progress (STORY-145) |
+| T | Known guard-bash bypass surface for B1b/B15: `curl`/`python`/`Invoke-RestMethod` POSTs to `api.github.com/…/pulls/*/reviews` or `…/merge`, `gh api --input <file>`, `-F query=@file`, editing `~/.config/gh/config.yml` aliases by hand, `git send-pack`, pushing to a URL instead of the remote name | B15 also blocks `gh api` writes to `…/pulls…` whose body comes from `--input`/`@file` outside a gate flow, and `curl`/`wget`/`Invoke-*` with a write method to `api.github.com` paths under `/pulls/`. The remaining forms are documented non-goals (REQ-OPS-001 style); GitHub enforces | REQ-OPS-163 | In progress (STORY-145) |
+| T | A hand-edited PR body (claims, coverage, DECISIONS) | `gate:v1` marker = HEAD sha + sha256 of the LF-normalised body; `pr-body-lint` is required. Inserted text is neutralised (`<!--` → `&lt;!--`). The digest is **not a MAC**: anyone who reruns the algorithm can forge it, so it detects hand edits, and the gate values are recomputed by the gate jobs, never read from the body | REQ-OPS-158 | In progress (STORY-145) |
+| T | The CI gate tool reads loosened thresholds from the PR's own `delivery-gates.yaml` | Same exposure as editing `pr.yml` (row 2). The agreement test plus the security-reviewer trigger on `scripts/quality/*.yaml` and `eval/thresholds.yaml` make every change visible; the AI review prompt flags threshold loosening | REQ-OPS-150 | In progress (STORY-145) |
+| R | Who approved or merged what | Approval is a GitHub review on the head sha. The squash body carries `Story:`, `Reqs:`, `Verify: <path>@<sha>`, `Review: <path>@<sha>`. Owner merges on the interim route are logged as `owner merge (G5 manual, OWNER-011)` | REQ-OPS-164 | In progress (STORY-145) |
+| I | `ANTHROPIC_API_KEY` exfiltrated by PR code (gate jobs run `make`, Gradle and npm on PR code) | The key is set only in the `gate/M11 ai-review` job, as step env of the Claude action. That job runs no repo code (tools: Read, Grep, Glob, `git diff/log/show`, inline/PR comment). `gate/M9 eval` on pull_request uses the reference adapter (no key). No `pull_request_target`. `persist-credentials: false` on every checkout | REQ-OPS-161, REQ-SEC-027 | In progress (STORY-145) |
+| I | The key exposed on Dependabot runs (it must be a Dependabot secret, OWNER-012) | Same job isolation: Dependabot-triggered runs expose the key only to the ai-review step, which runs no dependency code (no install, no build) | REQ-OPS-161 | In progress (STORY-145) |
+| I | Gate output leaks bodies, OCR text or secrets into CI logs | Gate rows hold shas, paths, counts and durations only. Command logs go to `.claude/state/gate-logs/` locally and the job log in CI. Only the tail of a failing command is printed. `make gate` never echoes environment variables | REQ-SEC-005 | In progress (STORY-145) |
+| E | `GITHUB_TOKEN` over-privileged in jobs that run PR code | Workflow default `contents: read`. Per job: gate jobs read only (`pull-requests: read`/`actions: read` where needed). `pull-requests: write` only in ai-review, approval and labeler. No `checks: write`, `id-token`, `contents: write` or `pull_request_target` in `pr.yml`/`pr-meta.yml` | REQ-OPS-161 | In progress (STORY-145) |
+| E | The `revert-on-red` token is misused (it can push branches and open PRs that trigger workflows) | `GATE_BOT_TOKEN` (OWNER-013) is preferably a GitHub App installation token (`actions/create-github-app-token`, 1 h lifetime) scoped to this repository with contents and pull-requests write; otherwise a fine-grained PAT with the same scope and ≤ 90-day expiry. Only the `revert-on-red` job in `main.yml` sees it. That job runs from main (`push` event), executes no build or test code (`git revert`/`rebase`, `gh`), and force-pushes only the explicit refspec `HEAD:refs/heads/revert/<short M>` with `--force-with-lease`. `contents`, `pull-requests` and `issues: write` exist only in this job. A missing token makes the job fail and open an issue naming the secret | REQ-OPS-162 | In progress (STORY-145) |
+| E | A prompt injection in the diff, the PR body or comments steers the AI review (`STATUS: APPROVE`, `[WONTFIX STORY-NNN]` replies) | The diff, PR body, comments and repo files are declared untrusted data in the prompt, and the action has no write tools beyond comments. Only the strict last line of the final message is parsed (`delivery-gate.py ai-status`). Approval also needs all 14 required checks, local M10/M11 reports and `delivery-gate.py approve`. M11 ignores `[WONTFIX …]` replies authored by `github-actions[bot]`. The model is pinned with `--max-turns` | REQ-OPS-161, REQ-OPS-152 | In progress (STORY-145) |
+| D | Gate spend: about 18 jobs per push plus an Anthropic call per synchronize | `concurrency` cancels superseded runs (a `cancelled` attempt is not a flaky violation). `pr-meta.yml` re-runs only pr-body-lint, M7 and M12 on edits and labels. S16 item 3 budget check | REQ-OPS-161 | In progress (STORY-145) |
+| D | A flaky job is silently re-run until green | `gate/M15 ci` step `flaky-guard` compares attempts per job (`failure`/`timed_out` → `success` without a quarantine row fails) | REQ-OPS-156 | In progress (STORY-145) |
+
+Supersedes the B9 row's "required `gate` check": the aggregate `PR gate` job is removed. Branch protection requires
+the 14 `required_checks` of `delivery-gates.yaml` (STORY-016).
 
 ## 4. Requirement register (REQ-SEC)
 
@@ -204,9 +266,12 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | REQ-SEC-030 | WhatsApp send only to allowlisted recipients | B8 | Unit tests |
 
 ## 5. Out of scope / accepted for now
+- Local guardrail self-integrity (owner decision 2026-10-24): the Claude Code hooks can be disabled by a shell write to `.claude/hooks/**` (STORY-001 F-01), a write between/across calls can survive (F-02), interpreter writes to `docs/PROMPT*.md` and command-substitution delete targets are not caught (F-03, F-04). Accepted risk until STORY-146; mitigations: Claude Code permission prompts, git history, and review of every `.claude/hooks/**` diff.
 
 - Native iOS app: not built (Section 2); the PWA inherits browser sandboxing.
 - Multi-tenant SaaS threats: one household per deployment is the target; `household_id` scoping is still enforced to keep the option open.
 - Hardware wallet / banking credential storage: Masroof never holds bank credentials.
+- Build supply chain: artifact signature verification (`verify-signatures`) is off in `verification-metadata.xml` (sha256 only), and no SBOM is generated for the backend yet; revisit at the first release story. Image digests are pinned from STORY-143 on.
+- Framework support window: Spring Boot 3.5.16 (OSS support ended 2026-06-30) was accepted for STORY-002 only, which had no network surface. STORY-143 replaces it with 4.1.2 before the first endpoint ships (ADR-0004). If ADR-0004's fallback triggers, this becomes "Accepted risk (ADR-0003)" with manual tracking of Spring advisories.
 
 TODO(owner): confirm the VPS provider's disk-encryption and snapshot policy; decide whether raw media retention is 90 days or indefinite.

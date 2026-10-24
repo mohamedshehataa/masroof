@@ -3,7 +3,7 @@
 Masroof turns every expense of a two-person household (Mohamed on Android, Member 2 on iPhone) into one
 structured entry - from WhatsApp text/photos/PDFs/voice notes, Egyptian bank and wallet SMS, bank-app push
 notifications, iOS Shortcut forwarding, receipt uploads or manual entry - deduplicates the same purchase across
-channels, and serves bilingual (Arabic/English, RTL) analytics. Stack: Java 21 + Spring Boot 3 + PostgreSQL 16 +
+channels, and serves bilingual (Arabic/English, RTL) analytics. Stack: Java 21 + Spring Boot 4.1 (ADR-0004) + PostgreSQL 16 +
 MinIO, React/TypeScript PWA, Kotlin/Compose Android app, Claude API for parsing, Caddy + docker compose.
 The full specification is `docs/PROMPT.md` (protected, read it for product detail). This file is the operating manual.
 
@@ -45,9 +45,14 @@ Run from Git Bash on Windows; `source scripts/env.sh` puts make/python/jq/scanne
 - Tests written by test-designer are never deleted, skipped or weakened. Enforced by test-integrity hook + `make test-integrity` in CI.
 - Secrets live only in `.env` (gitignored); `.env.example` holds placeholders. Enforced by scan-secrets hook, gitleaks, protect-files.
 
-## Workflow (S2/S5 of the spec, in short)
-1 product-analyst spec -> 2 spec-reviewer -> 3 architect (+ security-reviewer on trigger paths) -> 4 test-designer writes failing tests (worktree, proves they fail) -> 5 implementer -> 6 qa-verifier (fresh context; receives "claims to verify", never the author's summary) -> 7 code-reviewer in parallel with triggered specialists -> 8 `make check` + `make trace`, squash-merge to main, story DONE, PROGRESS + metrics updated.
+## Workflow (S2/S5 of the spec, risk-tiered by owner decision 2026-10-24)
+Every story has frontmatter `risk_tier: high | low`. **High** = it touches parsing, dedup, money, auth or ingestion (incl. webhooks and LLM prompts). **Low** = everything else (UI screens, CRUD, infra, docs, SDLC tooling).
+- **High tier (full pipeline):** 1 product-analyst spec -> 2 spec-reviewer -> 3 architect (+ security-reviewer) -> 4 test-designer writes failing tests (worktree, proves they fail) -> 5 implementer -> 6 qa-verifier (fresh context; "claims to verify", never the author's summary) -> 7 code-reviewer + security-reviewer + triggered specialists in parallel -> 8 integrate.
+- **Low tier:** 1 one spec pass (no spec-review loop; architect notes only if the story needs a design decision) -> 4 failing tests -> 5 implementation -> 6+7 ONE combined fresh-context verify+review agent (qa-verifier with the code-review checklist) -> 8 integrate.
+- Integrate: `make check` + `make trace` green, story DONE, PROGRESS + metrics lines, then a PR to `main` that the owner merges personally (OWNER-011 open: GitHub forbids author approval). CI (`pr.yml`, job `gate`) must be green; `main` is protected (STORY-145).
 - Loop limit: implement -> verify -> review at most 3 times per story; then write docs/ESCALATIONS.md, set `status: BLOCKED`, move to other ready work. Never ship a red gate.
+- Budget: each phase has a time and AI-spend cap in `docs/SDLC_METRICS.md` ("Phase budgets"), reviewed against delivered stories at the phase gate; passing a cap is an owner checkpoint.
+- Current goal: a working vertical slice (STORY-143 -> 141 -> 142 -> manual expense entry). `docs/PROMPT_DELIVERY_GATES.md` is mostly deferred (see its status banner); do not expand the SDLC further without an owner decision.
 - Skills: `/next`, `/story <id>`, `/spec`, `/design`, `/tdd`, `/implement`, `/verify`, `/review`, `/security-review`, `/eval`, `/bug`, `/adr`, `/phase-gate <n>`, `/release <v>`, `/retro`, `/sdlc-selftest`, `/sdlc-status`.
 - Stories: `docs/backlog/EPIC-NN-<slug>/STORY-NNN-<slug>.md` (template `docs/templates/story.md`; frontmatter status DRAFT|READY|IN_PROGRESS|BLOCKED|DONE|DESCOPED; `### REQ-<AREA>-<NNN>` headings with Given/When/Then). Reports `.verify.md` / `.review.md` beside the story. Branch `story/STORY-NNN-<slug>`; commits `type(scope): subject [STORY-NNN]` (lefthook enforces).
 - REQ areas: WA SMS NTF IOS RCPT PARSE DEDUP EXP AN UI AND PWA SEC OPS. Tests carry REQ ids (`@Tag("REQ-SMS-004")`, `describe('REQ-SMS-004 ...')`, Kotlin backtick names, eval `tags`).

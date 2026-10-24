@@ -35,7 +35,7 @@ DIGIT_MAP: dict[str, str] = {
 }
 
 _INVISIBLE_RE = re.compile(
-    "[​-‏‪-‮⁠-⁤⁦-⁩﻿­؜]"
+    "[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u00ad\u061c]"
 )
 _HTML_TAG_RE = re.compile(r"<[^>]{1,200}>")
 _URL_RE = re.compile(r"https?://\S+|www\.\S+")

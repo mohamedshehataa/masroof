@@ -4,7 +4,7 @@
 # Non-roster agents (general-purpose, Explore, ...) pass through.
 HOOK_NAME=check-output-contract
 # shellcheck source=lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 read_input
 agent="$(json_get '.agent_type')"
 [ -z "$agent" ] && exit 0
@@ -18,7 +18,10 @@ contract_field() {   # contract_field <agent> <status|required_sections>  -> new
   fi
 }
 allowed="$(contract_field "$agent" status)"
-[ -z "$allowed" ] && exit 0            # not a roster agent
+if [ -z "$allowed" ]; then             # not a roster agent: pass, but say so (REQ-OPS-005 unhappy path)
+  printf "check-output-contract: '%s' is not a roster agent; not gated\n" "$agent" >&2
+  exit 0
+fi
 sections="$(contract_field "$agent" required_sections)"
 msg="$(json_get '.last_assistant_message')"
 
@@ -26,9 +29,14 @@ allowed_pipe="$(printf '%s' "$allowed" | tr '\n' '|' | sed 's/|$//')"
 contract_help="Required by output-contracts.json for '$agent': end your final message with 'STATUS: <$allowed_pipe>' and include each section as a line starting with: $(printf '%s' "$sections" | sed 's/$/:/' | tr '\n' ' ')"
 
 [ -z "$msg" ] && block "final message is empty. $contract_help"
+# lines inside ``` / ~~~ code fences are examples, not the contract
+body="$(printf '%s\n' "$msg" | awk '/^[[:space:]]*(```|~~~)/ { f = !f; next } !f')"
 
-status_val="$(printf '%s\n' "$msg" | grep -E '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' | tail -1 | sed -E 's/^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:[[:space:]]*//; s/\*\*//g; s/`//g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
-[ -z "$status_val" ] && block "no 'STATUS:' line found in the final message. $contract_help"
+status_val="$(printf '%s\n' "$body" | grep -E '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' | tail -1 | sed -E 's/^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:[[:space:]]*//; s/\*\*//g; s/`//g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+[ -z "$status_val" ] && block "no 'STATUS:' line found in the final message (outside code fences). $contract_help"
+case "$status_val" in
+  *"|"*) block "the STATUS line '$status_val' is the contract template, not a result - pick exactly one value. $contract_help" ;;
+esac
 status_val="${status_val%% *}"
 case "|$allowed_pipe|" in
   *"|$status_val|"*) : ;;
@@ -38,14 +46,19 @@ esac
 missing=""
 while IFS= read -r s; do
   [ -z "$s" ] && continue
-  printf '%s\n' "$msg" | grep -Eq "^[[:space:]]*(#+[[:space:]]*)?(\*\*)?$s(\*\*)?[[:space:]]*:" || missing="${missing:+$missing, }$s"
+  printf '%s\n' "$body" | grep -Eq "^[[:space:]]*(#+[[:space:]]*)?(\*\*)?$s(\*\*)?[[:space:]]*:" || missing="${missing:+$missing, }$s"
 done <<< "$sections"
 [ -n "$missing" ] && block "final message is missing required section(s): $missing. $contract_help"
 
-# STATUS must be the last non-empty line (so the orchestrator can parse it reliably)
+# STATUS must be the last non-empty line (so the orchestrator can parse it reliably), and it must be the
+# same line that was validated above: an unclosed fence counts as closed at the end of the message, so a
+# last line inside it is code, not the contract (STORY-001 loop 3, F-12)
 last_line="$(printf '%s\n' "$msg" | grep -vE '^[[:space:]]*$' | tail -1)"
+last_body="$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*$' | tail -1)"
 printf '%s' "$last_line" | grep -Eq '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' \
   || block "the 'STATUS:' line must be the LAST line of your final message (found other text after it). $contract_help"
+[ "$last_line" = "$last_body" ] \
+  || block "the last line is inside an unclosed code fence; close the fence and end with the 'STATUS:' line outside it. $contract_help"
 
 log_hook "OK agent=$agent status=$status_val"
 exit 0

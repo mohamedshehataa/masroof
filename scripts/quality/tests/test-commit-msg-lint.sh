@@ -52,7 +52,7 @@ expect 1 "story tag with 2 digits"              'feat(sms): parse CIB templates 
 expect 1 "wrong tag family"                     'feat(sms): parse CIB templates [TICKET-123]\n'
 expect 1 "tag not last"                         'feat(sms): [STORY-014] parse CIB templates\n'
 expect 1 "only a tag"                           'chore: [SDLC]\n'
-expect 1 "uppercase scope"                      'feat(SMS): parse CIB templates [STORY-014]\n'
+expect 0 "uppercase scope (story ids)"                     'feat(SMS): parse CIB templates [STORY-014]\n'
 expect 1 "missing space after colon"            'feat(sms):parse CIB templates [STORY-014]\n'
 expect 1 "empty message"                        '\n\n# only comments\n'
 

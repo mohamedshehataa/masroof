@@ -46,9 +46,12 @@ TEST_FILE_RES = (
 )
 CODE_EXTS = {".java", ".kt", ".kts", ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sh", ".feature", ".yaml", ".yml", ".sql"}
 EXCLUDED_DIRS = {
-    ".git", "node_modules", "build", "dist", "coverage", ".gradle", "__pycache__", ".venv", ".vite", "out",
+    ".git", "node_modules", "build", "dist", "coverage", ".gradle", "__pycache__", ".venv", ".vite",
     "test-results", "playwright-report", "state", "worktrees", "agent-memory-local", ".idea", "generated",
 }
+# IDE output dirs that are excluded only directly under a module root (backend/out), never deep
+# package dirs such as adapters/out (STORY-002 verify finding).
+MODULE_ROOT_ONLY_DIRS = {"out"}
 RESULT_GLOBS = (
     "backend/build/test-results/**/*.xml",
     "android/**/build/test-results/**/*.xml",
@@ -116,7 +119,9 @@ def rel(path: Path, root: Path) -> str:
 
 def is_excluded(path: Path, root: Path) -> bool:
     parts = path.resolve().relative_to(root.resolve()).parts[:-1]
-    return any(p in EXCLUDED_DIRS for p in parts)
+    if any(p in EXCLUDED_DIRS for p in parts):
+        return True
+    return len(parts) >= 2 and parts[1] in MODULE_ROOT_ONLY_DIRS
 
 
 def is_test_file(relpath: str) -> bool:
@@ -135,8 +140,10 @@ def walk_files(root: Path) -> Iterator[Path]:
             continue
         for p in entries:
             if p.is_dir():
-                if p.name not in EXCLUDED_DIRS:
-                    stack.append(p)
+                depth = len(p.resolve().relative_to(root.resolve()).parts)
+                if p.name in EXCLUDED_DIRS or (p.name in MODULE_ROOT_ONLY_DIRS and depth <= 2):
+                    continue
+                stack.append(p)
             else:
                 yield p
 
@@ -248,7 +255,7 @@ def load_junit(root: Path) -> list[CaseResult]:
                 continue
             seen.add(xml_path)
             try:
-                tree = ET.parse(xml_path)
+                tree = ET.parse(xml_path)  # nosemgrep: use-defused-xml-parse - local build/test report written by our own tools, not untrusted input
             except (ET.ParseError, OSError):
                 continue
             for tc in tree.iter("testcase"):

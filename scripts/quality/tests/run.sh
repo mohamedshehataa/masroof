@@ -17,23 +17,28 @@ export QUALITY_TEST_RESULTS_TSV="$TSV"
 : > "$TSV"
 fail=0
 
-for t in "$TESTS_DIR"/test-*.sh; do
-  [ -e "$t" ] || continue
-  name="$(basename "$t" .sh)"
-  before="$(wc -l < "$TSV" | tr -d ' ')"
+# The shell suites run in parallel (STORY-001 loop 3, check-fast budget), each with its own TSV and log;
+# results are merged and printed in suite order.
+PAR="$(mktemp -d)"
+suites=()
+for t in "$TESTS_DIR"/test-*.sh; do [ -e "$t" ] && suites+=("$t"); done
+for k in "${!suites[@]}"; do
+  : > "$PAR/$k.tsv"
+  { QUALITY_TEST_RESULTS_TSV="$PAR/$k.tsv" bash "${suites[$k]}" < /dev/null > "$PAR/$k.log" 2>&1; printf '%s' "$?" > "$PAR/$k.rc"; } &
+done
+wait
+for k in "${!suites[@]}"; do
+  name="$(basename "${suites[$k]}" .sh)"
+  rc="$(cat "$PAR/$k.rc" 2>/dev/null || echo 1)"
   echo "== $name"
-  if out="$(bash "$t" 2>&1)"; then rc=0; else rc=$?; fi
-  printf '%s\n' "$out"
-  after="$(wc -l < "$TSV" | tr -d ' ')"
-  if [ "$after" -eq "$before" ]; then
-    if [ "$rc" -eq 0 ]; then
-      printf '%s\tok\t%s\t\n' "$name" "$name" >> "$TSV"
-    else
-      printf '%s\tfail\t%s\t%s\n' "$name" "$name" "exit $rc: $(printf '%s' "$out" | tail -n 5 | tr '\n\t' '  ')" >> "$TSV"
-    fi
+  cat "$PAR/$k.log"
+  if [ -s "$PAR/$k.tsv" ]; then cat "$PAR/$k.tsv" >> "$TSV"
+  elif [ "$rc" -eq 0 ]; then printf '%s\tok\t%s\t\n' "$name" "$name" >> "$TSV"
+  else printf '%s\tfail\t%s\t%s\n' "$name" "$name" "exit $rc: $(tail -n 5 "$PAR/$k.log" | tr '\n\t' '  ')" >> "$TSV"
   fi
   [ "$rc" -eq 0 ] || fail=1
 done
+rm -rf "$PAR"
 
 # $PYTHON may be "py -3" (two words), so it is intentionally unquoted.
 # shellcheck disable=SC2086

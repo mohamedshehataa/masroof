@@ -52,3 +52,6 @@ Thumbs.db
 
 # generated test reports
 scripts/quality/tests/results.xml
+
+# jqwik run database
+backend/.jqwik-database

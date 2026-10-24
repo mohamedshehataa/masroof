@@ -6,7 +6,7 @@ phase: 1
 status: READY
 size: M
 modules: [infra, backend]
-depends_on: [STORY-002]
+depends_on: [STORY-142]
 reqs: [REQ-OPS-030, REQ-OPS-031, REQ-OPS-032]
 implements: ["PROMPT.md §14 Phase 1 (observability stack)", "PROMPT.md S13", "PROMPT.md §12 (never log bodies)"]
 owner_agent: devops-engineer
@@ -24,8 +24,8 @@ owner_agent: devops-engineer
 Unhappy path: **Given** a logger call at DEBUG with a message body in a test **When** the log level is INFO (default in compose) **Then** the line is not emitted at all; semgrep rule `no-log-body` fails `make check` if source logs a `body`/`text`/`ocr` field above DEBUG.
 
 ### REQ-OPS-031 — Metrics endpoint and dashboards
-**Given** `make up` **When** the stack is healthy **Then** `GET http://localhost:8080/actuator/prometheus` (internal network only; not routed by Caddy) exposes Micrometer metrics including `http_server_requests_seconds` and `jvm_memory_used_bytes`, Prometheus scrapes it every 15 s, and Grafana (provisioned from `infra/grafana/`) shows a "Masroof API" dashboard with request rate, p95 latency and error rate panels.
-Unhappy path: **Given** a request to `https://localhost/actuator/prometheus` through Caddy **Then** `404`/`403` (actuator is never public).
+**Given** `make up` **When** the stack is healthy **Then** `GET http://backend:8080/actuator/prometheus` on the internal compose network (the host port 8080 is not published under `make up`, STORY-142; not routed by Caddy) exposes Micrometer metrics including `http_server_requests_seconds` and `jvm_memory_used_bytes`, Prometheus scrapes it every 15 s, and Grafana (provisioned from `infra/grafana/`) shows a "Masroof API" dashboard with request rate, p95 latency and error rate panels.
+Unhappy path: **Given** a request to `http://localhost/actuator/prometheus` through Caddy (plain HTTP while `DOMAIN` is empty, STORY-142) **Then** it is not answered by the backend (`404`/`403`, or the web container's `text/html`; never Prometheus text) — actuator is never public.
 
 ### REQ-OPS-032 — Traces exported
 **Given** OpenTelemetry is configured **When** `GET /health` is called **Then** a trace with a server span `GET /health` and a child DB span reaches the collector (verified via the collector's debug exporter in the integration test / compose logs), and the same `traceId` appears in the request's log lines.
@@ -50,7 +50,7 @@ None.
 Filled at stage 3.
 
 ## Dependencies
-STORY-002.
+STORY-142 (the `make up` stack with Caddy; it depends on STORY-143 and STORY-141).
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -67,3 +67,4 @@ STORY-002.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-142 after the STORY-002 split; Caddy URL is plain HTTP locally |

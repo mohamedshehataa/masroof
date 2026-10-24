@@ -117,6 +117,7 @@ Items marked `(L1)` are Level 1 requirements that L2 includes.
 | Id | Requirement | REQ | Status | Evidence |
 |---|---|---|---|---|
 | V13.1.x | Build pipeline: dependency scanning (osv-scanner, Dependabot), SAST (semgrep, CodeQL), secrets (gitleaks), images (Trivy), SBOM | REQ-SEC-013 | DONE (Phase 0 workflows) | `.github/workflows/*.yml`, `.github/dependabot.yml` |
+| V13.1.x (backend) | Backend dependency graph visible to SCA and pinned: Gradle dependency locking, verification metadata, wrapper validation, CVE overrides above the BOM | REQ-SEC-013 | DONE (STORY-002); SBOM TODO | `backend/gradle.lockfile`, `backend/buildscript-gradle.lockfile`, `backend/gradle/verification-metadata.xml`, `osv-scanner scan source -r --no-ignore backend` = 0 issues |
 | V13.2.x | Debug features, Swagger UI, actuator endpoints disabled or internal-only in prod | REQ-SEC-001 | TODO | Profile config + ZAP |
 | V13.3.x | Secrets never in repo; `.env` in `.gitignore`; hook `scan-secrets.sh` | REQ-SEC-021 | DONE (Phase 0) | `.gitignore`, `.gitleaks.toml`, lefthook |
 | V13.4.x | Containers non-root, read-only FS, pinned digests | REQ-SEC-020 | TODO | Trivy misconfig in main.yml |

@@ -9,7 +9,7 @@ MODULES_PRESENT := sdlc $(if $(wildcard backend/gradlew),backend) $(if $(wildcar
 MODULE ?= $(MODULES_PRESENT)
 BASE ?= main
 SUITE ?=
-URL ?= http://localhost:8080
+URL ?= http://localhost
 VERSION ?= dev
 
 .PHONY: help bootstrap up down logs check-fast check check-full e2e eval eval-fast security mutation perf trace metrics \

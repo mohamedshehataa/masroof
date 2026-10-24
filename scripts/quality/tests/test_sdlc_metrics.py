@@ -88,6 +88,16 @@ class SdlcMetricsTests(SdlcMetricsFixture):
         self.assertIn("| PHASE-0 | 1.25 |", md)
         self.assertNotIn("old summary", md)
 
+    def test_metrics_phase_budgets_preserved_before_ledger(self) -> None:
+        self.populate()
+        budgets = "## Phase budgets\n| phase | cap | spent |\n|---|---|---|\n| P0 | 150 | 83 |\n"
+        old = self.out.read_text(encoding="utf-8").replace("## AI spend ledger", budgets + "\n## AI spend ledger", 1)
+        write(self.out, old)
+        md = self.run_metrics()
+        self.assertIn(budgets, md)
+        self.assertLess(md.index("## Phase budgets"), md.index("## AI spend ledger"))
+        self.assertTrue(md.endswith(LEDGER), md[-400:])
+
     def test_metrics_missing_ledger_gets_default_section(self) -> None:
         md = self.run_metrics()
         self.assertIn("## AI spend ledger\n| date | story/phase | model mix | USD | note |", md)

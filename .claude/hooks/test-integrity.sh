@@ -4,7 +4,7 @@
 # Non-blocking: feeds a warning back and logs it for the verifier. CI runs the full diff check.
 HOOK_NAME=test-integrity
 # shellcheck source=lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 read_input
 agent="$(json_get '.agent_type')"
 [ "$agent" = "test-designer" ] && exit 0
@@ -14,6 +14,17 @@ rel="$(rel_to_project "$fp")"
 abs="$(to_posix_path "$fp")"
 [ -f "$abs" ] || exit 0
 
+# NTFS is case-insensitive: c:/.../expensetest.java is backend/.../ExpenseTest.java. Resolve the
+# spelling git knows (tracked or untracked) so the HEAD comparison and the name patterns still work.
+case "$rel" in
+  /*|[A-Za-z]:*) : ;;   # outside the project
+  *)
+    if ! git -C "$PROJECT_DIR" cat-file -e "HEAD:$rel" 2>/dev/null; then
+      real="$(git -C "$PROJECT_DIR" ls-files --cached --others --exclude-standard 2>/dev/null | grep -ixF -- "$rel")"
+      if [ -n "$real" ] && ! printf '%s\n' "$real" | grep -qxF -- "$rel"; then rel="$(printf '%s\n' "$real" | head -1)"; fi
+    fi ;;
+esac
+
 is_test=false
 printf '%s' "$rel" | grep -Eq '(^|/)(test|tests|androidTest|e2e|__tests__|spec)/' && is_test=true
 printf '%s' "$rel" | grep -Eq '\.(test|spec)\.(ts|tsx|js|jsx|mjs|kt|py)$' && is_test=true
@@ -21,19 +32,27 @@ printf '%s' "$rel" | grep -Eq '(Test|Tests|IT|Spec|Specs)\.(java|kt)$' && is_tes
 printf '%s' "$rel" | grep -Eq '(^|/)test_[^/]+\.py$' && is_test=true
 [ "$is_test" = true ] || exit 0
 
-ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\('
+# --- regexes: KEEP IN SYNC with scripts/quality/test-integrity-check.sh ---------------------
+# The last alternatives count the bash hook/script suites: assert_* calls, `expect <rc>` and expect_*.
+ASSERT_RE='\b(assert[A-Za-z_]*|expect|should[A-Z]?[A-Za-z]*|verify|check|require[A-Z]?[A-Za-z]*|assertThat|assertEquals|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|expectThat|toBe[A-Za-z]*|toEqual|toHave[A-Za-z]*|toMatch[A-Za-z]*|toThrow)\s*\(|\bassert_rc [0-9]+|\bassert_[a-z_]+\b|\bexpect [0-9]+|\bexpect_(block|allow|rc)\b'
+# whole-line comments do not count (a check left only in a comment is a removed check)
+COMMENT_RE='^[[:space:]]*(#|//|/\*|\*)'
 SKIP_RE='@Disabled|@Ignore|@Skip|\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|test\.skip|it\.skip|describe\.skip|\.only\(|@Test\(\s*enabled\s*=\s*false|pytest\.mark\.skip|@unittest\.skip|\.todo\(|fixme\(|@Tag\("skip"\)'
 TOL_RE='withinPercentage|within\(|offset\(|delta|tolerance|approximately|toBeCloseTo|isCloseTo|closeTo|assertAlmostEqual|Percentage\.withPercentage'
+# ------------------------------------------------------------------------------------------
 
 # count MATCHES (several assertions can share one line), never lines
 count_matches() { grep -oE "$1" 2>/dev/null | wc -l | tr -d ' '; }
-new_a="$(count_matches "$ASSERT_RE" < "$abs")"
+# assertion identifiers with their counts ("3 assert_blocked", "1 expect 0"): a flip such as
+# assert_blocked -> assert_allowed keeps the total but changes this multiset
+assert_ids() { grep -vE "$COMMENT_RE" 2>/dev/null | grep -oE "$ASSERT_RE" 2>/dev/null | sed -E 's/[[:space:]]*\($//' | sort | uniq -c; }
+new_a="$(grep -vE "$COMMENT_RE" "$abs" 2>/dev/null | count_matches "$ASSERT_RE")"
 new_s="$(count_matches "$SKIP_RE" < "$abs")"
 new_t="$(count_matches "$TOL_RE" < "$abs")"
 
 old=""; old_a=0; old_s=0; old_t=0
 if old="$(git -C "$PROJECT_DIR" show "HEAD:$rel" 2>/dev/null)"; then
-  old_a="$(printf '%s\n' "$old" | count_matches "$ASSERT_RE")"
+  old_a="$(printf '%s\n' "$old" | grep -vE "$COMMENT_RE" | count_matches "$ASSERT_RE")"
   old_s="$(printf '%s\n' "$old" | count_matches "$SKIP_RE")"
   old_t="$(printf '%s\n' "$old" | count_matches "$TOL_RE")"
   existed=true
@@ -43,6 +62,17 @@ fi
 
 problems=()
 if [ "$existed" = true ] && (( new_a < old_a )); then problems+=("assertions decreased $old_a -> $new_a"); fi
+if [ "$existed" = true ] && (( new_a >= old_a )); then
+  declare -A OC=() NC=()
+  while read -r c id; do [ -n "$id" ] && OC["$id"]="$c"; done < <(printf '%s\n' "$old" | assert_ids)
+  while read -r c id; do [ -n "$id" ] && NC["$id"]="$c"; done < <(assert_ids < "$abs")
+  flips=""
+  for id in "${!OC[@]}"; do
+    o="${OC[$id]}"; n="${NC[$id]:-0}"
+    (( n < o )) && flips+="${flips:+, }$id $o -> $n"
+  done
+  [ -n "$flips" ] && problems+=("assertion kinds changed while the total did not drop ($flips) - e.g. assert_blocked flipped to assert_allowed")
+fi
 if (( new_s > old_s )); then problems+=("skip/disable/only markers increased $old_s -> $new_s"); fi
 if [ "$existed" = true ] && (( new_t > old_t )); then problems+=("tolerance/approximation usage increased $old_t -> $new_t (possible loosened test)"); fi
 

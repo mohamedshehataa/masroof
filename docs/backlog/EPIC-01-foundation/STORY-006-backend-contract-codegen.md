@@ -6,7 +6,7 @@ phase: 1
 status: READY
 size: M
 modules: [contracts, backend]
-depends_on: [STORY-002]
+depends_on: [STORY-143]
 reqs: [REQ-OPS-050, REQ-OPS-051, REQ-OPS-052]
 implements: ["PROMPT.md §9 (contract-first)", "PROMPT.md S9 (oasdiff gate)", "PROMPT.md §15 (docs/API.md)"]
 owner_agent: backend-engineer
@@ -19,7 +19,7 @@ owner_agent: backend-engineer
 
 ## Requirements and acceptance criteria
 ### REQ-OPS-050 — Spring interfaces generated at build
-**Given** `./gradlew checkFast` **When** it runs **Then** `openapi-generator` produces interfaces and models under `backend/build/generated/openapi` (or `src/main/generated`, listed under `**/generated/**`) for every operation in the contract, with `Money` mapped to the domain `Money` type (no `Double`), `date-time` to `Instant`, and the `HealthController` implements the generated `HealthApi` (compile error if the contract and controller drift).
+**Given** `./gradlew checkFast` **When** it runs **Then** `openapi-generator` produces interfaces and models under `backend/build/generated/openapi` (or `src/main/generated`, listed under `**/generated/**`) for every operation in the contract, with `Money` mapped to the domain `Money` type (no `Double`), `date-time` to `Instant`, and the `HealthController` — hand-written in STORY-143 — is switched to implement the generated `HealthApi` with no behaviour change (STORY-143's REQ-OPS-020 tests pass unchanged; compile error if the contract and controller drift).
 Unhappy path: **Given** a hand edit inside the generated directory **When** the Edit tool is used **Then** `protect-files.sh` blocks it; **When** the build runs **Then** the directory is regenerated from scratch.
 
 ### REQ-OPS-051 — Contract lint and breaking-change gate
@@ -34,7 +34,7 @@ Unhappy path: **Given** an operation without `operationId` **Then** `make contra
 N/A.
 
 ## Contract impact
-Tooling only; `x-req` on `/health` corrected to `REQ-OPS-020` (see STORY-002). No path/schema change.
+Tooling only; `x-req` on `/health` is already `REQ-OPS-020`. No path/schema change.
 
 ## Data / migration impact
 None.
@@ -49,7 +49,7 @@ None.
 Filled at stage 3.
 
 ## Dependencies
-STORY-002.
+STORY-143 (the hand-written `HealthController` this story switches; it depends on STORY-002).
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
@@ -66,3 +66,5 @@ STORY-002.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — HealthController switch from hand-written (STORY-002) made explicit; stale x-req note fixed |
+| 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-143, which now owns the hand-written HealthController |

@@ -95,7 +95,7 @@ paths:
       x-req: [REQ-OPS-020]
       responses:
         '200':
-          description: Service is up (or degraded, reported as status DOWN).
+          description: Service and database are up.
           content:
             application/json:
               schema:
@@ -2306,7 +2306,7 @@ components:
           description: Server time now (UTC).
         checks:
           type: object
-          description: Component checks (`db`, `storage`, `queue`).
+          description: Component checks. Only `db` exists until later stories add keys (for example `storage`, `queue`).
           additionalProperties:
             type: string
             enum: [UP, DOWN]
