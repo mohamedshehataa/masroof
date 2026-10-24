@@ -1,5 +1,6 @@
 // Backend build (ADR-0002, STORY-002 design notes). Versions are pinned inline on purpose: one module, no catalog.
 import com.github.spotbugs.snom.Confidence
+import java.time.Instant
 import net.ltgt.gradle.errorprone.errorprone
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
@@ -40,6 +41,7 @@ dependencyLocking { lockAllConfigurations() }
 
 dependencies {
     implementation(platform(SpringBootPlugin.BOM_COORDINATES))
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.jspecify:jspecify")
@@ -48,12 +50,23 @@ dependencies {
     errorprone("com.google.errorprone:error_prone_core:2.51.0")
     errorprone("com.uber.nullaway:nullaway:0.14.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+// /health build info (STORY-143): the Docker build passes -PgitSha/-PbuildTime; local builds read git, so checkFast needs no env.
+val gitSha = providers.gradleProperty("gitSha").orElse(
+    providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.map { it.trim().take(7) })
+val buildTime = providers.gradleProperty("buildTime").orElse( // commit time keeps bootBuildInfo up to date between builds
+    providers.exec { commandLine("git", "show", "-s", "--format=%ct", "HEAD") }.standardOutput.asText
+        .map { Instant.ofEpochSecond(it.trim().toLong()).toString() })
+springBoot { buildInfo { this.properties { time = buildTime; additional.put("gitSha", gitSha) } } }
+tasks.bootJar { archiveFileName = "masroof-backend.jar" }
+tasks.jar { enabled = false }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
