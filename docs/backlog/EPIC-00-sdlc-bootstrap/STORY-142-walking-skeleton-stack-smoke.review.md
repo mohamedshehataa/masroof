@@ -38,4 +38,42 @@
 - [x] Migrations immutable (none)
 - [x] Generated code untouched
 
-STATUS: CHANGES_REQUESTED
+Loop 1 result: CHANGES_REQUESTED (superseded by Loop 2 below)
+
+---
+
+# Loop 2 - review of fix 392de9c
+
+- Date: 2026-10-24. Diff reviewed: the fix commit 392de9c (main.yml, backend/Dockerfile, web/Dockerfile, web/nginx.conf, compose, e2e.sh, smoke.sh, contracts, DECISIONS) on top of the rebased story commits.
+
+## Resolution of loop-1 items
+| # | Loop-1 item | Resolution |
+|---|---|---|
+| 1 | MAJOR make e2e can never be green | fixed: e2e.sh runs the compose checks first, then one throwaway stack (temp copy, temp .env, unique project, EXIT-trap down -v) for Playwright; unsets IMAGE_TAG; pre-flight refuses when port 80 answers. 3 green runs incl. IMAGE_TAG=sha |
+| 2 | MAJOR web image fixable HIGH | fixed: nginx-unprivileged 1.31.7-alpine digest plus apk upgrade brotli-libs (also in backend); trivy ignore-unfixed exit-code 1 clean on both |
+| 3 | MINOR servers[0] | fixed: http://localhost; README and redocly comments aligned; oasdiff non-breaking |
+| 4 | MINOR tests not hermetic | mitigated by the e2e.sh pre-flight (tests may not be changed) |
+| 5 | MINOR caddy root + 6 HIGH | deferred to STORY-121 (DECISIONS 2026-10-24 loop-1 fixes line) |
+| 6 | MINOR restart policies | fixed: all 5 unless-stopped |
+| 7 | MINOR MinIO default credentials | deferred (DECISIONS); open |
+| 8 | MINOR server_tokens / headers | server_tokens fixed; headers deferred to STORY-010 |
+| 9 | MINOR oasdiff.sh on Windows | open (pre-existing, outside the story) |
+| 10 | NIT SMOKE_TIMEOUT validation | fixed (rc 2) |
+| 11 | NIT SIGPIPE | fixed (here-string) |
+| 12 | NIT favicon fallback | open |
+| 13 | NIT branch scope | open |
+
+## New findings (loop 2)
+| # | Severity | Reviewer | Location | Why it matters | Suggested fix | Resolution |
+|---|---|---|---|---|---|---|
+| 14 | NIT | code-reviewer | infra/scripts/e2e.sh pre-flight | the curl probe misses a non-HTTP listener on port 80 | probe the TCP connect (bash /dev/tcp) instead | open |
+| 15 | NIT | security-reviewer | web/Dockerfile | the runtime still contains curl from the base image | apk del curl in the runtime stage (healthcheck uses wget) | open |
+| 16 | NIT | code-reviewer | PR 9 | origin/main has moved to 9275b4e | rebase before merge | open |
+
+## Checklist notes (loop 2)
+- e2e.sh: set -uo pipefail (no -e, on purpose, to collect rc), nullglob, quoted paths, the trap cleans up on every exit path, shellcheck disable carries a reason, the real .env is never touched. OK on Git Bash (3 runs).
+- Dockerfiles: USER root only for the apk upgrade, then back to USER 101:101 (verified at runtime, uid 101). The backend still runs as 10001.
+- main.yml e2e: npm ci and playwright install --with-deps chromium in web, before make e2e. Correct for ubuntu-latest. The Linux Playwright 1.64.1 noble container passed the 4 screenshot baselines within maxDiffPixelRatio 0.01.
+- Invariants: no secrets added, no new logging, no migrations, generated code untouched.
+
+STATUS: APPROVE

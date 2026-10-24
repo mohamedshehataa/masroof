@@ -60,4 +60,68 @@ OK. scripts/quality/test-integrity-check.sh 45542e1 reports TEST_INTEGRITY: OK. 
 
 Teardown: down -v for project masroof-qa142; docker ps -a empty. The masroof_pgdata volume (created 16:02Z, before this run) was left in place.
 
-STATUS: FAIL
+Loop 1 result: FAIL (superseded by Loop 2 below)
+
+---
+
+# Loop 2 - re-verification of fix 392de9c (rebased on main 2c842f7, PR 9)
+
+- Verifier: qa-verifier (fresh context). Date: 2026-10-24. Head: 392de9c066e0a5005d66ff8e9362a7e50ff7c17f (detached). 2c842f7 is an ancestor of the head. Loop: 2 of 3.
+
+## Environment
+- web: npm ci, then contract lint (scripts/make/contract.sh lint): "Your API description is valid"
+- Docker was clean at the start (no containers); every project started here was torn down at the end (0 containers, 0 qa142/e2e/t022 volumes)
+
+## Criteria (loop 2)
+| Claim | Result | Evidence (command, observed) |
+|---|---|---|
+| make e2e green from clean, twice | PASS | bash scripts/make/e2e.sh: run 1 rc 0 (291 s), run 2 rc 0 (149 s). Each run: ok REQ-OPS-020, ok REQ-OPS-022 resilience, smoke-format and stack, then a throwaway stack masroof-e2e-PID with Playwright 19 passed; 0 containers left afterwards |
+| make e2e with IMAGE_TAG = 40-char sha (main.yml) | PASS | IMAGE_TAG=392de9c066e0a5005d66ff8e9362a7e50ff7c17f bash scripts/make/e2e.sh: rc 0 (152 s), ok REQ-OPS-020 (non-root check), 19 passed |
+| tests unchanged since test-designer | PASS | diff 7210dc0..392de9c over infra/tests, web/e2e and web/src test files is empty (7210dc0 = "test(infra): failing compose checks for stack smoke") |
+| Linux screenshot baselines (NEW) | PASS | stack up (compose.sh up, project masroof-qa142l2). docker run mcr.microsoft.com/playwright:v1.64.1-noble (matches @playwright/test 1.64.1), web mounted read-only and copied in, npm ci, E2E_BASE_URL=http://host.docker.internal, CI=1, npx playwright test e2e/REQ-OPS-021-matrix.spec.ts: 4 passed (1.3 s). toHaveScreenshot (maxDiffPixelRatio 0.01) matched the Windows-made baselines on Linux chromium. The snapshot template has no platform suffix, so these are the same PNGs CI uses. The baselines were mounted read-only and not regenerated; the worktree is clean |
+| trivy on web + backend | PASS | trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1: masroof/web:dev 0 HIGH/0 CRITICAL rc 0 (nginx 1.31.7); masroof/backend:dev 0/0 rc 0. caddy:2.11.7-alpine still 6 HIGH (rc 1), accepted and deferred to STORY-121 in the DECISIONS.md line dated 2026-10-24, "[STORY-142] Loop-1 fixes" (CI does not scan caddy) |
+| servers[0] + non-breaking | PASS | openapi.yaml servers[0] url is http://localhost; contracts/README.md and redocly.yaml comments updated. oasdiff by docker (main vs head) breaking --fail-on ERR: "No breaking changes", rc 0; changelog: no changes |
+| restart policies | PASS | compose config json: backend, caddy, minio, postgres and web all restart=unless-stopped |
+| server_tokens off | PASS | curl -sD- http://localhost/ shows "Server: nginx" (no version) |
+| SMOKE_TIMEOUT=abc exits 2 | PASS | "smoke: SMOKE_TIMEOUT must be a positive integer (seconds), got: abc", rc 2; smoke on the live stack still OK/OK rc 0 |
+| main.yml e2e job for ubuntu | PASS (review) | new step in working-directory web: npm ci, then npx playwright install --with-deps chromium (installs the browser and apt deps; sudo is available on ubuntu-latest), then make e2e. e2e.sh unsets IMAGE_TAG, checks port 80 is free, runs the compose checks, then one throwaway stack for Playwright with teardown in an EXIT trap. Its correctness on Linux is shown by the Linux container run above plus the IMAGE_TAG run; the GitHub job itself was not run here |
+| non-root / no node (regression) | PASS | web Config.User 101:101 and runtime id uid 101; node entrypoint rc 127; backend 10001:10001 |
+
+## Loop-1 findings, resolution
+| Loop-1 finding | Status |
+|---|---|
+| MAJOR make e2e red in both states | fixed (3 green runs above) |
+| MAJOR web image 45 fixable HIGH | fixed (0 with ignore-unfixed) |
+| MINOR servers[0] url | fixed |
+| MINOR restart policies | fixed |
+| MINOR server_tokens | fixed (security headers still deferred to STORY-010) |
+| NIT SMOKE_TIMEOUT=abc | fixed |
+| NIT printf-pipe SIGPIPE | fixed (here-string) |
+| MINOR tests not hermetic on port 80 | mitigated: e2e.sh pre-flight refuses to start when port 80 answers (tests unchanged, by rule) |
+| MINOR caddy root + 6 HIGH | deferred to STORY-121, recorded in DECISIONS |
+| MINOR MinIO default credentials logged | deferred to STORY-010/121, recorded in DECISIONS; still open |
+| MINOR oasdiff.sh broken on Windows Git Bash (pre-existing) | still open (oasdiff run by hand) |
+| NIT favicon fallback, spec title, branch scope | still open (cosmetic) |
+
+## New findings (loop 2)
+| Severity | Location | Problem | Reproduce |
+|---|---|---|---|
+| NIT | infra/scripts/e2e.sh pre-flight | the port 80 check only detects an HTTP answer; a non-HTTP listener passes and fails later at compose up | listen on 80 with a raw TCP server, run e2e.sh |
+| NIT | web/Dockerfile | the runtime image still ships curl (inherited from the base; 0 fixable HIGH now) | docker run --entrypoint sh masroof/web:dev -c "command -v curl" |
+| NIT | branch | origin/main is now 9275b4e, beyond the rebase base 2c842f7; PR 9 may need a rebase before merging | rev-parse origin/main |
+
+## Exploratory (loop 2)
+8 regression cases, 0 new problems:
+1. e2e run twice back to back (state reuse)
+2. e2e with IMAGE_TAG = 40-char sha
+3. SMOKE_TIMEOUT=abc
+4. Server header on /
+5. restart policy on all 5 services
+6. Linux chromium screenshot diff for ltr/rtl x light/dark
+7. node and curl in the web runtime
+8. leftover containers/volumes after each e2e run (0)
+
+## Test integrity (loop 2)
+OK. The diff 7210dc0..392de9c over infra/tests, web/e2e and web/src test files is empty. No skips added, no assertions changed.
+
+STATUS: PASS
