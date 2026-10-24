@@ -12,5 +12,6 @@ Owner decision 2026-10-24 (lighter, risk-tiered process aimed at a working verti
 **How to apply when specifying stories:**
 - Set frontmatter `risk_tier: high` for parsing, dedup, money, auth, ingestion (incl. webhooks, LLM prompts); `low` for everything else. Low-tier stories get one spec pass (no spec-review loop).
 - Keep the ≤ ~400 hand-written-line cap; split rather than invoking size exceptions.
-- Merges to main go through a PR the owner merges personally (OWNER-011 open). No story may plan a direct `git push origin main`.
+- Merges to main go through a PR; since 2026-10-25 the orchestrator squash-merges after a green `PR gate` + verify PASS (OWNER-011 resolved). main is unprotected (STORY-147 DESCOPED, OWNER-014 c). No story may plan a direct `git push origin main`.
+- The product-analyst has no shell tool: it cannot run `git show` or `sdlc-lint.py`; emulate lint rules by grep and tell the orchestrator to run it.
 - Do not add new SDLC machinery to a story without an explicit owner decision.

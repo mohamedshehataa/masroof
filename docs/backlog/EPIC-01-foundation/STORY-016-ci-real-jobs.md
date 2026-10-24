@@ -1,47 +1,75 @@
 ---
 id: STORY-016
 epic: EPIC-01
-title: CI workflows run the real gates per module and build artifacts
+title: CI runs backend integration tests and builds and scans the real images
 phase: 1
-status: DRAFT
+status: READY
 size: M
 modules: [infra, sdlc]
-depends_on: [STORY-002, STORY-143, STORY-141, STORY-142, STORY-006, STORY-007, STORY-008, STORY-145]
-reqs: [REQ-OPS-060, REQ-OPS-061, REQ-OPS-062]
-implements: ["PROMPT.md §14 Phase 1 (CI with real jobs)", "PROMPT.md S12 (pr.yml, main.yml, nightly.yml)", "PROMPT.md §2 (CI)"]
+depends_on: [STORY-002, STORY-141, STORY-142, STORY-143, STORY-145]
+reqs: [REQ-OPS-060, REQ-OPS-061, REQ-OPS-172]
+implements: ["PROMPT.md §14 Phase 1 (CI with real jobs)", "PROMPT.md S12 (pr.yml, main.yml)", "PROMPT.md S8 (make targets are the single command surface)"]
+risk_tier: low
 owner_agent: devops-engineer
 ---
 
-# STORY-016 — CI workflows run the real gates per module and build artifacts
+# STORY-016 — CI runs backend integration tests and builds and scans the real images
 
 ## Goal
-Pull requests and `main` run the same `make` gates the agents run locally, split per module, and produce the backend image, web bundle and debug APK (PROMPT S12).
+Close the gaps between what `pr.yml`/`main.yml` claim to check and what they actually run (PROMPT §14 Phase 1 "CI with real jobs", S12). The PR and main gates are already real and green (STORY-145, REQ-OPS-150: `PR gate` / `Main gate`, per-module `check-fast` legs, contract, test integrity, eval-fast, gitleaks/semgrep/osv, `make e2e` on main). Three gaps remain, all checked on main 56f9450:
+1. CI runs only `make check-fast MODULE=backend`. The backend Testcontainers integration tests (`integrationTest`) and ArchUnit tests (`archTest`) run only inside `make check` (`scripts/make/check.sh`), which no workflow calls.
+2. `make build-images` delegates to `infra/scripts/build-images.sh`, which does not exist. It prints `skip: infra/scripts/build-images.sh not present yet` and exits 0. The pr.yml `artifacts` job and the main.yml `images` job therefore build no image, and both main.yml Trivy image scans are skipped (the job only warns `No masroof/* image tagged ... found`).
+3. main.yml uploads no web bundle or debug APK. Only pr.yml's `artifacts` job does.
+
+## Scope trimmed on 2026-10-25 (already DONE elsewhere, not re-specified)
+- Per-module PR legs, the aggregate `gate` job and its "detect must succeed" rule: STORY-145 REQ-OPS-150, `scripts/quality/tests/test_pr_gate.py`.
+- `make e2e` on main against a throwaway compose stack: STORY-142 (`infra/scripts/e2e.sh`).
+- Claude review job (skipped without `ANTHROPIC_API_KEY`): already in pr.yml.
+- **REQ-OPS-062 (branch protection) is retired.** Its successor REQ-OPS-151 is in STORY-147, which is DESCOPED (owner decision 2026-10-25, OWNER-014 option c). The per-metric `gate/Mn` check names and `delivery-gates.yaml` it referred to were deferred with STORY-145's cut (REQ-OPS-152..167 retired).
+- SBOMs (`make sbom` is still a stub): STORY-137 REQ-OPS-133 (Phase 10). Image push or signing to a registry (`IMAGE_PUSH`, `IMAGE_REGISTRY`): STORY-137.
+- Android legs need `android/gradlew`, which STORY-008 adds. Until then they are skipped by `detect`. This story only makes sure they become real without further workflow edits.
 
 ## Requirements and acceptance criteria
-### REQ-OPS-060 — pr.yml runs the gates per module in parallel
-**Amended 2026-10-24 (STORY-145 decision D6; re-spec at this story's `/spec`).** The check runs and their names are owned by STORY-145 REQ-OPS-161: the `required_checks` list in `scripts/quality/delivery-gates.yaml` (14 names, `gate/M1 check-fast` … `pr-body-lint`). There is no aggregate check. This story makes the module legs real inside those checks: backend with Testcontainers integration tests, web, android, and the full-history security scans.
-**Given** a pull request **When** `pr.yml` runs **Then** the module work of `gate/M1 check-fast` and `gate/M2 check` runs in parallel per present module, for backend (`make check-fast MODULE=backend` plus integration tests with Testcontainers), web (`make check-fast MODULE=web`) and android (`make check-fast MODULE=android`). Each leg finishes in < 15 min. The check is green only if every leg passes. Legs for modules the diff does not touch still run, because gates have no path filters.
-Unhappy path: **Given** a PR whose `web/` change fails ESLint **Then** `gate/M1 check-fast` is red, its summary names the web leg, and the failure annotation points at the file and line. The other module legs report green.
+### REQ-OPS-060 — Backend integration and architecture tests run in the PR and main gates
+**Amended 2026-10-25 (trimmed to what is missing; the per-metric check names from the 2026-10-24 amendment are void since STORY-145's cut).**
+**Given** a pull request to `main` while `backend/gradlew` exists **When** `pr.yml` runs **Then**:
+- a job runs the backend Testcontainers integration tests and the ArchUnit tests through a `make` target (the workflow calls no `./gradlew`, `npm` or `pytest` directly; S8);
+- the job log shows at least one executed test for each of the two suites (the JUnit XML under `backend/build/test-results/` has `tests` > 0 for `integrationTest` and for `archTest`), and the results are uploaded as an artifact;
+- the job finishes in < 15 min on `ubuntu-latest`;
+- `PR gate` lists the job in `needs`, so `test_pr_gate.py` still passes, extended with this job.
 
-### REQ-OPS-061 — main.yml builds and publishes artifacts
-**Given** a push to `main` **When** `main.yml` runs **Then** after the PR gates it builds the backend container image (tag `sha-<short>`, non-root, pinned base digest), the web bundle (`make build-web`) and the debug APK (`make build-apk`), uploads them as workflow artifacts, and runs `make e2e` against a compose stack started from the built images (Playwright matrix placeholder may be the health page until Phase 2); the Trivy scan of the image reports no HIGH/CRITICAL with a fix.
-Unhappy path: **Given** Trivy finds a fixable CRITICAL **Then** the workflow fails and the image is not retained.
+The same job runs in `main.yml`, and `Main gate` needs it.
+Unhappy path: **Given** a throwaway branch where one Testcontainers integration test asserts a wrong value **When** the PR runs **Then** this job concludes `failure`, `PR gate` concludes `failure` with `::error::At least one required job failed or was cancelled.`, and the uploaded test report names the failing test class.
+Unhappy path: **Given** Docker or Testcontainers cannot start a container on the runner **When** the job runs **Then** it concludes `failure`. It never concludes `success` with 0 integration tests executed.
+Unhappy path: **Given** `backend/gradlew` is absent (simulated in `test_pr_gate.py` with `detect` output `backend=false`) **Then** the job is skipped and `PR gate` still concludes `success`.
+Unhappy path: **Given** an ArchUnit rule is violated (e.g. a `domain` class imports `org.springframework`) **Then** the job and `PR gate` conclude `failure`.
 
-### REQ-OPS-062 — Branch protection on main uses the delivery-gates required checks
-**Amended 2026-10-24 (STORY-145 decision D6; re-spec at this story's `/spec`).**
-**Given** `gh` is authenticated as an admin of the repository **When** this story applies branch protection to `main` **Then** `gh api repos/<owner>/<repo>/branches/main/protection` shows all of the following:
-- required status checks exactly equal to `required_checks` in `scripts/quality/delivery-gates.yaml` (the 14 names, read from the file, not copied);
-- 1 required approving review;
-- dismiss stale approvals on new pushes;
-- required linear history;
-- force pushes and deletions disabled;
-- `enforce_admins` true.
+### REQ-OPS-061 — `make build-images` builds the real images and CI scans them with Trivy
+**Amended 2026-10-25.** Image naming follows `infra/README.md`: `IMAGE_TAG` sets the tag, and an empty `IMAGE_REGISTRY` gives the local names `masroof/backend:<tag>` and `masroof/web:<tag>`.
+**Given** Docker is running and `IMAGE_TAG=pr-12` **When** `make build-images` runs **Then**:
+- it exits 0;
+- `docker image inspect masroof/backend:pr-12` and `docker image inspect masroof/web:pr-12` both succeed;
+- each image's `Config.User` is non-empty and is neither `root` nor `0`;
+- every `FROM` line of `backend/Dockerfile` and `web/Dockerfile` carries an `@sha256:` digest;
+- the output contains no `skip:` line.
 
-The repository also has secret scanning **and push protection** enabled (STORY-145 decision D9). Without admin access, the commands to run are recorded as `TODO(owner)` in `docs/DEPLOY.md`.
-Unhappy path: **Given** a PR whose `gate/M5 test-integrity` is red **Then** GitHub refuses the merge, and `gh pr merge` reports the failing required check. **Given** a PR approved only by its author **Then** the merge is refused, because GitHub does not count an author's own review.
+**Given** `IMAGE_TAG` is unset **Then** the images are tagged `dev`, the tag compose and `infra/tests/*.sh` inspect. A later `make up` keeps working.
+**Given** a pull request **When** the pr.yml `artifacts` job runs **Then** it builds both images and runs a Trivy image scan on each (severity `HIGH,CRITICAL`, ignore unfixed, exit code 1), and `PR gate` needs that job.
+**Given** a push to `main` **When** the main.yml `images` job runs **Then** both Trivy image-scan steps run (they are not skipped), and the log has no `No masroof/* image tagged` warning.
+Unhappy path: **Given** a throwaway branch whose `backend/Dockerfile` runtime base is re-pinned to an older digest with a fixable HIGH or CRITICAL CVE **When** the PR runs **Then** the Trivy step fails, its table names the package and CVE, and `PR gate` concludes `failure`.
+Unhappy path: **Given** a Dockerfile syntax error **When** `make build-images` runs **Then** it exits non-zero and names the image that failed. CI then fails the job; it never exits 0.
+Unhappy path: **Given** the Docker daemon is not reachable **When** `make build-images` runs **Then** it exits non-zero with one stderr line saying Docker is unavailable. It never silently skips.
+Unhappy path: **Given** `web/package.json` is absent **Then** only the backend image is built, and it exits 0 with a line naming the skipped web image (it mirrors the module-presence rule of `build-web`).
+
+### REQ-OPS-172 — main.yml publishes the web bundle and the debug APK
+**Given** a push to `main` with `web/package.json` present **When** `main.yml` runs **Then** a job runs `make build-web` and uploads the artifact `web-bundle` (contents of `web/dist/`, including `index.html`, retention ≥ 7 days), and `Main gate` needs that job.
+**Given** `android/gradlew` is present **When** the same run happens **Then** it also runs `make build-apk` and uploads `android-debug-apk` (`android/**/build/outputs/apk/debug/*.apk`, `if-no-files-found: error`). Until STORY-008 lands, this is proven by a workflow-structure test in the style of `test_pr_gate.py`: the step exists, it is gated on `detect.outputs.android == 'true'`, and the upload uses `if-no-files-found: error`.
+Unhappy path: **Given** `make build-web` fails (e.g. a TypeScript error) **Then** the job and `Main gate` conclude `failure`.
+Unhappy path: **Given** `android/gradlew` is absent **Then** the APK steps are skipped, and `Main gate` concludes `success` when everything else is green.
+Unhappy path: **Given** the build produces no `index.html` in `web/dist/` **Then** the upload or a check step fails the job (an empty artifact is never published).
 
 ## UX states (UI stories only)
-N/A.
+N/A (CI only).
 
 ## Contract impact
 None.
@@ -50,27 +78,33 @@ None.
 None.
 
 ## Security / privacy / LLM-safety impact
-Secrets come only from GitHub Actions secrets. Workflows pin third-party actions by SHA. `GITHUB_TOKEN` permissions are `contents: read` by default. The Claude review action (S12) **moved to STORY-145** (REQ-OPS-161, check `gate/M11 ai-review`) by decision D6. Branch protection and push protection are applied here (REQ-OPS-062).
+- Third-party actions stay pinned by commit SHA. Workflow and job `permissions` stay at `contents: read`, and no new secret is needed.
+- Images are built and scanned locally on the runner and are never pushed (registry push is STORY-137).
+- Trivy HIGH/CRITICAL with a fix becomes a real PR gate for the backend and web images. The Caddy and MinIO upstream images are not built here, so they are not scanned (Caddy: DECISIONS 2026-10-25 → STORY-121).
+- Test reports must not contain fixture message bodies above DEBUG (logging-privacy rule). Integration-test logs are uploaded only as artifacts, not echoed in full.
 
 ## Eval impact
-`eval` fast subset job is added as a placeholder calling `make eval-fast` with the reference adapter (already present in Phase 0).
+None (eval-fast already runs in both workflows).
 
 ## Design notes (architect)
-Filled at stage 3.
+Low tier: architect notes only if needed. Open points for the implementer:
+- the make target name for "backend integration + ArchUnit" (a new target, or `make check` scoped to backend, without duplicating `check-fast`);
+- whether `build-images.sh` wraps `docker build` or `docker compose build`;
+- reusing the `IMAGE_TAG=pr-<n>` / `${{ github.sha }}` values already exported by the workflows.
 
 ## Dependencies
-STORY-002 (backend gate), STORY-143 (backend image), STORY-141 (web gate), STORY-142 (compose stack for `make e2e`), STORY-006, STORY-007, STORY-008, and STORY-145 (the check names in `delivery-gates.yaml`, `approvers`, and the per-metric `pr.yml`).
+STORY-002 (backend Gradle `integrationTest`/`archTest` tasks), STORY-141 (web build), STORY-142 (compose stack, image tags `dev`), STORY-143 (backend Dockerfile), STORY-145 (`pr.yml` gate + `test_pr_gate.py`). All are DONE. STORY-006/007/008 were removed from `depends_on` on 2026-10-25: nothing in this scope needs codegen, and the APK leg is gated on `android/gradlew`.
 
 ## Definition of Ready checklist
 - [x] Goal + Part I links
-- [ ] Numbered REQs with Given/When/Then incl. unhappy paths (REQ-OPS-060/062 amended 2026-10-24; spec-review pending at `/spec`)
+- [x] Numbered REQs with Given/When/Then incl. unhappy paths (REQ-OPS-060, -061, -172; REQ-OPS-062 retired)
 - [x] UX states (UI stories) — N/A
 - [x] Contract impact
 - [x] Data / migration impact
 - [x] Security / privacy / LLM-safety impact
 - [x] Eval impact
-- [x] Size ≤ 400 changed lines
-- [x] Dependencies listed
+- [x] Size ≤ 400 changed lines. Estimate ≈ 250: `infra/scripts/build-images.sh` ~50, workflow edits ~50 (one backend-integration job in two workflows, Trivy steps in pr.yml `artifacts`, one main artifacts job), make target ~5, tests ~150 (workflow-structure tests extending `test_pr_gate.py`, a `build-images` shell test for tag/user/skip).
+- [x] Dependencies listed (all DONE)
 
 ## Status log
 | date | stage | agent | result |
@@ -79,3 +113,4 @@ STORY-002 (backend gate), STORY-143 (backend image), STORY-141 (web gate), STORY
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-141/142 added to depends_on after the STORY-002 split |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-143 added to depends_on (backend image built by main.yml) |
 | 2026-10-24 | 1-2 spec fix | product-analyst | DRAFT — STORY-145 decision D6: REQ-OPS-060 now feeds STORY-145's per-metric checks, REQ-OPS-062 applies branch protection with the yaml `required_checks` + push protection (D9), Claude review moved to STORY-145; depends_on += STORY-145; re-spec + spec-review at `/spec` |
+| 2026-10-25 | 1 spec (low tier) | product-analyst | READY — trimmed to the remaining gaps: backend integration/ArchUnit not run in CI; `make build-images` was a skip stub, so no image was built or Trivy-scanned; main uploaded no web bundle/APK. REQ-OPS-062 retired (STORY-147 DESCOPED); REQ-OPS-172 added; depends_on cut to DONE stories; risk_tier low |
