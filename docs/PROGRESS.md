@@ -22,3 +22,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-24 04:10 · P0 · STORY-002 · review · GREEN · code-reviewer APPROVE; security-reviewer APPROVE after CI osv flag fix (476eacf); awaiting verify loop 2 report, then integrate.
 2026-10-24 04:30 · P0 · STORY-002 · integrate · GREEN · verify loop 2 PASS, both reviewers APPROVE, status DONE (f2053b2); fast-forward to main pending a clean tree (STORY-001 hook fix in flight).
 2026-10-24 06:10 · P0 · STORY-143 · design · GREEN · architect DESIGN_READY after split: STORY-144 (Boot 4.1.2 upgrade + guard NITs, REQ-OPS-142/143) precedes STORY-143 (REQ-OPS-020 only); ADR-0004 supersedes ADR-0003; OWNER-010 (jqwik) escalated.
+2026-10-24 07:05 · P0 · STORY-144 · spec-review · GREEN · loop 2 APPROVE; design covered by ADR-0004; test design started.
