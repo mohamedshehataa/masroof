@@ -61,3 +61,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 · P0 · SDLC · backlog · INFO · Phase-1 readiness pass: STORY-016 READY (trimmed: backend integration/ArchUnit in CI, real build-images + Trivy, main artifacts; REQ-OPS-062 retired, REQ-OPS-172 new); STORY-146 READY (REQ-OPS-168/169); new STORY-148 READY (REQ-OPS-170/171 split from 146); STORY-147 DESCOPED; STORY-137..140 confirmed phase 10 DRAFT; sdlc-lint to be run by the orchestrator.
 2026-10-25 06:30 · P0 · SDLC · review · GREEN · phase 0 gate: 12/12 criteria green (STORY-001 by owner exception); make check-full GREEN, selftest 16/16; report docs/phases/phase-0-report.md; phase -> 1
 2026-10-25 06:45 · P1 · STORY-007 · tdd · INFO · started (low tier).
+2026-10-25 08:40 · P1 · STORY-007 · verify · RED · loop 1/3 FAIL: MAJOR js-yaml 4.2.0 (3 High) via @hey-api/openapi-ts would fail the security gate; all REQ-OPS-053 clauses PASS; fix loop 2.
