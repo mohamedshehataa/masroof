@@ -3,12 +3,13 @@ id: STORY-142
 epic: EPIC-00
 title: "Walking skeleton (stack): make up with Caddy, MinIO, web; make smoke"
 phase: 0
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [infra, sdlc, web, contracts]
 depends_on: [STORY-143, STORY-141]
 reqs: [REQ-OPS-022]
 implements: ["PROMPT.md S15 item 7", "PROMPT.md §2 (compose: Postgres, MinIO, backend, web, Caddy)", "PROMPT.md §12 (actuator not public, non-root images)", "PROMPT.md S8 (make up, make smoke, make e2e)", "PROMPT.md S9 (image hardening)"]
+risk_tier: low
 owner_agent: devops-engineer
 ---
 
