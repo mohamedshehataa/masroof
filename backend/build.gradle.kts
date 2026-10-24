@@ -5,17 +5,13 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
-// Plugin classpath is locked too (-> buildscript-gradle.lockfile). The constraints lift build-time libraries that the
-// plugins pull in above CVE-fixed versions (CWE-1395, ASVS 15.2.1); drop each once the owning plugin ships a fix.
+// Plugin classpath is locked too (-> buildscript-gradle.lockfile). Boot 4.1.2's plugin ships fixed httpclient5/httpcore5.
 buildscript {
     dependencyLocking { lockAllConfigurations() }
     dependencies {
-        classpath(platform("com.fasterxml.jackson:jackson-bom:2.21.8")) // jackson-core/databind 2.21.4 DoS GHSAs
         constraints {
-            classpath("org.apache.commons:commons-lang3:3.18.0") // GHSA-j288-q9x7-2f5v
-            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.5") // GHSA-hjcp-jmpx-g3qm
-            classpath("org.apache.httpcomponents.core5:httpcore5:5.4.4") // GHSA-hf6x-8p5f-cgmf
-            classpath("org.apache.httpcomponents.core5:httpcore5-h2:5.4.4") // GHSA-v3jc-474w-2wm6
+            // GHSA-j288-q9x7-2f5v: spring-boot-gradle-plugin 4.1.2 -> buildpack-platform -> commons-compress 1.27.1 -> 3.16.0
+            classpath("org.apache.commons:commons-lang3:3.18.0")
         }
     }
 }
@@ -24,7 +20,7 @@ plugins {
     java
     jacoco
     checkstyle
-    id("org.springframework.boot") version "3.5.16"
+    id("org.springframework.boot") version "4.1.2"
     id("net.ltgt.errorprone") version "5.1.1"
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
@@ -44,27 +40,18 @@ dependencyLocking { lockAllConfigurations() }
 
 dependencies {
     implementation(platform(SpringBootPlugin.BOM_COORDINATES))
-    // Above the Boot 3.5.16 BOM: Gradle picks the highest version across platforms and constraints.
-    implementation(platform("com.fasterxml.jackson:jackson-bom:2.21.8")) // jackson-core/databind 2.21.4 DoS GHSAs via flyway-core
-    constraints {
-        runtimeOnly("org.postgresql:postgresql:42.7.14") // GHSA-j92g-9f8w-j867 (CVE-2026-54291, CVSS 8.2) fixed in 42.7.12
-        implementation("org.apache.logging.log4j:log4j-api:2.25.5") // GHSA-qv9r-c865-cp47, transitive of spring-boot-starter
-        testImplementation("org.apache.commons:commons-compress:1.28.0") // GHSA-4265-ccf5-phj5, via Testcontainers
-    }
-    testImplementation(platform("org.junit:junit-bom:5.14.4")) // > Boot's 5.12.2; jqwik 1.10.2 needs platform 1.14
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
-    implementation("org.flywaydb:flyway-core")
-    implementation("org.jspecify:jspecify:1.0.0")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.jspecify:jspecify")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
     errorprone("com.google.errorprone:error_prone_core:2.51.0")
     errorprone("com.uber.nullaway:nullaway:0.14.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
-    testImplementation("net.jqwik:jqwik:1.10.2")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

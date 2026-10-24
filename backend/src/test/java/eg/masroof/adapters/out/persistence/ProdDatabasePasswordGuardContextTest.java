@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class ProdDatabasePasswordGuardContextTest {
   private final ApplicationContextRunner runner =
       new ApplicationContextRunner().withUserConfiguration(ProdDatabasePasswordGuard.class);
 
-  private static List<Throwable> chain(Throwable failure) {
+  private static List<Throwable> chain(@Nullable Throwable failure) {
     List<Throwable> result = new ArrayList<>();
     Throwable current = failure;
     while (current != null && !result.contains(current)) {
@@ -34,7 +35,7 @@ class ProdDatabasePasswordGuardContextTest {
     return result;
   }
 
-  private static void assertGuardFailure(Throwable failure) {
+  private static void assertGuardFailure(@Nullable Throwable failure) {
     assertThat(failure).as("startup failure").isNotNull();
     assertThat(chain(failure))
         .as("an IllegalStateException naming spring.datasource.password and POSTGRES_PASSWORD")
@@ -47,7 +48,7 @@ class ProdDatabasePasswordGuardContextTest {
             });
   }
 
-  private static void assertNoCanary(Throwable failure) {
+  private static void assertNoCanary(@Nullable Throwable failure) {
     for (Throwable t : chain(failure)) {
       assertThat(String.valueOf(t.getMessage())).doesNotContain(CANARY);
     }

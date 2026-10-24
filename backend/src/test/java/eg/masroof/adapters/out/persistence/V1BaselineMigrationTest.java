@@ -18,9 +18,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** REQ-OPS-024: the application context migrates an empty Postgres 16 to exactly V1. */
 @SpringBootTest
@@ -29,8 +29,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Tag("migration")
 class V1BaselineMigrationTest {
 
+  // postgres:16.15-alpine3.24, pinned by digest (Testcontainers 2 rejects the tag@digest form).
   @Container @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16.11-alpine");
+  static final PostgreSQLContainer POSTGRES =
+      new PostgreSQLContainer(
+          "postgres@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36");
 
   private final JdbcTemplate jdbc;
 

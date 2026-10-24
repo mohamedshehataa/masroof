@@ -44,6 +44,7 @@ public class ArchitectureRulesTest {
               "jakarta.persistence..",
               "jakarta.servlet..",
               "com.fasterxml.jackson..",
+              "tools.jackson..",
               "java.net.http..")
           .allowEmptyShould(true)
           .as("rule 1: domain does not depend on Spring, JPA, servlet, Jackson or java.net.http");
