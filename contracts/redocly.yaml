@@ -3,7 +3,7 @@
 extends:
   - recommended
 rules:
-  # The first server entry is the local `make up` stack on localhost:8080, on purpose:
+  # The first server entry is the local `make up` stack on http://localhost (Caddy, port 80), on purpose:
   # generated clients default to it in dev. Production is the `https://{domain}` entry.
   no-server-example.com: off
   # Everything else stays at the `recommended` severity. Tighten a few rules we rely on:

@@ -7,7 +7,10 @@ RUN npm ci
 COPY . .
 RUN npx vite build
 
-FROM nginxinc/nginx-unprivileged:1.29.8-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
+USER root
+# Fixed HIGH in brotli-libs (CVE-2026-111497) until the base image digest is bumped; drop when trivy is clean without it.
+RUN apk upgrade --no-cache brotli-libs
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 USER 101:101

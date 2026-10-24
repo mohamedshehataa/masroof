@@ -23,6 +23,9 @@ case "$base" in
 esac
 
 timeout_s="${SMOKE_TIMEOUT:-10}"
+case "$timeout_s" in
+  ""|*[!0-9]*|0) echo "smoke: SMOKE_TIMEOUT must be a positive integer (seconds), got: $timeout_s" >&2; exit 2 ;;
+esac
 health_url="${base}${SMOKE_HEALTH_PATH:-/health}"
 web_url="${SMOKE_WEB_URL:-$base/}"
 deadline=$(( $(date +%s) + timeout_s ))
@@ -38,7 +41,7 @@ check() {
     body="$(curl -sS --max-time "$(( left < 5 ? left : 5 ))" -w '\n%{http_code}' "$url" 2>/dev/null || true)"
     got="$(printf '%s' "$body" | tail -n 1)"
     case "$got" in 000|*[!0-9]*) ;; *) status="$got" ;; esac   # keep the last status actually observed
-    if [ "$status" = "200" ] && printf '%s' "$body" | grep -Eq "$re"; then
+    if [ "$status" = "200" ] && grep -Eq "$re" <<<"$body"; then
       echo "OK $name $url" >"$out_dir/$name"; return 0
     fi
     sleep 1
