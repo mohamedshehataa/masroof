@@ -302,7 +302,6 @@ jobs:
         with:
           scan-args: |-
             --recursive
-            --skip-git
             ./
       - name: Trivy filesystem + IaC scan
         uses: aquasecurity/trivy-action@0.28.0

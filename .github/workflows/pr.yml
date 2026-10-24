@@ -283,13 +283,12 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:latest \
             semgrep scan --config p/default --config .semgrep/ --error --quiet .
       - name: osv-scanner (lockfiles)
-        # Skipped until a lockfile exists: osv-scanner exits non-zero on "no package sources found".
+        # Runs once any lockfile exists (osv-scanner exits non-zero on "no package sources found").
         if: hashFiles('**/package-lock.json', '**/pnpm-lock.yaml', '**/gradle.lockfile', '**/gradle/verification-metadata.xml', '**/requirements*.txt', '**/poetry.lock') != ''
         uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
         with:
           scan-args: |-
             --recursive
-            --skip-git
             ./
 
   # --------------------------------------------------------------------------

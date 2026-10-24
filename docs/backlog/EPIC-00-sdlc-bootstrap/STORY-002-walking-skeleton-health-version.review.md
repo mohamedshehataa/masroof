@@ -8,7 +8,7 @@
 | # | Severity | Reviewer | Location | Why it matters | Suggested fix | Resolution |
 |---|---|---|---|---|---|---|
 | 1 | MAJOR | security | backend/build.gradle.kts:25,28,31 (CWE-1395 / ASVS-15.2.1) | Runtime classpath ships pgjdbc 42.7.11 (CVE-2026-54291, 8.2, channel-binding downgrade), jackson 2.21.4 (5 x 7.5 DoS), log4j-api 2.24.3 — all with fixes; the EOL Boot 3.5.16 BOM will never pull them | Override above the BOM (jackson-bom 2.21.x, pgjdbc 42.7.12+, log4j-api 2.25.x) with reasons; rescan | fix loop 1 (backend-engineer) |
-| 2 | MAJOR | security | backend (no dependencyLocking), scripts/make/security.sh:18, main.yml:298 (CWE-1104 / ASVS-15.1.2) | No gradle.lockfile → osv-scanner step skipped, trivy misses nested build dirs, `make security` RED on a removed osv flag: vulnerable components can merge unnoticed | `dependencyLocking { lockAllConfigurations() }` + committed lockfiles; fix security.sh flags | security.sh fixed by orchestrator (osv `scan source`, trivy `**/build`); locking in fix loop 1 |
+| 2 | MAJOR | security | backend (no dependencyLocking), scripts/make/security.sh:18, pr.yml:292, main.yml:305 (CWE-1104 / ASVS-15.1.2) | No gradle.lockfile → osv-scanner step skipped, trivy misses nested build dirs, `make security` RED on a removed osv flag; loop 2 found the CI steps still passed `--skip-git`, which would turn the gate permanently red once a lockfile exists | `dependencyLocking { lockAllConfigurations() }` + committed lockfiles; fix security.sh and workflow flags | security.sh + both workflows fixed by orchestrator; locking landed in 3f5ac58 |
 | 3 | MINOR | security | settings/build.gradle.kts (CWE-494 / ASVS-15.2.4) | No `verification-metadata.xml`, no wrapper-jar validation in CI | `--write-verification-metadata sha256`; `gradle/actions/wrapper-validation` step | fix loop 1 |
 | 4 | MINOR | security | build/test classpath (httpcore5 5.3.6, commons-compress 1.24.0) | Build/test-only CVEs; not shipped | Track via lockfile; bump when plugins allow | tracked by #2 |
 | 5 | MINOR | security | application.yml:9 (CWE-1188 / ASVS-13.3.1) | `${POSTGRES_PASSWORD:}` empty default could connect unauthenticated against a permissive pg_hba in prod | No default outside dev/test or fail-fast in prod profile | fix loop 1 |
@@ -22,6 +22,12 @@
 | 13 | NIT | code/security | V1BaselineMigrationTest:33 | Floating `postgres:16-alpine` tag | Pin minor/digest | fix loop 1 |
 | 14 | NIT | code + verify | V1__baseline.sql | Accepts `egp`, `Mars/Phobos`, empty name; no updated_at trigger (spec DDL; V1 immutable) | V2+ CHECKs and trigger in STORY-004 | ticketed → STORY-004 |
 | 15 | NIT | code | gradle.properties:1, migrationTest JaCoCo exec, README race note, probe regex | Hygiene | As listed | fix loop 1 |
+| 16 | NIT | security (loop 2) | ProdDatabasePasswordGuard.java:17 | Reads POSTGRES_PASSWORD, not the effective spring.datasource.password | Also check `spring.datasource.password` | ticketed → STORY-143 (compose sets SPRING_PROFILES_ACTIVE=prod) |
+| 17 | NIT | security (loop 2) | ProdDatabasePasswordGuardTest.java:14 | No test proves @Profile("prod") wiring | ApplicationContextRunner test | ticketed → STORY-143 |
+| 18 | NIT | security (loop 2) | gradle.lockfile log4j-to-slf4j 2.24.3 vs log4j-api 2.25.5 | Version drift between API and bridge | `platform(log4j-bom:2.25.5)` | ticketed → STORY-143 |
+
+## Loop 2 (after 3f5ac58)
+security-reviewer: loop-1 #1, #3, #4, #5 resolved (osv 0 findings on both lockfiles; checksums spot-checked against Maven Central; prod guard fails closed without logging the value); #2 resolved locally, CI osv args fixed by the orchestrator in this loop. New risk from the fix: none.
 
 ## Invariants checked
 - [x] Money types (ArchUnit money rule present; gaps ticketed to STORY-004)
