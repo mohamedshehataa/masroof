@@ -167,7 +167,7 @@ Owner decision 2026-10-24: every phase has a time cap and an AI-spend cap, revie
 
 | phase | scope | time cap | AI-spend cap (USD) | spent so far (USD, est.) | delivered | status |
 |---|---|---|---|---|---|---|
-| P0 | SDLC bootstrap + walking skeleton (STORY-001, 002, 141, 142, 143, 144 done; 145 in progress) | ends 2026-10-27 | 200 | 135 | 6 of 7 stories DONE | open |
+| P0 | SDLC bootstrap + walking skeleton (STORY-001, 002, 141, 142, 143, 144, 145 done; 147 deferred) | ends 2026-10-27 | 200 | 137 | 7 of 7 stories DONE | gate pending |
 | P1+P2 slice | manual expense entry end to end (backend + web: schema, auth, expense create/list, web Home/Add/Transactions) | 7 days after P0 closes | 250 | 0 | – | not started |
 
 ## AI spend ledger

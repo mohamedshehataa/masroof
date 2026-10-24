@@ -3,11 +3,11 @@ id: STORY-145
 epic: EPIC-00
 title: "CI on every PR and branch protection on main (delivery gates, cut down)"
 phase: 0
-status: IN_PROGRESS
+status: DONE
 size: S
 modules: [sdlc]
 depends_on: [STORY-001]
-reqs: [REQ-OPS-150, REQ-OPS-151]
+reqs: [REQ-OPS-150]
 implements: ["PROMPT_DELIVERY_GATES.md §0 (cut down, owner decision 2026-10-24)", "PROMPT.md S12"]
 owner_agent: devops-engineer
 risk_tier: low
@@ -26,10 +26,7 @@ Unhappy path: **Given** `ANTHROPIC_API_KEY` is not a repository secret (OWNER-01
 Unhappy path: **Given** Dependabot opens a PR **When** CI runs **Then** it uses the same workflow; a red Dependabot PR is closed or fixed by a story, never merged red.
 Evidence: a link to a green `gate` run on the PR that carries this story, plus the failing run from the throwaway branch.
 
-### REQ-OPS-151 — main is protected
-**Given** the repository `mohamedshehataa/masroof` **When** branch protection is applied to `main` (via `gh api` with the owner's token, recorded as a script `scripts/sdlc/apply-branch-protection.sh` so it is reviewable and re-runnable) **Then** `gh api repos/mohamedshehataa/masroof/branches/main/protection` shows: required status check `gate` (strict, up to date with main), linear history required, force pushes disabled, deletions disabled, pull request required before merging with **0** required approvals (the owner merges personally; GitHub forbids author approval, OWNER-011), and `enforce_admins` false so the owner can still merge.
-**Given** a direct push to `main` **When** it is attempted **Then** GitHub rejects it.
-Unhappy path: **Given** the protection call fails (scope or plan limits) **Then** the script exits non-zero with GitHub's message and the story stays IN_PROGRESS.
+REQ-OPS-151 (branch protection on main) moved to STORY-147 (deferred, owner decision 2026-10-25): GitHub refuses branch protection and rulesets on a private repo without GitHub Pro (HTTP 403, OWNER-014).
 
 ## UX states (UI stories only)
 N/A
@@ -72,3 +69,4 @@ Everything else in docs/PROMPT_DELIVERY_GATES.md: M1-M18 as separate checks, `de
 | 2026-10-24 | 1-2 spec | product-analyst | READY (18 REQs, 2 spec-review loops; full version at 56c4a4f) |
 | 2026-10-24 | 3 design | architect | DESIGN_READY (ADR-0005, ADR-0006) |
 | 2026-10-24 | 1 spec | orchestrator | cut to REQ-OPS-150/151 per owner decision (lighter, risk-tiered process) |
+| 2026-10-25 | integrate | orchestrator | DONE: REQ-OPS-150 proven on PR #2 (run 40092342642 red gate on a failing job, 40093004627 green) and every PR since; guarded by scripts/quality/tests/test_pr_gate.py; REQ-OPS-151 moved to STORY-147 |

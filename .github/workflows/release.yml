@@ -40,6 +40,9 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # release-please runs only on demand until the first real release (owner decision 2026-10-25:
+  # no "Allow GitHub Actions to create pull requests" setting change). Tag pushes still release.
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -64,7 +67,7 @@ jobs:
     name: Release PR / changelog
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       pull-requests: write
