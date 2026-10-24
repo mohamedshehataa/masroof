@@ -10,7 +10,7 @@ Operator runbook: [`docs/DEPLOY.md`](../docs/DEPLOY.md). Security posture:
 | Path | Status | Purpose |
 |---|---|---|
 | `docker-compose.yml` | TODO (Phase 1) | Base stack: `caddy`, `backend`, `web`, `postgres` (16), `minio`, `otel-collector`; non-root images, read-only FS where possible, pinned digests (S9) |
-| `docker-compose.local.yml` | TODO | Local overrides: exposed ports, seeded demo data, MinIO console, no TLS (`make up`) |
+| `docker-compose.dev.yml` | done (STORY-143) | Dev-only overlay: backend on `127.0.0.1:8080`; never loaded by `make up` or deploys |
 | `docker-compose.staging.yml` | TODO | Staging overlay: separate compose project `masroof-staging`, own DB/bucket, Meta test number |
 | `docker-compose.prod.yml` | TODO | Production overlay: resource limits, log rotation, restart policies |
 | `Caddyfile` | TODO | `DOMAIN` -> web + `/api/*`, `/webhooks/*` -> backend; HSTS, security headers, request body limits, rate-limit on `/api/ingest/*` and `/webhooks/*` (REQ-SEC-001, REQ-SEC-004) |
