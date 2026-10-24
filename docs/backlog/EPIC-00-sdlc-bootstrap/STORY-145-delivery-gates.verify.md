@@ -26,4 +26,14 @@ TEST_INTEGRITY: OK
 - The release header comment is corrected, and release jobs now require a push event.
 - Resolved escalations moved under the Resolved heading, and the REQ-OPS-151 mention is removed from the test.
 
-STATUS: FAIL
+## Loop 2 (head 9418499) — PASS
+| REQ | Result | Evidence |
+|---|---|---|
+| REQ-OPS-150 | PASS | `python -m unittest test_pr_gate -v` passes 5 tests, and all 4 mutants are caught (security-fast or detect removed from needs, the failure pattern narrowed, the jq block deleted). The real gate step on pretty-printed RESULTS exits 0 when all are green; failure, cancelled, failed detect, empty and malformed input all exit non-zero. CI run 40137648022 at 9418499: all jobs succeed, and the PR gate log prints "All required jobs passed". |
+| REQ-OPS-151 | PASS (moved) | STORY-147 is DRAFT with identical text, and the trace row lists no tests. |
+
+All six loop-1 findings are fixed. Two NITs remain: a push to main starts a release run where every job is skipped (documented in the header), and the old grep would have matched pretty-printed lines anyway (jq is still the stricter check).
+
+TEST_INTEGRITY: OK
+
+STATUS: PASS
