@@ -25,7 +25,18 @@ export default tseslint.config(
     files: ['**/*.tsx'],
     ignores: ['src/**/*.test.tsx'],
     ...i18next.configs['flat/recommended'],
-    rules: { 'i18next/no-literal-string': ['error', { mode: 'jsx-text-only' }] },
+    rules: {
+      'i18next/no-literal-string': ['error', { mode: 'jsx-text-only' }],
+      // User-facing attributes must come from i18n too (the plugin's jsx-text-only mode ignores attributes).
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'JSXAttribute[name.name=/^(aria-label|aria-description|aria-placeholder|title|alt|placeholder)$/] > Literal',
+          message: 'User-facing attribute strings must come from t().',
+        },
+      ],
+    },
   },
   { files: ['**/*.js'], ...tseslint.configs.disableTypeChecked },
   { files: ['*.config.{js,ts}'], languageOptions: { globals: globals.node } },

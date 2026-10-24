@@ -46,7 +46,7 @@ const LanguageToggle: FC = () => {
         void instance.changeLanguage(target);
       }}
     >
-      {t(`common.language.${target}`)}
+      <span lang={target}>{t(`common.language.${target}`)}</span>
     </button>
   );
 };
@@ -59,14 +59,15 @@ const HealthPanel: FC = () => {
   const { data, isFetching, isError, refetch } = useQuery({ queryKey: ['health'], queryFn: fetchHealth });
 
   useEffect(() => {
+    // Only recover from the error/offline state; never flash a skeleton over a rendered version.
     const onOnline = () => {
-      void refetch();
+      if (isError) void refetch();
     };
     window.addEventListener('online', onOnline);
     return () => {
       window.removeEventListener('online', onOnline);
     };
-  }, [refetch]);
+  }, [refetch, isError]);
 
   if (isFetching) return <div role="status" aria-busy="true" className="skeleton" />;
   if (isError || !data) {

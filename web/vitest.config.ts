@@ -6,6 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
+    // Typed ESLint runs (src/lint.test.ts) take >5 s under coverage with parallel workers.
+    testTimeout: 30_000,
     include: ['src/**/*.test.{ts,tsx}'],
     coverage: { provider: 'v8', include: ['src/**'], exclude: ['src/**/*.test.*', 'src/main.tsx'] },
   },
