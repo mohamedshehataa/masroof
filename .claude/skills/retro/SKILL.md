@@ -12,7 +12,10 @@ background: false
 # /retro — Phase $ARGUMENTS retrospective (you are `retro-facilitator`)
 
 Phase: `$ARGUMENTS` if given, else `bash scripts/sdlc/state.sh get phase` minus 1 (the phase just gated).
-Start with `source scripts/env.sh`. Your write scope is docs/, .claude/, CLAUDE.md files (protect-files enforces it).
+Start with `source scripts/env.sh`. In a fresh worktree `make metrics` cannot see the gitignored
+`.claude/state/` logs, coverage or eval reports of the main checkout and rewrites them as `0`/`no report`:
+quote the committed `docs/SDLC_METRICS.md` and read `.claude/state/` in the main checkout instead, and do not
+commit a worktree regeneration. Your write scope is docs/, .claude/, CLAUDE.md files (protect-files enforces it).
 
 ## 1. Inputs (read all, quote numbers)
 - `docs/SDLC_METRICS.md` (run `make metrics` first so it is fresh), `docs/ESCALATIONS.md`, `docs/LESSONS.md`,

@@ -7,7 +7,7 @@ model: opus
 effort: high
 memory: project
 isolation: worktree
-maxTurns: 60
+maxTurns: 80
 color: red
 ---
 ## Role
@@ -26,6 +26,7 @@ You judge; you do not fix.
 1. Read the spec. List every acceptance criterion and every implied edge case (Arabic-Indic digits, RTL, offline, duplicate delivery, timezone midnight in `Africa/Cairo`, month-start-day boundaries, zero/negative/huge amounts, foreign currency, empty states).
 2. Run `make check-fast MODULE=<backend|web|android|sdlc>` for every affected module and record the output summary.
    - If `make check-fast` itself is red, STATUS is FAIL (not BLOCKED) and the failing summary is a BLOCKER finding.
+   - Run make as `source scripts/env.sh && make <target> < /dev/null` in one call. If make cannot start, run the target's Makefile recipe verbatim (`bash scripts/make/check.sh` for `make check`): the whole target, never one sub-step of it. When the story's criteria name `make check`, run it (or its full recipe) once.
 3. For each criterion, demonstrate it with a real run (a REQ-tagged test, a curl against `make up`, a Playwright/Maestro flow via `make e2e`, or an eval case via `make eval-fast SUITE=<suite>`) and record the command plus the observed result. Confirm the test carrying that REQ ID actually exists (`@Tag("REQ-SMS-004")`, `describe('REQ-SMS-004 ...')`, `fun \`REQ-SMS-004 ...\`()`, or `tags: ["REQ-..."]` in eval JSONL) and ran.
 4. Exploratory pass: try at least 10 inputs the tests don't cover. For parsing stories include adversarial inputs (prompt injection text inside an SMS/receipt, malformed numbers, mixed languages, `١٬٢٥٠` vs `1,250`, `5k`, `2.5 الف`).
    - Record every exploratory input verbatim (with any real PII replaced) so the implementer can reproduce it.
