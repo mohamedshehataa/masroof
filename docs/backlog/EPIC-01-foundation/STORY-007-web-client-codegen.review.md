@@ -45,3 +45,11 @@ The design is now acceptable. The merge is still blocked: the required PR gate i
 
 ### Verdict
 CHANGES_REQUESTED: implementation review items are resolved; the remaining blocker is the semgrep failure in the test file. The PR gate must be green before integrate.
+
+## Loop 3 (head e424749) — PASS
+- The test-designer fix (e424749) touches only web/src/api/generated.test.ts. Both `expect(missing).toEqual([])` assertions are unchanged. The `\b<id>\b` RegExp became a Set of `[A-Za-z0-9_]+` tokens, which matches the same names or fewer: all 79 operationIds are word-only, and schema names are word-only by construction. The spawn shell call keeps a scoped `nosemgrep` with its reason.
+- CI run 40144396415 at e424749: every job is green (Android skipped, module absent), including Security: gitleaks, semgrep, and osv-scanner ("web/package-lock.json … 440 packages … No issues found"). PR gate success.
+- `cd web && npx vitest run`: 10 files, 60/60.
+- Open, non-blocking follow-ups: ESLint static bypasses (fetch via a variable, `new Request`, origin concatenation, relative api/; money via unary minus, destructuring, computed key, optional chain); a post-generation `any` detector to replace the NextCursor allowlist; contract `minLength` for `Health.version`.
+
+STATUS: APPROVE

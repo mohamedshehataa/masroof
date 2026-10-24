@@ -64,3 +64,11 @@ OK. `make check` -> TEST_INTEGRITY: OK, assertions 11 -> 102. No test was delete
 
 ### Verdict
 STATUS: FAIL. Every REQ-OPS-053 clause passes and the loop-1 MAJOR (js-yaml) is fixed locally. The required PR gate is still red: security-fast fails at semgrep on 3 blocking findings in the test-designer file web/src/api/generated.test.ts. Route that to test-designer (justified nosemgrep comments or a rule-compliant rewrite, no assertion change), then re-run CI. Loop 3 is the last.
+
+## Loop 3 (head e424749) — PASS
+- The test-designer fix (e424749) touches only web/src/api/generated.test.ts. Both `expect(missing).toEqual([])` assertions are unchanged. The `\b<id>\b` RegExp became a Set of `[A-Za-z0-9_]+` tokens, which matches the same names or fewer: all 79 operationIds are word-only, and schema names are word-only by construction. The spawn shell call keeps a scoped `nosemgrep` with its reason.
+- CI run 40144396415 at e424749: every job is green (Android skipped, module absent), including Security: gitleaks, semgrep, and osv-scanner ("web/package-lock.json … 440 packages … No issues found"). PR gate success.
+- `cd web && npx vitest run`: 10 files, 60/60.
+- Open, non-blocking follow-ups: ESLint static bypasses (fetch via a variable, `new Request`, origin concatenation, relative api/; money via unary minus, destructuring, computed key, optional chain); a post-generation `any` detector to replace the NextCursor allowlist; contract `minLength` for `Health.version`.
+
+STATUS: PASS

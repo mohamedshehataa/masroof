@@ -68,3 +68,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 09:30 · P1 · STORY-016 · integrate · GREEN · verify PASS + review APPROVE (live PR run 40142922510 green, make check GREEN, 13/15 mutants killed); web Trivy step gated in main.yml; DONE.
 2026-10-25 08:20 · P1 · SDLC · process · INFO · append-only logs (PROGRESS, DECISIONS, LESSONS) use git's union merge, so parallel branches stop conflicting on them.
 2026-10-25 10:10 · P1 · STORY-007 · verify · RED · loop 2/3 FAIL: semgrep blocks the PR gate on 3 findings in the test-designer's generated.test.ts (spawn shell, 2x non-literal RegExp); impl findings resolved; loop 3 (last) routed to test-designer.
+2026-10-25 10:40 · P1 · STORY-007 · integrate · GREEN · loop 3/3 verify PASS + review APPROVE (CI run 40144396415 all green incl. semgrep + osv); DONE.
