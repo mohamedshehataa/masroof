@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { byFullText } from './test/matchers';
 
 const good = {
   status: 'UP',
@@ -58,7 +59,7 @@ describe('REQ-OPS-021 version page states', () => {
   it('REQ-OPS-021 sends exactly one GET /health and shows the English version line', async () => {
     script(json(200, good));
     render(<App />);
-    expect(await screen.findByText(EN_VERSION, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText(EN_VERSION))).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(document.documentElement).toHaveAttribute('lang', 'en');
     expect(document.documentElement).toHaveAttribute('dir', 'ltr');
@@ -73,7 +74,7 @@ describe('REQ-OPS-021 version page states', () => {
     setLanguage(nav);
     script(json(200, good));
     render(<App />);
-    expect(await screen.findByText(copy, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText(copy))).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('lang', lang);
     expect(document.documentElement).toHaveAttribute('dir', dir);
   });
@@ -81,7 +82,7 @@ describe('REQ-OPS-021 version page states', () => {
   it('REQ-OPS-021 wraps version and SHA in bdi dir=ltr', async () => {
     script(json(200, good));
     const { container } = render(<App />);
-    await screen.findByText(EN_VERSION, { exact: false });
+    await screen.findByText(byFullText(EN_VERSION));
     const bdis = Array.from(container.querySelectorAll('bdi[dir="ltr"]')).map((b) => b.textContent);
     expect(bdis).toEqual(['0.1.0', '1a2b3c4']);
   });
@@ -90,13 +91,13 @@ describe('REQ-OPS-021 version page states', () => {
     script(json(200, good));
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText(EN_VERSION, { exact: false });
+    await screen.findByText(byFullText(EN_VERSION));
     await user.click(screen.getByRole('button', { name: 'العربية' }));
-    expect(await screen.findByText('الخادم 0.1.0 (1a2b3c4)', { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText('الخادم 0.1.0 (1a2b3c4)'))).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('lang', 'ar');
     expect(document.documentElement).toHaveAttribute('dir', 'rtl');
     await user.click(screen.getByRole('button', { name: 'English' }));
-    expect(await screen.findByText(EN_VERSION, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText(EN_VERSION))).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('dir', 'ltr');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -142,15 +143,15 @@ describe('REQ-OPS-021 version page states', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Retry' }));
-    expect(await screen.findByText(EN_VERSION, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText(EN_VERSION))).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('REQ-OPS-021 offline Retry shows offline copy, and the online event refetches exactly once', async () => {
     script(
       json(503, { type: 'about:blank', title: 'x', status: 503 }, 'application/problem+json'),
-      netFail,
-      json(200, good),
+      // later calls depend on connectivity, whether or not Retry hits the network while offline
+      () => (navigator.onLine ? json(200, good)() : netFail()),
     );
     const user = userEvent.setup();
     render(<App />);
@@ -164,7 +165,7 @@ describe('REQ-OPS-021 version page states', () => {
     const before = fetchMock.mock.calls.length;
     setOnline(true);
     window.dispatchEvent(new Event('online'));
-    expect(await screen.findByText(EN_VERSION, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(byFullText(EN_VERSION))).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock.mock.calls.length - before).toBe(1);
     });

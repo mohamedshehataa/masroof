@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { afterEach, describe, expect, it } from 'vitest';
 import { makeI18n } from '../../test/i18n';
+import { byFullText } from '../../test/matchers';
 import { VersionLine } from './VersionLine';
 
 afterEach(cleanup);
@@ -18,7 +19,7 @@ async function renderLine(lng: 'en' | 'ar', version: string, gitSha: string) {
 describe('REQ-OPS-021 version line', () => {
   it('REQ-OPS-021 shows English copy with SHA cut to 7 chars, version and SHA in bdi dir=ltr', async () => {
     const { container } = await renderLine('en', '0.1.0', '1a2b3c4d5e6f');
-    expect(screen.getByText('Backend 0.1.0 (1a2b3c4)', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(byFullText('Backend 0.1.0 (1a2b3c4)'))).toBeInTheDocument();
     const bdis = Array.from(container.querySelectorAll('bdi[dir="ltr"]')).map((b) => b.textContent);
     expect(bdis).toEqual(['0.1.0', '1a2b3c4']);
   });
