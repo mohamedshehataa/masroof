@@ -1,2 +1,2 @@
 - [Ticketed follow-ups into story](feedback_ticketed_followups.md) — fold review/verify "ticketed → STORY-NNN" rows into that story's REQs
-- [Delivery gates addendum](project_delivery_gates.md) — STORY-145 M1-M18 rules every later spec must respect (size exception, sanctioned test changes, no push to main)
+- [Delivery gates addendum](project_delivery_gates.md) — addendum mostly DEFERRED (2026-10-24); only CI on every PR applies; risk tiers; no push to main
