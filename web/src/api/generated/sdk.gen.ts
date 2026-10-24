@@ -27,10 +27,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * Returns `UP` when the service and its database are reachable. No authentication.
  */
 export const getHealth = <ThrowOnError extends boolean = true>(options?: Options<GetHealthData, ThrowOnError>): RequestResult<GetHealthResponses, GetHealthErrors, ThrowOnError, 'data'> => (options?.client ?? client).get<GetHealthResponses, GetHealthErrors, ThrowOnError, 'data'>({
-    responseValidator: async (data) => {
-        const health = await v.parseAsync(vGetHealthResponse, data);
-        if (health.status !== 'UP') throw new Error('health: backend reports DOWN');
-    },
+    responseValidator: async (data) => await v.parseAsync(vGetHealthResponse, data),
     responseStyle: 'data',
     url: '/health',
     ...options

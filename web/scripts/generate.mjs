@@ -44,8 +44,10 @@ function rewrite(file, edits) {
   const path = join(outDir, file);
   let text = readFileSync(path, 'utf8');
   for (const [from, to] of edits) {
-    if (!text.includes(from)) throw new Error(`generate: runtime patch no longer applies in ${file}: ${from}`);
-    text = text.replace(from, to);
+    const count = text.split(from).length - 1;
+    if (count !== 1)
+      throw new Error(`generate: runtime patch must match exactly once in ${file} (found ${String(count)}): ${from}`);
+    text = text.replace(from, () => to);
   }
   writeFileSync(path, text);
 }
@@ -61,17 +63,6 @@ rewrite('client/client.gen.ts', [
   [
     '  const makeMethodFn =',
     "  const request = requestImpl as unknown as Client['request'];\n\n  const makeMethodFn =",
-  ],
-]);
-// REQ-OPS-021 kept: a 200 body reporting DOWN is a failure for the version page (the contract enum allows DOWN
-// but the backend answers 503 in that case), so getHealth() rejects instead of resolving a DOWN payload.
-rewrite('sdk.gen.ts', [
-  [
-    'responseValidator: async (data) => await v.parseAsync(vGetHealthResponse, data),',
-    `responseValidator: async (data) => {
-        const health = await v.parseAsync(vGetHealthResponse, data);
-        if (health.status !== 'UP') throw new Error('health: backend reports DOWN');
-    },`,
   ],
 ]);
 rewrite('core/serverSentEvents.gen.ts', [['yield data as any;', 'yield data as never;']]);

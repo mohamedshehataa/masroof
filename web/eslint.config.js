@@ -36,6 +36,13 @@ const contractSelectors = [
   },
 ];
 
+// Global fetch is reserved for the client runtime config in src/api (it forwards to the stubbable global).
+const globalFetchSelector = {
+  selector: "MemberExpression[property.name='fetch'][object.name=/^(window|globalThis|self)$/]",
+  message: 'Do not use the global fetch outside src/api; use the generated client in src/api/generated.',
+};
+const allSelectors = [...contractSelectors, globalFetchSelector];
+
 export default tseslint.config(
   {
     ignores: [
@@ -65,6 +72,11 @@ export default tseslint.config(
   {
     files: ['**/*.{ts,tsx}'],
     ignores: ['src/lib/money.ts'],
+    rules: { 'no-restricted-syntax': ['error', ...allSelectors] },
+  },
+  {
+    files: ['src/api/**/*.ts'],
+    ignores: ['src/lib/money.ts'],
     rules: { 'no-restricted-syntax': ['error', ...contractSelectors] },
   },
   {
@@ -81,7 +93,7 @@ export default tseslint.config(
             'JSXAttribute[name.name=/^(aria-label|aria-description|aria-placeholder|title|alt|placeholder)$/] > Literal',
           message: 'User-facing attribute strings must come from t().',
         },
-        ...contractSelectors,
+        ...allSelectors,
       ],
     },
   },
