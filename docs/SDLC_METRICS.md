@@ -11,7 +11,7 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | stories blocked | 0 |
 | median cycle time | 1.0 d |
 | mean loops per story | 0.33 |
-| review findings (BLOCKER/MAJOR/MINOR) | 1/12/55 |
+| review findings (BLOCKER/MAJOR/MINOR) | 1/13/57 |
 | escaped defects | 4 |
 | gate failures | 51 |
 | flaky tests quarantined | 0 |
@@ -20,19 +20,19 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 ## Stories by status
 | status | count |
 |---|---|
-| DRAFT | 102 |
-| READY | 38 |
+| DRAFT | 100 |
+| READY | 40 |
 | IN_PROGRESS | 0 |
 | BLOCKED | 0 |
 | DONE | 7 |
-| DESCOPED | 0 |
-| total | 147 |
+| DESCOPED | 1 |
+| total | 148 |
 
 ## Stories by phase
 | phase | DRAFT | READY | IN_PROGRESS | BLOCKED | DONE | DESCOPED | total |
 |---|---|---|---|---|---|---|---|
-| 0 | 1 | 0 | 0 | 0 | 7 | 0 | 8 |
-| 1 | 1 | 17 | 0 | 0 | 0 | 0 | 18 |
+| 0 | 0 | 0 | 0 | 0 | 7 | 1 | 8 |
+| 1 | 0 | 19 | 0 | 0 | 0 | 0 | 19 |
 | 2 | 0 | 21 | 0 | 0 | 0 | 0 | 21 |
 | 3 | 23 | 0 | 0 | 0 | 0 | 0 | 23 |
 | 4 | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
@@ -46,6 +46,8 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 ## Cycle time per stage
 | stage | samples | median | mean |
 |---|---|---|---|
+| spec | 1 | 0.0 d | 0.0 d |
+| 1 intake | 5 | 2.0 d | 1.8 d |
 | 1 spec | 1 | 1.0 d | 1.0 d |
 | 1-2 spec | 12 | 0.0 d | 0.1 d |
 | 1-2 spec fix | 10 | 0.0 d | 0.4 d |
@@ -71,24 +73,30 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | STORY-010 | READY | – | 0.0 d |
 | STORY-016 | READY | – | 2.0 d |
 | STORY-017 | READY | – | 0.0 d |
+| STORY-137 | DRAFT | – | 2.0 d |
+| STORY-138 | DRAFT | – | 2.0 d |
+| STORY-139 | DRAFT | – | 2.0 d |
+| STORY-140 | DRAFT | – | 2.0 d |
 | STORY-141 | DONE | – | 0.0 d |
 | STORY-142 | DONE | – | 0.0 d |
 | STORY-143 | DONE | – | 1.0 d |
 | STORY-144 | DONE | 0 | 0.0 d |
 | STORY-145 | DONE | – | 1.0 d |
+| STORY-146 | READY | – | 1.0 d |
+| STORY-147 | DESCOPED | – | 0.0 d |
 
 ## Review findings by severity
 | severity | count |
 |---|---|
 | BLOCKER | 1 |
-| MAJOR | 12 |
-| MINOR | 55 |
-| NIT | 64 |
+| MAJOR | 13 |
+| MINOR | 57 |
+| NIT | 66 |
 
 ## Review findings by reviewer agent
 | agent | BLOCKER | MAJOR | MINOR | NIT | total |
 |---|---|---|---|---|---|
-| code-reviewer | 0 | 4 | 28 | 30 | 62 |
+| code-reviewer | 0 | 5 | 30 | 32 | 67 |
 | guard-bash | 0 | 0 | 0 | 1 | 1 |
 | qa-verifier | 1 | 7 | 24 | 32 | 64 |
 | security-reviewer | 0 | 1 | 3 | 1 | 5 |
@@ -117,9 +125,9 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | android line coverage (Kover) | – | `no report` |
 | web line coverage (Vitest) | 98.6% | `web/coverage/coverage-summary.json` |
 | web branch coverage (Vitest) | 90.4% | `web/coverage/coverage-summary.json` |
-| latest eval report | `eval/reports/20261024T222140Z.md` | eval/reports/*.md |
+| latest eval report | `eval/reports/20261024T224732Z.md` | eval/reports/*.md |
 
-### Latest eval summary (`eval/reports/20261024T222140Z.md`)
+### Latest eval summary (`eval/reports/20261024T224732Z.md`)
 | metric | value | threshold | status | note |
 |---|---|---|---|---|
 | amount_exact_match[adversarial] | 1.0000 | >= 0.96 | PASS |  |
@@ -146,7 +154,7 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | latency_ms_p95[notifications] | 0.0000 | <= 10000 | PASS |  |
 | latency_ms_p95[receipts] | 1.0000 | <= 30000 | PASS |  |
 | latency_ms_p95[sms] | 0.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[voice] | 1.0000 | <= 45000 | PASS |  |
+| latency_ms_p95[voice] | 0.0000 | <= 45000 | PASS |  |
 | latency_ms_p95[whatsapp_text] | 0.0000 | <= 10000 | PASS |  |
 | regression:adversarial_injection_obeyed_count | 0 | baseline 0.0000 (tolerance 0.01) | PASS |  |
 | regression:amount_exact_match[adversarial] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
