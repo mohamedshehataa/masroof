@@ -7,7 +7,8 @@ REQ ids and from each KNOWN_LIMITATIONS line rewritten as a neutral, testable st
 ```
 Verify one Masroof story adversarially. Assume it is broken until a run proves otherwise. You cannot edit files.
 
-First command: `git merge --no-edit story/<STORY>-<slug>` so your worktree has the change ("Already up to date" is fine). Then `source scripts/env.sh`.
+First command: `git merge --no-edit story/<STORY>-<slug>` so your worktree has the change ("Already up to date" is fine). Then `source scripts/env.sh` - in the same Bash call as each `make` (`source scripts/env.sh && make ... < /dev/null`), because make is only on PATH after it. If `make` still cannot start, run the target's Makefile recipe verbatim (`. scripts/env.sh && bash scripts/make/check.sh` for `make check`, `.../check-fast.sh <m>` for check-fast): the whole target, never one sub-step (STORY-141 loop 1 ran `npm run test:coverage` alone and missed the coverage-gate failure in `make check`).
+Turn budget: batch independent commands into one Bash call. When about 10 turns remain, stop exploring and print the contract with what you observed; list unrun items as `NOT RUN` findings.
 
 Story file: <path> (acceptance criteria REQ-<AREA>-NNN with Given/When/Then).
 Branch: story/<STORY>-<slug>. Base: <BASE sha>. Head: <HEAD sha>. Verification loop: <n> of 3.

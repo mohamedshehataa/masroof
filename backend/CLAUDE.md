@@ -23,6 +23,7 @@ Dependency rule: `adapters -> application -> domain`; adapters never import each
 ## Gradle entrypoints the SDLC calls (define them in build.gradle.kts)
 - `checkFast` = spotlessCheck + checkstyleMain + compileJava/compileTestJava (`-Werror`, Error Prone + NullAway) + unit `test` (excludes tag integration) + SpotBugs (no high-priority findings).
 - `integrationTest` (Testcontainers), `archTest` (ArchUnit), `pitest` (money/parsing/dedup/analytics packages), `migrationTest` (empty + previous snapshot), `openApiGenerate` (server interfaces from `../contracts/openapi.yaml` into `build/generated` - never edited), `cyclonedxBom`.
+- CI runs on Linux: `gradle/verification-metadata.xml` regenerated on Windows lacks Linux-resolved entries (PR #2 went red). After a dependency change, also regenerate in `eclipse-temurin:21-jdk` (pass `-PgitSha`/`-PbuildTime`; that image has no git) and merge; compare files LF-normalised.
 - JaCoCo thresholds come from `scripts/quality/quality-thresholds.yaml` (85/75 overall; 95/90 for money, parsing, dedup, analytics).
 
 ## Tests
