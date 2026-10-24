@@ -5,7 +5,7 @@ set -uo pipefail
 what="${1:?images|web|apk-debug|apk-release}"; ver="${2:-dev}"
 case "$what" in
   images) delegate infra/scripts/build-images.sh "$ver" ;;
-  web) [ -f web/package.json ] || { echo "skip: web not present"; exit 0; }; (cd web && npm run -s build) ;;
+  web) [ -f web/package.json ] || { echo "skip: web not present"; exit 0; }; { [ -d web/node_modules ] || (cd web && npm ci --no-audit --no-fund); } && (cd web && npm run -s build) ;;
   apk-debug) [ -x android/gradlew ] || { echo "skip: android not present"; exit 0; }; (cd android && ./gradlew --console=plain -q assembleDebug) ;;
   apk-release) [ -x android/gradlew ] || { echo "skip: android not present"; exit 0; }; delegate android/scripts/build-release.sh "$ver" ;;
   *) echo "unknown build target $what" >&2; exit 2 ;;

@@ -1,0 +1,48 @@
+# Base stack. STORY-143: postgres + backend; STORY-142 adds minio, web, caddy and the restart policy.
+# No host ports here; the dev-only overlay docker-compose.dev.yml publishes the backend on 127.0.0.1:8080.
+name: masroof
+services:
+  postgres:
+    image: postgres:16.15-alpine3.24@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-masroof}
+      POSTGRES_USER: ${POSTGRES_USER:-masroof}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+      start_interval: 1s
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-}          # empty -> the image build fails naming GIT_SHA (never "unknown")
+    image: masroof/backend:${IMAGE_TAG:-dev}
+    environment:                       # explicit list; never env_file: .env (it would ship every secret and POSTGRES_HOST=localhost)
+      SPRING_PROFILES_ACTIVE: prod     # containers always require a DB password (ProdDatabasePasswordGuard)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-masroof}
+      POSTGRES_USER: ${POSTGRES_USER:-masroof}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 4s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
+volumes:
+  pgdata:

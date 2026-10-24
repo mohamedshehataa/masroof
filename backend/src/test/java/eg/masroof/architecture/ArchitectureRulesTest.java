@@ -153,6 +153,19 @@ public class ArchitectureRulesTest {
           .allowEmptyShould(true)
           .as("rule 6: application does not depend on adapters");
 
+  /** Rule 8: JDBC lives only in outbound adapters. */
+  @ArchTest
+  public static final ArchRule JDBC_ONLY_IN_OUTBOUND_ADAPTERS =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("eg.masroof.adapters.out..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "java.sql..", "javax.sql..", "org.springframework.jdbc..", "com.zaxxer.hikari..")
+          .allowEmptyShould(true)
+          .as("rule 8: JDBC only in adapters.out");
+
   /** Rule 7: top-level adapter slices (in.rest, out.persistence, ...) are independent. */
   @ArchTest
   public static final ArchRule ADAPTER_SLICES_INDEPENDENT =
