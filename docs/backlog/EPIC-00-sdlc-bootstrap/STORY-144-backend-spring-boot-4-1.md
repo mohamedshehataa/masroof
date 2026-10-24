@@ -3,7 +3,7 @@ id: STORY-144
 epic: EPIC-00
 title: "Backend on Spring Boot 4.1.2 + prod guard NITs"
 phase: 0
-status: READY
+status: DONE
 size: M
 modules: [backend]
 depends_on: [STORY-002]
@@ -138,3 +138,9 @@ Commit 2 (guard): guard change ≈ 8, guard unit-test updates ≈ 15, `ProdDatab
 | 2026-10-24 | 3 design | architect | covered by ADR-0004 (STORY-143 design) |
 | 2026-10-24 | 1-2 spec | product-analyst | READY — split out of STORY-143 (size ≈ 480): Boot 4.1.2 upgrade (ADR-0004) + STORY-002 review NITs 16-18; REQ-OPS-142/143; ≈ 120 lines |
 | 2026-10-24 | 2 spec fix loop 1 | product-analyst | READY — spec-reviewer loop-1 findings applied with orchestrator decisions: guard context cases (e)-(i) + full-context no-guard-message test; secret check limited to exception chain; archTest totals 9/0/0/0; V1 image pin; no webmvc/Tomcat (deferred to STORY-143); metadata over `... pitest bootJar` with `--continue`; stale-metadata greps + byte-identical re-run; one lowest-fix constraint per advisory; fallback = BLOCKED + OWNER via ESCALATIONS, > 60 numstat lines; CLAUDE.md/money.md wording; ADR-0004 moved to body links; size re-estimated ≈ 145-170 |
+
+| 2026-10-24 | 4 tdd | test-designer | TESTS_FAILING_AS_EXPECTED (b2eabfc) |
+| 2026-10-24 | 5 implement | backend-engineer | BLOCKED on an over-broad check -> criterion narrowed (857eecc); upgrade 46a68af, guard 7fba50d |
+| 2026-10-24 | 6 verify | qa-verifier | PASS loop 1 |
+| 2026-10-24 | 7 review | code-reviewer / security-reviewer | APPROVE / APPROVE (MINORs fixed 1bfd9cd, 546703a; others ticketed STORY-143/145) |
+| 2026-10-24 | 8 integrate | orchestrator | DONE on story branch; manual delivery-gate table in .review.md; merge to main pending OWNER-011 / STORY-001 |

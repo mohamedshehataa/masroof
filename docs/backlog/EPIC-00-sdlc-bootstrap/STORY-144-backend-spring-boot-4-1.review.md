@@ -7,15 +7,15 @@
 ## Findings
 | # | Severity | Reviewer | Location | Why it matters | Suggested fix | Resolution |
 |---|---|---|---|---|---|---|
-| 1 | MINOR | code | ProdDatabasePasswordGuard.java:27 | `contains("${")` branch reached by no test; a refactor could drop it silently | Unit case via MockEnvironment ignoring unresolvable placeholders or an escaped `ab\${cd}` | fix in progress (test-designer) |
-| 2 | MINOR | code | ProdDatabasePasswordGuardTest.java:11,37 | Missing `@Tag("REQ-OPS-143")`; spec's `""` unit case missing | Tag class; add empty-string case | fix in progress (test-designer) |
-| 3 | MINOR | code | backend/README.md:12 | Refresh command differs from the proven byte-identical regeneration command | Use the story's command; note CRLF normalisation | fix in progress (backend-engineer) |
+| 1 | MINOR | code | ProdDatabasePasswordGuard.java:27 | `contains("${")` branch reached by no test; a refactor could drop it silently | Unit case via MockEnvironment ignoring unresolvable placeholders or an escaped `ab\${cd}` | fixed 546703a |
+| 2 | MINOR | code | ProdDatabasePasswordGuardTest.java:11,37 | Missing `@Tag("REQ-OPS-143")`; spec's `""` unit case missing | Tag class; add empty-string case | fixed 546703a |
+| 3 | MINOR | code | backend/README.md:12 | Refresh command differs from the proven byte-identical regeneration command | Use the story's command; note CRLF normalisation | fixed 1bfd9cd |
 | 4 | MINOR | security + verify | ProdDatabasePasswordGuard.java:23 (CWE-258 / ASVS-13.3.1) | Empty `SPRING_DATASOURCE_HIKARI_PASSWORD` overrides the guarded password after binding | Also guard `spring.datasource.hikari.password`, or compose test that no `SPRING_DATASOURCE_HIKARI_*` is passed | ticketed → STORY-143 |
 | 5 | MINOR | verify | backend/gradle.lockfile | Gradle accepts a lock downgrade to a version already in the verification metadata (pre-existing Gradle behaviour) | Lockfile diff check in CI (delivery gates) | ticketed → STORY-145 (M13/M8 lockfile diff review) |
 | 6 | MINOR | verify | make security (local) | semgrep not installed locally; money-no-float/no-log-body only run in CI | Docker fallback or explicit SKIPPED status | ticketed → STORY-145 (M8 must not report GREEN with a skipped scanner) |
-| 7 | NIT | code | backend-boot41-checks.sh:29 | Quoted `"$PYTHON"` breaks the `py -3` fallback | Array split | fix in progress (backend-engineer) |
-| 8 | NIT | code | build.gradle.kts:13 | Comment chain does not name commons-lang3 | Reword | fix in progress (backend-engineer) |
-| 9 | NIT | code + verify | ProdDatabasePasswordGuard.java:30 | Message for a literal `${` says only "non-empty" | Mention `${` (never the value) | fix in progress (backend-engineer) |
+| 7 | NIT | code | backend-boot41-checks.sh:29 | Quoted `"$PYTHON"` breaks the `py -3` fallback | Array split | fixed 1bfd9cd |
+| 8 | NIT | code | build.gradle.kts:13 | Comment chain does not name commons-lang3 | Reword | fixed 1bfd9cd |
+| 9 | NIT | code + verify | ProdDatabasePasswordGuard.java:30 | Message for a literal `${` says only "non-empty" | Mention `${` (never the value) | fixed 1bfd9cd |
 | 10 | NIT | code + security | V1BaselineMigrationTest.java:32-36 | Digest-only pin; tag provenance only in a comment; no parity with compose pin | Record digest source; STORY-143 digest-parity check | ticketed → STORY-143 |
 | 11 | NIT | verify | metadata regeneration on Windows | Gradle writes CRLF; raw `cmp` shows a false diff | Normalise line endings before `cmp` | covered by #3 README note |
 | 12 | NIT | verify | guard-bash | verifier reported `osv-scanner scan source ...` blocked; orchestrator could not reproduce (exit 0 for all three forms) | none | not reproduced; no change |
