@@ -119,6 +119,7 @@ networks:
     ipam:
       config:
         - subnet: ${MASROOF_NET_SUBNET:-172.28.0.0/24}   # fixed so Caddy's address is known; tests pick a random one per project
+          ip_range: ${MASROOF_NET_RANGE:-172.28.0.128/25}   # dynamic addresses come from the upper half, never colliding with Caddy's pinned .10
 volumes:
   pgdata:
   miniodata:

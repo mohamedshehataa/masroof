@@ -63,6 +63,29 @@ class WebSecurityConfigurationTest {
 
   @Test
   @Tag("REQ-SEC-051")
+  @DisplayName(
+      "REQ-SEC-051 prod refuses trusted-proxy entries broader than /16 (IPv4) or /64 (IPv6)")
+  void prodRefusesBroadProxyRanges() {
+    assertThat(new ClientIp("172.28.0.10/32", true)).isNotNull();
+    assertThat(new ClientIp("172.28.0.0/16", true)).isNotNull();
+    assertThat(new ClientIp("fd00::/64", true)).isNotNull();
+    for (String broad :
+        new String[] {
+          "10.0.0.0/8", "0.0.0.0/0", "::/0", "fd00::/48", "172.28.0.10/32, 10.0.0.0/15"
+        }) {
+      assertThat(catchThrowable(() -> new ClientIp(broad, true)))
+          .as(broad)
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("broader");
+    }
+    // outside prod the broad default still works
+    assertThat(new ClientIp("10.0.0.0/8", false)).isNotNull();
+    assertThat(catchThrowable(() -> new ClientIp("", true)))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  @Tag("REQ-SEC-051")
   @DisplayName("REQ-SEC-051 only a header-less loopback call is the container's own probe")
   void loopbackProbe() {
     assertThat(ClientIp.isLoopbackProbe(req("127.0.0.1", null))).isTrue();

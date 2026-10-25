@@ -6,7 +6,10 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,7 +17,8 @@ import org.springframework.stereotype.Component;
  * socket peer is inside {@code masroof.trusted-proxies} (env {@code MASROOF_TRUSTED_PROXIES}, a
  * comma separated list of addresses or CIDRs; default Docker's {@code 172.16.0.0/12} pool, where
  * Caddy lives); then the last entry, the one Caddy appended, is used. Anyone else's header is
- * ignored and the socket address is used.
+ * ignored and the socket address is used. Under profile {@code prod} an entry broader than /16
+ * (IPv4) or /64 (IPv6) is refused at startup.
  */
 @Component
 final class ClientIp {
@@ -41,11 +45,31 @@ final class ClientIp {
 
   private final List<Cidr> trusted = new ArrayList<>();
 
-  ClientIp(@Value("${masroof.trusted-proxies:}") String proxies) {
+  static final int PROD_MAX_V4_SPAN = 16;
+  static final int PROD_MAX_V6_SPAN = 64;
+
+  @Autowired
+  ClientIp(@Value("${masroof.trusted-proxies:}") String proxies, Environment environment) {
+    this(proxies, environment.acceptsProfiles(Profiles.of("prod")));
+  }
+
+  ClientIp(String proxies) {
+    this(proxies, false);
+  }
+
+  ClientIp(String proxies, boolean prod) {
     String list = proxies.isBlank() ? DEFAULT_PROXIES : proxies;
     for (String entry : list.split(",", -1)) {
       if (!entry.isBlank()) {
-        trusted.add(parse(entry.strip()));
+        Cidr cidr = parse(entry.strip());
+        int limit = cidr.network().length == 4 ? PROD_MAX_V4_SPAN : PROD_MAX_V6_SPAN;
+        if (prod && cidr.bits() < limit) {
+          throw new IllegalStateException(
+              "masroof.trusted-proxies (MASROOF_TRUSTED_PROXIES) has an entry broader than /"
+                  + limit
+                  + "; under profile prod list only the proxy's own address");
+        }
+        trusted.add(cidr);
       }
     }
   }

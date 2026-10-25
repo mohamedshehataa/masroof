@@ -104,8 +104,9 @@ skips the deploy with a visible warning; it never fails because of that.
 lines after the first start**: they only act while no login exists, and the backend logs a warning (without values)
 when they are still set later. The compose network is pinned (`172.28.0.0/24`, Caddy at `172.28.0.10`; override with `MASROOF_NET_SUBNET`/`CADDY_IP` if it
 collides with something on the host) and the backend trusts `X-Forwarded-For` only from that one address
-(`MASROOF_TRUSTED_PROXIES` is set by compose, do not put it in `.env`). `MASROOF_AUDIT_KEY` (optional, 32+ bytes) keys the audit-log
-IP hashes; without it the key is derived from `MASROOF_JWT_SECRET`.
+(`MASROOF_TRUSTED_PROXIES` is set by compose, do not put it in `.env`). `bootstrap.sh` also generates `MASROOF_AUDIT_KEY` (48 random bytes, base64, mode 600 `.env`, never overwritten once present)
+to key the audit-log IP hashes, independent of `MASROOF_JWT_SECRET`, so rotating the JWT secret does not change audit hashes.
+Under the prod profile the backend refuses to start if `MASROOF_TRUSTED_PROXIES` has an entry broader than /16 (IPv4) or /64 (IPv6). The network also sets `ip_range` (`MASROOF_NET_RANGE`, default `172.28.0.128/25`) so dynamic addresses never collide with Caddy's `.10`.
 
 ### DNS: publish an A record only
 Create only an **A** record (IPv4) for the domain, **no AAAA**, until Docker IPv6 is native and the proxy trust model has been

@@ -44,7 +44,7 @@ sed -i "s|^MASROOF_JWT_SECRET=.*|MASROOF_JWT_SECRET=e2e$(openssl rand -hex 24)|"
 for _ in $(seq 1 50); do
   n=$((RANDOM % 200 + 20))
   if ! docker network ls -q | xargs -r docker network inspect --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | grep -q "172.28.$n.0/24"; then
-    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nCADDY_IP=172.28.%s.10\n' "$n" "$n" >>"$WORK/.env"
+    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nMASROOF_NET_RANGE=172.28.%s.128/25\nCADDY_IP=172.28.%s.10\n' "$n" "$n" "$n" >>"$WORK/.env"
     break
   fi
 done

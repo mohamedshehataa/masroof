@@ -18,7 +18,7 @@ pick_net() {
   for _ in $(seq 1 50); do
     n=$((RANDOM % 200 + 20))
     case " $used " in *" 172.28.$n.0/24 "*) continue ;; esac
-    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nCADDY_IP=172.28.%s.10\n' "$n" "$n" >>"$1"
+    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nMASROOF_NET_RANGE=172.28.%s.128/25\nCADDY_IP=172.28.%s.10\n' "$n" "$n" "$n" >>"$1"
     return 0
   done
   echo "pick_net: no free subnet" >&2
