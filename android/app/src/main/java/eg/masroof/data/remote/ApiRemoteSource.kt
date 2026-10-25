@@ -10,6 +10,9 @@ import eg.masroof.api.models.PaymentAccount
 import eg.masroof.api.models.PaymentMethod
 import eg.masroof.api.models.TransactionType
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.BearerInterceptor
+import eg.masroof.data.auth.SessionManager
+import eg.masroof.data.auth.TokenAuthenticator
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
@@ -38,7 +41,6 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.io.IOException
 import java.math.BigDecimal
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -51,6 +53,17 @@ object UuidSerializer : KSerializer<UUID> {
     override fun serialize(
         encoder: Encoder,
         value: UUID,
+    ) = encoder.encodeString(value.toString())
+}
+
+object UriSerializer : KSerializer<java.net.URI> {
+    override val descriptor = PrimitiveSerialDescriptor("URI", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): java.net.URI = java.net.URI(decoder.decodeString())
+
+    override fun serialize(
+        encoder: Encoder,
+        value: java.net.URI,
     ) = encoder.encodeString(value.toString())
 }
 
@@ -79,6 +92,15 @@ val apiJson: Json =
                 contextual(UuidSerializer)
                 contextual(BigDecimalSerializer)
                 contextual(Instant.serializer())
+                contextual(UriSerializer)
+                contextual(
+                    eg.masroof.api.models.TokenPairTokenType
+                        .serializer(),
+                )
+                contextual(
+                    eg.masroof.api.models.MemberRole
+                        .serializer(),
+                )
                 contextual(TransactionType.serializer())
                 contextual(PaymentMethod.serializer())
                 contextual(
@@ -102,36 +124,26 @@ class ApiRemoteSource
     @Inject
     constructor(
         private val settings: SettingsRepository,
+        bare: OkHttpClient,
+        session: SessionManager,
     ) : RemoteSource {
-        private var cachedKey: Pair<String, String>? = null
+        private var cachedKey: String? = null
         private var cachedRetrofit: Retrofit? = null
+
+        // Bearer header on every call; a 401 triggers one single-flight refresh and one retry (TokenAuthenticator).
+        private val client: OkHttpClient =
+            bare
+                .newBuilder()
+                .addInterceptor(BearerInterceptor(session))
+                .authenticator(TokenAuthenticator(session))
+                .build()
 
         private suspend fun retrofit(): Retrofit {
             val s = settings.current()
             val base = normalizeServerUrl(s.serverUrl) ?: throw IOException("Invalid server URL")
-            val key = base to s.accessToken
+            val key = base
             synchronized(this) {
                 if (key == cachedKey) cachedRetrofit?.let { return it }
-                val client =
-                    OkHttpClient
-                        .Builder()
-                        .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                        .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                        .addInterceptor { chain ->
-                            val req =
-                                chain
-                                    .request()
-                                    .newBuilder()
-                                    .apply {
-                                        if (s.accessToken.isNotBlank()) {
-                                            header(
-                                                "Authorization",
-                                                "Bearer ${s.accessToken}",
-                                            )
-                                        }
-                                    }.build()
-                            chain.proceed(req)
-                        }.build()
                 val built =
                     Retrofit
                         .Builder()
@@ -191,13 +203,10 @@ class ApiRemoteSource
             return try {
                 val response = retrofit().create(ExpensesApi::class.java).createExpense(body, item.clientId)
                 val created = response.body()
-                when {
-                    response.isSuccessful && created != null -> UploadResult.Created(created.toEntity())
-                    response.isSuccessful -> UploadResult.Unexpected
-                    response.code() == UNAUTHORIZED -> UploadResult.Unauthorized
-                    response.code() in RETRYABLE -> UploadResult.Retry
-                    response.code() >= SERVER_ERROR -> UploadResult.Retry
-                    else -> UploadResult.Rejected
+                if (response.isSuccessful && created != null) {
+                    UploadResult.Created(created.toEntity())
+                } else {
+                    classifyUploadStatus(response.code(), response.isSuccessful)
                 }
             } catch (_: IOException) {
                 UploadResult.Retry
@@ -229,10 +238,25 @@ class ApiRemoteSource
         }
 
         private companion object {
-            const val TIMEOUT_SECONDS = 15L
             const val PAGE_LIMIT = 200
-            const val SERVER_ERROR = 500
-            const val UNAUTHORIZED = 401
-            val RETRYABLE = setOf(408, 429)
         }
+    }
+
+private const val SERVER_ERROR = 500
+private const val UNAUTHORIZED = 401
+
+/** 409 is the backend's "concurrent Idempotency-Key; retry": the first attempt is in flight, so retry, never reject. */
+private val RETRYABLE = setOf(408, 409, 429)
+
+/** Outcome of a non-created upload response. Pure so the status table is unit tested. */
+fun classifyUploadStatus(
+    code: Int,
+    successful: Boolean,
+): UploadResult =
+    when {
+        successful -> UploadResult.Unexpected
+        code == UNAUTHORIZED -> UploadResult.Unauthorized
+        code in RETRYABLE -> UploadResult.Retry
+        code >= SERVER_ERROR -> UploadResult.Retry
+        else -> UploadResult.Rejected
     }

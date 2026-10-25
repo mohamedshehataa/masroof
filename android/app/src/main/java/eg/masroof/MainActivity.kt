@@ -17,6 +17,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -31,8 +32,11 @@ import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.SessionManager
+import eg.masroof.data.auth.SessionState
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.home.HomeRoute
+import eg.masroof.ui.login.LoginRoute
 import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
@@ -54,12 +58,23 @@ private const val ADD_ROUTE = "add"
 class MainActivity : ComponentActivity() {
     @Inject lateinit var settings: SettingsRepository
 
+    @Inject lateinit var session: SessionManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val current by settings.settings.collectAsState(initial = AppSettings())
-            MasroofTheme(digitOverride = current.digitStyle) { MasroofRoot() }
+            val sessionState by session.state.collectAsState()
+            LaunchedEffect(Unit) { session.restore() }
+            MasroofTheme(digitOverride = current.digitStyle) {
+                when (val s = sessionState) {
+                    SessionState.Restoring -> Unit
+                    is SessionState.SignedOut ->
+                        Scaffold { padding -> LoginRoute(s.notice, modifier = Modifier.padding(padding)) }
+                    is SessionState.SignedIn -> MasroofRoot()
+                }
+            }
         }
     }
 }

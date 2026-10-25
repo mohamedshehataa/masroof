@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -21,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,16 +34,16 @@ import eg.masroof.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsRoute(viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    SettingsContent(state, viewModel::onUrl, viewModel::onToken, viewModel::onDigits, viewModel::save)
+    SettingsContent(state, viewModel::onUrl, viewModel::onDigits, viewModel::save, viewModel::logout)
 }
 
 @Composable
 fun SettingsContent(
     state: SettingsUiState,
     onUrl: (String) -> Unit,
-    onToken: (String) -> Unit,
     onDigits: (DigitStyle) -> Unit,
     onSave: () -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val effectiveDigits = state.digitStyle ?: LocalMoneyStyle.current.digits
@@ -62,14 +62,6 @@ fun SettingsContent(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            value = state.accessToken,
-            onValueChange = onToken,
-            label = { Text(stringResource(R.string.settings_token)) },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -85,5 +77,8 @@ fun SettingsContent(
             Text(stringResource(R.string.settings_save))
         }
         if (state.saved) Text(stringResource(R.string.settings_saved), color = MaterialTheme.colorScheme.primary)
+        OutlinedButton(onClick = onLogout, enabled = !state.loggingOut, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text(stringResource(R.string.settings_logout))
+        }
     }
 }

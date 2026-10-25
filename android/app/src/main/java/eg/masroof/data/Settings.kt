@@ -17,7 +17,6 @@ import javax.inject.Singleton
 
 data class AppSettings(
     val serverUrl: String = DEFAULT_SERVER_URL,
-    val accessToken: String = "",
     /** null = follow the UI language (Arabic -> Arabic-Indic digits). */
     val digitStyle: DigitStyle? = null,
 ) {
@@ -44,7 +43,6 @@ class DataStoreSettings
         @ApplicationContext private val context: Context,
     ) : SettingsRepository {
         private val urlKey = stringPreferencesKey("server_url")
-        private val tokenKey = stringPreferencesKey("access_token")
         private val arabicDigitsKey = booleanPreferencesKey("arabic_digits")
         private val digitsSetKey = booleanPreferencesKey("digits_set")
 
@@ -52,7 +50,6 @@ class DataStoreSettings
             context.dataStore.data.map { p ->
                 AppSettings(
                     serverUrl = p[urlKey] ?: AppSettings.DEFAULT_SERVER_URL,
-                    accessToken = p[tokenKey].orEmpty(),
                     digitStyle =
                         if (p[digitsSetKey] == true) {
                             if (p[arabicDigitsKey] == true) DigitStyle.ARABIC_INDIC else DigitStyle.WESTERN
@@ -68,7 +65,6 @@ class DataStoreSettings
             val next = transform(current())
             context.dataStore.edit { p ->
                 p[urlKey] = next.serverUrl
-                p[tokenKey] = next.accessToken
                 if (next.digitStyle == null) {
                     p.remove(digitsSetKey)
                 } else {
