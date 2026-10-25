@@ -60,7 +60,8 @@ class GradlewGuardTests(unittest.TestCase):
 
     def test_committed_gradle_wrappers_have_the_executable_bit(self) -> None:
         git = shutil.which("git")
-        self.assertIsNotNone(git)
+        if git is None or not (ROOT / ".git").exists():
+            self.skipTest("not a git checkout (e.g. a git-archive export)")
         out = subprocess.run([git, "ls-files", "-s", "--", "android/gradlew", "backend/gradlew"], cwd=ROOT,
                              capture_output=True, text=True).stdout.strip().splitlines()
         self.assertTrue(out, "no gradle wrapper tracked")
