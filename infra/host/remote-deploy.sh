@@ -11,7 +11,7 @@ cmd="${1:?apply|commit|restore}"
 infra="$HOME/masroof/infra"
 state="$infra/.deployed"
 cd "$infra"
-[ -f .env ] || { echo "remote-deploy: $infra/.env missing: run infra/oracle/bootstrap.sh first" >&2; exit 1; }
+[ -f .env ] || { echo "remote-deploy: $infra/.env missing: run infra/host/bootstrap.sh first" >&2; exit 1; }
 mkdir -p "$state"
 
 dc() { docker compose -p masroof -f docker-compose.yml -f docker-compose.prod.yml --env-file .env "$@"; }

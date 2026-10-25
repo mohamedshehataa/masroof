@@ -17,7 +17,7 @@
 # Image naming contract with the Makefile (see infra/README.md):
 #   `make build-images` honours IMAGE_TAG and produces
 #   masroof/backend:${IMAGE_TAG} and masroof/web:${IMAGE_TAG}. With IMAGE_REGISTRY/IMAGE_PUSH=1/PLATFORMS (job
-#   `publish-images`) it pushes ghcr.io/<owner>/masroof-backend and -web, linux/amd64 + linux/arm64.
+#   `publish-images`) it pushes ghcr.io/<owner>/masroof-backend and -web, linux/amd64 (the GCP e2-micro host).
 name: Main
 
 on:
@@ -453,10 +453,10 @@ jobs:
           retention-days: 90
 
   # --------------------------------------------------------------------------
-  # Publishes multi-arch (amd64 + arm64: the Oracle Always Free host is Ampere) images to GHCR, tagged with the
+  # Publishes linux/amd64 (the Google Cloud e2-micro host is x86_64) images to GHCR, tagged with the
   # commit sha. Runs only after the image build + Trivy scan passed. `packages: write` is scoped to this job.
   publish-images:
-    name: Publish images to GHCR (multi-arch)
+    name: Publish images to GHCR (linux/amd64)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     needs: [detect, images]
@@ -467,10 +467,9 @@ jobs:
     env:
       IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
       IMAGE_PUSH: "1"
-      PLATFORMS: linux/amd64,linux/arm64
+      PLATFORMS: linux/amd64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
