@@ -193,6 +193,7 @@ class ApiRemoteSource
                 val created = response.body()
                 when {
                     response.isSuccessful && created != null -> UploadResult.Created(created.toEntity())
+                    response.isSuccessful -> UploadResult.Unexpected
                     response.code() == UNAUTHORIZED -> UploadResult.Unauthorized
                     response.code() in RETRYABLE -> UploadResult.Retry
                     response.code() >= SERVER_ERROR -> UploadResult.Retry
@@ -204,7 +205,7 @@ class ApiRemoteSource
                 throw e
             } catch (_: Exception) {
                 // Anything unexpected (bad id, malformed body) must not kill the worker or lose the entry.
-                UploadResult.Retry
+                UploadResult.Unexpected
             }
         }
 

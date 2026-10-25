@@ -16,11 +16,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
-import eg.masroof.ui.TransactionsUiState
-import eg.masroof.ui.TransactionsViewModel
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
+import eg.masroof.ui.viewmodel.TransactionsUiState
+import eg.masroof.ui.viewmodel.TransactionsViewModel
 
 @Composable
 fun TransactionsRoute(viewModel: TransactionsViewModel = hiltViewModel()) {

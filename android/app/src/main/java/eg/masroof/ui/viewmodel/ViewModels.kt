@@ -1,4 +1,4 @@
-package eg.masroof.ui
+package eg.masroof.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

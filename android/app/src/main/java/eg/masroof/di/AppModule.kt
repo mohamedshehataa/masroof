@@ -43,7 +43,7 @@ object ProvidersModule {
         Room
             .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
             // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .fallbackToDestructiveMigrationFrom(true, 1)
             .build()
 
     @Provides @Singleton

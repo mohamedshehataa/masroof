@@ -27,9 +27,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DigitStyle
-import eg.masroof.ui.SettingsUiState
-import eg.masroof.ui.SettingsViewModel
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.SettingsUiState
+import eg.masroof.ui.viewmodel.SettingsViewModel
 
 @Composable
 fun SettingsRoute(viewModel: SettingsViewModel = hiltViewModel()) {

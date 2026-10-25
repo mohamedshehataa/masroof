@@ -9,7 +9,8 @@ cd "$PROJECT_DIR" || exit 1
 mod="${1:?module}"; task="${2:?task}"
 case "$mod" in
   backend|android)
-    gradlew_state "$mod"; case $? in 2) echo "skip: $mod module not present"; exit 0 ;; 1) exit 1 ;; esac
+    st=0; gradlew_state "$mod" || st=$?   # under set -e a bare call would exit 2 before the case
+    case $st in 2) echo "skip: $mod module not present"; exit 0 ;; 1) exit 1 ;; esac
     case "$task" in mutation) gtask=pitest ;; *) gtask="$task" ;; esac
     if [ "$task" = mutation ] && [ "$mod" = backend ]; then
       # PIT with zero target classes writes no mutations.xml. Leave an explicit marker (only when PIT itself says so)

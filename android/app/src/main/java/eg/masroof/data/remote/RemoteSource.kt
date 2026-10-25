@@ -18,6 +18,9 @@ sealed interface UploadResult {
     /** Transient: network down, 5xx, 408/429. Keep in the outbox and back off. */
     data object Retry : UploadResult
 
+    /** 2xx with an unusable body, or an unexpected local error. Retried a few times, then given up on (marked failed). */
+    data object Unexpected : UploadResult
+
     /** 401: credentials missing/expired. Retrying cannot help until the user signs in again. */
     data object Unauthorized : UploadResult
 

@@ -7,6 +7,35 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.kover)
+}
+
+// Lock only what ships in the APK (runtime classpaths); tooling/test classpaths are intentionally not locked, so
+// osv-scanner reports on shipped code. LENIENT: a few artifacts differ per OS. Refresh: ./gradlew :app:dependencies --write-locks
+configurations
+    .matching { it.name == "debugRuntimeClasspath" || it.name == "releaseRuntimeClasspath" }
+    .configureEach { resolutionStrategy.activateDependencyLocking() }
+dependencyLocking { lockMode.set(LockMode.LENIENT) }
+
+kover {
+    reports {
+        filters {
+            excludes {
+                // Generated glue (Hilt/Dagger/Room/Compose) is not ours to cover.
+                classes(
+                    "*_Factory",
+                    "*_Factory\$*",
+                    "*Hilt_*",
+                    "*_HiltModules*",
+                    "*_MembersInjector",
+                    "dagger.hilt.*",
+                    "hilt_aggregated_deps.*",
+                )
+                classes("*_Impl", "*_Impl\$*", "*ComposableSingletons*", "eg.masroof.BuildConfig", "eg.masroof.R", "eg.masroof.R\$*")
+                classes("eg.masroof.ui.theme.*", "eg.masroof.MainActivity*", "eg.masroof.MasroofApp*")
+            }
+        }
+    }
 }
 
 android {
@@ -111,6 +140,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(libs.snakeyaml)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
@@ -165,5 +195,6 @@ val checkNoFloatMoney by tasks.registering {
 tasks.register("checkFast") {
     group = "verification"
     description = "Fast gate: ktlint + detekt + money scan + lint + unit tests + debug APK"
-    dependsOn("ktlintCheck", "detekt", checkNoFloatMoney, "lintDebug", "testDebugUnitTest", "assembleDebug")
+    // koverXmlReportDebug writes app/build/reports/kover/reportDebug.xml, which scripts/quality/coverage-gate.py reads.
+    dependsOn("ktlintCheck", "detekt", checkNoFloatMoney, "lintDebug", "koverXmlReportDebug", "assembleDebug")
 }

@@ -21,6 +21,8 @@ datetime = "0.6.2"
 openapiGenerator = "7.14.0"
 ktlintPlugin = "13.1.0"
 detekt = "1.23.8"
+kover = "0.9.11"
+snakeyaml = "2.7"
 junit = "4.13.2"
 robolectric = "4.16"
 androidxTest = "1.7.0"
@@ -59,6 +61,7 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 junit = { module = "junit:junit", version.ref = "junit" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidxTest" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit-ktx", version.ref = "androidxTestExt" }
@@ -74,3 +77,4 @@ hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 openapi-generator = { id = "org.openapi.generator", version.ref = "openapiGenerator" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }

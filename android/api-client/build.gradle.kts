@@ -80,3 +80,9 @@ dependencies {
     api(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
 }
+
+// Lock only what ships (runtime classpath); tooling and test classpaths are intentionally not locked.
+configurations.matching { it.name == "runtimeClasspath" }.configureEach {
+    resolutionStrategy.activateDependencyLocking()
+}
+dependencyLocking { lockMode.set(LockMode.LENIENT) }

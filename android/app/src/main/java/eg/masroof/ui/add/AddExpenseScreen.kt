@@ -28,9 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
-import eg.masroof.ui.AddExpenseViewModel
-import eg.masroof.ui.AddUiState
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.AddExpenseViewModel
+import eg.masroof.ui.viewmodel.AddUiState
 
 @Composable
 fun AddExpenseRoute(

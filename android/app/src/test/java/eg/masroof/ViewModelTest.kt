@@ -1,10 +1,10 @@
 package eg.masroof
 
 import eg.masroof.data.RefreshOutcome
-import eg.masroof.ui.AddExpenseViewModel
-import eg.masroof.ui.HomeViewModel
-import eg.masroof.ui.LoadStatus
-import eg.masroof.ui.TransactionsViewModel
+import eg.masroof.ui.viewmodel.AddExpenseViewModel
+import eg.masroof.ui.viewmodel.HomeViewModel
+import eg.masroof.ui.viewmodel.LoadStatus
+import eg.masroof.ui.viewmodel.TransactionsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch

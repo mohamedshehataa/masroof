@@ -4,13 +4,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import eg.masroof.core.Money
-import eg.masroof.ui.ExpenseRow
-import eg.masroof.ui.HomeUiState
-import eg.masroof.ui.LoadStatus
-import eg.masroof.ui.TransactionsUiState
 import eg.masroof.ui.home.HomeContent
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsContent
+import eg.masroof.ui.viewmodel.ExpenseRow
+import eg.masroof.ui.viewmodel.HomeUiState
+import eg.masroof.ui.viewmodel.LoadStatus
+import eg.masroof.ui.viewmodel.TransactionsUiState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

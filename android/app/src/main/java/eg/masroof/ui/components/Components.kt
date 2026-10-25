@@ -30,9 +30,9 @@ import androidx.compose.ui.unit.dp
 import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
-import eg.masroof.ui.ExpenseRow
-import eg.masroof.ui.LoadStatus
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.ExpenseRow
+import eg.masroof.ui.viewmodel.LoadStatus
 
 /** Amount rendered per locale and digit setting, with tabular numerals so columns line up. */
 @Composable

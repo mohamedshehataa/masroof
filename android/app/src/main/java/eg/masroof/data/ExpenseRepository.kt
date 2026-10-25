@@ -175,6 +175,16 @@ class DefaultExpenseRepository
                             db.markRejected(item.clientId)
                             rejected++
                         }
+                        UploadResult.Unexpected -> {
+                            // An undecodable response will not fix itself: give up after MAX_ATTEMPTS instead of looping.
+                            if (item.attempts + 1 >= MAX_ATTEMPTS) {
+                                db.markRejected(item.clientId)
+                                rejected++
+                            } else {
+                                db.outbox().bumpAttempts(item.clientId)
+                                retry = true
+                            }
+                        }
                     }
                     // Unreachable server or bad credentials: later items would fail the same way, and order is preserved.
                     if (retry || unauthorized) break
@@ -188,5 +198,6 @@ class DefaultExpenseRepository
 
         private companion object {
             const val UNAUTHORIZED = 401
+            const val MAX_ATTEMPTS = 5
         }
     }

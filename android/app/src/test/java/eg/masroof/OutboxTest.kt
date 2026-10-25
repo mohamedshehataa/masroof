@@ -161,6 +161,27 @@ class OutboxTest {
         }
 
     @Test
+    fun `REQ-AND-015 an undecodable response is retried a few times then marked failed`() =
+        runTest {
+            val id = repo.add(entry())
+            remote.uploadResult = { UploadResult.Unexpected }
+
+            repeat(4) { assertTrue(repo.syncOutbox().retry) }
+            val last = repo.syncOutbox()
+
+            assertEquals(false, last.retry)
+            assertEquals(1, last.rejected)
+            assertTrue(
+                repo
+                    .observeAll()
+                    .first()
+                    .single { it.id == id }
+                    .failed,
+            )
+            assertEquals(0, repo.observePendingCount().first())
+        }
+
+    @Test
     fun `REQ-AND-015 unauthorized keeps the entry queued and does not ask for endless retries`() =
         runTest {
             repo.add(entry())

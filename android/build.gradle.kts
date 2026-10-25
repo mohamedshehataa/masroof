@@ -1,8 +1,3 @@
-// Plugin classpath is locked too (-> buildscript-gradle.lockfile), as in backend/.
-buildscript {
-    dependencyLocking { lockAllConfigurations() }
-}
-
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
@@ -14,15 +9,8 @@ plugins {
     alias(libs.plugins.openapi.generator) apply false
     alias(libs.plugins.ktlint) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.kover) apply false
 }
 
-// Lock every resolvable configuration so SCA (osv-scanner, Dependabot) sees the full graph (ASVS 15.1.2).
-// LENIENT: Android tooling resolves a few OS-specific artifacts (aapt2, protoc), so a lock written on Linux must not
-// break a Windows developer; drift is still visible in review. Refresh on Linux with:
-//   ./gradlew dependencies buildEnvironment --write-locks   (see android/gradle/README note in docs/DECISIONS.md)
-allprojects {
-    dependencyLocking {
-        lockAllConfigurations()
-        lockMode.set(LockMode.LENIENT)
-    }
-}
+// Dependency locking covers ONLY the runtime classpaths that ship in the APK (so osv-scanner sees what users run, not
+// build tooling). Each module opts in; see app/build.gradle.kts and api-client/build.gradle.kts.

@@ -21,13 +21,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
-import eg.masroof.ui.HomeUiState
-import eg.masroof.ui.HomeViewModel
-import eg.masroof.ui.LoadStatus
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
+import eg.masroof.ui.viewmodel.HomeUiState
+import eg.masroof.ui.viewmodel.HomeViewModel
+import eg.masroof.ui.viewmodel.LoadStatus
 
 @Composable
 fun HomeRoute(
