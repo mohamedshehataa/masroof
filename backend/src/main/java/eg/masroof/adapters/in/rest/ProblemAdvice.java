@@ -1,12 +1,14 @@
 package eg.masroof.adapters.in.rest;
 
 import eg.masroof.adapters.in.rest.ApiProblemException.FieldProblem;
+import eg.masroof.application.auth.AuthException;
 import eg.masroof.application.expense.ExpenseException;
 import eg.masroof.application.household.HouseholdNotConfiguredException;
 import eg.masroof.application.household.UnauthenticatedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -72,6 +74,28 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
         .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
         .body(problem);
+  }
+
+  @ExceptionHandler(AuthException.class)
+  ResponseEntity<Object> handleAuth(AuthException e, HttpServletRequest request) {
+    boolean limited = e.kind() == AuthException.Kind.RATE_LIMITED;
+    HttpStatus status = limited ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED;
+    ProblemDetail problem =
+        problem(
+            status,
+            limited ? "Too many failed attempts; try again later" : "Authentication failed",
+            request.getRequestURI());
+    problem.setTitle(e.title());
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
+    Duration wait = e.retryAfter();
+    if (limited && wait != null) {
+      long seconds = Math.max(1, (wait.toMillis() + 999) / 1000);
+      response.header(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
+    }
+    if (!limited) {
+      response.header(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+    }
+    return response.body(problem);
   }
 
   @ExceptionHandler(HouseholdNotConfiguredException.class)

@@ -17,8 +17,7 @@ class ProdSingleHouseholdGuard {
 
   ProdSingleHouseholdGuard(Environment environment) {
     if (Boolean.parseBoolean(environment.getProperty(PROPERTY, "false"))) {
-      throw new IllegalStateException(
-          PROPERTY + " must not be true when profile 'prod' is active (no authentication yet)");
+      throw new IllegalStateException(PROPERTY + " must not be true when profile 'prod' is active");
     }
   }
 }

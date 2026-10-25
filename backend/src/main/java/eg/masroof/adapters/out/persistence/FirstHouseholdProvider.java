@@ -1,6 +1,7 @@
 package eg.masroof.adapters.out.persistence;
 
-import eg.masroof.application.household.CurrentHousehold;
+import eg.masroof.application.household.CurrentHousehold.Household;
+import eg.masroof.application.household.DevHousehold;
 import eg.masroof.application.household.HouseholdNotConfiguredException;
 import java.util.List;
 import java.util.UUID;
@@ -10,12 +11,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Dev implementation (only with masroof.dev.single-household=true; never under profile prod): the
- * oldest household. Auth is not built yet; STORY-009 replaces this with the household from the
- * caller's JWT.
+ * oldest household, used only for requests that carry no access token. A valid token always wins.
  */
 @Component
 @ConditionalOnProperty(name = "masroof.dev.single-household", havingValue = "true")
-final class FirstHouseholdProvider implements CurrentHousehold {
+final class FirstHouseholdProvider implements DevHousehold {
 
   private final JdbcTemplate jdbc;
 
