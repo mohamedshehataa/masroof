@@ -27,9 +27,12 @@ export DEBIAN_FRONTEND=noninteractive
 
 # ---------- patch + packages ----------
 say "patching and installing packages"
-apt-get update -qq
-apt-get upgrade -y -qq >/dev/null
-apt-get install -y -qq docker.io docker-compose-v2 ufw fail2ban unattended-upgrades curl gnupg openssl cron ca-certificates >/dev/null
+export DEBIAN_FRONTEND=noninteractive
+APT_OPTS=(-y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+# </dev/null: this script arrives on stdin (ssh ... bash -s), so apt must never read it as answers.
+apt-get update -qq </dev/null
+apt-get upgrade "${APT_OPTS[@]}" >/dev/null </dev/null
+apt-get install "${APT_OPTS[@]}" docker.io docker-compose-v2 ufw fail2ban unattended-upgrades curl gnupg openssl cron ca-certificates >/dev/null </dev/null
 
 # ---------- swap (1 GB RAM: a 2 GB swapfile absorbs JVM/Postgres spikes instead of the OOM killer) ----------
 if ! swapon --show=NAME --noheadings | grep -q .; then
