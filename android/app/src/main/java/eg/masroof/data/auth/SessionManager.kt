@@ -79,6 +79,7 @@ class SessionManager
                 is AuthResult.RateLimited -> LoginResult.RateLimited(result.retryAfterSeconds)
                 AuthResult.Network -> LoginResult.Network
                 AuthResult.Server -> LoginResult.Server
+                AuthResult.InvalidUrl -> LoginResult.InvalidUrl
             }
         }
 

@@ -92,5 +92,62 @@
         <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
         <item quantity="other">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
     </plurals>
-</resources>
 
+    <string name="nav_insights">التحليلات</string>
+
+    <string name="insights_title">التحليلات</string>
+    <string name="insights_period_current">هذا الشهر</string>
+    <string name="insights_period_previous">الشهر الماضي</string>
+    <string name="insights_total_current">المصروف هذا الشهر</string>
+    <string name="insights_total_previous">المصروف الشهر الماضي</string>
+    <string name="insights_vs_previous">مقابل %1$s في الفترة السابقة</string>
+    <string name="insights_range">%1$s – %2$s</string>
+    <string name="insights_daily_average">المتوسط اليومي</string>
+    <string name="insights_projected">المتوقع بنهاية الشهر</string>
+    <string name="insights_days_left">أيام متبقية</string>
+    <plurals name="insights_pending_review">
+        <item quantity="zero">لا مصروفات تحتاج مراجعة</item>
+        <item quantity="one">مصروف واحد يحتاج مراجعة</item>
+        <item quantity="two">مصروفان يحتاجان مراجعة</item>
+        <item quantity="few">%1$s مصروفات تحتاج مراجعة</item>
+        <item quantity="many">%1$s مصروفًا يحتاج مراجعة</item>
+        <item quantity="other">%1$s مصروف يحتاج مراجعة</item>
+    </plurals>
+    <plurals name="insights_expense_count">
+        <item quantity="zero">لا مصروفات</item>
+        <item quantity="one">مصروف واحد</item>
+        <item quantity="two">مصروفان</item>
+        <item quantity="few">%1$s مصروفات</item>
+        <item quantity="many">%1$s مصروفًا</item>
+        <item quantity="other">%1$s مصروف</item>
+    </plurals>
+    <string name="insights_categories_title">المصروف حسب الفئة</string>
+    <string name="insights_donut_desc">المصروف حسب الفئة: %1$s</string>
+    <string name="insights_category_row_desc">%1$s: %2$s، %3$s من المصروفات</string>
+    <string name="insights_trend_title">آخر %1$s أشهر</string>
+    <string name="insights_trend_desc">المصروف الشهري: %1$s</string>
+    <string name="insights_trend_average">المتوسط %1$s في الشهر</string>
+    <string name="insights_calendar_title">المصروف اليومي</string>
+    <string name="insights_calendar_desc">تقويم المصروف اليومي. أكثر الأيام إنفاقًا %1$s بمبلغ %2$s.</string>
+    <string name="insights_calendar_desc_none">تقويم المصروف اليومي. لا مصروفات في هذه الفترة.</string>
+    <string name="insights_calendar_busiest">أكثر الأيام إنفاقًا: %1$s، %2$s</string>
+    <string name="insights_weekday_title">حسب يوم الأسبوع</string>
+    <string name="insights_weekday_desc">المصروف حسب يوم الأسبوع: %1$s</string>
+    <string name="insights_empty_title">لا توجد بيانات كافية بعد</string>
+    <string name="insights_empty_body">أضف بعض المصروفات وستظهر الرسوم البيانية هنا.</string>
+    <string name="insights_error_title">تعذّر تحميل التحليلات</string>
+    <string name="insights_error_body">رد الخادم بخطأ. حاول مرة أخرى بعد قليل.</string>
+    <string name="insights_offline_title">اتصل مرة واحدة لعرض التحليلات</string>
+    <string name="insights_offline_body">تُحفظ الرسوم البيانية على هذا الجهاز بعد أول تحميل ناجح.</string>
+    <string name="delta_up_desc">المصروف أعلى بنسبة %1$s مقارنة بالفترة السابقة</string>
+    <string name="delta_down_desc">المصروف أقل بنسبة %1$s مقارنة بالفترة السابقة</string>
+    <string name="delta_flat_desc">لا تغيير مقارنة بالفترة السابقة</string>
+
+    <string name="home_vs_last_month">مقابل الشهر الماضي</string>
+    <string name="home_trend_title">آخر ٦ أشهر</string>
+    <string name="home_trend_desc">المصروف خلال آخر ٦ أشهر: %1$s</string>
+
+    <string name="settings_section_server">الخادم</string>
+    <string name="settings_section_display">العرض</string>
+    <string name="settings_language">اللغة</string>
+</resources>

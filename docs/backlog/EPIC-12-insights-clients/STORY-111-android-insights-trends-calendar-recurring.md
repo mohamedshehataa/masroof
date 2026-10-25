@@ -3,7 +3,7 @@ id: STORY-111
 epic: EPIC-12
 title: "Android Insights: Trends, Calendar and Recurring tabs"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-109, STORY-097, STORY-098, STORY-103]

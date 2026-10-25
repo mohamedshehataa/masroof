@@ -3,7 +3,7 @@ id: STORY-093
 epic: EPIC-10
 title: "Overview: daily average, projected month-end (linear + weekday-aware), remaining budget, days left"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025, STORY-092]

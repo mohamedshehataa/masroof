@@ -3,7 +3,7 @@ id: STORY-098
 epic: EPIC-10
 title: "Calendar heatmap and time patterns (weekday, hour)"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: S
 modules: [backend]
 depends_on: [STORY-025]

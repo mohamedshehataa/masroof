@@ -3,7 +3,7 @@ id: STORY-094
 epic: EPIC-10
 title: "By category: donut data, ranked list, drill into subcategories and items, MoM change"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025]

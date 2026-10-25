@@ -3,7 +3,7 @@ id: STORY-097
 epic: EPIC-10
 title: "Trends: 6/12-period stacked bars by category, total line, income vs expense vs savings rate"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025]

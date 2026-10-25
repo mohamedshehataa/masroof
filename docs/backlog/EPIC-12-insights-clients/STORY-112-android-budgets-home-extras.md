@@ -3,7 +3,7 @@ id: STORY-112
 epic: EPIC-12
 title: "Android Budgets screen, Home extras and onboarding budget step"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-034, STORY-070, STORY-092, STORY-103, STORY-104, STORY-059]

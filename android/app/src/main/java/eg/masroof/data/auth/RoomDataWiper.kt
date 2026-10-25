@@ -2,6 +2,7 @@ package eg.masroof.data.auth
 
 import androidx.work.WorkManager
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.insights.InsightsCache
 import eg.masroof.di.IoDispatcher
 import eg.masroof.work.OUTBOX_RETRY_WORK_NAME
 import eg.masroof.work.OUTBOX_WORK_NAME
@@ -15,6 +16,7 @@ class RoomDataWiper
     @Inject
     constructor(
         private val db: AppDatabase,
+        private val insights: InsightsCache,
         private val workManager: WorkManager,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) : LocalDataWiper {
@@ -26,5 +28,6 @@ class RoomDataWiper
             workManager.cancelUniqueWork(OUTBOX_WORK_NAME)
             workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME)
             withContext(io) { db.clearAllTables() }
+            withContext(io) { insights.clear() }
         }
     }

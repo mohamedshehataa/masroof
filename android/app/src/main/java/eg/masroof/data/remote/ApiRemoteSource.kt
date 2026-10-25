@@ -1,6 +1,7 @@
 package eg.masroof.data.remote
 
 import eg.masroof.api.apis.AccountsApi
+import eg.masroof.api.apis.AnalyticsApi
 import eg.masroof.api.apis.CategoriesApi
 import eg.masroof.api.apis.ExpensesApi
 import eg.masroof.api.models.Expense
@@ -21,6 +22,7 @@ import eg.masroof.data.normalizeServerUrl
 import kotlinx.datetime.Instant
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -93,6 +95,8 @@ val apiJson: Json =
                 contextual(BigDecimalSerializer)
                 contextual(Instant.serializer())
                 contextual(UriSerializer)
+                // The generator emits `List<@Contextual List<Money>>` for the heatmap's weekday x hour matrix.
+                contextual(List::class) { args -> ListSerializer(args[0]) }
                 contextual(
                     eg.masroof.api.models.TokenPairTokenType
                         .serializer(),
@@ -156,6 +160,9 @@ class ApiRemoteSource
                 return built
             }
         }
+
+        /** The generated analytics API on the authenticated client (used by the Insights tab). */
+        suspend fun analyticsApi(): AnalyticsApi = retrofit().create(AnalyticsApi::class.java)
 
         private fun <T> Response<T>.bodyOrThrow(): T {
             if (!isSuccessful) throw HttpFailure(code())

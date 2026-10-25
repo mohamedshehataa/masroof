@@ -3,7 +3,7 @@ id: STORY-109
 epic: EPIC-12
 title: "Android Insights: Overview and Categories tabs"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-034, STORY-093, STORY-094]

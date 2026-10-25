@@ -3,7 +3,7 @@ id: STORY-096
 epic: EPIC-10
 title: "By merchant: top merchants, visit frequency, average ticket"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: S
 modules: [backend]
 depends_on: [STORY-025, STORY-051]
