@@ -14,8 +14,36 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcReferenceData implements ReferenceData {
 
-  private static final String CATEGORY_COLUMNS =
-      "id, household_id, name_en, name_ar, icon, color, parent_id, is_essential, sort_order, archived";
+  private static final String CATEGORY_BY_ID =
+      """
+      select id, household_id, name_en, name_ar, icon, color, parent_id, is_essential,
+        sort_order, archived
+      from category where household_id = ? and id = ?
+      """;
+
+  private static final String CATEGORIES =
+      """
+      select id, household_id, name_en, name_ar, icon, color, parent_id, is_essential,
+        sort_order, archived
+      from category where household_id = ? and (? or not archived)
+      order by sort_order, name_en, id
+      """;
+
+  private static final String ACCOUNTS =
+      """
+      select id, member_id, type, institution, last4, nickname, currency, is_shared
+      from payment_account where household_id = ? order by created_at, id
+      """;
+
+  private static final String ACCOUNT_EXISTS =
+      """
+      select exists (select 1 from payment_account where household_id = ? and id = ?)
+      """;
+
+  private static final String MEMBER_EXISTS =
+      """
+      select exists (select 1 from member where household_id = ? and id = ?)
+      """;
 
   private static final RowMapper<CategoryView> CATEGORY =
       (rs, n) ->
@@ -53,55 +81,28 @@ class JdbcReferenceData implements ReferenceData {
 
   @Override
   public Optional<CategoryView> category(UUID householdId, UUID categoryId) {
-    return jdbc
-        .query(
-            "select " + CATEGORY_COLUMNS + " from category where household_id = ? and id = ?",
-            CATEGORY,
-            householdId,
-            categoryId)
-        .stream()
-        .findFirst();
+    return jdbc.query(CATEGORY_BY_ID, CATEGORY, householdId, categoryId).stream().findFirst();
   }
 
   @Override
   public boolean accountExists(UUID householdId, UUID accountId) {
-    return exists("payment_account", householdId, accountId);
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(ACCOUNT_EXISTS, Boolean.class, householdId, accountId));
   }
 
   @Override
   public boolean memberExists(UUID householdId, UUID memberId) {
-    return exists("member", householdId, memberId);
-  }
-
-  private boolean exists(String table, UUID householdId, UUID id) {
-    // table is one of two literals above, never user input
-    Boolean found =
-        jdbc.queryForObject(
-            "select exists (select 1 from " + table + " where household_id = ? and id = ?)",
-            Boolean.class,
-            householdId,
-            id);
-    return Boolean.TRUE.equals(found);
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(MEMBER_EXISTS, Boolean.class, householdId, memberId));
   }
 
   @Override
   public List<CategoryView> categories(UUID householdId, boolean includeArchived) {
-    return jdbc.query(
-        "select "
-            + CATEGORY_COLUMNS
-            + " from category where household_id = ? and (? or not archived)"
-            + " order by sort_order, name_en, id",
-        CATEGORY,
-        householdId,
-        includeArchived);
+    return jdbc.query(CATEGORIES, CATEGORY, householdId, includeArchived);
   }
 
   @Override
   public List<AccountView> accounts(UUID householdId) {
-    return jdbc.query(
-        "select id, member_id, type, institution, last4, nickname, currency, is_shared"
-            + " from payment_account where household_id = ? order by created_at, id",
-        ACCOUNT,
-        householdId);
+    return jdbc.query(ACCOUNTS, ACCOUNT, householdId);
   }
 }

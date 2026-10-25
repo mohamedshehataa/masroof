@@ -26,15 +26,60 @@ import org.springframework.stereotype.Repository;
 
 /**
  * JDBC implementation of {@link ExpenseRepository}. All queries are parameterised and
- * household-scoped.
+ * household-scoped. Each statement is one literal; the only dynamic parts are fragments chosen from
+ * fixed lists in this class (filter predicates, a column from the {@code ExpenseSort} whitelist)
+ * and every user-supplied value is bound as a parameter.
  */
 @Repository
 class JdbcExpenseRepository implements ExpenseRepository {
 
-  private static final String COLUMNS =
-      "id, household_id, type, amount_minor, currency, occurred_at, category_id, payment_account_id,"
-          + " paid_by_member_id, payment_method, merchant_raw, note, tags, status, source,"
-          + " deleted_at, created_at, updated_at";
+  private static final String INSERT =
+      """
+      insert into expense (id, household_id, type, amount_minor, currency, occurred_at,
+        category_id, payment_account_id, paid_by_member_id, payment_method, merchant_raw,
+        note, tags, status, source, created_at, updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::text[], ?, ?, ?, ?)
+      returning *
+      """;
+
+  private static final String FIND =
+      """
+      select * from expense where household_id = ? and id = ?
+      """;
+
+  private static final String UPDATE =
+      """
+      update expense set type = ?, amount_minor = ?, currency = ?, occurred_at = ?,
+        category_id = ?, payment_account_id = ?, paid_by_member_id = ?, payment_method = ?,
+        merchant_raw = ?, note = ?, tags = ?::text[], status = ?
+      where household_id = ? and id = ? and deleted_at is null
+      returning *
+      """;
+
+  private static final String SOFT_DELETE =
+      """
+      update expense set deleted_at = ?
+      where household_id = ? and id = ? and deleted_at is null
+      """;
+
+  private static final String LIST_HEAD = "select * from expense";
+
+  private static final String TOTAL_HEAD = "select coalesce(sum(amount_minor), 0) from expense";
+
+  private static final String FIND_IDEMPOTENCY =
+      """
+      select fingerprint, expense_id, created_at from idempotency_key
+      where household_id = ? and key = ?
+      """;
+
+  private static final String CLAIM_IDEMPOTENCY =
+      """
+      insert into idempotency_key (household_id, key, fingerprint, expense_id, created_at)
+      values (?, ?, ?, ?, ?)
+      on conflict (household_id, key) do update set fingerprint = excluded.fingerprint,
+        expense_id = excluded.expense_id, created_at = excluded.created_at
+      where idempotency_key.created_at < ?
+      """;
 
   private static final RowMapper<Expense> MAPPER = JdbcExpenseRepository::map;
 
@@ -48,6 +93,10 @@ class JdbcExpenseRepository implements ExpenseRepository {
       throws SQLException {
     OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
     return value == null ? null : value.toInstant();
+  }
+
+  private static Instant instant(ResultSet rs, String column) throws SQLException {
+    return Objects.requireNonNull(nullableInstant(rs, column), column);
   }
 
   private static Expense map(ResultSet rs, int rowNum) throws SQLException {
@@ -72,8 +121,9 @@ class JdbcExpenseRepository implements ExpenseRepository {
         instant(rs, "updated_at"));
   }
 
-  private static Instant instant(ResultSet rs, String column) throws SQLException {
-    return Objects.requireNonNull(nullableInstant(rs, column), column);
+  /** Joins fixed statement fragments (all literals or built from bound-parameter predicates). */
+  private static String compose(String... fragments) {
+    return String.join("", fragments);
   }
 
   private static OffsetDateTime utc(Instant instant) {
@@ -83,12 +133,7 @@ class JdbcExpenseRepository implements ExpenseRepository {
   @Override
   public Expense insert(Expense e) {
     return jdbc.queryForObject(
-        "insert into expense (id, household_id, type, amount_minor, currency, occurred_at,"
-            + " category_id, payment_account_id, paid_by_member_id, payment_method, merchant_raw,"
-            + " note, tags, status, source, created_at, updated_at)"
-            + " values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::text[], ?, ?, ?, ?)"
-            + " returning "
-            + COLUMNS,
+        INSERT,
         MAPPER,
         e.id(),
         e.householdId(),
@@ -111,24 +156,13 @@ class JdbcExpenseRepository implements ExpenseRepository {
 
   @Override
   public Optional<Expense> find(UUID householdId, UUID id) {
-    return jdbc
-        .query(
-            "select " + COLUMNS + " from expense where household_id = ? and id = ?",
-            MAPPER,
-            householdId,
-            id)
-        .stream()
-        .findFirst();
+    return jdbc.query(FIND, MAPPER, householdId, id).stream().findFirst();
   }
 
   @Override
   public Expense update(Expense e) {
     return jdbc.queryForObject(
-        "update expense set type = ?, amount_minor = ?, currency = ?, occurred_at = ?,"
-            + " category_id = ?, payment_account_id = ?, paid_by_member_id = ?,"
-            + " payment_method = ?, merchant_raw = ?, note = ?, tags = ?::text[], status = ?"
-            + " where household_id = ? and id = ? and deleted_at is null returning "
-            + COLUMNS,
+        UPDATE,
         MAPPER,
         e.type().name(),
         e.amount().amountMinor(),
@@ -148,16 +182,10 @@ class JdbcExpenseRepository implements ExpenseRepository {
 
   @Override
   public boolean softDelete(UUID householdId, UUID id, Instant now) {
-    return jdbc.update(
-            "update expense set deleted_at = ? where household_id = ? and id = ?"
-                + " and deleted_at is null",
-            utc(now),
-            householdId,
-            id)
-        > 0;
+    return jdbc.update(SOFT_DELETE, utc(now), householdId, id) > 0;
   }
 
-  /** WHERE clause without the cursor condition. */
+  /** WHERE clause without the cursor condition; predicates are fixed text, values are bound. */
   private static String where(ExpenseFilter f, List<Object> args) {
     StringBuilder sql = new StringBuilder(" where household_id = ?");
     args.add(f.householdId());
@@ -222,22 +250,19 @@ class JdbcExpenseRepository implements ExpenseRepository {
   @Override
   public List<Expense> list(ExpenseFilter f) {
     List<Object> args = new ArrayList<>();
-    StringBuilder sql = new StringBuilder("select " + COLUMNS + " from expense");
-    sql.append(where(f, args));
+    StringBuilder sql = new StringBuilder();
+    sql.append(compose(LIST_HEAD, where(f, args)));
     String column = f.sort().column(); // from the ExpenseSort whitelist, never user input
     String dir = f.sort().descending() ? "desc" : "asc";
     Cursor after = f.after();
     if (after != null) {
-      sql.append(" and (")
-          .append(column)
-          .append(", id) ")
-          .append(f.sort().descending() ? "<" : ">");
-      sql.append(" (?, ?)");
+      sql.append(" and (").append(column).append(", id) ");
+      sql.append(f.sort().descending() ? "<" : ">").append(" (?, ?)");
       args.add(f.sort().isAmount() ? (Object) after.amountMinor() : utc(after.instant()));
       args.add(after.id());
     }
-    sql.append(" order by ").append(column).append(' ').append(dir).append(", id ").append(dir);
-    sql.append(" limit ?");
+    sql.append(" order by ").append(column).append(' ').append(dir);
+    sql.append(", id ").append(dir).append(" limit ?");
     args.add(f.limit() + 1);
     return jdbc.query(sql.toString(), MAPPER, args.toArray());
   }
@@ -245,11 +270,9 @@ class JdbcExpenseRepository implements ExpenseRepository {
   @Override
   public long totalMinor(ExpenseFilter f) {
     List<Object> args = new ArrayList<>();
-    String sql =
-        "select coalesce(sum(amount_minor), 0) from expense"
-            + where(f, args)
-            + " and type <> 'TRANSFER'";
-    Long total = jdbc.queryForObject(sql, Long.class, args.toArray());
+    StringBuilder sql = new StringBuilder();
+    sql.append(compose(TOTAL_HEAD, where(f, args), " and type <> 'TRANSFER'"));
+    Long total = jdbc.queryForObject(sql.toString(), Long.class, args.toArray());
     return total == null ? 0 : total;
   }
 
@@ -257,8 +280,7 @@ class JdbcExpenseRepository implements ExpenseRepository {
   public Optional<IdempotencyRecord> findIdempotency(UUID householdId, String key) {
     return jdbc
         .query(
-            "select fingerprint, expense_id, created_at from idempotency_key"
-                + " where household_id = ? and key = ?",
+            FIND_IDEMPOTENCY,
             (rs, n) ->
                 new IdempotencyRecord(
                     rs.getString("fingerprint"),
@@ -279,17 +301,7 @@ class JdbcExpenseRepository implements ExpenseRepository {
       Instant now,
       Instant staleBefore) {
     return jdbc.update(
-            "insert into idempotency_key (household_id, key, fingerprint, expense_id, created_at)"
-                + " values (?, ?, ?, ?, ?)"
-                + " on conflict (household_id, key) do update set fingerprint = excluded.fingerprint,"
-                + " expense_id = excluded.expense_id, created_at = excluded.created_at"
-                + " where idempotency_key.created_at < ?",
-            householdId,
-            key,
-            fingerprint,
-            expenseId,
-            utc(now),
-            utc(staleBefore))
+            CLAIM_IDEMPOTENCY, householdId, key, fingerprint, expenseId, utc(now), utc(staleBefore))
         > 0;
   }
 }
