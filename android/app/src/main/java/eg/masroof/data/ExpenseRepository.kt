@@ -75,6 +75,9 @@ interface ExpenseRepository {
     /** Re-queue an entry the server rejected, e.g. after the user fixed the server side. */
     suspend fun retryFailed(id: String)
 
+    /** Whether any queued entry can still sync (not permanently failed). */
+    suspend fun hasRetryable(): Boolean = false
+
     /** Drop an entry that could not be synced. */
     suspend fun deleteFailed(id: String)
 }
@@ -200,6 +203,8 @@ class DefaultExpenseRepository
                 }
                 SyncReport(uploaded, rejected, retry, unauthorized, retryAfter)
             }
+
+        override suspend fun hasRetryable(): Boolean = db.outbox().countRetryable() > 0
 
         override suspend fun retryFailed(id: String) = db.resetFailed(id)
 

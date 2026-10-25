@@ -20,6 +20,7 @@ import javax.inject.Singleton
 
 const val OUTBOX_WORK_NAME = "outbox-sync"
 const val OUTBOX_RETRY_WORK_NAME = "outbox-sync-retry"
+const val OUTBOX_OPEN_WORK_NAME = "outbox-sync-open"
 private const val KEY_ATTEMPT = "attempt"
 
 /** Seam so view models can request a sync without knowing about WorkManager. */
@@ -31,7 +32,26 @@ interface SyncScheduler {
         delaySeconds: Long,
         attempt: Int,
     ) = Unit
+
+    /** Drops the pending retry (a sync just succeeded), which also resets the backoff attempt counter. */
+    fun cancelRetry() = Unit
+
+    /** One immediate sync on app start/foreground; never stacks (unique work, KEEP). */
+    fun scheduleOnOpen() = Unit
 }
+
+/** Called when the app comes to the foreground: pushes retryable entries now instead of waiting out a long backoff. */
+@Singleton
+class ForegroundSync
+    @Inject
+    constructor(
+        private val repository: ExpenseRepository,
+        private val scheduler: SyncScheduler,
+    ) {
+        suspend fun onForeground() {
+            if (repository.hasRetryable()) scheduler.scheduleOnOpen()
+        }
+    }
 
 @Singleton
 class WorkManagerSyncScheduler
@@ -56,7 +76,18 @@ class WorkManagerSyncScheduler
                     .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
                     .setInputData(Data.Builder().putAll(workDataOf(KEY_ATTEMPT to attempt)).build())
                     .build()
-            workManager.enqueueUniqueWork(OUTBOX_RETRY_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+            // REPLACE: at most one pending retry job. A failing run is the freshest information about the outage, so
+            // its delay supersedes whatever was pending (it never grows a chain, whatever triggered the run).
+            workManager.enqueueUniqueWork(OUTBOX_RETRY_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+        }
+
+        override fun cancelRetry() {
+            workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME)
+        }
+
+        override fun scheduleOnOpen() {
+            val request = OneTimeWorkRequestBuilder<OutboxSyncWorker>().setConstraints(constraints).build()
+            workManager.enqueueUniqueWork(OUTBOX_OPEN_WORK_NAME, ExistingWorkPolicy.KEEP, request)
         }
     }
 
@@ -79,6 +110,9 @@ class OutboxSyncWorker
             if (report.retry) {
                 val attempt = inputData.getInt(KEY_ATTEMPT, 0)
                 scheduler.scheduleRetry(OutboxBackoff.delaySeconds(attempt, report.retryAfterSeconds), attempt + 1)
+            } else if (!report.unauthorized) {
+                // The outage is over: drop any pending long-delay retry so the next outage starts from the base delay.
+                scheduler.cancelRetry()
             }
             return Result.success()
         }

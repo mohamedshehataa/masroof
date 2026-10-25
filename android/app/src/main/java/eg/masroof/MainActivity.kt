@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -42,6 +43,8 @@ import eg.masroof.ui.login.LoginRoute
 import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
+import eg.masroof.work.ForegroundSync
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private enum class Tab(
@@ -62,8 +65,16 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var session: SessionManager
 
+    @Inject lateinit var foregroundSync: ForegroundSync
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // App start or return to foreground: do not wait out a long backoff once the server may be back.
+        lifecycleScope.launch { foregroundSync.onForeground() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

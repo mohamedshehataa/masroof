@@ -152,6 +152,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(libs.work.testing)
     testImplementation(libs.snakeyaml)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
