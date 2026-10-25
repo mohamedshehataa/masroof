@@ -345,6 +345,8 @@ class ExpensesApiIT {
     Reply different = createWithKey(expense(778, "2024-05-05T10:00:00Z"), key);
     assertThat(different.status()).isEqualTo(409);
     assertThat(different.body()).containsEntry("title", "Idempotency key reused");
+    assertThat(different.body())
+        .containsEntry("type", "https://masroof.app/problems/idempotency-key-reused");
 
     jdbc.update(
         "update idempotency_key set created_at = now() - interval '25 hours' where key = ?", key);
@@ -740,6 +742,8 @@ class ExpensesApiIT {
 
     assertThat(replay.status()).isEqualTo(409);
     assertThat(replay.body()).containsEntry("title", "Idempotency key reused");
+    assertThat(replay.body())
+        .containsEntry("type", "https://masroof.app/problems/idempotency-expense-deleted");
   }
 
   @Test

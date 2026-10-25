@@ -120,7 +120,8 @@ public class ExpenseService {
               Kind.CONFLICT,
               "Idempotency key reused",
               "The Idempotency-Key was already used with a different request",
-              List.of());
+              List.of(),
+              "idempotency-key-reused");
         }
         Expense original =
             expenses
@@ -133,7 +134,8 @@ public class ExpenseService {
                             "Idempotency key reused",
                             "The expense created with this Idempotency-Key was deleted;"
                                 + " use a new key to create it again",
-                            List.of()));
+                            List.of(),
+                            "idempotency-expense-deleted"));
         return new Created(original, true);
       }
     }
@@ -175,7 +177,8 @@ public class ExpenseService {
             Kind.CONFLICT,
             "Conflict",
             "A concurrent request used the same Idempotency-Key; retry",
-            List.of());
+            List.of(),
+            "idempotency-in-progress");
       }
     }
     return new Created(stored, false);

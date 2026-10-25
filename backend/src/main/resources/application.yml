@@ -24,6 +24,8 @@ spring:
 masroof:
   jwt:
     secret: ${MASROOF_JWT_SECRET:} # >= 32 random bytes; required under profile prod (JwtConfiguration)
+  audit:
+    key: ${MASROOF_AUDIT_KEY:} # optional, >= 32 bytes; else derived from the JWT secret (AuditConfiguration)
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:} # comma separated; '*' refused under prod
   bootstrap:
