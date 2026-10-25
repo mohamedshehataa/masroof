@@ -24,7 +24,7 @@ up_with() { # up_with <registry> <backend-tag> <web-tag>
   else
     dc pull --quiet backend web
   fi
-  dc up -d --no-build --pull never --remove-orphans
+  dc up -d --no-build --pull missing --remove-orphans  # third-party images (postgres, minio, caddy) still download
 }
 
 case "$cmd" in
