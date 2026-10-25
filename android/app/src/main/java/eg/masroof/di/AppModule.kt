@@ -1,6 +1,7 @@
 package eg.masroof.di
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.room.Room
 import androidx.work.WorkManager
 import dagger.Binds
@@ -25,14 +26,22 @@ import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.auth.SessionStore
 import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.MIGRATION_2_3
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.RemoteSource
+import eg.masroof.data.remote.SmsRemote
+import eg.masroof.ingest.DeviceIdProvider
+import eg.masroof.ingest.PrefsSenderSettings
+import eg.masroof.ingest.SenderSettings
+import eg.masroof.ingest.SmsWorkScheduler
+import eg.masroof.ingest.WorkManagerSmsScheduler
 import eg.masroof.work.SyncScheduler
 import eg.masroof.work.WorkManagerSyncScheduler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import okhttp3.OkHttpClient
 import java.time.Clock
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -57,6 +66,10 @@ abstract class BindingsModule {
     @Binds abstract fun wiper(impl: RoomDataWiper): LocalDataWiper
 
     @Binds abstract fun network(impl: ConnectivityNetworkMonitor): NetworkMonitor
+
+    @Binds abstract fun smsRemote(impl: ApiRemoteSource): SmsRemote
+
+    @Binds abstract fun smsScheduler(impl: WorkManagerSmsScheduler): SmsWorkScheduler
 }
 
 @Module
@@ -71,6 +84,7 @@ object ProvidersModule {
         Room
             .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
             // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
+            .addMigrations(MIGRATION_2_3)
             .fallbackToDestructiveMigrationFrom(true, 1)
             .build()
 
@@ -78,6 +92,22 @@ object ProvidersModule {
     fun workManager(
         @ApplicationContext context: Context,
     ): WorkManager = WorkManager.getInstance(context)
+
+    @Provides @Singleton
+    fun senderSettings(
+        @ApplicationContext context: Context,
+    ): SenderSettings = PrefsSenderSettings(context.getSharedPreferences("masroof_senders", Context.MODE_PRIVATE))
+
+    @Provides @Singleton
+    fun deviceId(
+        @ApplicationContext context: Context,
+    ): DeviceIdProvider {
+        val prefs = context.getSharedPreferences("masroof_device", Context.MODE_PRIVATE)
+        return object : DeviceIdProvider {
+            override fun get(): String =
+                prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also { id -> prefs.edit { putString("device_id", id) } }
+        }
+    }
 
     @Provides
     fun clock(): Clock = Clock.systemUTC()

@@ -3,7 +3,7 @@ id: STORY-056
 epic: EPIC-06
 title: "Ingest endpoints for SMS and push-notification texts (device token, idempotent)"
 phase: 3
-status: DRAFT
+status: IN_PROGRESS
 size: S
 modules: [backend]
 depends_on: [STORY-055, STORY-044]

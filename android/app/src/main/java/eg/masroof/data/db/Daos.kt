@@ -7,6 +7,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -101,9 +103,45 @@ interface LookupDao {
     suspend fun upsertAccounts(items: List<AccountEntity>)
 }
 
+@Dao
+interface SmsOutboxDao {
+    /** IGNORE: the same SMS seen live and in a backfill is stored once. Returns the new row id, or -1 if it existed. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: SmsOutboxEntity): Long
+
+    @Query("SELECT * FROM sms_outbox WHERE failed = 0 ORDER BY receivedAtMillis")
+    suspend fun pending(): List<SmsOutboxEntity>
+
+    @Query("UPDATE sms_outbox SET attempts = attempts + 1 WHERE smsId = :smsId")
+    suspend fun bumpAttempts(smsId: String)
+
+    @Query("UPDATE sms_outbox SET failed = 1 WHERE smsId = :smsId")
+    suspend fun markFailed(smsId: String)
+
+    @Query("DELETE FROM sms_outbox WHERE smsId = :smsId")
+    suspend fun delete(smsId: String)
+
+    /** Bodies never linger: permanently failed rows go after the retention window. */
+    @Query("DELETE FROM sms_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
+    suspend fun purgeFailedBefore(olderThanMillis: Long)
+
+    @Query("SELECT COUNT(*) FROM sms_outbox WHERE failed = 0")
+    suspend fun countPending(): Int
+
+    @Query("SELECT * FROM sms_outbox")
+    suspend fun all(): List<SmsOutboxEntity>
+}
+
 @Database(
-    entities = [ExpenseEntity::class, CategoryEntity::class, AccountEntity::class, OutboxEntity::class],
-    version = 2,
+    entities =
+        [
+            ExpenseEntity::class,
+            CategoryEntity::class,
+            AccountEntity::class,
+            OutboxEntity::class,
+            SmsOutboxEntity::class,
+        ],
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -112,6 +150,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun outbox(): OutboxDao
 
     abstract fun lookups(): LookupDao
+
+    abstract fun smsOutbox(): SmsOutboxDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction
@@ -153,3 +193,16 @@ abstract class AppDatabase : RoomDatabase() {
         expenses().delete(clientId)
     }
 }
+
+/** v2 -> v3: where an expense came from, and the SMS upload queue. Keeps the manual-entry outbox intact. */
+val MIGRATION_2_3: Migration =
+    object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expense ADD COLUMN source TEXT")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS sms_outbox (smsId TEXT NOT NULL, sender TEXT NOT NULL, body TEXT NOT NULL, " +
+                    "receivedAtMillis INTEGER NOT NULL, attempts INTEGER NOT NULL, failed INTEGER NOT NULL, " +
+                    "createdAtMillis INTEGER NOT NULL, PRIMARY KEY(smsId))",
+            )
+        }
+    }

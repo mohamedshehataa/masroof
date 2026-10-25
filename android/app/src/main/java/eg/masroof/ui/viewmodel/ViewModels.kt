@@ -41,6 +41,7 @@ data class ExpenseRow(
     val failed: Boolean,
     val category: CategoryEntity?,
     val notes: String?,
+    val source: String? = null,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -62,6 +63,7 @@ private fun toRows(
             failed = it.failed,
             category = it.categoryId?.let(byId::get),
             notes = it.notes,
+            source = it.source,
         )
     }
 }

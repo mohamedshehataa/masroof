@@ -3,7 +3,7 @@ id: STORY-066
 epic: EPIC-07
 title: "Sender allowlist with defaults and 'Suggested sources' for unknown money-like senders"
 phase: 4
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-064]

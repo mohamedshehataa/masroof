@@ -48,6 +48,7 @@ fun SettingsRoute(viewModel: SettingsViewModel = hiltViewModel()) {
             viewModel::dismissLogout,
             viewModel::syncNow,
         ),
+        extra = { SmsCaptureSection() },
     )
 }
 
@@ -66,6 +67,7 @@ fun SettingsContent(
     state: SettingsUiState,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
+    extra: @Composable () -> Unit = {},
 ) {
     val onUrl = actions.onUrl
     val onDigits = actions.onDigits
@@ -126,6 +128,7 @@ fun SettingsContent(
             Text(stringResource(R.string.settings_save))
         }
         if (state.saved) Text(stringResource(R.string.settings_saved), color = MaterialTheme.colorScheme.primary)
+        extra()
         OutlinedButton(onClick = onLogout, enabled = !state.loggingOut, modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(stringResource(R.string.settings_logout))
         }

@@ -84,5 +84,14 @@
         <item quantity="one">%1$d unsynced expense will be deleted. Sync first or sign out anyway?</item>
         <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>
     </plurals>
+    <string name="source_sms">SMS</string>
+    <string name="sms_title">Capture bank SMS</string>
+    <string name="sms_rationale">Masroof can add an expense automatically when a message arrives from your bank or wallet. Only messages from listed senders are read, one-time passwords are never stored or uploaded, and the app works fully without this permission.</string>
+    <string name="sms_enable">Turn on SMS capture</string>
+    <string name="sms_on">SMS capture is on</string>
+    <string name="sms_denied">Permission not granted. You can still add expenses by hand.</string>
+    <string name="sms_suggested_title">Suggested senders</string>
+    <string name="sms_suggested_body">These senders sent a message that looks like a payment. Nothing was stored. Add one to start capturing it.</string>
+    <string name="sms_add_sender">Add</string>
 </resources>
 

@@ -92,5 +92,14 @@
         <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
         <item quantity="other">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
     </plurals>
+    <string name="source_sms">رسالة</string>
+    <string name="sms_title">تسجيل رسائل البنك</string>
+    <string name="sms_rationale">يقدر مصروف يضيف المصروف تلقائيا لما توصلك رسالة من البنك أو المحفظة. بنقرأ الرسائل من الجهات المسموح بيها بس، ورموز التحقق (OTP) عمرها ما بتتخزن ولا بتترفع، والتطبيق شغال كامل من غير الإذن ده.</string>
+    <string name="sms_enable">شغّل تسجيل الرسائل</string>
+    <string name="sms_on">تسجيل الرسائل شغال</string>
+    <string name="sms_denied">الإذن مش متاح. تقدر تضيف مصروفاتك بإيدك.</string>
+    <string name="sms_suggested_title">جهات مقترحة</string>
+    <string name="sms_suggested_body">الجهات دي بعتت رسالة شكلها دفع. مفيش حاجة اتخزنت. ضيف الجهة لو عايز نسجل رسايلها.</string>
+    <string name="sms_add_sender">إضافة</string>
 </resources>
 

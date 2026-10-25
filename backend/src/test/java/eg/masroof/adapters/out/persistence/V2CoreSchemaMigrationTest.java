@@ -96,6 +96,7 @@ class V2CoreSchemaMigrationTest {
             "V4__household_currency_check.sql",
             "V5__refresh_token_family.sql",
             "V6__audit_log_ip_hash.sql",
+            "V7__raw_message.sql",
             "R__seed_reference.sql");
   }
 

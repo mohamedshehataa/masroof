@@ -3,7 +3,7 @@ id: STORY-044
 epic: EPIC-05
 title: "SMS template rules engine: per-sender regex templates with hot reload and direction mapping"
 phase: 3
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-041, STORY-042, STORY-014]

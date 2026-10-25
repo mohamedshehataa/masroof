@@ -2,9 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Normal (install-time) permission: only to show "offline" on the login screen and disable Sign in. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Dangerous (runtime) permission, requested from Settings only when the user turns SMS capture on. The app works
+         fully without it; READ_SMS (history backfill) is added with that feature. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
         android:name=".MasroofApp"
@@ -29,6 +36,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Reason: the system delivers SMS_RECEIVED from outside the app, so the receiver must be exported; the
+             BROADCAST_SMS permission means only the system can send it. It does no work itself (hands off to WorkManager). -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
+        <receiver
+            android:name=".ingest.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider

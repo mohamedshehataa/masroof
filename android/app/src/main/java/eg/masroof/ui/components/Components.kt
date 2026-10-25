@@ -69,6 +69,13 @@ fun ExpenseListItem(
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text("$categoryName · ${row.date}", style = MaterialTheme.typography.bodySmall)
+                if (row.source == "SMS") {
+                    Text(
+                        stringResource(R.string.source_sms),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
                 if (row.pending) {
                     Text(
                         stringResource(R.string.pending_sync),

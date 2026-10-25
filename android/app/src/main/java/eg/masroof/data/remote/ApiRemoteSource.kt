@@ -3,8 +3,10 @@ package eg.masroof.data.remote
 import eg.masroof.api.apis.AccountsApi
 import eg.masroof.api.apis.CategoriesApi
 import eg.masroof.api.apis.ExpensesApi
+import eg.masroof.api.apis.IngestApi
 import eg.masroof.api.models.Expense
 import eg.masroof.api.models.ExpenseCreate
+import eg.masroof.api.models.IngestSmsRequest
 import eg.masroof.api.models.Money
 import eg.masroof.api.models.PaymentAccount
 import eg.masroof.api.models.PaymentMethod
@@ -17,6 +19,7 @@ import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.OutboxEntity
+import eg.masroof.data.db.SmsOutboxEntity
 import eg.masroof.data.normalizeServerUrl
 import kotlinx.datetime.Instant
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -115,6 +118,22 @@ val apiJson: Json =
                     eg.masroof.api.models.SplitMode
                         .serializer(),
                 )
+                contextual(
+                    eg.masroof.api.models.MessageSource
+                        .serializer(),
+                )
+                contextual(
+                    eg.masroof.api.models.ProcessingStatus
+                        .serializer(),
+                )
+                contextual(
+                    eg.masroof.api.models.SourceRole
+                        .serializer(),
+                )
+                contextual(
+                    eg.masroof.api.models.IngestAcceptedOutcome
+                        .serializer(),
+                )
             }
     }
 
@@ -126,7 +145,7 @@ class ApiRemoteSource
         private val settings: SettingsRepository,
         bare: OkHttpClient,
         session: SessionManager,
-    ) : RemoteSource {
+    ) : RemoteSource, SmsRemote {
         private var cachedKey: String? = null
         private var cachedRetrofit: Retrofit? = null
 
@@ -223,6 +242,38 @@ class ApiRemoteSource
             }
         }
 
+        @Suppress("TooGenericExceptionCaught")
+        override suspend fun uploadSms(
+            deviceId: String,
+            item: SmsOutboxEntity,
+        ): SmsUploadResult =
+            try {
+                val body =
+                    IngestSmsRequest(
+                        sender = item.sender,
+                        body = item.body,
+                        receivedAt = Instant.fromEpochMilliseconds(item.receivedAtMillis),
+                        deviceId = UUID.fromString(deviceId),
+                        smsId = item.smsId,
+                    )
+                val response = retrofit().create(IngestApi::class.java).ingestSms(body)
+                if (response.isSuccessful) {
+                    SmsUploadResult.Sent
+                } else {
+                    classifySmsStatus(
+                        response.code(),
+                        parseProblem(response.errorBody()?.string()),
+                        response.headers()["Retry-After"]?.trim()?.toLongOrNull(),
+                    )
+                }
+            } catch (_: IOException) {
+                SmsUploadResult.Retry(null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                SmsUploadResult.RetryLimited
+            }
+
         private fun Expense.toEntity() =
             ExpenseEntity(
                 id = id.toString(),
@@ -234,6 +285,12 @@ class ApiRemoteSource
                 accountId = paymentAccountId?.toString(),
                 notes = notes,
                 pending = false,
+                source =
+                    sources
+                        .firstOrNull()
+                        ?.rawMessage
+                        ?.source
+                        ?.value,
             )
 
         private fun PaymentAccount.toEntity(): AccountEntity {

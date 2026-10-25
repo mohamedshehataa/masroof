@@ -1,0 +1,21 @@
+{"id":"otp-en-1","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"Your OTP is 482915. Do not share it with anyone. Valid for 5 minutes."}
+{"id":"otp-ar-1","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"NBE","label":"OTP","body":"رمز التحقق الخاص بك هو 731904 لا تشارك الرمز مع احد"}
+{"id":"otp-ar-2","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"BanqueMisr","label":"OTP","body":"كود التحقق: 5521 صالح لمدة 3 دقائق"}
+{"id":"otp-en-with-amount","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"QNB","label":"OTP","body":"Use 902317 as your verification code for card payment of EGP 250.00 at AMAZON.EG. Do not share this code."}
+{"id":"otp-ar-with-amount","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"NBE","label":"OTP","body":"كلمة السر لمرة واحدة 884213 لتأكيد عملية بمبلغ 1,500.00 جنيه"}
+{"id":"otp-en-one-time","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"HSBC","label":"OTP","body":"Your one time password is 120045"}
+{"id":"otp-en-pin","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"AAIB","label":"OTP","body":"PIN reset code 3345"}
+{"id":"otp-en-enter","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"To complete your transfer enter 615233"}
+{"id":"otp-ar-enter","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"NBE","label":"OTP","body":"ادخل 4421 لاتمام عملية التحويل"}
+{"id":"otp-ar-indic","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"BDC","label":"OTP","body":"رمز التفعيل ٣٣٢١٩٠ - لا تفصح عنه لاي شخص"}
+{"id":"otp-en-security-code","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"Vodafone Cash","label":"OTP","body":"Your security code: 77123. It expires in 10 minutes."}
+{"id":"otp-ar-wallet","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"Orange Cash","label":"OTP","body":"كود تأكيد الدفع 905512 لا تقم بمشاركة هذا الكود"}
+{"id":"otp-digits-only","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"  605412 "}
+{"id":"otp-en-confirm","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"InstaPay","label":"OTP","body":"9021 to confirm your InstaPay transfer of EGP 800.00"}
+{"id":"promo-ar-cashback","tags":["REQ-SMS-032"],"sender":"CIB","label":"PROMO","body":"عرض خاص! احصل على كاش باك 10% على مشترياتك من كارفور حتى نهاية الشهر. الشروط والأحكام تنطبق"}
+{"id":"promo-en-loan","tags":["REQ-SMS-032"],"sender":"QNB","label":"PROMO","body":"Congratulations! You are pre-approved for a personal loan up to EGP 200,000. Call 19666 now"}
+{"id":"promo-en-installments","tags":["REQ-SMS-032"],"sender":"NBE","label":"PROMO","body":"Enjoy 0% installments up to 24 months at selected merchants. Visit www.example-bank.test for more"}
+{"id":"promo-ar-subscribe","tags":["REQ-SMS-032"],"sender":"Vodafone","label":"PROMO","body":"اشترك الآن في خدمة الرسائل القصيرة بـ 5 جنيه شهريا"}
+{"id":"promo-en-win","tags":["REQ-SMS-032"],"sender":"Orange","label":"PROMO","body":"Win a chance to get EGP 10,000 cashback! Terms apply"}
+{"id":"promo-ar-discount","tags":["REQ-SMS-032"],"sender":"BanqueMisr","label":"PROMO","body":"خصم يصل إلى 30% على جميع الفروع بكارت البنك"}
+{"id":"promo-ar-points","tags":["REQ-SMS-032"],"sender":"AAIB","label":"PROMO","body":"نقاطك: لديك 1,250 نقطة مكافآت صالحة حتى نهاية العام"}
