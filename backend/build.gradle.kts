@@ -215,6 +215,7 @@ pitest {
     targetClasses = setOf(
         "eg.masroof.domain.*", "eg.masroof.*.money.*", "eg.masroof.*.parsing.*",
         "eg.masroof.*.dedup.*", "eg.masroof.*.analytics.*",
+        "eg.masroof.adapters.out.security.*", "eg.masroof.application.auth.*",
     )
     excludedGroups = setOf("integration", "migration", "arch")
     outputFormats = setOf("XML", "HTML")

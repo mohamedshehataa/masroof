@@ -33,6 +33,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       MASROOF_JWT_SECRET: ${MASROOF_JWT_SECRET:-}   # empty under profile prod -> the backend refuses to start (JwtConfiguration)
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      MASROOF_TRUSTED_PROXIES: ${MASROOF_TRUSTED_PROXIES:-}   # CIDRs allowed to set X-Forwarded-For; empty = Docker 172.16.0.0/12
       MASROOF_BOOTSTRAP_ADMIN_EMAIL: ${MASROOF_BOOTSTRAP_ADMIN_EMAIL:-}
       MASROOF_BOOTSTRAP_ADMIN_PASSWORD: ${MASROOF_BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:

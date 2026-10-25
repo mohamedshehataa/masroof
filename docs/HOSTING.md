@@ -98,6 +98,13 @@ skips the deploy with a visible warning; it never fails because of that.
 - **Secrets**: generated on the server in `~deploy/masroof/infra/.env` (mode 600) by `bootstrap.sh`; the DuckDNS token is in
   `/etc/masroof/duckdns.env` (root only). Nothing secret is in the repo, the images, or cloud-init.
 
+### First login
+`bootstrap.sh` generates `MASROOF_JWT_SECRET`. To create the first admin, add `MASROOF_BOOTSTRAP_ADMIN_EMAIL` and
+`MASROOF_BOOTSTRAP_ADMIN_PASSWORD` (12+ characters) to the server `.env` before the first start. **Remove both
+lines after the first start**: they only act while no login exists, and the backend logs a warning (without values)
+when they are still set later. If Caddy is not the only way in, set `MASROOF_TRUSTED_PROXIES` (CIDR list; default is
+Docker's `172.16.0.0/12` pool) so client IPs for rate limiting come from the right proxy.
+
 ## What the server does on its own
 
 | Job | When | Where |

@@ -39,6 +39,7 @@ public class AuthService {
   private final PasswordHasher hasher;
   private final AccessTokens accessTokens;
   private final Clock clock;
+  private final AuditLog audit;
   private final SecureRandom random = new SecureRandom();
   private final FailureWindowLimiter emailLimiter =
       new FailureWindowLimiter(MAX_FAILURES, WINDOW, MAX_KEYS);
@@ -51,7 +52,9 @@ public class AuthService {
       RefreshTokenStore refreshTokens,
       PasswordHasher hasher,
       AccessTokens accessTokens,
+      AuditLog audit,
       Clock clock) {
+    this.audit = audit;
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.hasher = hasher;
@@ -74,6 +77,7 @@ public class AuthService {
     if (wait.isPresent()) {
       blocked.incrementAndGet();
       LOG.warn("auth_login_blocked_total={}", blocked.get());
+      audit("LOGIN_BLOCKED", accounts.findByEmail(emailKey), clientIp);
       throw new AuthException(Kind.RATE_LIMITED, wait.get());
     }
     Optional<Account> found = accounts.findByEmail(emailKey);
@@ -83,6 +87,7 @@ public class AuthService {
     if (found.isEmpty() || !ok) {
       emailLimiter.recordFailure(emailKey, now);
       ipLimiter.recordFailure(ipKey, now);
+      audit("LOGIN_FAILED", found, clientIp);
       throw new AuthException(Kind.INVALID_CREDENTIALS);
     }
     emailLimiter.reset(emailKey);
@@ -119,6 +124,18 @@ public class AuthService {
       refreshTokens.revokeAll(userId, now);
     } else if (refreshToken != null && refreshToken.length() <= MAX_TOKEN_CHARS) {
       refreshTokens.revokeFamily(sha256(refreshToken), userId, now);
+    }
+  }
+
+  /**
+   * Audits with the member id when known and a hash of the IP; a failing audit never changes the
+   * answer.
+   */
+  private void audit(String action, Optional<Account> account, String clientIp) {
+    try {
+      audit.record(action, account.map(Account::memberId).orElse(null), sha256("ip:" + clientIp));
+    } catch (RuntimeException e) {
+      LOG.warn("audit write failed for {}", action);
     }
   }
 

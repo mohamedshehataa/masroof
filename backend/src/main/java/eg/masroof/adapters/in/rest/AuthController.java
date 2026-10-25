@@ -26,8 +26,10 @@ class AuthController implements AuthApi {
 
   private final AuthService service;
   private final HttpServletRequest request;
+  private final ClientIp clientIp;
 
-  AuthController(AuthService service, HttpServletRequest request) {
+  AuthController(AuthService service, HttpServletRequest request, ClientIp clientIp) {
+    this.clientIp = clientIp;
     this.service = service;
     this.request = request;
   }
@@ -35,7 +37,7 @@ class AuthController implements AuthApi {
   @Override
   public ResponseEntity<TokenPair> login(LoginRequest body) {
     return ResponseEntity.ok(
-        toPair(service.login(body.getEmail(), body.getPassword(), ClientIp.of(request))));
+        toPair(service.login(body.getEmail(), body.getPassword(), clientIp.of(request))));
   }
 
   @Override

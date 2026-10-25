@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -94,6 +95,48 @@ class HmacJwtAccessTokensTest {
         new HmacJwtAccessTokens(
             "another-secret-another-secret-another!".getBytes(StandardCharsets.UTF_8));
     assertThat(jwt.verify(other.issue(account, NOW), NOW)).isEmpty();
+  }
+
+  private String signed(String payloadJson) throws Exception {
+    String input = b64("{\"alg\":\"HS256\",\"typ\":\"JWT\"}") + "." + b64(payloadJson);
+    javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+    mac.init(new javax.crypto.spec.SecretKeySpec(SECRET, "HmacSHA256"));
+    return input + "." + ENC.encodeToString(mac.doFinal(input.getBytes(StandardCharsets.US_ASCII)));
+  }
+
+  private String payload(@Nullable String iat, String exp, @Nullable String jti) {
+    return "{\"sub\":\""
+        + account.userId()
+        + "\",\"hid\":\""
+        + account.householdId()
+        + "\",\"role\":\"ADMIN\""
+        + (iat == null ? "" : ",\"iat\":" + iat)
+        + ",\"exp\":"
+        + exp
+        + (jti == null ? "" : ",\"jti\":\"" + jti + "\"")
+        + "}";
+  }
+
+  @Test
+  @DisplayName("REQ-SEC-012 iat and jti are required; lifetime and future iat are bounded")
+  void claimChecks() throws Exception {
+    long now = NOW.getEpochSecond();
+    // baseline: a well-formed token passes
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 900), "j1")), NOW)).isPresent();
+    // missing or blank iat/jti, non-numeric iat
+    assertThat(jwt.verify(signed(payload(null, "" + (now + 900), "j1")), NOW)).isEmpty();
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 900), null)), NOW)).isEmpty();
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 900), "  ")), NOW)).isEmpty();
+    assertThat(jwt.verify(signed(payload("\"x\"", "" + (now + 900), "j1")), NOW)).isEmpty();
+    // lifetime: TTL + 60 s skew is the limit
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 960), "j1")), NOW)).isPresent();
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 961), "j1")), NOW)).isEmpty();
+    // iat in the future: 60 s skew allowed, 61 s not
+    assertThat(jwt.verify(signed(payload("" + (now + 60), "" + (now + 900), "j1")), NOW))
+        .isPresent();
+    assertThat(jwt.verify(signed(payload("" + (now + 61), "" + (now + 900), "j1")), NOW)).isEmpty();
+    // a month-long token signed with the right key is refused
+    assertThat(jwt.verify(signed(payload("" + now, "" + (now + 2_592_000), "j1")), NOW)).isEmpty();
   }
 
   @Test

@@ -11,6 +11,8 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +44,12 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
         problem(e.status(), String.valueOf(e.getMessage()), request.getRequestURI());
     if (!e.errors().isEmpty()) {
       problem.setProperty("errors", e.errors());
+    }
+    if (e.status().is5xxServerError()) {
+      LOG.error(
+          "Server error on {} traceId={}",
+          request.getRequestURI(),
+          Optional.ofNullable(problem.getProperties()).map(m -> m.get("traceId")).orElse("-"));
     }
     return ResponseEntity.status(e.status()).body(problem);
   }
@@ -225,6 +233,9 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
   private static ProblemDetail problem(HttpStatus status, String detail, @Nullable String path) {
     ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
     problem.setType(URI.create("about:blank"));
+    if (!"/health".equals(path)) { // /health keeps its fixed body (REQ-OPS-020)
+      problem.setProperty("traceId", UUID.randomUUID().toString());
+    }
     problem.setTitle(status.getReasonPhrase());
     if (path != null) {
       try {
@@ -255,6 +266,7 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
     if (response != null && response.getBody() instanceof ProblemDetail pd) {
       // Jackson omits the default type unless it is set explicitly
       pd.setType(URI.create("about:blank"));
+      pd.setProperty("traceId", UUID.randomUUID().toString());
       if (pd.getInstance() == null && request instanceof ServletWebRequest swr) {
         try {
           pd.setInstance(URI.create(swr.getRequest().getRequestURI()));

@@ -35,6 +35,10 @@ final class AuthenticationFilter extends OncePerRequestFilter {
           "/auth/invite/accept",
           "/api/app/android/latest");
 
+  static boolean isPublic(HttpServletRequest request) {
+    return PUBLIC.contains(request.getRequestURI());
+  }
+
   private final AccessTokens tokens;
   private final AccountStore accounts;
   private final Clock clock;
@@ -52,7 +56,7 @@ final class AuthenticationFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    if (PUBLIC.contains(request.getRequestURI()) || "OPTIONS".equals(request.getMethod())) {
+    if (isPublic(request) || "OPTIONS".equals(request.getMethod())) {
       chain.doFilter(request, response);
       return;
     }

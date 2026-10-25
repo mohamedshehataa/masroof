@@ -2,6 +2,7 @@ package eg.masroof.adapters.out.persistence;
 
 import eg.masroof.application.auth.Account;
 import eg.masroof.application.auth.AccountStore;
+import eg.masroof.application.auth.AuditLog;
 import eg.masroof.application.auth.RefreshTokenStore;
 import eg.masroof.domain.auth.Role;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -17,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Accounts and refresh tokens in Postgres. */
 @Repository
-class JdbcAuthStore implements AccountStore, RefreshTokenStore {
+class JdbcAuthStore implements AccountStore, RefreshTokenStore, AuditLog {
 
   // Each statement is one literal (semgrep masroof-no-string-concat-sql); parameters are always
   // bound.
@@ -56,6 +58,26 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
 
   JdbcAuthStore(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
+  }
+
+  private static final String AUDIT_MEMBER =
+      """
+      insert into audit_log (id, household_id, member_id, action, ip_hash)
+      select ?, m.household_id, m.id, ?, ? from member m where m.id = ?
+      """;
+
+  private static final String AUDIT_ANON =
+      """
+      insert into audit_log (id, action, ip_hash) values (?, ?, ?)
+      """;
+
+  @Override
+  public void record(String action, @Nullable UUID memberId, String ipHash) {
+    if (memberId == null) {
+      jdbc.update(AUDIT_ANON, UUID.randomUUID(), action, ipHash);
+    } else {
+      jdbc.update(AUDIT_MEMBER, UUID.randomUUID(), action, ipHash, memberId);
+    }
   }
 
   @Override

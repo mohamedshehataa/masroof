@@ -36,6 +36,10 @@ public class AdminBootstrap {
     }
     if (accounts.createFirstAdmin(normalized, normalized.substring(0, at), hasher.hash(password))) {
       LOG.info("Bootstrap admin created");
+    } else {
+      LOG.warn(
+          "MASROOF_BOOTSTRAP_ADMIN_* are set but a login already exists; remove them from the"
+              + " environment");
     }
   }
 }

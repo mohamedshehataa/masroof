@@ -24,6 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 final class HmacJwtAccessTokens implements AccessTokens {
 
   static final Duration TTL = Duration.ofMinutes(15);
+  private static final Duration SKEW = Duration.ofSeconds(60);
   private static final int MAX_CHARS = 2048;
   private static final String HEADER_JSON = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -79,12 +80,17 @@ final class HmacJwtAccessTokens implements AccessTokens {
       }
       JsonNode p = JSON.readTree(DEC.decode(parts[1]));
       if (!p.path("exp").isIntegralNumber()
+          || !p.path("iat").isIntegralNumber()
           || !p.path("sub").isString()
-          || !p.path("hid").isString()) {
+          || !p.path("hid").isString()
+          || p.path("jti").asString("").isBlank()) {
         return Optional.empty();
       }
       Instant exp = Instant.ofEpochSecond(p.path("exp").asLong());
-      if (!now.isBefore(exp)) {
+      Instant iat = Instant.ofEpochSecond(p.path("iat").asLong());
+      if (!now.isBefore(exp)
+          || iat.isAfter(now.plus(SKEW))
+          || Duration.between(iat, exp).compareTo(TTL.plus(SKEW)) > 0) {
         return Optional.empty();
       }
       return Optional.of(

@@ -5,7 +5,7 @@ import eg.masroof.application.household.DevHousehold;
 import eg.masroof.application.household.HouseholdNotConfiguredException;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * oldest household, used only for requests that carry no access token. A valid token always wins.
  */
 @Component
-@ConditionalOnProperty(name = "masroof.dev.single-household", havingValue = "true")
+@Conditional(DevSwitch.Enabled.class)
 final class FirstHouseholdProvider implements DevHousehold {
 
   private final JdbcTemplate jdbc;

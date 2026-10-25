@@ -2,9 +2,11 @@ package eg.masroof.adapters.in.rest;
 
 import eg.masroof.application.auth.AccessTokens;
 import eg.masroof.application.auth.AccountStore;
+import eg.masroof.application.household.DevHousehold;
 import java.time.Clock;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -50,14 +52,24 @@ class WebSecurityConfiguration {
   }
 
   @Bean
+  FilterRegistrationBean<PublicRateLimitFilter> publicRateLimitFilter(
+      ClientIp clientIp, Clock clock) {
+    FilterRegistrationBean<PublicRateLimitFilter> bean =
+        new FilterRegistrationBean<>(new PublicRateLimitFilter(clientIp, clock));
+    bean.setOrder(-220);
+    return bean;
+  }
+
+  /** Token-less requests pass only when a DevHousehold bean exists (the one dev-switch reading). */
+  @Bean
   FilterRegistrationBean<AuthenticationFilter> authenticationFilter(
       AccessTokens tokens,
       AccountStore accounts,
       Clock clock,
-      @Value("${masroof.dev.single-household:false}") boolean devSingleHousehold) {
+      Optional<DevHousehold> devHousehold) {
     FilterRegistrationBean<AuthenticationFilter> bean =
         new FilterRegistrationBean<>(
-            new AuthenticationFilter(tokens, accounts, clock, devSingleHousehold));
+            new AuthenticationFilter(tokens, accounts, clock, devHousehold.isPresent()));
     bean.setOrder(-200);
     return bean;
   }

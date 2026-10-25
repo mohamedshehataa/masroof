@@ -20,6 +20,19 @@ final class ProblemResponses {
     write(response, 401, "Unauthorized", "Authentication is required", request.getRequestURI());
   }
 
+  /** 429 with {@code Retry-After} in whole seconds. */
+  static void tooManyRequests(
+      HttpServletRequest request, HttpServletResponse response, long retryAfterSeconds)
+      throws IOException {
+    response.setHeader("Retry-After", Long.toString(retryAfterSeconds));
+    write(
+        response,
+        429,
+        "Too Many Requests",
+        "Too many requests; try again later",
+        request.getRequestURI());
+  }
+
   private static void write(
       HttpServletResponse response, int status, String title, String detail, String instance)
       throws IOException {

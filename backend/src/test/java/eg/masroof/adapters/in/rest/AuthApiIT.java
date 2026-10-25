@@ -42,7 +42,8 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     properties = {
       "masroof.jwt.secret=" + AuthApiIT.TEST_KEY,
-      "masroof.cors.allowed-origins=http://localhost:5173,https://app.example.com"
+      "masroof.cors.allowed-origins=http://localhost:5173,https://app.example.com",
+      "masroof.trusted-proxies=127.0.0.0/8,::1/128"
     })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -495,6 +496,133 @@ class AuthApiIT {
             .andReturn()
             .getResponse();
     assertThat(evil.getHeader("Access-Control-Allow-Origin")).isNull();
+  }
+
+  private MockHttpServletResponse healthFrom(String ip) throws Exception {
+    return mvc.perform(get("/health").header("X-Forwarded-For", ip)).andReturn().getResponse();
+  }
+
+  @Test
+  @Tag("REQ-SEC-051")
+  @DisplayName("REQ-SEC-051 the 61st unauthenticated request in a window is 429 with Retry-After")
+  void publicRateLimit() throws Exception {
+    String ip = freshIp();
+    for (int i = 0; i < 60; i++) {
+      assertThat(healthFrom(ip).getStatus()).as("request " + (i + 1)).isEqualTo(200);
+    }
+    MockHttpServletResponse limited = healthFrom(ip);
+    assertThat(limited.getStatus()).isEqualTo(429);
+    assertThat(limited.getContentType()).startsWith("application/problem+json");
+    assertThat(JSON.readTree(limited.getContentAsString()).path("title").asString())
+        .isEqualTo("Too Many Requests");
+    assertThat(Integer.parseInt(limited.getHeader("Retry-After"))).isBetween(1, 60);
+    assertThat(healthFrom(freshIp()).getStatus()).isEqualTo(200); // another client is unaffected
+    // the login route shares the same budget
+    MockHttpServletResponse login = login(emailA, PASSWORD, ip);
+    assertThat(login.getStatus()).isEqualTo(429);
+  }
+
+  @Test
+  @Tag("REQ-SEC-051")
+  @DisplayName("REQ-SEC-051 header-less loopback health probes are never counted")
+  void loopbackProbesUncounted() throws Exception {
+    for (int i = 0; i < 70; i++) {
+      assertThat(getWith("/health", null).getStatus()).isEqualTo(200);
+    }
+  }
+
+  @Test
+  @Tag("REQ-SEC-051")
+  @DisplayName(
+      "REQ-SEC-051 spoofed X-Forwarded-For from an untrusted peer does not escape the limit")
+  void spoofedForwardedForStillLimited() throws Exception {
+    for (int i = 0; i < 61; i++) {
+      MockHttpServletResponse r =
+          mvc.perform(
+                  get("/health")
+                      .with(
+                          req -> {
+                            req.setRemoteAddr("203.0.113.88");
+                            return req;
+                          })
+                      .header("X-Forwarded-For", freshIp()))
+              .andReturn()
+              .getResponse();
+      assertThat(r.getStatus()).isEqualTo(i < 60 ? 200 : 429);
+    }
+  }
+
+  @Test
+  @Tag("REQ-SEC-007")
+  @DisplayName("REQ-SEC-007 failed and blocked logins are audited with a hashed IP and no e-mail")
+  void loginAudit() throws Exception {
+    String ip = freshIp();
+    String victim = "audit-" + UUID.randomUUID() + "@example.com";
+    UUID victimUser = user(householdA, victim);
+    for (int i = 0; i < 10; i++) {
+      assertThat(login(victim, "bad password " + i, ip).getStatus()).isEqualTo(401);
+    }
+    assertThat(login(victim, "bad password x", ip).getStatus()).isEqualTo(429);
+    assertThat(
+            jdbc.queryForObject(
+                """
+                select count(*) from audit_log a join member m on m.id = a.member_id
+                join app_user u on u.member_id = m.id
+                where u.id = ? and a.action = 'LOGIN_FAILED' and a.ip_hash = ?
+                """,
+                Integer.class,
+                victimUser,
+                sha("ip:" + ip)))
+        .isEqualTo(10);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from audit_log where action = 'LOGIN_BLOCKED' and ip_hash = ?",
+                Integer.class,
+                sha("ip:" + ip)))
+        .isEqualTo(1);
+    assertThat(
+            login("ghost-" + UUID.randomUUID() + "@example.com", PASSWORD, freshIp()).getStatus())
+        .isEqualTo(401);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from audit_log where action = 'LOGIN_FAILED' and member_id is null",
+                Integer.class))
+        .isGreaterThanOrEqualTo(1);
+  }
+
+  @Test
+  @Tag("REQ-SEC-013")
+  @DisplayName("REQ-SEC-013 errors are problem+json with a traceId and never echo the body")
+  void problemShape() throws Exception {
+    MockHttpServletResponse malformed =
+        mvc.perform(
+                post("/auth/login")
+                    .header("X-Forwarded-For", freshIp())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"email\": \"leak-me@example.com\", \"password\": SECRETBODY"))
+            .andReturn()
+            .getResponse();
+    assertThat(malformed.getStatus()).isEqualTo(400);
+    assertThat(malformed.getContentType()).startsWith("application/problem+json");
+    assertThat(malformed.getContentAsString())
+        .doesNotContain("SECRETBODY")
+        .doesNotContain("leak-me");
+    JsonNode p = JSON.readTree(malformed.getContentAsString());
+    assertThat(p.path("traceId").asString()).isNotBlank();
+    assertThat(p.path("status").asInt()).isEqualTo(400);
+    MockHttpServletResponse unauthorized = getWith("/api/expenses", null);
+    assertThat(unauthorized.getContentType()).startsWith("application/problem+json");
+    MockHttpServletResponse invalid =
+        mvc.perform(
+                post("/auth/login")
+                    .header("X-Forwarded-For", freshIp())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"email\":\"a@example.com\",\"password\":\"x\"}"))
+            .andReturn()
+            .getResponse();
+    assertThat(invalid.getContentAsString()).doesNotContain("rejectedValue");
+    MockHttpServletResponse notFound = getWith("/api/no-such-thing", null);
+    assertThat(notFound.getStatus()).isEqualTo(401);
   }
 
   @Test
