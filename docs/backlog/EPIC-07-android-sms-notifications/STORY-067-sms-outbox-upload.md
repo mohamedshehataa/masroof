@@ -3,7 +3,7 @@ id: STORY-067
 epic: EPIC-07
 title: "SMS outbox upload with backoff and idempotency on (device_id, sms_id)"
 phase: 4
-status: DRAFT
+status: BLOCKED
 size: S
 modules: [android]
 depends_on: [STORY-038, STORY-056, STORY-054]

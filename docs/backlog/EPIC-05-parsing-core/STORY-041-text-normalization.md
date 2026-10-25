@@ -3,7 +3,7 @@ id: STORY-041
 epic: EPIC-05
 title: "Text normalization: Unicode, Arabic-Indic digits, separators, multipliers, currency words"
 phase: 3
-status: DRAFT
+status: BLOCKED
 size: M
 modules: [backend]
 depends_on: [STORY-005]

@@ -3,7 +3,7 @@ id: STORY-064
 epic: EPIC-07
 title: SMS BroadcastReceiver hands off to WorkManager (never parses in the receiver)
 phase: 4
-status: DRAFT
+status: BLOCKED
 size: S
 modules: [android]
 depends_on: [STORY-038]
