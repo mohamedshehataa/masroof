@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Category, Expense } from '../api/generated';
 import { cairoToday } from '../lib/dates';
+import { clearSession, setSession } from '../api/session';
 import { Root } from './Root';
 
 const CAT = '11111111-1111-4111-8111-111111111111';
@@ -95,9 +96,12 @@ function go(path: string, lang = 'en-US') {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // Auth is on by default: these screen tests run signed in (login/session behaviour has its own specs).
+  setSession({ accessToken: 'test-access', refreshToken: 'test-refresh', expiresIn: 900 });
 });
 afterEach(() => {
   cleanup();
+  clearSession();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
