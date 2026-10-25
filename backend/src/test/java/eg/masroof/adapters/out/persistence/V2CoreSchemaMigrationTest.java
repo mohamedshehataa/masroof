@@ -90,7 +90,37 @@ class V2CoreSchemaMigrationTest {
             String.class);
     assertThat(scripts)
         .containsExactly(
-            "V1__baseline.sql", "V2__core_schema.sql", "V3__expenses.sql", "R__seed_reference.sql");
+            "V1__baseline.sql",
+            "V2__core_schema.sql",
+            "V3__expenses.sql",
+            "V4__household_currency_check.sql",
+            "R__seed_reference.sql");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"egp", "EG ", "E1P", "EGPP", "€€€"})
+  @Tag("REQ-OPS-047")
+  @DisplayName("REQ-OPS-047 household base_currency must be three upper-case letters")
+  void invalidBaseCurrencyRejected(String code) {
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "insert into household (id, name, base_currency) values (?, 'H', ?)",
+                    UUID.randomUUID(),
+                    code))
+        .satisfies(e -> assertThat(sqlState(e)).isIn("23514", "22001"));
+  }
+
+  @Test
+  @Tag("REQ-OPS-047")
+  @DisplayName("REQ-OPS-047 a valid base_currency such as USD is accepted")
+  void validBaseCurrencyAccepted() {
+    UUID id = UUID.randomUUID();
+    jdbc.update("insert into household (id, name, base_currency) values (?, 'H', 'USD')", id);
+    assertThat(
+            jdbc.queryForObject(
+                "select base_currency from household where id = ?", String.class, id))
+        .isEqualTo("USD");
   }
 
   @Test
