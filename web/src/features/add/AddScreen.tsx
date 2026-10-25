@@ -4,6 +4,7 @@ import type { ExpenseCreate } from '../../api/generated';
 import { useAccounts, useCategories, useCreateExpense } from '../../api/queries';
 import { usePrefs } from '../../app/prefs';
 import { SkeletonRows, useOnline } from '../../components/common';
+import { newUuid } from '../../lib/uuid';
 import { addDays, cairoToday, occurredAtFor } from '../../lib/dates';
 import { EMPTY_KEYPAD, keypadDisplay, keypadToMinor, pressKey, type KeypadKey } from '../../lib/money';
 import { useRouter } from '../../router';
@@ -59,7 +60,7 @@ export const AddScreen: FC = () => {
       ...(note.trim() === '' ? {} : { notes: note.trim() }),
     };
     const signature = JSON.stringify([amountMinor, categoryId, accountId, day, note.trim()]);
-    if (attempt.current?.signature !== signature) attempt.current = { signature, key: crypto.randomUUID() };
+    if (attempt.current?.signature !== signature) attempt.current = { signature, key: newUuid() };
     create.mutate(
       { body, idempotencyKey: attempt.current.key },
       {
