@@ -21,19 +21,19 @@ Bank and wallet SMS are parsed deterministically and for free by regex templates
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-002 — CRUD /api/sms-templates (sender_pattern, regex, field_mapping, status ACTIVE|PROPOSED|DISABLED, hit_count)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the template CRUD API, when used, then templates are managed. NOT built in the SMS slice: templates are a JSON resource loaded at start (follow-up).
 
 ### REQ-SMS-010 — Template extraction of amount, currency, original amount/currency, merchant, last-4, date/time, balance, reference from fixture SMS
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an anonymized bank or wallet SMS in `fixtures/sms/cases.jsonl`, when parsed by the template engine, then amount, currency, kind, merchant, card last four and time (Africa/Cairo to UTC) match the expectations; given no template or no amount, then nothing is extracted.
 
 ### REQ-SMS-011 — Templates are hot-reloaded from DB without restart; hit_count increments
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given edited templates, when saved, then they are hot-reloaded without restart. NOT built in the SMS slice (follow-up).
 
 ### REQ-SMS-012 — Direction mapping: debit/credit/refund/reversal/own-transfer/ATM/fee → expense type; balance stored, never an expense
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a purchase, ATM, refund, fee, transfer, salary or reversal message, when parsed, then the kind maps to EXPENSE, CASH_WITHDRAWAL, REFUND, FEE, TRANSFER, INCOME or a review/ignore outcome, and a balance is never an expense.
 
 ### REQ-SMS-013 — Card/account last-4 maps to payment_account and therefore to the owner member
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a card last four that matches exactly one payment account, when the expense is created, then it is linked to that account and paid by its owner.
 
 
 ## UX states (UI stories only)

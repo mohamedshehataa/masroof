@@ -21,13 +21,13 @@ No one-time password ever reaches the backend (PROMPT §4.1).
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-030 — OTP detection by keywords (OTP, رمز, كود التحقق, verification code, لا تشارك) and patterns; dropped on device
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a message with OTP keywords (English or Arabic, Arabic-Indic digits), when classified on the device, then it is dropped and never stored or uploaded.
 
 ### REQ-SMS-031 — OTP leak = hard test failure (0% false negatives on the sms suite negatives)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the OTP fixtures, when classified, then every one is OTP (zero false negatives); the server runs the same check again.
 
 ### REQ-SMS-032 — Promotional SMS classified on device with simple rules and not uploaded; server confirms
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a promotional message without transaction words, when classified, then it is dropped; given a real transaction message, then it is kept.
 
 
 ## UX states (UI stories only)

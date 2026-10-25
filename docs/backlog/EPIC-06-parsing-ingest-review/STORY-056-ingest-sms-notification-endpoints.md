@@ -21,10 +21,10 @@ Bank SMS and bank-app notifications from any device enter the same pipeline exac
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-001 — POST /api/ingest/sms {sender, body, receivedAt, deviceId, smsId} → 202; idempotent on (deviceId, smsId); source SMS or IOS_SHORTCUT by device platform
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a valid access token, when POST /api/ingest/sms is sent twice with the same deviceId and smsId, then both answer 202 and the second says DUPLICATE with the same id; given an OTP, then REJECTED_OTP and nothing is stored; given bad input, then 4xx without echoing the text.
 
 ### REQ-NTF-001 — POST /api/ingest/notification {packageName, title, text, postedAt, deviceId, notificationKey} → 202; source PUSH_NOTIFICATION; idempotent
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a notification, when posted, then it is queued. NOT built in the SMS slice (still 501).
 
 
 ## UX states (UI stories only)

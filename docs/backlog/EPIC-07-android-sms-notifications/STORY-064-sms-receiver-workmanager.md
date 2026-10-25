@@ -21,10 +21,10 @@ Every new bank SMS reaches the app's pipeline reliably without draining the batt
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-020 — Incoming SMS from allowlisted senders is enqueued as a WorkManager job within the receiver's time budget
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an SMS from an allowlisted sender, when it arrives, then the receiver hands it to WorkManager.
 
 ### REQ-SMS-021 — Receiver does no parsing/network; StrictMode and unit tests assert it
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given any SMS, when the receiver runs, then it only does a sender lookup, a keyword check and an enqueue: no parsing, database or network.
 
 
 ## UX states (UI stories only)

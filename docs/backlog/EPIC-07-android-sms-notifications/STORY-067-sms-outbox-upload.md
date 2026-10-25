@@ -21,10 +21,10 @@ Each bank SMS is uploaded exactly once, even across reboots and offline periods 
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-060 — Filtered SMS are posted to /api/ingest/sms with the device token; 202 removes them from the outbox
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a filtered SMS in the outbox, when uploaded, then it is posted to /api/ingest/sms with the device id and a 202 removes it.
 
 ### REQ-SMS-061 — Offline/5xx → retry with exponential backoff; bodies deleted locally after acknowledgement (retention ≤ 7 days)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the server is offline or answers 5xx, when uploading, then the row stays and is retried with exponential backoff; given a permanent rejection, then it is marked failed; failed bodies are purged after 7 days.
 
 
 ## UX states (UI stories only)

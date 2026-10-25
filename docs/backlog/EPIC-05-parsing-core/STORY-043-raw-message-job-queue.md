@@ -21,13 +21,13 @@ Ingestion is asynchronous and durable: a message is persisted first, then proces
 
 ## Requirements and acceptance criteria
 ### REQ-PARSE-030 — Every input becomes an immutable raw_message row before any processing
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an uploaded SMS, when the endpoint answers 202, then a `raw_message` row exists with status QUEUED before any processing, and an unparsed message stays NEEDS_REVIEW instead of being dropped.
 
 ### REQ-PARSE-031 — Jobs are claimed with FOR UPDATE SKIP LOCKED by N workers, exactly-once per attempt, with lag metric
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given 40 queued messages and 4 concurrent workers, when they drain the queue with FOR UPDATE SKIP LOCKED, then each message is processed exactly once. The lag metric is not built yet (follow-up).
 
 ### REQ-PARSE-032 — Retry with exponential backoff, max attempts, dead-letter status with error and admin visibility
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a failing attempt, when it is retried, then it backs off exponentially (10 s x 2^n, max 15 min) and after 5 attempts ends as FAILED with an error code. Admin visibility is not built yet (follow-up).
 
 
 ## UX states (UI stories only)
