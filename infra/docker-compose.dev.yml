@@ -1,4 +1,9 @@
-# Dev-only overlay (STORY-143): backend on loopback for curl and the Vite proxy (STORY-141). Never loaded by make up or deploys.
+# Local overlay (STORY-143, STORY-017): backend on loopback for curl and the Vite proxy, and the single-household
+# switch that stands in for authentication until STORY-009. Loaded by `make up` (local only); never by deploys.
+# The profile is `dev` because the backend refuses to start with profile `prod` and the switch together.
 services:
   backend:
     ports: ["127.0.0.1:8080:8080"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      MASROOF_DEV_SINGLE_HOUSEHOLD: "true"
