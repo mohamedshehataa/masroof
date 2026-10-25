@@ -3,12 +3,13 @@ id: STORY-008
 epic: EPIC-01
 title: Android Gradle project skeleton with fast gate and generated Kotlin client
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [contracts, android]
 depends_on: [STORY-002]
 reqs: [REQ-OPS-054, REQ-OPS-055]
 implements: ["PROMPT.md §2 (Android stack)", "PROMPT.md §9 (generated Kotlin client)", "PROMPT.md S9 (Android gates)"]
+risk_tier: low
 owner_agent: android-engineer
 ---
 
