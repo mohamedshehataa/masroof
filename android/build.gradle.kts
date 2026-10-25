@@ -1,3 +1,8 @@
+// Plugin classpath is locked too (-> buildscript-gradle.lockfile), as in backend/.
+buildscript {
+    dependencyLocking { lockAllConfigurations() }
+}
+
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
