@@ -21,7 +21,7 @@ test.describe('REQ-OPS-021 375x812 matrix (axe + screenshot)', () => {
       });
       const page = await ctx.newPage();
       await mockHealth(page, ok);
-      await page.goto('/');
+      await page.goto('/version');
       await expect(page.getByText(c.copy)).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('dir', c.dir);
 
