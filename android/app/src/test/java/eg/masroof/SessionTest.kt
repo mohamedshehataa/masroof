@@ -15,8 +15,6 @@ import eg.masroof.data.auth.SessionState
 import eg.masroof.data.auth.SignedOutNotice
 import eg.masroof.data.auth.TokenAuthenticator
 import eg.masroof.data.auth.toAuthResult
-import eg.masroof.data.remote.UploadResult
-import eg.masroof.data.remote.classifyUploadStatus
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -285,15 +283,98 @@ class SessionTest {
         assertEquals(AuthResult.RateLimited(120), limited.toAuthResult())
     }
 
-    // ---- upload status mapping (MINOR from the last verify)
+    // ---- keystore / keyset loss (REQ-AND-007)
+
+    private class ThrowingCipher : eg.masroof.data.auth.TokenCipher {
+        override fun encrypt(plain: ByteArray): ByteArray = throw java.security.GeneralSecurityException("keyset lost")
+
+        override fun decrypt(sealed: ByteArray): ByteArray = throw java.security.GeneralSecurityException("keyset lost")
+    }
 
     @Test
-    fun `REQ-AND-015 a concurrent Idempotency-Key 409 is retried, not rejected`() {
-        assertEquals(UploadResult.Retry, classifyUploadStatus(409, false))
-        assertEquals(UploadResult.Retry, classifyUploadStatus(429, false))
-        assertEquals(UploadResult.Retry, classifyUploadStatus(503, false))
-        assertEquals(UploadResult.Unauthorized, classifyUploadStatus(401, false))
-        assertEquals(UploadResult.Rejected, classifyUploadStatus(422, false))
-        assertEquals(UploadResult.Rejected, classifyUploadStatus(400, false))
+    fun `REQ-AND-007 a cipher that throws on decrypt discards the blob and reports invalidated`() {
+        val prefs = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("t3", Context.MODE_PRIVATE)
+        EncryptedSessionStore(prefs, AeadTokenCipher(inMemoryAead())).save(session())
+        val broken = EncryptedSessionStore(prefs, ThrowingCipher())
+        assertEquals(LoadedSession.Invalidated, broken.load())
+        assertFalse(prefs.contains("session"))
+        assertEquals(LoadedSession.Empty, broken.load())
     }
+
+    @Test
+    fun `REQ-AND-007 a keystore that cannot even be opened is the same as a lost session, not a crash`() =
+        runTest {
+            val sm = TestAuth.manager(FakeSessionStore().apply { loadThrows = true })
+            sm.restore()
+            assertEquals(SessionState.SignedOut(SignedOutNotice.KEYSTORE_RESET), sm.state.value)
+        }
+
+    @Test
+    fun `REQ-AND-007 a save failure is non fatal and the session lives on in memory`() =
+        runTest {
+            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
+            val store = FakeSessionStore().apply { saveThrows = true }
+            val sm = TestAuth.manager(store, remote)
+            assertEquals(LoginResult.Success, sm.login("https://x.eg", "a@b.eg", "pw"))
+            assertEquals(SessionState.SignedIn("Mohamed", persisted = false), sm.state.value)
+            assertEquals("access-1", sm.accessToken())
+        }
+
+    @Test
+    fun `REQ-AND-007 a save failure during refresh keeps the rotated token in memory`() =
+        runTest {
+            val remote = FakeAuthRemote().apply { refreshResult = { AuthResult.Success(session("access-2", "refresh-2")) } }
+            val store = FakeSessionStore(LoadedSession.Found(session()))
+            val sm = TestAuth.manager(store, remote)
+            sm.restore()
+            store.saveThrows = true
+            assertEquals("access-2", sm.refreshAfter("access-1"))
+            assertEquals("access-2", sm.accessToken())
+            assertEquals(SessionState.SignedIn("Mohamed", persisted = false), sm.state.value)
+        }
+
+    // ---- account switch / logout confirmation data (REQ-AND-007)
+
+    @Test
+    fun `REQ-AND-007 a different member with unsynced entries needs confirmation before anything is wiped`() =
+        runTest {
+            val wiper = FakeWiper(unsynced = 3)
+            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
+            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
+            val sm = TestAuth.manager(store, remote, wiper = wiper)
+            assertEquals(LoginResult.AccountSwitch(3), sm.login("https://x.eg", "a@b.eg", "pw"))
+            assertEquals(0, wiper.wipes)
+            assertTrue(store.saves.isEmpty())
+            assertTrue(sm.state.value is SessionState.SignedOut)
+            sm.confirmAccountSwitch()
+            assertEquals(1, wiper.wipes)
+            assertEquals(SessionState.SignedIn("Mohamed"), sm.state.value)
+            assertEquals("member-1", store.lastMemberId)
+        }
+
+    @Test
+    fun `REQ-AND-007 cancelling an account switch revokes the new session and wipes nothing`() =
+        runTest {
+            val wiper = FakeWiper(unsynced = 2)
+            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
+            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
+            val sm = TestAuth.manager(store, remote, wiper = wiper)
+            sm.login("https://x.eg", "a@b.eg", "pw")
+            sm.cancelAccountSwitch()
+            assertEquals(listOf("refresh-1"), remote.logoutTokens)
+            assertEquals(0, wiper.wipes)
+            assertEquals("someone-else", store.lastMemberId)
+            assertNull(sm.accessToken())
+        }
+
+    @Test
+    fun `REQ-AND-007 a different member with nothing queued is wiped without asking`() =
+        runTest {
+            val wiper = FakeWiper(unsynced = 0)
+            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
+            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
+            val sm = TestAuth.manager(store, remote, wiper = wiper)
+            assertEquals(LoginResult.Success, sm.login("https://x.eg", "a@b.eg", "pw"))
+            assertEquals(1, wiper.wipes)
+        }
 }

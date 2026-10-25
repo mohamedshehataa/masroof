@@ -3,6 +3,7 @@ package eg.masroof.data.auth
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.normalizeServerUrl
 import eg.masroof.di.IoDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +38,7 @@ class SessionManager
             if (restored) return
             restoreMutex.withLock {
                 if (restored) return
-                when (val loaded = withContext(io) { store.load() }) {
+                when (val loaded = withContext(io) { safeLoad() }) {
                     is LoadedSession.Found -> {
                         current = loaded.session
                         _state.value = SessionState.SignedIn(loaded.session.displayName)
@@ -48,6 +49,17 @@ class SessionManager
                 restored = true
             }
         }
+
+        /** A store that cannot even be opened (keystore or keyset loss) is the same as a lost session, never a crash. */
+        @Suppress("TooGenericExceptionCaught")
+        private fun safeLoad(): LoadedSession =
+            try {
+                store.load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                LoadedSession.Invalidated
+            }
 
         suspend fun accessToken(): String? {
             restore()
@@ -62,10 +74,7 @@ class SessionManager
             val base = normalizeServerUrl(serverUrl) ?: return LoginResult.InvalidUrl
             restore()
             return when (val result = remote.login(base, email.trim(), password, DEVICE_NAME)) {
-                is AuthResult.Success -> {
-                    onSignedIn(base, result.session)
-                    LoginResult.Success
-                }
+                is AuthResult.Success -> onAuthenticated(base, result.session)
                 AuthResult.Rejected -> LoginResult.InvalidCredentials
                 is AuthResult.RateLimited -> LoginResult.RateLimited(result.retryAfterSeconds)
                 AuthResult.Network -> LoginResult.Network
@@ -73,21 +82,68 @@ class SessionManager
             }
         }
 
-        private suspend fun onSignedIn(
+        private suspend fun onAuthenticated(
+            base: String,
+            session: Session,
+        ): LoginResult {
+            val previous = withContext(io) { store.lastMemberId }
+            if (previous != null && previous != session.memberId) {
+                // Another account must never see (or upload) the previous account's cache and queued entries,
+                // but silently deleting unsynced entries is not acceptable: ask first.
+                val unsynced = wiper.unsyncedCount()
+                if (unsynced > 0) {
+                    pendingSwitch = base to session
+                    return LoginResult.AccountSwitch(unsynced)
+                }
+                wiper.wipe()
+            }
+            finishSignIn(base, session)
+            return LoginResult.Success
+        }
+
+        private var pendingSwitch: Pair<String, Session>? = null
+
+        /** The user accepted losing the previous account's unsynced entries: wipe, then complete the sign-in. */
+        suspend fun confirmAccountSwitch() {
+            val (base, session) = pendingSwitch ?: return
+            pendingSwitch = null
+            wiper.wipe()
+            finishSignIn(base, session)
+        }
+
+        /** The user backed out: revoke the session the server just issued and keep everything as it was. */
+        suspend fun cancelAccountSwitch() {
+            val (base, session) = pendingSwitch ?: return
+            pendingSwitch = null
+            remote.logout(base, session.accessToken, session.refreshToken)
+        }
+
+        suspend fun unsyncedCount(): Int = wiper.unsyncedCount()
+
+        private suspend fun finishSignIn(
             base: String,
             session: Session,
         ) {
-            val previous = withContext(io) { store.lastMemberId }
-            // Another account must never see (or upload) the previous account's cache and queued entries.
-            if (previous != null && previous != session.memberId) wiper.wipe()
-            withContext(io) {
-                store.save(session)
-                store.lastMemberId = session.memberId
-            }
+            val persisted = persist(session)
+            withContext(io) { runCatchingStore { store.lastMemberId = session.memberId } }
             settings.update { it.copy(serverUrl = base) }
             current = session
-            _state.value = SessionState.SignedIn(session.displayName)
+            _state.value = SessionState.SignedIn(session.displayName, persisted)
         }
+
+        /** Writing the encrypted store must never be fatal: on failure the session stays in memory only. */
+        private suspend fun persist(session: Session): Boolean = withContext(io) { runCatchingStore { store.save(session) } }
+
+        @Suppress("TooGenericExceptionCaught")
+        private inline fun runCatchingStore(block: () -> Unit): Boolean =
+            try {
+                block()
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
 
         /**
          * Single-flight refresh after a 401 for [staleToken]. Concurrent callers queue on the mutex; whoever arrives
@@ -103,8 +159,9 @@ class SessionManager
                 val base = settings.current().serverUrl
                 when (val result = remote.refresh(base, session.refreshToken)) {
                     is AuthResult.Success -> {
-                        withContext(io) { store.save(result.session) }
+                        val persisted = persist(result.session)
                         current = result.session
+                        _state.value = SessionState.SignedIn(result.session.displayName, persisted)
                         result.session.accessToken
                     }
                     AuthResult.Rejected -> {
@@ -118,7 +175,7 @@ class SessionManager
 
         /** The server no longer accepts this session. Queued entries are kept; they upload after the next sign-in. */
         private suspend fun expire() {
-            withContext(io) { store.clear() }
+            withContext(io) { runCatchingStore { store.clear() } }
             current = null
             _state.value = SessionState.SignedOut(SignedOutNotice.SESSION_EXPIRED)
         }
@@ -131,8 +188,8 @@ class SessionManager
                 remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
             }
             withContext(io) {
-                store.clear()
-                store.lastMemberId = null
+                runCatchingStore { store.clear() }
+                runCatchingStore { store.lastMemberId = null }
             }
             wiper.wipe()
             current = null

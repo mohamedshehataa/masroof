@@ -1,5 +1,6 @@
 package eg.masroof
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,7 @@ import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
+import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.login.LoginRoute
@@ -60,6 +62,10 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var session: SessionManager
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -71,7 +77,16 @@ class MainActivity : ComponentActivity() {
                 when (val s = sessionState) {
                     SessionState.Restoring -> Unit
                     is SessionState.SignedOut ->
-                        Scaffold { padding -> LoginRoute(s.notice, modifier = Modifier.padding(padding)) }
+                        Scaffold { padding ->
+                            LoginRoute(
+                                s.notice,
+                                onToggleLanguage = {
+                                    AppLanguage.toggle(this@MainActivity)
+                                    recreate()
+                                },
+                                modifier = Modifier.padding(padding),
+                            )
+                        }
                     is SessionState.SignedIn -> MasroofRoot()
                 }
             }

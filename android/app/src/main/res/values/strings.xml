@@ -69,5 +69,19 @@
     <string name="login_error_server">The server had a problem. Try again.</string>
     <string name="login_notice_expired">Your session expired. Sign in again; your saved entries are kept.</string>
     <string name="login_notice_keystore">Your saved sign-in could not be unlocked on this device. Sign in again.</string>
+    <string name="login_offline">You are offline. Connect to sign in.</string>
+    <string name="login_language_switch">العربية</string>
+    <string name="login_switch_confirm">Sign in anyway</string>
+    <string name="login_switch_cancel">Cancel</string>
+    <plurals name="login_switch_warning">
+        <item quantity="one">%1$d unsynced expense from the previous account will be deleted if you sign in as a different member.</item>
+        <item quantity="other">%1$d unsynced expenses from the previous account will be deleted if you sign in as a different member.</item>
+    </plurals>
+    <string name="logout_sync_now">Sync now</string>
+    <string name="logout_anyway">Sign out anyway</string>
+    <plurals name="logout_unsynced_warning">
+        <item quantity="one">%1$d unsynced expense will be deleted. Sync first or sign out anyway?</item>
+        <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>
+    </plurals>
 </resources>
 

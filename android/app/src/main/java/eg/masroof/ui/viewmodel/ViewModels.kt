@@ -244,6 +244,8 @@ data class SettingsUiState(
     val urlInvalid: Boolean = false,
     val saved: Boolean = false,
     val loggingOut: Boolean = false,
+    /** Non-null while the "N unsynced expenses will be deleted" confirmation is showing. */
+    val confirmLogoutUnsynced: Int? = null,
 )
 
 @HiltViewModel
@@ -252,6 +254,7 @@ class SettingsViewModel
     constructor(
         private val settings: SettingsRepository,
         private val session: SessionManager,
+        private val scheduler: SyncScheduler,
     ) : ViewModel() {
         private val draft = MutableStateFlow<SettingsUiState?>(null)
 
@@ -268,14 +271,42 @@ class SettingsViewModel
 
         fun onDigits(style: DigitStyle) = edit { it.copy(digitStyle = style) }
 
-        /** Revokes the session on the server, then wipes tokens and cached data; the root returns to login. */
+        /**
+         * Log out. When entries exist only on this device the user is asked first (they would be deleted with the
+         * account's cache); otherwise it goes straight through.
+         */
         fun logout() {
             if (state.value.loggingOut) return
-            draft.value = state.value.copy(loggingOut = true)
             viewModelScope.launch {
-                session.logout()
-                draft.value = null
+                val unsynced = session.unsyncedCount()
+                if (unsynced > 0) {
+                    draft.value = state.value.copy(confirmLogoutUnsynced = unsynced)
+                } else {
+                    performLogout()
+                }
             }
+        }
+
+        /** "Sign out anyway" in the confirmation: revoke the session, then wipe tokens and all cached data. */
+        fun confirmLogout() {
+            if (state.value.loggingOut) return
+            viewModelScope.launch { performLogout() }
+        }
+
+        fun dismissLogout() {
+            draft.value = state.value.copy(confirmLogoutUnsynced = null)
+        }
+
+        /** "Sync now": leave the dialog and let WorkManager upload the queue; the user can log out again afterwards. */
+        fun syncNow() {
+            scheduler.schedule()
+            dismissLogout()
+        }
+
+        private suspend fun performLogout() {
+            draft.value = state.value.copy(loggingOut = true, confirmLogoutUnsynced = null)
+            session.logout()
+            draft.value = null
         }
 
         fun save() {

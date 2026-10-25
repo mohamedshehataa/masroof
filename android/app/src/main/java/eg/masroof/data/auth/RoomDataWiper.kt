@@ -17,6 +17,8 @@ class RoomDataWiper
         private val workManager: WorkManager,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) : LocalDataWiper {
+        override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() }
+
         override suspend fun wipe() {
             workManager.cancelUniqueWork(OUTBOX_WORK_NAME)
             withContext(io) { db.clearAllTables() }

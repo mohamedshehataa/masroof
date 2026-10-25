@@ -9,9 +9,11 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import eg.masroof.data.ConnectivityNetworkMonitor
 import eg.masroof.data.DataStoreSettings
 import eg.masroof.data.DefaultExpenseRepository
 import eg.masroof.data.ExpenseRepository
+import eg.masroof.data.NetworkMonitor
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.auth.AeadTokenCipher
 import eg.masroof.data.auth.ApiAuthRemote
@@ -53,6 +55,8 @@ abstract class BindingsModule {
     @Binds abstract fun authRemote(impl: ApiAuthRemote): AuthRemote
 
     @Binds abstract fun wiper(impl: RoomDataWiper): LocalDataWiper
+
+    @Binds abstract fun network(impl: ConnectivityNetworkMonitor): NetworkMonitor
 }
 
 @Module

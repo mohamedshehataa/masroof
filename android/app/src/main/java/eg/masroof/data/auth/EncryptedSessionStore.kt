@@ -39,6 +39,8 @@ class EncryptedSessionStore(
     private val prefs: SharedPreferences,
     private val cipher: TokenCipher,
 ) : SessionStore {
+    // Any failure to open the blob (lost key, corrupt keyset, bad data) means the session is gone, never a crash.
+    @Suppress("TooGenericExceptionCaught")
     override fun load(): LoadedSession {
         val encoded = prefs.getString(KEY_SESSION, null) ?: return LoadedSession.Empty
         return try {
@@ -50,7 +52,7 @@ class EncryptedSessionStore(
             discard()
         } catch (_: SerializationException) {
             discard()
-        } catch (_: IllegalArgumentException) {
+        } catch (_: RuntimeException) {
             discard()
         }
     }

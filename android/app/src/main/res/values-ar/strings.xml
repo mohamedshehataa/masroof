@@ -69,5 +69,27 @@
     <string name="login_error_server">حدثت مشكلة في الخادم. حاول مرة أخرى.</string>
     <string name="login_notice_expired">انتهت جلستك. سجّل الدخول مجددًا؛ إدخالاتك المحفوظة باقية.</string>
     <string name="login_notice_keystore">تعذر فتح تسجيل الدخول المحفوظ على هذا الجهاز. سجّل الدخول مجددًا.</string>
+    <string name="login_offline">أنت غير متصل. اتصل بالإنترنت لتسجيل الدخول.</string>
+    <string name="login_language_switch">English</string>
+    <string name="login_switch_confirm">سجّل الدخول على أي حال</string>
+    <string name="login_switch_cancel">إلغاء</string>
+    <plurals name="login_switch_warning">
+        <item quantity="zero">سيتم حذف %1$d إدخال غير متزامن من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+        <item quantity="one">سيتم حذف إدخال غير متزامن واحد من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+        <item quantity="two">سيتم حذف إدخالين غير متزامنين من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+        <item quantity="few">سيتم حذف %1$d إدخالات غير متزامنة من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+        <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+        <item quantity="other">سيتم حذف %1$d إدخال غير متزامن من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
+    </plurals>
+    <string name="logout_sync_now">زامن الآن</string>
+    <string name="logout_anyway">سجّل الخروج على أي حال</string>
+    <plurals name="logout_unsynced_warning">
+        <item quantity="zero">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+        <item quantity="one">سيتم حذف إدخال غير متزامن واحد. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+        <item quantity="two">سيتم حذف إدخالين غير متزامنين. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+        <item quantity="few">سيتم حذف %1$d إدخالات غير متزامنة. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+        <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+        <item quantity="other">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
+    </plurals>
 </resources>
 

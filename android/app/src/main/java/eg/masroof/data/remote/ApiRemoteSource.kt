@@ -206,7 +206,11 @@ class ApiRemoteSource
                 if (response.isSuccessful && created != null) {
                     UploadResult.Created(created.toEntity())
                 } else {
-                    classifyUploadStatus(response.code(), response.isSuccessful)
+                    classifyUploadStatus(
+                        response.code(),
+                        response.isSuccessful,
+                        problemTitle(response.errorBody()?.string()),
+                    )
                 }
             } catch (_: IOException) {
                 UploadResult.Retry
@@ -240,23 +244,4 @@ class ApiRemoteSource
         private companion object {
             const val PAGE_LIMIT = 200
         }
-    }
-
-private const val SERVER_ERROR = 500
-private const val UNAUTHORIZED = 401
-
-/** 409 is the backend's "concurrent Idempotency-Key; retry": the first attempt is in flight, so retry, never reject. */
-private val RETRYABLE = setOf(408, 409, 429)
-
-/** Outcome of a non-created upload response. Pure so the status table is unit tested. */
-fun classifyUploadStatus(
-    code: Int,
-    successful: Boolean,
-): UploadResult =
-    when {
-        successful -> UploadResult.Unexpected
-        code == UNAUTHORIZED -> UploadResult.Unauthorized
-        code in RETRYABLE -> UploadResult.Retry
-        code >= SERVER_ERROR -> UploadResult.Retry
-        else -> UploadResult.Rejected
     }

@@ -24,8 +24,10 @@ sealed interface SessionState {
         val notice: SignedOutNotice? = null,
     ) : SessionState
 
+    /** [persisted] is false when the encrypted store could not be written: the session lives in memory only. */
     data class SignedIn(
         val displayName: String,
+        val persisted: Boolean = true,
     ) : SessionState
 }
 
@@ -72,6 +74,14 @@ sealed interface AuthResult {
 sealed interface LoginResult {
     data object Success : LoginResult
 
+    /**
+     * The credentials are valid but belong to a different member than the one whose [unsynced] entries are queued
+     * on this device. Nothing is stored until [SessionManager.confirmAccountSwitch].
+     */
+    data class AccountSwitch(
+        val unsynced: Int,
+    ) : LoginResult
+
     data object InvalidUrl : LoginResult
 
     data object InvalidCredentials : LoginResult
@@ -108,5 +118,8 @@ interface AuthRemote {
 
 /** Removes everything cached for the account: Room tables (expenses, outbox, lookups) and pending sync work. */
 interface LocalDataWiper {
+    /** Queued entries (pending or failed) that exist only on this device. */
+    suspend fun unsyncedCount(): Int
+
     suspend fun wipe()
 }

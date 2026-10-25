@@ -36,12 +36,18 @@ class FakeSessionStore(
     var stored: LoadedSession = LoadedSession.Empty,
 ) : SessionStore {
     var clears = 0
+    var saveThrows = false
+    var loadThrows = false
     var saves = mutableListOf<Session>()
     override var lastMemberId: String? = null
 
-    override fun load() = stored
+    override fun load(): LoadedSession {
+        if (loadThrows) error("keystore gone")
+        return stored
+    }
 
     override fun save(session: Session) {
+        if (saveThrows) throw java.security.GeneralSecurityException("keystore gone")
         saves += session
         stored = LoadedSession.Found(session)
     }
@@ -90,8 +96,12 @@ class FakeAuthRemote : AuthRemote {
     }
 }
 
-class FakeWiper : LocalDataWiper {
+class FakeWiper(
+    var unsynced: Int = 0,
+) : LocalDataWiper {
     var wipes = 0
+
+    override suspend fun unsyncedCount() = unsynced
 
     override suspend fun wipe() {
         wipes++
@@ -105,4 +115,11 @@ object TestAuth {
         settings: SettingsRepository = FakeSettings(),
         wiper: LocalDataWiper = FakeWiper(),
     ) = SessionManager(store, remote, settings, wiper, Dispatchers.Unconfined)
+}
+
+class FakeNetwork(
+    online: Boolean = true,
+) : eg.masroof.data.NetworkMonitor {
+    val flow = kotlinx.coroutines.flow.MutableStateFlow(online)
+    override val online: kotlinx.coroutines.flow.Flow<Boolean> = flow
 }
