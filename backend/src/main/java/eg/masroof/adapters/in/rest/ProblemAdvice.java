@@ -3,6 +3,7 @@ package eg.masroof.adapters.in.rest;
 import eg.masroof.adapters.in.rest.ApiProblemException.FieldProblem;
 import eg.masroof.application.expense.ExpenseException;
 import eg.masroof.application.household.HouseholdNotConfiguredException;
+import eg.masroof.application.household.UnauthenticatedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
@@ -11,6 +12,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -20,9 +22,11 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import tools.jackson.core.JacksonException;
 
 /** Turns every failure into an RFC 9457 problem; never echoes input values or stack traces. */
 @RestControllerAdvice
@@ -60,6 +64,16 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
     return ResponseEntity.status(status).body(problem);
   }
 
+  @ExceptionHandler(UnauthenticatedException.class)
+  ResponseEntity<Object> handleUnauthenticated(
+      UnauthenticatedException e, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNAUTHORIZED, "Authentication is required", request.getRequestURI());
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+        .body(problem);
+  }
+
   @ExceptionHandler(HouseholdNotConfiguredException.class)
   ResponseEntity<Object> handleNoHousehold(
       HouseholdNotConfiguredException e, HttpServletRequest request) {
@@ -94,7 +108,15 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> handleUnexpected(Exception e, HttpServletRequest request) {
-    LOG.error("Unhandled error on {}", request.getRequestURI(), e);
+    // Database messages embed the failing row's values, so log only the type and the first line
+    // (constraint name); never the stack trace or the Detail lines.
+    Throwable root = e instanceof DataAccessException dae ? dae.getMostSpecificCause() : e;
+    String firstLine = String.valueOf(root.getMessage()).lines().findFirst().orElse("");
+    LOG.error(
+        "Unhandled {} on {}: {}",
+        e.getClass().getSimpleName(),
+        request.getRequestURI(),
+        e instanceof DataAccessException ? firstLine : "(message withheld)");
     return handleApi(
         new ApiProblemException(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error"), request);
   }
@@ -108,18 +130,56 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
       HttpHeaders headers,
       HttpStatusCode status,
       WebRequest request) {
+    String field = null;
+    boolean badCurrency = false;
     for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof JacksonException je && field == null && !je.getPath().isEmpty()) {
+        field = path(je);
+      }
       if (t instanceof IllegalArgumentException
           && String.valueOf(t.getMessage()).startsWith("currency must be")) {
-        ProblemDetail problem =
-            problem(HttpStatus.UNPROCESSABLE_CONTENT, "Validation failed", null);
-        problem.setProperty(
-            "errors", List.of(new FieldProblem("amount.currency", "is not an ISO-4217 code")));
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(problem);
+        badCurrency = true;
       }
     }
-    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Request body is not valid JSON", null);
+    if (badCurrency) {
+      ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_CONTENT, "Validation failed", null);
+      problem.setProperty(
+          "errors",
+          List.of(
+              new FieldProblem(
+                  field == null || field.isEmpty()
+                      ? "amount.currency"
+                      : field.endsWith(".currency") ? field : field + ".currency",
+                  "is not an ISO-4217 code")));
+      return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(problem);
+    }
+    boolean named = field != null;
+    ProblemDetail problem =
+        problem(
+            HttpStatus.BAD_REQUEST,
+            named ? "Validation failed" : "Request body is not valid JSON",
+            null);
+    if (field != null) {
+      problem.setProperty(
+          "errors", List.of(new FieldProblem(field, "has a missing or invalid value or type")));
+    }
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+  }
+
+  /** Dotted field path of a Jackson mapping failure, for example {@code amount.amountMinor}. */
+  private static String path(JacksonException e) {
+    StringBuilder sb = new StringBuilder();
+    for (JacksonException.Reference ref : e.getPath()) {
+      if (ref.getPropertyName() != null) {
+        if (!sb.isEmpty()) {
+          sb.append('.');
+        }
+        sb.append(ref.getPropertyName());
+      } else if (ref.getIndex() >= 0) {
+        sb.append('[').append(ref.getIndex()).append(']');
+      }
+    }
+    return sb.toString();
   }
 
   @Override
@@ -154,6 +214,31 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
 
   private static String lastSegment(String path) {
     int dot = path.lastIndexOf('.');
-    return dot < 0 ? path : path.substring(dot + 1);
+    String name = dot < 0 ? path : path.substring(dot + 1);
+    return "idempotencyKey".equals(name) ? "Idempotency-Key" : name;
+  }
+
+  /** Framework-built problems (404, 415, 405 ...) get an explicit {@code type} and instance too. */
+  @Override
+  protected @Nullable ResponseEntity<Object> handleExceptionInternal(
+      Exception ex,
+      @Nullable Object body,
+      HttpHeaders headers,
+      HttpStatusCode statusCode,
+      WebRequest request) {
+    ResponseEntity<Object> response =
+        super.handleExceptionInternal(ex, body, headers, statusCode, request);
+    if (response != null && response.getBody() instanceof ProblemDetail pd) {
+      // Jackson omits the default type unless it is set explicitly
+      pd.setType(URI.create("about:blank"));
+      if (pd.getInstance() == null && request instanceof ServletWebRequest swr) {
+        try {
+          pd.setInstance(URI.create(swr.getRequest().getRequestURI()));
+        } catch (IllegalArgumentException ignored) {
+          // optional
+        }
+      }
+    }
+    return response;
   }
 }

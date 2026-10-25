@@ -102,6 +102,7 @@ openApiGenerate {
         "useOptional" to "false",
         "skipDefaultInterface" to "false",
         "generatedConstructorWithRequiredArgs" to "false",
+        "containerDefaultToNull" to "true", // absent list != empty list (PATCH must not erase tags)
     )
 }
 sourceSets.main { java.srcDir(openApiOut.map { it.dir("src/main/java") }) }

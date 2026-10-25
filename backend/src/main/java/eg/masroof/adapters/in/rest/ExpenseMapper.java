@@ -41,10 +41,10 @@ final class ExpenseMapper {
     if (body.getMerchantId() != null) {
       throw ExpenseException.invalid("merchantId", "merchants are not supported yet");
     }
-    if (!body.getItems().isEmpty()) {
+    if (body.getItems() != null && !body.getItems().isEmpty()) {
       throw ExpenseException.invalid("items", "line items are not supported yet");
     }
-    if (!body.getSplits().isEmpty()
+    if ((body.getSplits() != null && !body.getSplits().isEmpty())
         || (body.getSplitMode() != null && body.getSplitMode() != SplitMode.NONE)) {
       throw ExpenseException.invalid("splits", "splits are not supported yet");
     }
@@ -62,6 +62,19 @@ final class ExpenseMapper {
     }
   }
 
+  /** Absent or null tags on create mean no tags; a null element is a client error, not a 500. */
+  private static List<String> createTags(@Nullable List<String> tags) {
+    List<String> checked = tags(tags);
+    return checked == null ? List.of() : checked;
+  }
+
+  private static @Nullable List<String> tags(@Nullable List<String> tags) {
+    if (tags != null && tags.stream().anyMatch(java.util.Objects::isNull)) {
+      throw ExpenseException.invalid("tags", "must not contain null");
+    }
+    return tags;
+  }
+
   static ExpenseService.CreateCommand toCommand(ExpenseCreate body) {
     return new ExpenseService.CreateCommand(
         convert(body.getType(), ExpenseType.class),
@@ -73,7 +86,7 @@ final class ExpenseMapper {
         convertOrNull(body.getPaymentMethod(), PaymentMethod.class),
         body.getMerchantRaw(),
         body.getNotes(),
-        body.getTags());
+        createTags(body.getTags()));
   }
 
   static ExpenseService.PatchCommand toCommand(ExpensePatch body) {
@@ -88,7 +101,7 @@ final class ExpenseMapper {
         convertOrNull(body.getStatus(), ExpenseStatus.class),
         body.getMerchantRaw(),
         body.getNotes(),
-        body.getTags());
+        tags(body.getTags()));
   }
 
   static Expense toDto(eg.masroof.domain.expense.Expense e) {

@@ -4,7 +4,9 @@ import eg.masroof.adapters.in.rest.generated.api.AccountsApi;
 import eg.masroof.adapters.in.rest.generated.model.AccountType;
 import eg.masroof.adapters.in.rest.generated.model.ListAccounts200Response;
 import eg.masroof.adapters.in.rest.generated.model.PaymentAccount;
+import eg.masroof.adapters.in.rest.generated.model.PaymentAccountInput;
 import eg.masroof.application.expense.ReferenceService;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,6 +15,28 @@ import org.springframework.web.bind.annotation.RestController;
 class AccountsController implements AccountsApi {
 
   private final ReferenceService service;
+
+  // Declared in the contract, built later: answer 501 as Problem+JSON instead of the bare default.
+  @Override
+  public ResponseEntity<PaymentAccount> createAccount(PaymentAccountInput paymentAccountInput) {
+    throw ApiProblemException.notImplemented();
+  }
+
+  @Override
+  public ResponseEntity<Void> deleteAccount(UUID accountId) {
+    throw ApiProblemException.notImplemented();
+  }
+
+  @Override
+  public ResponseEntity<PaymentAccount> getAccount(UUID accountId) {
+    throw ApiProblemException.notImplemented();
+  }
+
+  @Override
+  public ResponseEntity<PaymentAccount> updateAccount(
+      UUID accountId, PaymentAccountInput paymentAccountInput) {
+    throw ApiProblemException.notImplemented();
+  }
 
   AccountsController(ReferenceService service) {
     this.service = service;

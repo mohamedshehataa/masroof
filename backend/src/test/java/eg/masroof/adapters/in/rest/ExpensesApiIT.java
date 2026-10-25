@@ -34,7 +34,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Manual expense entry end to end against real Postgres (STORY-020, STORY-021). */
-@SpringBootTest
+@SpringBootTest(properties = "masroof.dev.single-household=true")
 @AutoConfigureMockMvc
 @Testcontainers
 @Tag("integration")
@@ -276,16 +276,34 @@ class ExpensesApiIT {
         .containsExactly("occurredAt");
 
     Map<String, Object> notes = expense(100, "2026-10-22T11:05:00Z");
+    // The contract limits (notes 500, tags 10 x 30) are enforced by request validation: 400 naming
+    // the field.
     notes.put("notes", "x".repeat(501));
-    assertThat(errors(create(notes))).extracting(e -> e.get("field")).containsExactly("notes");
+    Reply longNotes = create(notes);
+    assertThat(longNotes.status()).isEqualTo(400);
+    assertThat(errors(longNotes)).extracting(e -> e.get("field")).containsExactly("notes");
     notes.put("notes", "x".repeat(500));
+    assertThat(create(notes).status()).isEqualTo(201);
+    notes.put("notes", "😀".repeat(250)); // 250 code points, 500 UTF-16 units: within the limit
     assertThat(create(notes).status()).isEqualTo(201);
 
     Map<String, Object> tags = expense(100, "2026-10-22T11:05:00Z");
     tags.put("tags", List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"));
-    assertThat(errors(create(tags))).extracting(e -> e.get("field")).containsExactly("tags");
+    Reply manyTags = create(tags);
+    assertThat(manyTags.status()).isEqualTo(400);
+    assertThat(errors(manyTags)).extracting(e -> e.get("field")).containsExactly("tags");
     tags.put("tags", List.of("x".repeat(31)));
-    assertThat(create(tags).status()).isEqualTo(422);
+    Reply longTag = create(tags);
+    assertThat(longTag.status()).isEqualTo(400);
+    assertThat(errors(longTag))
+        .extracting(e -> String.valueOf(e.get("field")))
+        .allMatch(f -> f.startsWith("tags"));
+
+    Map<String, Object> tooOld = expense(100, "1999-12-31T23:59:59Z");
+    assertThat(errors(create(tooOld)))
+        .extracting(e -> e.get("field"))
+        .containsExactly("occurredAt");
+    assertThat(create(expense(100, "2000-01-01T00:00:00Z")).status()).isEqualTo(201);
 
     Map<String, Object> foreign = expense(100, "2026-10-22T11:05:00Z");
     foreign.put("categoryId", otherCategory.toString());
@@ -605,5 +623,151 @@ class ExpensesApiIT {
         .containsEntry("type", "CASH")
         .containsEntry("currency", "EGP")
         .containsEntry("isShared", false);
+  }
+
+  @Test
+  @Tag("REQ-EXP-003")
+  @DisplayName("REQ-EXP-003 PATCH leaves omitted fields alone, including tags")
+  void patchKeepsOmittedFields() throws Exception {
+    Map<String, Object> body = expense(1000, "2016-02-02T10:00:00Z");
+    body.put("tags", List.of("keep", "me"));
+    body.put("notes", "stay");
+    body.put("merchantRaw", "Shop");
+    String id = (String) create(body).body().get("id");
+
+    Reply patched =
+        send(
+            patch("/api/expenses/" + id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":{\"amountMinor\":2000,\"currency\":\"EGP\"}}"));
+
+    assertThat(patched.status()).isEqualTo(200);
+    assertMoney(patched.body().get("amount"), 2000);
+    assertThat(patched.body().get("tags")).isEqualTo(List.of("keep", "me"));
+    assertThat(patched.body()).containsEntry("notes", "stay").containsEntry("merchantRaw", "Shop");
+    Reply nullTags =
+        send(
+            patch("/api/expenses/" + id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tags\":null}"));
+    assertThat(nullTags.status()).isEqualTo(200);
+    assertThat(nullTags.body().get("tags")).isEqualTo(List.of("keep", "me"));
+    Reply emptyTags =
+        send(
+            patch("/api/expenses/" + id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tags\":[]}"));
+    assertThat(emptyTags.body().get("tags")).isEqualTo(List.of());
+  }
+
+  @Test
+  @Tag("REQ-EXP-021")
+  @DisplayName(
+      "REQ-EXP-021 amountMinor as a string, Arabic-digit string or boolean is a 400 naming the field")
+  void amountMinorMustBeAJsonInteger() throws Exception {
+    for (String bad : List.of("\"20000\"", "\"١٢٥٠\"", "true", "[]", "{}", "null", "12.5")) {
+      String json =
+          "{\"type\":\"EXPENSE\",\"amount\":{\"amountMinor\":"
+              + bad
+              + ",\"currency\":\"EGP\"},\"occurredAt\":\"2026-10-22T11:05:00Z\"}";
+      Reply r = createRaw(json);
+      assertThat(r.status()).as("amountMinor %s", bad).isIn(400, 422);
+      assertThat(r.raw().getContentType()).startsWith("application/problem+json");
+      assertThat(errors(r)).extracting(e -> e.get("field")).contains("amount.amountMinor");
+      Reply p =
+          send(
+              patch("/api/expenses/" + UUID.randomUUID())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"amount\":{\"amountMinor\":" + bad + ",\"currency\":\"EGP\"}}"));
+      assertThat(p.status()).as("PATCH amountMinor %s", bad).isIn(400, 422);
+      assertThat(errors(p)).extracting(e -> e.get("field")).contains("amount.amountMinor");
+    }
+    // a non-numeric currency type is rejected too, naming the field
+    Reply currency =
+        createRaw(
+            "{\"type\":\"EXPENSE\",\"amount\":{\"amountMinor\":5,\"currency\":5},"
+                + "\"occurredAt\":\"2026-10-22T11:05:00Z\"}");
+    assertThat(currency.status()).isIn(400, 422);
+    assertThat(errors(currency)).extracting(e -> e.get("field")).contains("amount.currency");
+  }
+
+  @Test
+  @Tag("REQ-EXP-002")
+  @DisplayName("REQ-EXP-002 bad client input is never a 500: null tags, NUL, empty Idempotency-Key")
+  void clientInputNeverCausesA500() throws Exception {
+    Reply nullElement =
+        createRaw(
+            "{\"type\":\"EXPENSE\",\"amount\":{\"amountMinor\":5,\"currency\":\"EGP\"},"
+                + "\"occurredAt\":\"2026-10-22T11:05:00Z\",\"tags\":[null]}");
+    assertThat(nullElement.status()).isEqualTo(422);
+    assertThat(errors(nullElement)).extracting(e -> e.get("field")).containsExactly("tags");
+
+    Reply nullTags =
+        createRaw(
+            "{\"type\":\"EXPENSE\",\"amount\":{\"amountMinor\":5,\"currency\":\"EGP\"},"
+                + "\"occurredAt\":\"2026-10-22T11:05:00Z\",\"tags\":null}");
+    assertThat(nullTags.status()).isEqualTo(201);
+    assertThat(nullTags.body().get("tags")).isEqualTo(List.of());
+
+    for (String field : List.of("notes", "merchantRaw")) {
+      Map<String, Object> nul = expense(5, "2026-10-22T11:05:00Z");
+      nul.put(field, "bad\u0000text");
+      Reply r = create(nul);
+      assertThat(r.status()).as(field).isEqualTo(422);
+      assertThat(errors(r)).extracting(e -> e.get("field")).containsExactly(field);
+    }
+    Map<String, Object> nulTag = expense(5, "2026-10-22T11:05:00Z");
+    nulTag.put("tags", List.of("a\u0000b"));
+    assertThat(errors(create(nulTag))).extracting(e -> e.get("field")).containsExactly("tags");
+
+    for (String key : List.of("", " ", "has space", "tab\t", "x".repeat(129), "é")) {
+      Reply r = createWithKey(expense(5, "2026-10-22T11:05:00Z"), key);
+      assertThat(r.status()).as("key '%s'", key).isEqualTo(400);
+      assertThat(errors(r)).extracting(e -> e.get("field")).contains("Idempotency-Key");
+    }
+  }
+
+  @Test
+  @Tag("REQ-EXP-020")
+  @DisplayName("REQ-EXP-020 replaying the key of a deleted expense is a 409, not a resurrected 201")
+  void idempotentReplayOfDeletedExpense() throws Exception {
+    String key = UUID.randomUUID().toString();
+    Map<String, Object> body = expense(321, "2015-03-03T10:00:00Z");
+    String id = (String) createWithKey(body, key).body().get("id");
+    assertThat(send(delete("/api/expenses/" + id)).status()).isEqualTo(204);
+
+    Reply replay = createWithKey(body, key);
+
+    assertThat(replay.status()).isEqualTo(409);
+    assertThat(replay.body()).containsEntry("title", "Idempotency key reused");
+  }
+
+  @Test
+  @Tag("REQ-EXP-002")
+  @DisplayName("REQ-EXP-002 404, 415 and 501 are Problem+JSON with a type")
+  void errorsAreProblemJson() throws Exception {
+    Reply notFound = send(get("/api/does-not-exist"));
+    assertThat(notFound.status()).isEqualTo(404);
+    assertThat(notFound.raw().getContentType()).startsWith("application/problem+json");
+    assertThat(notFound.body()).containsEntry("type", "about:blank").containsKey("title");
+
+    Reply unsupported =
+        send(post("/api/expenses").contentType(MediaType.TEXT_PLAIN).content("hello"));
+    assertThat(unsupported.status()).isEqualTo(415);
+    assertThat(unsupported.raw().getContentType()).startsWith("application/problem+json");
+    assertThat(unsupported.body()).containsEntry("type", "about:blank");
+
+    Reply notImplemented =
+        send(
+            post("/api/expenses/" + UUID.randomUUID() + "/restore")
+                .contentType(MediaType.APPLICATION_JSON));
+    assertThat(notImplemented.status()).isEqualTo(501);
+    assertThat(notImplemented.raw().getContentType()).startsWith("application/problem+json");
+    assertThat(notImplemented.body()).containsEntry("type", "about:blank");
+    assertThat(send(delete("/api/categories/" + UUID.randomUUID())).status()).isEqualTo(501);
+
+    Reply missing = createRaw("{\"type\":\"EXPENSE\"}");
+    assertThat(missing.body()).containsEntry("title", "Bad Request");
+    assertThat(errors(missing)).extracting(e -> e.get("message")).doesNotContain("not valid JSON");
   }
 }

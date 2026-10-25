@@ -14,6 +14,12 @@ public class ApiProblemException extends RuntimeException {
   private final HttpStatus status;
   private final transient List<FieldProblem> errors;
 
+  /** The contract declares the operation but it is not built yet (501 Problem+JSON). */
+  public static ApiProblemException notImplemented() {
+    return new ApiProblemException(
+        HttpStatus.NOT_IMPLEMENTED, "This operation is not implemented yet");
+  }
+
   /** A problem without field errors. */
   public ApiProblemException(HttpStatus status, String detail) {
     this(status, detail, List.of());

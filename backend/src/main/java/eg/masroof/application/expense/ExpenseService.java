@@ -33,6 +33,8 @@ public class ExpenseService {
   static final int MAX_TAGS = 10;
   static final int MAX_TAG_LENGTH = 30;
   static final Duration MAX_FUTURE = Duration.ofDays(1);
+  static final Instant MIN_OCCURRED_AT = Instant.parse("2000-01-01T00:00:00Z");
+  static final int MAX_MERCHANT = 200;
   static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
 
   /** Fields of a new expense; the adapter has already mapped transport types. */
@@ -123,13 +125,21 @@ public class ExpenseService {
         Expense original =
             expenses
                 .find(household.id(), seen.get().expenseId())
-                .orElseThrow(() -> ExpenseException.notFound("Expense"));
+                .filter(e -> e.deletedAt() == null)
+                .orElseThrow(
+                    () ->
+                        new ExpenseException(
+                            Kind.CONFLICT,
+                            "Idempotency key reused",
+                            "The expense created with this Idempotency-Key was deleted;"
+                                + " use a new key to create it again",
+                            List.of()));
         return new Created(original, true);
       }
     }
     validateMoney(cmd.amount(), household);
     validateOccurredAt(cmd.occurredAt(), now);
-    validateText(cmd.notes(), cmd.tags());
+    validateText(cmd.notes(), cmd.merchantRaw(), cmd.tags());
     validateReferences(household, cmd.categoryId(), cmd.paidByMemberId(), cmd.paymentAccountId());
     Expense row =
         new Expense(
@@ -191,7 +201,8 @@ public class ExpenseService {
     }
     List<String> tags = patch.tags() == null ? current.tags() : List.copyOf(patch.tags());
     String notes = patch.notes() == null ? current.notes() : patch.notes();
-    validateText(notes, tags);
+    String merchantRaw = patch.merchantRaw() == null ? current.merchantRaw() : patch.merchantRaw();
+    validateText(notes, merchantRaw, tags);
     validateReferences(
         household,
         patch.categoryId() == null || patch.categoryId().equals(current.categoryId())
@@ -212,7 +223,7 @@ public class ExpenseService {
                 : patch.paymentAccountId(),
             patch.paidByMemberId() == null ? current.paidByMemberId() : patch.paidByMemberId(),
             patch.paymentMethod() == null ? current.paymentMethod() : patch.paymentMethod(),
-            patch.merchantRaw() == null ? current.merchantRaw() : patch.merchantRaw(),
+            merchantRaw,
             notes,
             tags,
             patch.status() == null ? current.status() : patch.status(),
@@ -333,20 +344,36 @@ public class ExpenseService {
     if (occurredAt.isAfter(now.plus(MAX_FUTURE))) {
       throw ExpenseException.invalid("occurredAt", "must not be more than 1 day in the future");
     }
+    if (occurredAt.isBefore(MIN_OCCURRED_AT)) {
+      throw ExpenseException.invalid("occurredAt", "must be on or after 2000-01-01");
+    }
   }
 
-  private static void validateText(@Nullable String notes, List<String> tags) {
-    if (notes != null && notes.length() > MAX_NOTES) {
-      throw ExpenseException.invalid("notes", "must be at most " + MAX_NOTES + " characters");
-    }
+  /**
+   * Lengths count Unicode code points, as the database does; NUL is rejected (Postgres cannot store
+   * it).
+   */
+  private static void validateText(
+      @Nullable String notes, @Nullable String merchantRaw, List<String> tags) {
+    checkText("notes", notes, MAX_NOTES);
+    checkText("merchantRaw", merchantRaw, MAX_MERCHANT);
     if (tags.size() > MAX_TAGS) {
       throw ExpenseException.invalid("tags", "must have at most " + MAX_TAGS + " entries");
     }
     for (String tag : tags) {
-      if (tag.length() > MAX_TAG_LENGTH) {
-        throw ExpenseException.invalid(
-            "tags", "each tag must be at most " + MAX_TAG_LENGTH + " characters");
-      }
+      checkText("tags", tag, MAX_TAG_LENGTH);
+    }
+  }
+
+  private static void checkText(String field, @Nullable String value, int maxCodePoints) {
+    if (value == null) {
+      return;
+    }
+    if (value.indexOf('\u0000') >= 0) {
+      throw ExpenseException.invalid(field, "must not contain the NUL character");
+    }
+    if (value.codePointCount(0, value.length()) > maxCodePoints) {
+      throw ExpenseException.invalid(field, "must be at most " + maxCodePoints + " characters");
     }
   }
 
