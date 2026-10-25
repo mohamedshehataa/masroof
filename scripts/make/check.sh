@@ -8,7 +8,7 @@ export LC_ALL=C.UTF-8
 fail=0
 run() { local d="$1"; shift; printf '\n### %s\n' "$d"; if "$@"; then printf 'OK   %s\n' "$d"; else printf 'FAIL %s\n' "$d"; fail=1; fi; }
 
-mods="sdlc"; [ -x backend/gradlew ] && mods="$mods backend"; [ -f web/package.json ] && mods="$mods web"; [ -x android/gradlew ] && mods="$mods android"
+mods="sdlc"; [ -e backend/gradlew ] && mods="$mods backend"; [ -f web/package.json ] && mods="$mods web"; [ -e android/gradlew ] && mods="$mods android"
 # shellcheck disable=SC2086
 run "check-fast [$mods]" bash scripts/make/check-fast.sh $mods
 [ -x backend/gradlew ] && run "backend gate probes (REQ-OPS-023)" bash scripts/quality/tests/backend-gate-probes.sh

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Masroof</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_transactions">Transactions</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_add">Add expense</string>
+
+    <string name="home_this_month">Spent this month</string>
+    <string name="home_recent">Recent expenses</string>
+    <string name="home_see_all">See all</string>
+
+    <string name="transactions_title">Transactions</string>
+
+    <string name="empty_title">No expenses yet</string>
+    <string name="empty_body">Tap + to add your first expense.</string>
+    <string name="loading">Loading</string>
+    <string name="error_title">Could not load expenses</string>
+    <string name="error_body">The server answered with an error. Your saved data is safe.</string>
+    <string name="offline_title">You are offline</string>
+    <string name="offline_body">Showing what is saved on this device. New entries sync when you are back online.</string>
+    <string name="retry">Retry</string>
+    <string name="delete">Delete</string>
+    <string name="sync_failed">Couldn\'t sync</string>
+    <string name="banner_sign_in">Sign in again - set your access token in Settings</string>
+    <string name="sign_in_title">Sign in again</string>
+    <string name="sign_in_body">The server did not accept your access token. Update it in Settings. Your saved entries are kept.</string>
+    <string name="banner_offline">Offline - showing saved data</string>
+    <string name="banner_error">Could not refresh - showing saved data</string>
+    <string name="pending_sync">Waiting to sync</string>
+    <string name="pending_count">Waiting to sync: %1$d</string>
+    <string name="uncategorized">Uncategorized</string>
+    <string name="expense_fallback_title">Expense</string>
+
+    <string name="add_title">Add expense</string>
+    <string name="add_amount">Amount (EGP)</string>
+    <string name="add_amount_error">Enter an amount greater than zero, e.g. 125.50</string>
+    <string name="add_category">Category</string>
+    <string name="add_account">Account</string>
+    <string name="add_none">None</string>
+    <string name="add_date">Date (YYYY-MM-DD, Cairo)</string>
+    <string name="add_date_error">Use the format YYYY-MM-DD</string>
+    <string name="add_note">Note</string>
+    <string name="add_save">Save</string>
+    <string name="add_offline_hint">Saved on this device first, then synced automatically.</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_server_url">Server URL</string>
+    <string name="settings_server_url_error">Enter a URL starting with http:// or https://</string>
+    <string name="settings_token">Access token</string>
+    <string name="settings_digits">Use Arabic-Indic digits (١٢٣)</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_saved">Saved</string>
+</resources>

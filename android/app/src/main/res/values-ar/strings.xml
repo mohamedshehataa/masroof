@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">مصروف</string>
+
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_transactions">المعاملات</string>
+    <string name="nav_settings">الإعدادات</string>
+    <string name="nav_add">إضافة مصروف</string>
+
+    <string name="home_this_month">المصروف هذا الشهر</string>
+    <string name="home_recent">آخر المصروفات</string>
+    <string name="home_see_all">عرض الكل</string>
+
+    <string name="transactions_title">المعاملات</string>
+
+    <string name="empty_title">لا توجد مصروفات بعد</string>
+    <string name="empty_body">اضغط + لإضافة أول مصروف.</string>
+    <string name="loading">جارٍ التحميل</string>
+    <string name="error_title">تعذر تحميل المصروفات</string>
+    <string name="error_body">أعاد الخادم خطأ. بياناتك المحفوظة بأمان.</string>
+    <string name="offline_title">أنت غير متصل</string>
+    <string name="offline_body">نعرض ما هو محفوظ على هذا الجهاز. ستتم مزامنة الإدخالات الجديدة عند عودة الاتصال.</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="delete">حذف</string>
+    <string name="sync_failed">تعذرت المزامنة</string>
+    <string name="banner_sign_in">سجّل الدخول مجددًا - حدّث رمز الوصول في الإعدادات</string>
+    <string name="sign_in_title">سجّل الدخول مجددًا</string>
+    <string name="sign_in_body">لم يقبل الخادم رمز الوصول. حدّثه من الإعدادات. إدخالاتك المحفوظة باقية.</string>
+    <string name="banner_offline">غير متصل - نعرض البيانات المحفوظة</string>
+    <string name="banner_error">تعذر التحديث - نعرض البيانات المحفوظة</string>
+    <string name="pending_sync">في انتظار المزامنة</string>
+    <string name="pending_count">في انتظار المزامنة: %1$d</string>
+    <string name="uncategorized">بدون فئة</string>
+    <string name="expense_fallback_title">مصروف</string>
+
+    <string name="add_title">إضافة مصروف</string>
+    <string name="add_amount">المبلغ (ج.م)</string>
+    <string name="add_amount_error">أدخل مبلغًا أكبر من صفر، مثل 125.50</string>
+    <string name="add_category">الفئة</string>
+    <string name="add_account">الحساب</string>
+    <string name="add_none">بدون</string>
+    <string name="add_date">التاريخ (YYYY-MM-DD بتوقيت القاهرة)</string>
+    <string name="add_date_error">استخدم الصيغة YYYY-MM-DD</string>
+    <string name="add_note">ملاحظة</string>
+    <string name="add_save">حفظ</string>
+    <string name="add_offline_hint">يُحفظ على هذا الجهاز أولًا ثم يُزامَن تلقائيًا.</string>
+
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_server_url">عنوان الخادم</string>
+    <string name="settings_server_url_error">أدخل عنوانًا يبدأ بـ http:// أو https://</string>
+    <string name="settings_token">رمز الوصول</string>
+    <string name="settings_digits">استخدام الأرقام الهندية (١٢٣)</string>
+    <string name="settings_save">حفظ</string>
+    <string name="settings_saved">تم الحفظ</string>
+</resources>
