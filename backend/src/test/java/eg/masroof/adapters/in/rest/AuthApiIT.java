@@ -401,11 +401,77 @@ class AuthApiIT {
         new String[] {"/api/expenses", "/api/categories", "/api/accounts", "/api/nothing"}) {
       assertUnauthorized(getWith(path, null));
     }
-    assertUnauthorized(
-        mvc.perform(post("/auth/logout").contentType(MediaType.APPLICATION_JSON).content("{}"))
-            .andReturn()
-            .getResponse());
     assertThat(getWith("/health", null).getStatus()).isEqualTo(200);
+  }
+
+  private MockHttpServletResponse logoutWith(@Nullable String bearer, String body)
+      throws Exception {
+    MockHttpServletRequestBuilder b =
+        post("/auth/logout").contentType(MediaType.APPLICATION_JSON).content(body);
+    if (bearer != null) {
+      b.header("Authorization", "Bearer " + bearer);
+    }
+    return mvc.perform(b).andReturn().getResponse();
+  }
+
+  @Test
+  @Tag("REQ-SEC-006")
+  @DisplayName("REQ-SEC-006 logout with a missing or expired bearer still revokes by refresh token")
+  void logoutWithoutValidBearer() throws Exception {
+    String body1 = ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+    assertThat(logoutWith(null, JSON.writeValueAsString(Map.of("refreshToken", body1))).getStatus())
+        .isEqualTo(204);
+    assertThat(refresh(body1).getStatus()).isEqualTo(401);
+
+    String r2 = ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+    String expired = forge(HS256, claims(userA, householdA, Instant.now().getEpochSecond() - 3600));
+    assertThat(logoutWith(expired, JSON.writeValueAsString(Map.of("refreshToken", r2))).getStatus())
+        .isEqualTo(204);
+    assertThat(refresh(r2).getStatus()).isEqualTo(401);
+
+    String r3 = ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+    String r4 = ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+    assertThat(
+            logoutWith(
+                    "garbage",
+                    JSON.writeValueAsString(Map.of("refreshToken", r3, "allSessions", true)))
+                .getStatus())
+        .isEqualTo(204);
+    assertThat(refresh(r3).getStatus()).isEqualTo(401);
+    assertThat(refresh(r4).getStatus()).isEqualTo(401);
+  }
+
+  @Test
+  @Tag("REQ-SEC-006")
+  @DisplayName(
+      "REQ-SEC-006 logout with unknown, revoked, empty or garbage input is an idempotent 204")
+  void logoutIdempotent() throws Exception {
+    assertThat(logoutWith(null, "{\"refreshToken\":\"nope\"}").getStatus()).isEqualTo(204);
+    assertThat(logoutWith(null, "{}").getStatus()).isEqualTo(204);
+    assertThat(logoutWith(null, "{\"refreshToken\":\"" + "x".repeat(500) + "\"}").getStatus())
+        .isEqualTo(204);
+    String r = ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+    String body = JSON.writeValueAsString(Map.of("refreshToken", r));
+    assertThat(logoutWith(null, body).getStatus()).isEqualTo(204);
+    assertThat(logoutWith(null, body).getStatus()).isEqualTo(204);
+  }
+
+  @Test
+  @Tag("REQ-SEC-051")
+  @DisplayName("REQ-SEC-051 the unauthenticated rate limit covers /auth/logout")
+  void logoutIsRateLimited() throws Exception {
+    String ip = freshIp();
+    for (int i = 0; i < 61; i++) {
+      MockHttpServletResponse r =
+          mvc.perform(
+                  post("/auth/logout")
+                      .header("X-Forwarded-For", ip)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content("{}"))
+              .andReturn()
+              .getResponse();
+      assertThat(r.getStatus()).isEqualTo(i < 60 ? 204 : 429);
+    }
   }
 
   @Test

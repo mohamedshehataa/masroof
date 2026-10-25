@@ -92,13 +92,18 @@ class AuthServiceTest {
         }
 
         @Override
-        public void revokeFamily(String tokenHash, UUID userId, Instant now) {
+        public void revokeFamily(String tokenHash, @Nullable UUID userId, Instant now) {
           revoked.add("family:" + tokenHash);
         }
 
         @Override
         public void revokeAll(UUID userId, Instant now) {
           revoked.add("all:" + userId);
+        }
+
+        @Override
+        public void revokeAllOfOwner(String tokenHash, Instant now) {
+          revoked.add("owner:" + tokenHash);
         }
       };
 
@@ -302,5 +307,23 @@ class AuthServiceTest {
     assertThat(revoked).hasSize(n);
     service.logout(account.userId(), "x".repeat(128), false);
     assertThat(revoked).hasSize(n + 1);
+  }
+
+  @Test
+  @Tag("REQ-SEC-006")
+  @DisplayName("REQ-SEC-006 without a bearer the refresh token alone revokes its family or owner")
+  void logoutWithoutBearer() {
+    service.logout(null, "tok", false);
+    assertThat(revoked).hasSize(1);
+    assertThat(revoked.get(0)).startsWith("family:");
+    service.logout(null, "tok", true);
+    assertThat(revoked.get(1)).startsWith("owner:").hasSize(6 + 64);
+    service.logout(null, null, true);
+    service.logout(null, null, false);
+    service.logout(null, "x".repeat(129), true);
+    service.logout(null, "x".repeat(129), false);
+    assertThat(revoked).hasSize(2);
+    service.logout(null, "x".repeat(128), true);
+    assertThat(revoked).hasSize(3);
   }
 }

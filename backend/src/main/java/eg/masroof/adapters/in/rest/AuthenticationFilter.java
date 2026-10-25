@@ -27,8 +27,11 @@ final class AuthenticationFilter extends OncePerRequestFilter {
   /** Request attribute holding the {@link Caller}. */
   static final String CALLER = AuthenticationFilter.class.getName() + ".caller";
 
+  private static final String LOGOUT = "/auth/logout";
+
   private static final Set<String> PUBLIC =
       Set.of(
+          LOGOUT,
           "/health",
           "/auth/login",
           "/auth/refresh",
@@ -57,6 +60,11 @@ final class AuthenticationFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
     if (isPublic(request) || "OPTIONS".equals(request.getMethod())) {
+      String optional = request.getHeader(HttpHeaders.AUTHORIZATION);
+      if (LOGOUT.equals(request.getRequestURI()) && optional != null) {
+        // an optional, possibly expired bearer: used when valid, ignored otherwise
+        authenticate(optional).ifPresent(c -> request.setAttribute(CALLER, c));
+      }
       chain.doFilter(request, response);
       return;
     }

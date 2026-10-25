@@ -14,7 +14,6 @@ import eg.masroof.adapters.in.rest.generated.model.TokenPair.TokenTypeEnum;
 import eg.masroof.application.auth.AuthService;
 import eg.masroof.application.auth.Caller;
 import eg.masroof.application.auth.Session;
-import eg.masroof.application.household.UnauthenticatedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.ResponseEntity;
@@ -48,11 +47,8 @@ class AuthController implements AuthApi {
   @Override
   public ResponseEntity<Void> logout(@Nullable LogoutRequest body) {
     Caller caller = CallerHousehold.CallerContext.current();
-    if (caller == null) {
-      throw new UnauthenticatedException();
-    }
     service.logout(
-        caller.userId(),
+        caller == null ? null : caller.userId(),
         body == null ? null : body.getRefreshToken(),
         body != null && Boolean.TRUE.equals(body.getAllSessions()));
     return ResponseEntity.noContent().build();

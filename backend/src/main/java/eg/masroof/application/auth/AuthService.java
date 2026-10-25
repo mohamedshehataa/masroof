@@ -117,13 +117,21 @@ public class AuthService {
         outcome instanceof Outcome.Expired ? Kind.REFRESH_EXPIRED : Kind.REFRESH_INVALID);
   }
 
-  /** Revokes one session (by its refresh token) or all sessions of the user. */
-  public void logout(UUID userId, @Nullable String refreshToken, boolean allSessions) {
+  /**
+   * Revokes one session (by its refresh token) or all sessions. Holding the refresh token is proof
+   * enough, so no bearer is needed ({@code userId} null); when a valid bearer is present the token
+   * must belong to it. Unknown or already revoked tokens are silently fine (idempotent).
+   */
+  public void logout(@Nullable UUID userId, @Nullable String refreshToken, boolean allSessions) {
     Instant now = clock.instant();
-    if (allSessions) {
+    if (allSessions && userId != null) {
       refreshTokens.revokeAll(userId, now);
     } else if (refreshToken != null && refreshToken.length() <= MAX_TOKEN_CHARS) {
-      refreshTokens.revokeFamily(sha256(refreshToken), userId, now);
+      if (allSessions) {
+        refreshTokens.revokeAllOfOwner(sha256(refreshToken), now);
+      } else {
+        refreshTokens.revokeFamily(sha256(refreshToken), userId, now);
+      }
     }
   }
 

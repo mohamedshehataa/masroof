@@ -176,16 +176,30 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore, AuditLog {
   }
 
   @Override
-  public void revokeFamily(String tokenHash, UUID userId, Instant now) {
+  public void revokeFamily(String tokenHash, @Nullable UUID userId, Instant now) {
     jdbc.update(
         """
         update refresh_token set revoked_at = ?
         where revoked_at is null
-          and family_id = (select family_id from refresh_token where token_hash = ? and user_id = ?)
+          and family_id = (select family_id from refresh_token
+                           where token_hash = ? and (?::uuid is null or user_id = ?::uuid))
         """,
         utc(now),
         tokenHash,
+        userId,
         userId);
+  }
+
+  @Override
+  public void revokeAllOfOwner(String tokenHash, Instant now) {
+    jdbc.update(
+        """
+        update refresh_token set revoked_at = ?
+        where revoked_at is null
+          and user_id = (select user_id from refresh_token where token_hash = ?)
+        """,
+        utc(now),
+        tokenHash);
   }
 
   @Override

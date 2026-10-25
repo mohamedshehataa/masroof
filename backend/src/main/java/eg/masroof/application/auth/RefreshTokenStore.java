@@ -2,6 +2,7 @@ package eg.masroof.application.auth;
 
 import java.time.Instant;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /** Port: refresh tokens, stored only as SHA-256 hex hashes. */
 public interface RefreshTokenStore {
@@ -28,7 +29,10 @@ public interface RefreshTokenStore {
   Outcome rotate(String oldHash, String newHash, Instant newExpiresAt, Instant now);
 
   /** Revokes the family of {@code tokenHash} when it belongs to {@code userId}; otherwise no-op. */
-  void revokeFamily(String tokenHash, UUID userId, Instant now);
+  void revokeFamily(String tokenHash, @Nullable UUID userId, Instant now);
+
+  /** Revokes every token of whoever owns {@code tokenHash}; unknown hashes are a no-op. */
+  void revokeAllOfOwner(String tokenHash, Instant now);
 
   /** Revokes every token of the user. */
   void revokeAll(UUID userId, Instant now);
