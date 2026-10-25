@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // generated.test.ts regenerates src/api/generated (clean) while other files import it: run files serially.
+    fileParallelism: false,
     setupFiles: ['./vitest.setup.ts'],
     // Typed ESLint runs (src/lint.test.ts) take >5 s under coverage with parallel workers.
     testTimeout: 30_000,

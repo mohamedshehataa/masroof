@@ -1,4 +1,5 @@
 import type { CreateClientConfig } from './generated/client.gen';
+import { getAccessToken } from './session';
 
 const HEALTH_PATH = '/health';
 
@@ -27,6 +28,7 @@ export async function rejectDownHealth(response: Response, requestUrl: string): 
 export const createClientConfig: CreateClientConfig = (config) => ({
   ...config,
   baseUrl: globalThis.location.origin,
+  auth: () => getAccessToken(),
   fetch: async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const response = await globalThis.fetch(request.url, {
