@@ -6,3 +6,4 @@ e2e/__screenshots__
 package-lock.json
 test/fixtures
 CLAUDE.md
+src/api/generated

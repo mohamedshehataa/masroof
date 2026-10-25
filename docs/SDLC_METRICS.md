@@ -198,3 +198,6 @@ Owner decision 2026-10-24: every phase has a time cap and an AI-spend cap, revie
 | 2026-10-24 | STORY-141 | opus (test design x2, verify+review x2), sonnet (implement x2) | 14.00 | estimate; low tier, 2 verify loops (coverage timeout), 1 test-matcher defect fixed by the test-designer |
 | 2026-10-25 | STORY-142 | opus (test design, verify+review x2), sonnet (implement x2) | 16.00 | estimate; low tier, 2 loops (e2e port clash, stale web image) |
 | 2026-10-25 | SDLC | sonnet (Dependabot #5/#6 relock) | 4.00 | estimate; PRs #10 merged, #11 pending rebase |
+| 2026-10-25 | STORY-007 | opus (test design x2, verify+review x3), sonnet (implement x2) | 14.00 | estimate; low tier, 3 loops (js-yaml advisory, semgrep in test file) |
+| 2026-10-25 | STORY-016 | opus (test design, verify+review), sonnet (implement) | 9.00 | estimate; low tier, 1 loop |
+| 2026-10-25 | PHASE-0 gate + retro | opus/sonnet | 10.00 | estimate; check-full fixes, backlog READY pass, retro |

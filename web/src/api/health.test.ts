@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getHealth } from './health';
+import { getHealth } from './generated';
 
 const good = {
   status: 'UP',
