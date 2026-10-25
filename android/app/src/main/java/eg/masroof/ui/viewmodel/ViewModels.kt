@@ -44,7 +44,7 @@ data class ExpenseRow(
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val RECENT_LIMIT = 5
-private const val MAX_NOTES = 2000
+private const val MAX_NOTES = 500
 
 private fun toRows(
     expenses: List<ExpenseEntity>,
@@ -198,7 +198,7 @@ class AddExpenseViewModel
 
         fun onDate(text: String) = form.update { it.copy(dateText = text, dateInvalid = false) }
 
-        // The contract caps notes at 2000 characters; the form cannot exceed it.
+        // The contract caps notes at 500 characters (ADR-0007); the form cannot exceed it.
         fun onNotes(text: String) = form.update { it.copy(notes = text.take(MAX_NOTES)) }
 
         /** Validates, writes to Room + outbox, then asks WorkManager to sync. Never touches the network itself. */

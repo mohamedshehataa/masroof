@@ -124,13 +124,13 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-AND-013 notes are capped at the contract limit of 2000 characters`() =
+    fun `REQ-AND-013 notes are capped at the contract limit of 500 characters`() =
         runTest {
             val vm = AddExpenseViewModel(repo, FakeScheduler(), clock)
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             vm.onNotes("x".repeat(2_500))
-            assertEquals(2_000, vm.state.value.form.notes.length)
+            assertEquals(500, vm.state.value.form.notes.length)
         }
 
     @Test
