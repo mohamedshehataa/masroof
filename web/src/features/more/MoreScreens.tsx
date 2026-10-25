@@ -1,7 +1,6 @@
-import type { FC } from 'react';
+import { useSyncExternalStore, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
-import { clearSession } from '../../api/session';
-import { AUTH_ENABLED } from '../../app/flags';
+import { getMember, signOut, subscribeSession } from '../../api/session';
 import { usePrefs } from '../../app/prefs';
 import { Link } from '../../router';
 
@@ -18,11 +17,13 @@ export const InsightsScreen: FC = () => {
 export const MoreScreen: FC = () => {
   const { t } = useTranslation();
   const { lang, digits, setLang, setDigits } = usePrefs();
+  const member = useSyncExternalStore(subscribeSession, getMember);
   const target = lang === 'ar' ? 'en' : 'ar';
   return (
     <>
       <h1>{t('more.title')}</h1>
       <div className="stack">
+        {member ? <p className="muted">{t('more.signedInAs', { name: member.displayName })}</p> : null}
         <button
           type="button"
           className="btn"
@@ -45,11 +46,15 @@ export const MoreScreen: FC = () => {
         <Link to="/version" className="link-row">
           {t('more.version')}
         </Link>
-        {AUTH_ENABLED ? (
-          <button type="button" className="btn" onClick={clearSession}>
-            {t('more.signOut')}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            void signOut();
+          }}
+        >
+          {t('more.signOut')}
+        </button>
       </div>
     </>
   );

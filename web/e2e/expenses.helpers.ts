@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { guarded, mockAuth, seedRefreshToken, type AuthMock } from './auth.helpers';
 
 // Mock bodies are shaped exactly like contracts/openapi.yaml (Expense, Category, PaymentAccount, ExpensePage).
 export const NOW = '2026-10-25T10:00:00Z';
@@ -56,15 +57,27 @@ const json = (route: Route, status: number, body: unknown) =>
 export interface ApiMock {
   posted: unknown[];
   expenseCalls: URL[];
+  auth: AuthMock;
 }
 
 /** Routes the expense endpoints; `fail` makes GET /api/expenses answer 500. */
-export async function mockApi(page: Page, opts: { items?: unknown[]; fail?: boolean } = {}): Promise<ApiMock> {
-  const state: ApiMock = { posted: [], expenseCalls: [] };
+export async function mockApi(
+  page: Page,
+  opts: { items?: unknown[]; fail?: boolean; signedIn?: boolean } = {},
+): Promise<ApiMock> {
+  // Auth is on by default: unless a spec tests login, start with a stored refresh token (restored silently).
+  const auth = await mockAuth(page);
+  if (opts.signedIn !== false) await seedRefreshToken(page);
+  const state: ApiMock = { posted: [], expenseCalls: [], auth };
   await page.clock.setFixedTime(new Date(NOW));
-  await page.route('**/api/categories**', (route) => json(route, 200, { items: categories }));
-  await page.route('**/api/accounts**', (route) => json(route, 200, { items: accounts }));
+  await page.route('**/api/categories**', async (route) => {
+    if (await guarded(route, auth)) await json(route, 200, { items: categories });
+  });
+  await page.route('**/api/accounts**', async (route) => {
+    if (await guarded(route, auth)) await json(route, 200, { items: accounts });
+  });
   await page.route('**/api/expenses**', async (route) => {
+    if (!(await guarded(route, auth))) return;
     const req = route.request();
     if (req.method() === 'POST') {
       state.posted.push(req.postDataJSON());

@@ -1,10 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useSyncExternalStore, type FC } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState, useSyncExternalStore, type FC } from 'react';
 import App from '../App';
-import { hasSession, subscribeSession } from '../api/session';
-import { AUTH_ENABLED } from './flags';
+import { getSessionStatus, restoreSession, subscribeSession } from '../api/session';
 import { BottomNav } from '../components/BottomNav';
-import { OfflineBanner } from '../components/common';
+import { OfflineBanner, SkeletonRows } from '../components/common';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { AddScreen } from '../features/add/AddScreen';
 import { HomeScreen } from '../features/home/HomeScreen';
@@ -31,8 +30,22 @@ const Screen: FC = () => {
 };
 
 const Shell: FC = () => {
-  const signedIn = useSyncExternalStore(subscribeSession, hasSession);
-  if (AUTH_ENABLED && !signedIn) return <LoginScreen />;
+  const status = useSyncExternalStore(subscribeSession, getSessionStatus);
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    void restoreSession();
+  }, []);
+  useEffect(() => {
+    // Signed out (logout, rejected refresh, reuse of a rotated token): drop every cached household query.
+    if (status === 'out') queryClient.clear();
+  }, [status, queryClient]);
+  if (status === 'restoring')
+    return (
+      <main className="page">
+        <SkeletonRows />
+      </main>
+    );
+  if (status === 'out') return <LoginScreen />;
   return (
     <div className="shell">
       <OfflineBanner />
