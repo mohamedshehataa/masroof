@@ -3,7 +3,7 @@ id: STORY-065
 epic: EPIC-07
 title: On-device OTP and promotional SMS filtering (OTP never leaves the device)
 phase: 4
-status: DRAFT
+status: BLOCKED
 size: S
 modules: [android]
 depends_on: [STORY-064]
