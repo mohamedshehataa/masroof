@@ -74,6 +74,10 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE clientId = :clientId")
     suspend fun delete(clientId: String)
 
+    /** Entries still being retried (not permanently failed). */
+    @Query("SELECT COUNT(*) FROM outbox WHERE failed = 0")
+    suspend fun countRetryable(): Int
+
     /** Pending plus failed: everything not yet on the server. */
     @Query("SELECT COUNT(*) FROM outbox")
     suspend fun countAll(): Int

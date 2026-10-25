@@ -79,6 +79,7 @@
     </plurals>
     <string name="logout_sync_now">Sync now</string>
     <string name="logout_anyway">Sign out anyway</string>
+    <string name="logout_cancel">Cancel</string>
     <plurals name="logout_unsynced_warning">
         <item quantity="one">%1$d unsynced expense will be deleted. Sync first or sign out anyway?</item>
         <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>

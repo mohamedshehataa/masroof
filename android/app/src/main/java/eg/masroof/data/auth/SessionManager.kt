@@ -120,6 +120,8 @@ class SessionManager
 
         suspend fun unsyncedCount(): Int = wiper.unsyncedCount()
 
+        suspend fun retryableCount(): Int = wiper.retryableCount()
+
         private suspend fun finishSignIn(
             base: String,
             session: Session,

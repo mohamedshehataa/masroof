@@ -11,43 +11,65 @@ private const val UNAUTHORIZED = 401
 private const val CONFLICT = 409
 private val RETRYABLE = setOf(408, 429)
 
-/**
- * The backend's two permanent createExpense 409s share this problem title: the Idempotency-Key was reused with a
- * different request, or the entry created with that key was deleted. The concurrent-request 409 is a plain "Conflict".
- * No machine-readable problem `type` exists yet (every problem is about:blank), so the title is the only stable field.
- */
+/** Stable RFC 9457 problem `type` URIs (contracts/openapi.yaml, Problem.type). Clients switch on these, not on titles. */
+private const val PROBLEM_PREFIX = "https://masroof.app/problems/"
+private const val TYPE_IN_PROGRESS = "${PROBLEM_PREFIX}idempotency-in-progress"
+private const val TYPE_KEY_REUSED = "${PROBLEM_PREFIX}idempotency-key-reused"
+private const val TYPE_EXPENSE_DELETED = "${PROBLEM_PREFIX}idempotency-expense-deleted"
+private const val TYPE_RATE_LIMITED = "${PROBLEM_PREFIX}rate-limited"
+private const val TYPE_BLANK = "about:blank"
+
+/** Fallback only for a response whose type is `about:blank` (older server or framework-generated). */
 private const val PERMANENT_CONFLICT_TITLE = "Idempotency key reused"
 
-/** Reads only the RFC 9457 `title` of an error body; the body itself is never kept or logged. */
-fun problemTitle(body: String?): String? =
+/** The only two fields of an error body the app reads. The body itself is never kept or logged. */
+data class ProblemInfo(
+    val type: String?,
+    val title: String?,
+)
+
+fun parseProblem(body: String?): ProblemInfo? =
     try {
-        body
-            ?.let { Json.parseToJsonElement(it) }
-            ?.jsonObject
-            ?.get("title")
-            ?.jsonPrimitive
-            ?.contentOrNull
+        val obj = body?.let { Json.parseToJsonElement(it) }?.jsonObject
+        obj?.let {
+            ProblemInfo(
+                type = it["type"]?.jsonPrimitive?.contentOrNull,
+                title = it["title"]?.jsonPrimitive?.contentOrNull,
+            )
+        }
     } catch (_: SerializationException) {
         null
     } catch (_: IllegalArgumentException) {
         null
     }
 
+private fun transient(retryAfterSeconds: Long?): UploadResult =
+    if (retryAfterSeconds != null && retryAfterSeconds > 0) UploadResult.RetryAfter(retryAfterSeconds) else UploadResult.Retry
+
 /**
  * Outcome of a non-created upload response. Pure so the status table is unit tested.
- * [UploadResult.RetryLimited] = the server answered but cannot take it now (counts toward MAX_ATTEMPTS, then the
- * entry is marked failed); plain [UploadResult.Retry] is reserved for an unreachable network.
+ * Decided by the problem `type` first; the `title` is used only when the type is absent or `about:blank`.
+ * 5xx, 408, 429 and `rate-limited` are transient ([UploadResult.Retry], or [UploadResult.RetryAfter] when the server
+ * says how long) and are never capped. Only the ambiguous 409 ([UploadResult.RetryLimited]) counts toward MAX_ATTEMPTS.
  */
 fun classifyUploadStatus(
     code: Int,
     successful: Boolean,
-    title: String? = null,
-): UploadResult =
-    when {
+    problem: ProblemInfo? = null,
+    retryAfterSeconds: Long? = null,
+): UploadResult {
+    val type = problem?.type?.trim()
+    val untyped = type.isNullOrEmpty() || type == TYPE_BLANK
+    return when {
         successful -> UploadResult.Unexpected
         code == UNAUTHORIZED -> UploadResult.Unauthorized
-        code == CONFLICT -> if (title == PERMANENT_CONFLICT_TITLE) UploadResult.Rejected else UploadResult.RetryLimited
-        code in RETRYABLE -> UploadResult.RetryLimited
-        code >= SERVER_ERROR -> UploadResult.RetryLimited
+        type == TYPE_RATE_LIMITED -> transient(retryAfterSeconds)
+        type == TYPE_KEY_REUSED || type == TYPE_EXPENSE_DELETED -> UploadResult.Rejected
+        type == TYPE_IN_PROGRESS -> UploadResult.RetryLimited
+        code == CONFLICT ->
+            if (untyped && problem?.title == PERMANENT_CONFLICT_TITLE) UploadResult.Rejected else UploadResult.RetryLimited
+        // An outage (VM reboot, proxy 502) can outlast any attempt cap: these never fail an entry.
+        code in RETRYABLE || code >= SERVER_ERROR -> transient(retryAfterSeconds)
         else -> UploadResult.Rejected
     }
+}
