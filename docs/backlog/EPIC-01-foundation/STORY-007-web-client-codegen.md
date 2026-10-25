@@ -3,12 +3,13 @@ id: STORY-007
 epic: EPIC-01
 title: TypeScript API client generated from the contract
 phase: 1
-status: READY
+status: DONE
 size: S
 modules: [contracts, web]
 depends_on: [STORY-141]
 reqs: [REQ-OPS-053]
 implements: ["PROMPT.md §9 (generated TypeScript client)", "PROMPT.md S9 (contract-first)"]
+risk_tier: low
 owner_agent: web-engineer
 ---
 
@@ -61,3 +62,8 @@ STORY-141 (web module and the hand-written `getHealth()` it replaces; STORY-141 
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-141; switch of the hand-written getHealth() made explicit |
+
+## Follow-ups (verify+review loops 1-3, 2026-10-25)
+- Harden the ESLint money and fetch rules against static bypasses: fetch via a variable, `new Request`, origin concatenation, relative `api/`; money via unary minus, destructuring, computed key, optional chain. A type-aware rule or a branded Money type (STORY-017 or a small follow-up).
+- Replace the NextCursor top-level allowlist in web/scripts/generate.mjs with a post-generation scan that fails when an emitted type is `any`, naming the schema.
+- Contract: `Health.version` minLength 1 (the old hand-written check rejected an empty version).
