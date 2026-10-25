@@ -3,12 +3,13 @@ id: STORY-017
 epic: EPIC-01
 title: Web app shell — i18n ar/en with RTL, brand theme light/dark, 5-tab navigation, amount formatting
 phase: 1
-status: READY
+status: IN_PROGRESS
 size: M
 modules: [web]
 depends_on: [STORY-007]
 reqs: [REQ-UI-002, REQ-UI-003, REQ-UI-004, REQ-UI-005]
 implements: ["PROMPT.md §11 (design language, navigation)", "PROMPT.md §1 (bilingual, RTL)", "PROMPT.md §11 PWA-specific (desktop layout)"]
+risk_tier: low
 owner_agent: web-engineer
 ---
 
