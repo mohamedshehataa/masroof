@@ -34,6 +34,23 @@ class JwtSecretPolicyTest {
   }
 
   @Test
+  @DisplayName("REQ-SEC-001 variety boundary: 7 distinct characters fail, 8 pass")
+  void varietyBoundary() {
+    assertThat(JwtSecretPolicy.problem("abcdefgabcdefgabcdefgabcdefgabcdefgabcdefg")).isPresent();
+    assertThat(JwtSecretPolicy.problem("abcdefghabcdefghabcdefghabcdefghabcdefgh")).isEmpty();
+    assertThat(JwtSecretPolicy.problem("xchangemex-0123456789-abcdefghijklmnopqr")).isPresent();
+    assertThat(JwtSecretPolicy.problem("xCHANGEMEx-0123456789-abcdefghijklmnopqr")).isPresent();
+    assertThat(JwtSecretPolicy.problem("x-0123456789-abcdefghijklmnopqrstuvwxyz")).isEmpty();
+  }
+
+  @Test
+  @DisplayName("REQ-SEC-001 multi-byte secrets are measured in bytes, not characters")
+  void byteLength() {
+    // 16 two-byte characters = 32 bytes, with 16 distinct code points
+    assertThat(JwtSecretPolicy.problem("àáâãäåæçèéêëìíîï")).isEmpty();
+  }
+
+  @Test
   @DisplayName("REQ-SEC-001 a random base64 value passes and problems never echo the input")
   void randomOk() {
     assertThat(JwtSecretPolicy.problem("q3JrT9vXk2Lw8NzYp0Hc5Fd7Gm1Sb4UeAi6Oj+Rt/Wx=")).isEmpty();

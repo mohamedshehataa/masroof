@@ -310,6 +310,18 @@ class AuthServiceTest {
   }
 
   @Test
+  @Tag("REQ-SEC-001")
+  @DisplayName("REQ-SEC-001 refresh tokens are random and nothing sensitive is printed")
+  void tokensRandomAndRedacted() {
+    Session a = service.login("m@example.com", "right password", "198.51.100.1");
+    Session b = service.login("m@example.com", "right password", "198.51.100.1");
+    assertThat(a.refreshToken()).isNotEqualTo(b.refreshToken());
+    assertThat(a.refreshToken()).isNotEqualTo("A".repeat(43));
+    assertThat(a.toString()).startsWith("Session[account=Account[userId=").doesNotContain("jwt-");
+    assertThat(account.toString()).contains(account.userId().toString()).doesNotContain("hash-ok");
+  }
+
+  @Test
   @Tag("REQ-SEC-006")
   @DisplayName("REQ-SEC-006 without a bearer the refresh token alone revokes its family or owner")
   void logoutWithoutBearer() {
