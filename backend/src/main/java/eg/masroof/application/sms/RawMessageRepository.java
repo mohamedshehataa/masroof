@@ -30,6 +30,21 @@ public interface RawMessageRepository {
     }
   }
 
+  /**
+   * A structured on-device parse to record. No text is stored: the body column holds an empty
+   * string and {@code sender} is the allowlisted sender id.
+   */
+  record NewParsed(
+      UUID id,
+      UUID householdId,
+      @Nullable UUID memberId,
+      ExpenseSource source,
+      UUID deviceId,
+      String localId,
+      String sender,
+      Instant receivedAt,
+      Instant now) {}
+
   /** The row for a (household, device, external id), and whether this call created it. */
   record Stored(UUID id, boolean inserted) {}
 
@@ -41,6 +56,12 @@ public interface RawMessageRepository {
       @Nullable UUID memberId,
       Instant receivedAt,
       String processingStatus) {}
+
+  /** Stores the evidence row of a parsed record as DONE (never queued: nothing to parse). */
+  Stored insertParsed(NewParsed parsed);
+
+  /** Links the expense created from a parsed record to its evidence row. */
+  void attachExpense(UUID rawMessageId, UUID expenseId);
 
   /** Stores the message as QUEUED; an existing (device, id) pair is returned untouched. */
   Stored insertSms(NewSms sms);

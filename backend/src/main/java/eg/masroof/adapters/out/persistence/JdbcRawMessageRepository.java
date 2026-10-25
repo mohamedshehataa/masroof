@@ -41,6 +41,24 @@ class JdbcRawMessageRepository implements RawMessageRepository, SmsAccounts {
       returning id
       """;
 
+  private static final String INSERT_PARSED =
+      """
+      insert into raw_message (id, household_id, member_id, source, device_id, external_id,
+        sender, body, received_at, processing_status, next_attempt_at, template_id, created_at,
+        updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, '', ?, 'DONE', ?, 'on-device', ?, ?)
+      on conflict (household_id, source, device_id, external_id)
+        where device_id is not null and external_id is not null
+      do nothing
+      returning id
+      """;
+
+  private static final String FIND_PARSED =
+      """
+      select id from raw_message
+      where household_id = ? and source = ? and device_id = ? and external_id = ?
+      """;
+
   private static final String FIND_SMS =
       """
       select id from raw_message
@@ -150,6 +168,38 @@ class JdbcRawMessageRepository implements RawMessageRepository, SmsAccounts {
     UUID existing =
         jdbc.queryForObject(FIND_SMS, UUID.class, s.householdId(), s.deviceId(), s.externalId());
     return new Stored(Objects.requireNonNull(existing), false);
+  }
+
+  @Override
+  public Stored insertParsed(NewParsed p) {
+    String source = p.source().name();
+    List<UUID> created =
+        jdbc.queryForList(
+            INSERT_PARSED,
+            UUID.class,
+            p.id(),
+            p.householdId(),
+            p.memberId(),
+            source,
+            p.deviceId(),
+            p.localId(),
+            p.sender(),
+            utc(p.receivedAt()),
+            utc(p.now()),
+            utc(p.now()),
+            utc(p.now()));
+    if (!created.isEmpty()) {
+      return new Stored(created.get(0), true);
+    }
+    UUID existing =
+        jdbc.queryForObject(
+            FIND_PARSED, UUID.class, p.householdId(), source, p.deviceId(), p.localId());
+    return new Stored(Objects.requireNonNull(existing), false);
+  }
+
+  @Override
+  public void attachExpense(UUID rawMessageId, UUID expenseId) {
+    jdbc.update("update raw_message set expense_id = ? where id = ?", expenseId, rawMessageId);
   }
 
   @Override

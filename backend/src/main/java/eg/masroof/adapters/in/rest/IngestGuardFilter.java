@@ -19,15 +19,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
 
 /**
- * Guards {@code POST /api/ingest/sms} (REQ-SMS-001): at most {@value #MAX_BODY_BYTES} bytes of body
- * (413 before anything is parsed, whether or not Content-Length is sent) and {@value #LIMIT}
- * requests per minute per member (429 with Retry-After). Runs after authentication.
+ * Guards {@code POST /api/ingest/sms} and {@code POST /api/ingest/parsed-transactions}
+ * (REQ-SMS-001): at most {@value #MAX_BODY_BYTES} bytes of body (413 before anything is parsed,
+ * whether or not Content-Length is sent) and {@value #LIMIT} requests per minute per member (429
+ * with Retry-After). Runs after authentication.
  */
 final class IngestGuardFilter extends OncePerRequestFilter {
 
   static final int MAX_BODY_BYTES = 16 * 1024;
   static final int LIMIT = 100;
-  private static final String PATH = "/api/ingest/sms";
+  private static final java.util.Set<String> PATHS =
+      java.util.Set.of("/api/ingest/sms", "/api/ingest/parsed-transactions");
 
   private final FailureWindowLimiter limiter =
       new FailureWindowLimiter(LIMIT, Duration.ofSeconds(60), 10_000);
@@ -42,7 +44,7 @@ final class IngestGuardFilter extends OncePerRequestFilter {
     // Spring routes ";x=1" and "%73ms" to the controller, so compare the decoded path with matrix
     // parameters removed, never the raw request URI.
     return !"POST".equals(request.getMethod())
-        || !PATH.equals(UrlPathHelper.defaultInstance.getPathWithinApplication(request));
+        || !PATHS.contains(UrlPathHelper.defaultInstance.getPathWithinApplication(request));
   }
 
   @Override
