@@ -74,6 +74,10 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE clientId = :clientId")
     suspend fun delete(clientId: String)
 
+    /** Pending plus failed: everything not yet on the server. */
+    @Query("SELECT COUNT(*) FROM outbox")
+    suspend fun countAll(): Int
+
     @Query("SELECT * FROM outbox")
     suspend fun all(): List<OutboxEntity>
 }

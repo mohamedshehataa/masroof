@@ -77,9 +77,20 @@ android {
         disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable", "OldTargetApi")
     }
 
+    // In-app language switch: never split resources by language (also keeps lint's AppBundleLocaleChanges honest).
+    bundle {
+        language { enableSplit = false }
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+}
+
+// Robolectric Compose tests need the debug-only ui-test-manifest (it registers ComponentActivity), so they cannot run
+// against the release variant (minify is off: same code, same tests). Unit tests run once, on debug.
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { it.enableUnitTest = false }
 }
 
 kotlin {
@@ -135,6 +146,7 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.tink.android)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

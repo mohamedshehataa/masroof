@@ -175,8 +175,9 @@ class DefaultExpenseRepository
                             db.markRejected(item.clientId)
                             rejected++
                         }
-                        UploadResult.Unexpected -> {
-                            // An undecodable response will not fix itself: give up after MAX_ATTEMPTS instead of looping.
+                        UploadResult.Unexpected, UploadResult.RetryLimited -> {
+                            // An undecodable response or a server that keeps refusing will not fix itself:
+                            // give up after MAX_ATTEMPTS instead of looping.
                             if (item.attempts + 1 >= MAX_ATTEMPTS) {
                                 db.markRejected(item.clientId)
                                 rejected++

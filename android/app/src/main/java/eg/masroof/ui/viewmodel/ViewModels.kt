@@ -12,6 +12,7 @@ import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
 import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
@@ -239,10 +240,12 @@ class AddExpenseViewModel
 
 data class SettingsUiState(
     val serverUrl: String = AppSettings.DEFAULT_SERVER_URL,
-    val accessToken: String = "",
     val digitStyle: DigitStyle? = null,
     val urlInvalid: Boolean = false,
     val saved: Boolean = false,
+    val loggingOut: Boolean = false,
+    /** Non-null while the "N unsynced expenses will be deleted" confirmation is showing. */
+    val confirmLogoutUnsynced: Int? = null,
 )
 
 @HiltViewModel
@@ -250,12 +253,14 @@ class SettingsViewModel
     @Inject
     constructor(
         private val settings: SettingsRepository,
+        private val session: SessionManager,
+        private val scheduler: SyncScheduler,
     ) : ViewModel() {
         private val draft = MutableStateFlow<SettingsUiState?>(null)
 
         val state: StateFlow<SettingsUiState> =
             combine(settings.settings, draft) { stored, d ->
-                d ?: SettingsUiState(stored.serverUrl, stored.accessToken, stored.digitStyle)
+                d ?: SettingsUiState(stored.serverUrl, stored.digitStyle)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
         private fun edit(block: (SettingsUiState) -> SettingsUiState) {
@@ -264,9 +269,45 @@ class SettingsViewModel
 
         fun onUrl(text: String) = edit { it.copy(serverUrl = text, urlInvalid = false) }
 
-        fun onToken(text: String) = edit { it.copy(accessToken = text) }
-
         fun onDigits(style: DigitStyle) = edit { it.copy(digitStyle = style) }
+
+        /**
+         * Log out. When entries exist only on this device the user is asked first (they would be deleted with the
+         * account's cache); otherwise it goes straight through.
+         */
+        fun logout() {
+            if (state.value.loggingOut) return
+            viewModelScope.launch {
+                val unsynced = session.unsyncedCount()
+                if (unsynced > 0) {
+                    draft.value = state.value.copy(confirmLogoutUnsynced = unsynced)
+                } else {
+                    performLogout()
+                }
+            }
+        }
+
+        /** "Sign out anyway" in the confirmation: revoke the session, then wipe tokens and all cached data. */
+        fun confirmLogout() {
+            if (state.value.loggingOut) return
+            viewModelScope.launch { performLogout() }
+        }
+
+        fun dismissLogout() {
+            draft.value = state.value.copy(confirmLogoutUnsynced = null)
+        }
+
+        /** "Sync now": leave the dialog and let WorkManager upload the queue; the user can log out again afterwards. */
+        fun syncNow() {
+            scheduler.schedule()
+            dismissLogout()
+        }
+
+        private suspend fun performLogout() {
+            draft.value = state.value.copy(loggingOut = true, confirmLogoutUnsynced = null)
+            session.logout()
+            draft.value = null
+        }
 
         fun save() {
             val s = state.value
@@ -279,7 +320,6 @@ class SettingsViewModel
                 settings.update {
                     it.copy(
                         serverUrl = url,
-                        accessToken = s.accessToken.trim(),
                         digitStyle = s.digitStyle,
                     )
                 }

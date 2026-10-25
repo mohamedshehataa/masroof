@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+const val OUTBOX_WORK_NAME = "outbox-sync"
+
 /** Seam so view models can request a sync without knowing about WorkManager. */
 interface SyncScheduler {
     fun schedule()
@@ -34,11 +36,10 @@ class WorkManagerSyncScheduler
                     .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
                     .build()
-            workManager.enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+            workManager.enqueueUniqueWork(OUTBOX_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
 
         private companion object {
-            const val UNIQUE_NAME = "outbox-sync"
             const val BACKOFF_SECONDS = 30L
         }
     }
