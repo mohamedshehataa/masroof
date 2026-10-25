@@ -7,14 +7,23 @@
 # Git Bash only: a Windows-style PATH entry (C:/x/bin) is split at its colon by bash, so tools in it are
 # never found. Rewrite `C:/` to `/c/` (pure bash, no fork).
 if [ "${OSTYPE:-}" = msys ] || [ "${OSTYPE:-}" = cygwin ]; then
-  __masroof_p="$PATH"
-  while [[ $__masroof_p =~ (^|:)([A-Za-z]):/ ]]; do
-    __masroof_m="${BASH_REMATCH[0]}"
-    __masroof_d="${BASH_REMATCH[2]}"
-    __masroof_p="${__masroof_p/"$__masroof_m"/"${__masroof_m%%[A-Za-z]:/}/${__masroof_d,,}/"}"
+  # Split on ':' and rewrite only real drive entries: a one-letter element followed by an element that
+  # starts with '/' AND whose /<drive> mount exists. `/usr/bin:x:/y` is therefore left untouched.
+  IFS=: read -r -a __masroof_parts <<< "$PATH"
+  __masroof_p=""
+  __masroof_i=0
+  while [ "$__masroof_i" -lt "${#__masroof_parts[@]}" ]; do
+    __masroof_e="${__masroof_parts[$__masroof_i]}"
+    __masroof_n="${__masroof_parts[$((__masroof_i + 1))]:-}"
+    if [[ $__masroof_e =~ ^[A-Za-z]$ ]] && [[ $__masroof_n == /* ]] && [ -d "/${__masroof_e,,}" ]; then
+      __masroof_e="/${__masroof_e,,}$__masroof_n"
+      __masroof_i=$((__masroof_i + 1))
+    fi
+    __masroof_p="${__masroof_p:+$__masroof_p:}$__masroof_e"
+    __masroof_i=$((__masroof_i + 1))
   done
   PATH="$__masroof_p"
-  unset __masroof_p __masroof_m __masroof_d
+  unset __masroof_p __masroof_parts __masroof_i __masroof_e __masroof_n
 fi
 __masroof_add_path() {
   [ -d "$1" ] || return 0
