@@ -237,6 +237,39 @@ CREATE TABLE IF NOT EXISTS sms_outbox (
 )
 """
 
+private const val CREATE_PARSED_OUTBOX = """
+CREATE TABLE IF NOT EXISTS parsed_outbox (
+  localId TEXT NOT NULL,
+  source TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amountMinor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  occurredAtMillis INTEGER NOT NULL,
+  instrumentLast4 TEXT,
+  senderId TEXT NOT NULL,
+  institution TEXT,
+  paymentMethod TEXT,
+  merchant TEXT,
+  attempts INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(localId)
+)
+"""
+
+private const val CREATE_REVIEW_ITEM = """
+CREATE TABLE IF NOT EXISTS review_item (
+  id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  text TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  receivedAtMillis INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(id)
+)
+"""
+
 /**
  * v3 -> v4: SMS text no longer leaves or lingers on the phone. The v3 `sms_outbox` (which held redacted text) is dropped
  * and replaced by a typed `parsed_outbox` (no text) and the local `review_item` list.
@@ -245,17 +278,8 @@ val MIGRATION_3_4: Migration =
     object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("DROP TABLE IF EXISTS sms_outbox")
-            db.execSQL(
-                "CREATE TABLE IF NOT EXISTS parsed_outbox (localId TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL, " +
-                    "amountMinor INTEGER NOT NULL, currency TEXT NOT NULL, occurredAtMillis INTEGER NOT NULL, " +
-                    "instrumentLast4 TEXT, senderId TEXT NOT NULL, institution TEXT, paymentMethod TEXT, merchant TEXT, " +
-                    "attempts INTEGER NOT NULL, failed INTEGER NOT NULL, createdAtMillis INTEGER NOT NULL, PRIMARY KEY(localId))",
-            )
-            db.execSQL(
-                "CREATE TABLE IF NOT EXISTS review_item (id TEXT NOT NULL, source TEXT NOT NULL, sender TEXT NOT NULL, " +
-                    "text TEXT NOT NULL, reason TEXT NOT NULL, receivedAtMillis INTEGER NOT NULL, " +
-                    "createdAtMillis INTEGER NOT NULL, PRIMARY KEY(id))",
-            )
+            db.execSQL(CREATE_PARSED_OUTBOX)
+            db.execSQL(CREATE_REVIEW_ITEM)
         }
     }
 
