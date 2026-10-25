@@ -79,6 +79,7 @@ class SmsIngestApiIT {
   UUID accountA;
   String tokenA;
   String tokenB;
+  String tokenC;
   final UUID device = UUID.randomUUID();
 
   @BeforeAll
@@ -92,6 +93,11 @@ class SmsIngestApiIT {
     String emailB = "b-" + UUID.randomUUID() + "@example.com";
     user(householdA, memberA, emailA);
     user(householdB, UUID.randomUUID(), emailB);
+    UUID householdC = UUID.randomUUID();
+    jdbc.update("insert into household (id, name) values (?, 'C')", householdC);
+    String emailC = "c-" + UUID.randomUUID() + "@example.com";
+    user(householdC, UUID.randomUUID(), emailC);
+    tokenC = login(emailC);
     accountA = UUID.randomUUID();
     UUID owner = UUID.randomUUID();
     jdbc.update(
@@ -187,7 +193,13 @@ class SmsIngestApiIT {
   @DisplayName("REQ-SMS-001 202 first, then the worker turns the SMS into a CONFIRMED expense")
   void acceptThenParse() throws Exception {
     int expensesBefore = expensesOf(householdA);
-    MockHttpServletResponse r = ingest(tokenA, "CIB", PURCHASE, "sms-1");
+    java.time.LocalDate yesterday =
+        java.time.LocalDate.now(java.time.ZoneId.of("Africa/Cairo")).minusDays(1);
+    String dated =
+        PURCHASE.replace(
+            "12/03/2026",
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy").format(yesterday));
+    MockHttpServletResponse r = ingest(tokenA, "CIB", dated, "sms-1");
     assertThat(r.getStatus()).isEqualTo(202);
     JsonNode accepted = json(r);
     assertThat(accepted.get("outcome").asString()).isEqualTo("ACCEPTED");
@@ -211,7 +223,12 @@ class SmsIngestApiIT {
     assertThat(e.get("source")).isEqualTo("SMS");
     assertThat(e.get("merchant_raw")).isEqualTo("CARREFOUR MAADI");
     assertThat(e.get("payment_method")).isEqualTo("CARD");
-    assertThat(String.valueOf(e.get("occurred_at"))).contains("2026-03-12");
+    assertThat(
+            java.util.Objects.requireNonNull((java.sql.Timestamp) e.get("occurred_at"))
+                .toInstant()
+                .atZone(java.time.ZoneId.of("Africa/Cairo"))
+                .toLocalDate())
+        .isEqualTo(yesterday);
     // REQ-SMS-013: last four 1234 maps to the payment account and so to its owner
     assertThat(e.get("payment_account_id")).isEqualTo(accountA);
     assertThat(e.get("paid_by_member_id")).isEqualTo(ownerOfAccount);
@@ -495,6 +512,64 @@ class SmsIngestApiIT {
             .getResponse();
     assertThat(crossRead.getStatus()).isEqualTo(404);
     assertThat(rawMessages.sourcesOf(householdB, List.of(UUID.fromString(idA)))).isEmpty();
+  }
+
+  @Test
+  @Tag("REQ-SMS-030")
+  @Tag("REQ-SMS-031")
+  @DisplayName(
+      "REQ-SMS-030 code-like messages with a standalone number are refused and never stored")
+  void structuralOtpIsRefused() throws Exception {
+    String[] bodies = {
+      "Your 3D Secure code for EGP 64.00 at EMU WEBSHOP is 556677",
+      "Auth code 556677 for purchase of EGP 500.00 at AMAZON",
+      "Approve your payment of EGP 120.00 at NOON with 4455",
+      "Purchase of EGP 75.00 at STARBUCKS. Code: 889900",
+      "رقم التحقق 884213 لعملية شراء بمبلغ 500.00 جنيه"
+    };
+    int i = 0;
+    for (String body : bodies) {
+      JsonNode r = json(ingest(tokenA, "CIB", body, "sms-struct-otp-" + i++));
+      assertThat(r.get("outcome").asString()).as(body).isEqualTo("REJECTED_OTP");
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from raw_message where external_id like 'sms-struct-otp-%'",
+                Integer.class))
+        .isZero();
+  }
+
+  @Test
+  @Tag("REQ-SMS-001")
+  @DisplayName(
+      "REQ-SMS-001 more than 100 uploads a minute from one member answer 429 with Retry-After")
+  void rateLimited() throws Exception {
+    for (int i = 0; i < 100; i++) {
+      assertThat(ingest(tokenC, "CIB", PURCHASE, "sms-rate-" + i).getStatus()).isEqualTo(202);
+    }
+    MockHttpServletResponse limited = ingest(tokenC, "CIB", PURCHASE, "sms-rate-over");
+    assertThat(limited.getStatus()).isEqualTo(429);
+    assertThat(limited.getHeader("Retry-After")).isNotNull();
+    assertThat(limited.getContentType()).startsWith("application/problem+json");
+    // another member is not affected
+    assertThat(ingest(tokenA, "CIB", PURCHASE, "sms-rate-other").getStatus()).isEqualTo(202);
+  }
+
+  @Test
+  @Tag("REQ-SMS-001")
+  @DisplayName("REQ-SMS-001 a body over 16 KiB is refused with 413 before it is parsed")
+  void payloadTooLarge() throws Exception {
+    String huge = "{\"sender\":\"CIB\",\"body\":\"" + "x".repeat(20_000) + "\"}";
+    MockHttpServletResponse r =
+        mvc.perform(
+                post("/api/ingest/sms")
+                    .header("Authorization", "Bearer " + tokenA)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(huge))
+            .andReturn()
+            .getResponse();
+    assertThat(r.getStatus()).isEqualTo(413);
+    assertThat(r.getContentType()).startsWith("application/problem+json");
   }
 
   @Test

@@ -38,7 +38,7 @@ class SmsHandoff(
         val policy = settings.policy()
         for (sms in messages) {
             if (policy.isAllowed(sms.sender)) {
-                if (OtpPromoFilter.classify(sms.body) != MessageClass.OTP) scheduler.enqueueIntake(sms)
+                if (OtpPromoFilter.classify(sms.body) != MessageClass.OTP) scheduler.enqueueIntake(sms.copy(body = sms.body.take(MAX_BODY)))
             } else if (isSuggestible(sms)) {
                 settings.suggest(sms.sender)
             }
@@ -71,3 +71,6 @@ fun smsId(sms: IncomingSms): String {
 
 private const val MILLIS_PER_SECOND = 1000L
 private const val ID_BYTES = 16
+
+/** WorkManager input data is capped at 10 KB; the server accepts 2000 characters anyway. */
+private const val MAX_BODY = 2000

@@ -60,6 +60,15 @@ class WebSecurityConfiguration {
     return bean;
   }
 
+  /** Size and rate guard for POST /api/ingest/sms; runs right after authentication. */
+  @Bean
+  FilterRegistrationBean<IngestGuardFilter> ingestGuardFilter(Clock clock) {
+    FilterRegistrationBean<IngestGuardFilter> bean =
+        new FilterRegistrationBean<>(new IngestGuardFilter(clock));
+    bean.setOrder(-190);
+    return bean;
+  }
+
   /** Token-less requests pass only when a DevHousehold bean exists (the one dev-switch reading). */
   @Bean
   FilterRegistrationBean<AuthenticationFilter> authenticationFilter(

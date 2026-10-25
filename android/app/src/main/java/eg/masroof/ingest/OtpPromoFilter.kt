@@ -39,11 +39,32 @@ object OtpPromoFilter {
             "صالح لمده",
             "تنتهي صلاحيه",
         )
-    private val pin = Regex("\\bpin\\b")
+    private val pin = Regex("\\bpin\\b|\\bo\\W?t\\W?p\\b")
     private val codeToConfirm = Regex("(?<!\\d)\\d{4,8}(?!\\d).{0,40}(?:to confirm|to complete|to verify|لتاكيد|لاتمام)")
     private val codeEnter =
         Regex("(?:\\b(?:enter|use|type|input)|ادخل|استخدم|اكتب)\\s+(?:the\\s+)?(?:code\\s+)?(?<!\\d)\\d{4,8}(?!\\d)")
     private val digitsOnly = Regex("^\\W*\\d{4,8}\\W*$")
+
+    // Structural rule (same as the server): a code-like word plus a standalone 4-8 digit number that is not part of an
+    // amount, date, time or card last four is an OTP, whatever else the sentence says.
+    private val codeWord =
+        Regex(
+            "\\b(?:code|pin|otp|passcode|password|verification|authentication|approve|secure|activation|security)\\b" +
+                "|\\bo\\W?t\\W?p\\b|رمز|كود|كلمه السر|كلمه المرور|الرقم السري|رقم سري|تحقق|توثيق|وافق|موافق|تفعيل",
+        )
+    private const val CURRENCY =
+        "(?:(?<![a-z])(?:egp|l\\.?e|usd|eur|sar|aed|gbp)(?![a-z])|\\$|€|جنيه|ج\\.م|جم|دولار|ريال|درهم|يورو)"
+    private val notACode =
+        listOf(
+            Regex("$CURRENCY\\s*\\d[\\d.,]*"),
+            Regex("\\d[\\d.,]*\\s*$CURRENCY"),
+            Regex("\\d{1,4}[/-]\\d{1,2}(?:[/-]\\d{1,4})?"),
+            Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"),
+            Regex("(?:[*x•]{2,}|\\.{3})\\s*\\d{4}"),
+            Regex("(?:ending(?: with| in)?|ends with|a/c|acct|account|card)\\s*(?:no\\.?|number)?\\s*[*x•.\\- ]*\\d{4}(?!\\d)"),
+            Regex("(?:المنتهيه|منتهيه|رقم)\\s*(?:ب)?\\s*[*x. ]*\\d{4}(?!\\d)"),
+        )
+    private val standaloneNumber = Regex("(?<![\\w.,/:+-])\\d{4,8}(?![\\w/:]|[.,]\\d)")
     private val promoWords =
         listOf(
             "offer",
@@ -105,7 +126,8 @@ object OtpPromoFilter {
                 pin.containsMatchIn(text) ||
                 codeToConfirm.containsMatchIn(text) ||
                 codeEnter.containsMatchIn(text) ||
-                digitsOnly.matches(text) -> MessageClass.OTP
+                digitsOnly.matches(text) ||
+                looksLikeCode(text) -> MessageClass.OTP
             promoWords.any { text.contains(it) } && transactionWords.none { text.contains(it) } -> MessageClass.PROMO
             else -> MessageClass.OTHER
         }
@@ -121,6 +143,8 @@ object OtpPromoFilter {
                 code in PERSIAN_ZERO..PERSIAN_NINE -> out.append('0' + (code - PERSIAN_ZERO))
                 code == ARABIC_DECIMAL -> out.append('.')
                 code == ARABIC_THOUSANDS || code == ARABIC_COMMA -> out.append(',')
+                code in DASHES || code == MINUS_SIGN -> out.append('-')
+                code == ONE_DOT_LEADER || code == HYPHENATION_POINT -> out.append('.')
                 isIgnorable(code) -> Unit
                 else -> out.append(fold(c))
             }
@@ -130,6 +154,12 @@ object OtpPromoFilter {
             .lowercase(Locale.ROOT)
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    private fun looksLikeCode(text: String): Boolean {
+        if (!codeWord.containsMatchIn(text)) return false
+        val rest = notACode.fold(text) { acc, pattern -> pattern.replace(acc, " ") }
+        return standaloneNumber.containsMatchIn(rest)
     }
 
     private fun isIgnorable(code: Int) =
@@ -161,5 +191,9 @@ object OtpPromoFilter {
     private const val ARABIC_THOUSANDS = 0x066C
     private const val ARABIC_COMMA = 0x060C
     private const val TATWEEL = 0x0640
+    private val DASHES = 0x2010..0x2015
+    private const val MINUS_SIGN = 0x2212
+    private const val ONE_DOT_LEADER = 0x2024
+    private const val HYPHENATION_POINT = 0x2027
     private val HARAKAT = 0x064B..0x065F
 }

@@ -33,6 +33,17 @@ final class ProblemResponses {
         request.getRequestURI());
   }
 
+  /** 413 for a body over the endpoint's limit. */
+  static void payloadTooLarge(HttpServletRequest request, HttpServletResponse response)
+      throws IOException {
+    write(
+        response,
+        413,
+        "Payload Too Large",
+        "The request body is larger than this endpoint accepts",
+        request.getRequestURI());
+  }
+
   private static void write(
       HttpServletResponse response, int status, String title, String detail, String instance)
       throws IOException {

@@ -44,7 +44,7 @@ public final class MessageClassifier {
           "صالح لمده",
           "تنتهي صلاحيه");
 
-  private static final Pattern PIN = Pattern.compile("\\bpin\\b");
+  private static final Pattern PIN = Pattern.compile("\\bpin\\b|\\bo\\W?t\\W?p\\b");
 
   private static final Pattern CODE_TO_CONFIRM =
       Pattern.compile(
@@ -56,6 +56,35 @@ public final class MessageClassifier {
               + "|اكتب)\\s+(?:the\\s+)?(?:code\\s+)?(?<!\\d)\\d{4,8}(?!\\d)");
 
   private static final Pattern DIGITS_ONLY = Pattern.compile("^\\W*\\d{4,8}\\W*$");
+
+  /**
+   * Structural rule: a code-like word together with a standalone 4-8 digit number that is not part
+   * of an amount, date, time or card last four is an OTP, whatever the rest of the sentence says
+   * ("Auth code 556677 for purchase of EGP 500.00"). Same rule on the device.
+   */
+  private static final Pattern CODE_WORD =
+      Pattern.compile(
+          "\\b(?:code|pin|otp|passcode|password|verification|authentication|approve|secure"
+              + "|activation|security)\\b|\\bo\\W?t\\W?p\\b"
+              + "|رمز|كود|كلمه السر|كلمه المرور|الرقم السري|رقم سري|تحقق|توثيق|وافق|موافق|تفعيل");
+
+  private static final String CURRENCY =
+      "(?:(?<![a-z])(?:egp|l\\.?e|usd|eur|sar|aed|gbp)(?![a-z])|\\$|€|جنيه|ج\\.م|جم|دولار|ريال|درهم|يورو)";
+
+  private static final List<Pattern> NOT_A_CODE =
+      List.of(
+          Pattern.compile(CURRENCY + "\\s*\\d[\\d.,]*"),
+          Pattern.compile("\\d[\\d.,]*\\s*" + CURRENCY),
+          Pattern.compile("\\d{1,4}[/-]\\d{1,2}(?:[/-]\\d{1,4})?"),
+          Pattern.compile("\\d{1,2}:\\d{2}(?::\\d{2})?"),
+          Pattern.compile("(?:[*x•]{2,}|\\.{3})\\s*\\d{4}"),
+          Pattern.compile(
+              "(?:ending(?: with| in)?|ends with|a/c|acct|account|card)\\s*(?:no\\.?|number)?"
+                  + "\\s*[*x•.\\- ]*\\d{4}(?!\\d)"),
+          Pattern.compile("(?:المنتهيه|منتهيه|رقم)\\s*(?:ب)?\\s*[*x. ]*\\d{4}(?!\\d)"));
+
+  private static final Pattern STANDALONE_NUMBER =
+      Pattern.compile("(?<![\\w.,/:+-])\\d{4,8}(?![\\w/:]|[.,]\\d)");
 
   private static final List<String> PROMO_WORDS =
       List.of(
@@ -119,13 +148,25 @@ public final class MessageClassifier {
         || PIN.matcher(text).find()
         || CODE_TO_CONFIRM.matcher(text).find()
         || CODE_ENTER.matcher(text).find()
-        || DIGITS_ONLY.matcher(text).matches()) {
+        || DIGITS_ONLY.matcher(text).matches()
+        || looksLikeCode(text)) {
       return MessageClass.OTP;
     }
     if (containsAny(text, PROMO_WORDS) && !containsAny(text, TRANSACTION_WORDS)) {
       return MessageClass.PROMO;
     }
     return MessageClass.OTHER;
+  }
+
+  private static boolean looksLikeCode(String text) {
+    if (!CODE_WORD.matcher(text).find()) {
+      return false;
+    }
+    String rest = text;
+    for (Pattern p : NOT_A_CODE) {
+      rest = p.matcher(rest).replaceAll(" ");
+    }
+    return STANDALONE_NUMBER.matcher(rest).find();
   }
 
   private static boolean containsAny(String text, List<String> words) {

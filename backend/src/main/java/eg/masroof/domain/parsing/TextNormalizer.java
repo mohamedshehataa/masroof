@@ -4,6 +4,7 @@ import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 
 /**
  * Deterministic, pure text normalization for untrusted message bodies (STORY-041).
@@ -20,6 +21,12 @@ public final class TextNormalizer {
   private static final int MAX_AMOUNT_DIGITS = 15;
   private static final int GROUP = 3;
   private static final int CENTS = 2;
+
+  private static final Set<String> EXTRA_CODES =
+      Set.of(
+          "JPY", "CHF", "CAD", "AUD", "NZD", "CNY", "INR", "TRY", "RUB", "KRW", "SEK", "NOK", "DKK",
+          "PLN", "CZK", "HUF", "ZAR", "BRL", "MXN", "SGD", "HKD", "THB", "MYR", "IDR", "PHP", "QAR",
+          "BHD", "OMR", "JOD", "LBP", "MAD", "TND", "DZD", "ILS");
 
   private TextNormalizer() {}
 
@@ -97,6 +104,12 @@ public final class TextNormalizer {
     boolean bidi = (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069);
     if (harakat || bidi) {
       return 0;
+    }
+    if ((c >= 0x2010 && c <= 0x2015) || c == 0x2212 || c == 0xFE58 || c == 0xFE63) {
+      return '-'; // every Unicode dash and the minus sign: a typographic hyphen equals ASCII
+    }
+    if (c == 0x2024 || c == 0x2027) {
+      return '.'; // one-dot leader and hyphenation point
     }
     return c == 0x00A0 || c == 0x202F ? ' ' : c;
   }
@@ -257,7 +270,8 @@ public final class TextNormalizer {
           case "aed", "درهم" -> "AED";
           case "gbp" -> "GBP";
           case "kwd" -> "KWD";
-          default -> null;
+          default ->
+              EXTRA_CODES.contains(t.toUpperCase(Locale.ROOT)) ? t.toUpperCase(Locale.ROOT) : null;
         });
   }
 }

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val SMS_INTAKE_WORK = "sms-intake"
+const val SMS_INTAKE_TAG = "sms-intake"
 const val SMS_UPLOAD_WORK = "sms-upload"
 const val SMS_UPLOAD_RETRY_WORK = "sms-upload-retry"
 private const val KEY_SENDER = "sender"
@@ -47,6 +47,7 @@ class WorkManagerSmsScheduler
         override fun enqueueIntake(sms: IncomingSms) {
             val request =
                 OneTimeWorkRequestBuilder<SmsIntakeWorker>()
+                    .addTag(SMS_INTAKE_TAG)
                     .setInputData(workDataOf(KEY_SENDER to sms.sender, KEY_BODY to sms.body, KEY_TS to sms.timestampMillis))
                     .build()
             // Not unique by name: every message is its own job; the outbox insert dedups on the message id.

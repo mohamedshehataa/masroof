@@ -27,4 +27,4 @@
 {"id":"cib-en-declined","tags":["REQ-SMS-012"],"sender":"CIB","receivedAt":"2026-03-12T12:10:00Z","body":"Your card ending 1234 transaction of EGP 200.00 was declined due to insufficient funds","expect":{"kind":"INFO","amountMinor":null}}
 {"id":"cib-en-no-template","tags":["REQ-SMS-010"],"sender":"CIB","receivedAt":"2026-03-12T12:10:00Z","body":"Welcome to our bank, thank you for banking with us","expect":null}
 {"id":"cib-en-balance-only","tags":["REQ-SMS-010"],"sender":"CIB","receivedAt":"2026-03-12T12:10:00Z","body":"Your available balance is EGP 5,000.00","expect":null}
-{"id":"unknown-sender-generic","tags":["REQ-SMS-010"],"sender":"SomeNewBank","receivedAt":"2026-03-12T12:10:00Z","body":"Purchase of EGP 99.00 at PHARMACY 19011 on 12/03/2026 14:05","expect":{"kind":"PURCHASE","amountMinor":9900,"currency":"EGP","merchant":"PHARMACY 19011"}}
+{"id":"unknown-sender-generic","tags":["REQ-SMS-010"],"sender":"SomeNewBank","receivedAt":"2026-03-12T12:10:00Z","body":"Purchase of EGP 99.00 at PHARMACY 19011 on 12/03/2026 14:05","expect":{"kind":"PURCHASE","amountMinor":9900,"currency":"EGP","merchant":"PHARMACY ••9011"}}

@@ -41,7 +41,7 @@
     {
       "id": "info-statement",
       "kind": "INFO",
-      "detect": "statement is ready|e-?statement|كشف حساب|due date|payment due|reminder|تاريخ الاستحقاق|تذكير"
+      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment of|purchase|spent|charged|withdraw|\\bdebit\\b|تم خصم|تم دفع|شراء|سحب)).*(?:statement is ready|e-?statement|كشف حساب|due date|payment due|reminder|تاريخ الاستحقاق|تذكير)"
     },
     {
       "id": "reversal",
@@ -64,14 +64,19 @@
       "detect": "\\b(?:annual fee|monthly fee|service fee|maintenance fee|card fee|sms fee|fee of|fees of|commission)\\b|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)"
     },
     {
+      "id": "transfer-debit-credit",
+      "kind": "TRANSFER",
+      "detect": "(?s)\\bdebited\\b.{0,120}\\bcredited to\\b"
+    },
+    {
       "id": "income",
       "kind": "INCOME",
-      "detect": "\\b(?:received|credited|deposit(?:ed)?|salary|incoming)\\b|ايداع|استلام|استلمت|وارد|راتب|مرتب|اضافه مبلغ|تم اضافه"
+      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment|purchase|spent|charged|withdraw|\\bdebit\\b|تم خصم|تم دفع|شراء|سحب|خصم|دفع)).*(?:\\b(?:received|credited|deposit(?:ed)?|salary|incoming)\\b|ايداع|استلام|استلمت|وارد|راتب|مرتب|اضافه مبلغ|تم اضافه)"
     },
     {
       "id": "transfer",
       "kind": "TRANSFER",
-      "detect": "\\btransfer(?:red)?\\b|\\bsent to\\b|instapay|تحويل|حولت|تم ارسال|ارسال مبلغ"
+      "detect": "(?s)^(?!.*(?:\\breceived\\b|\\bcredited\\b|استلام|استلمت|وارد|ايداع)).*(?:\\btransfer(?:red)?\\b|\\bsent to\\b|تحويل|حولت|تم ارسال|ارسال مبلغ)"
     },
     {
       "id": "purchase",

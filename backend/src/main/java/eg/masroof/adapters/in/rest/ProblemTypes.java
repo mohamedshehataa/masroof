@@ -20,6 +20,7 @@ final class ProblemTypes {
       case 401 -> of("unauthorized");
       case 404 -> of("not-found");
       case 409 -> of("conflict");
+      case 413 -> of("payload-too-large");
       case 429 -> of("rate-limited");
       default -> URI.create("about:blank");
     };

@@ -35,9 +35,12 @@ public final class SmsTemplateEngine {
   private static final int MAX_MERCHANT = 60;
   private static final int SHORT_YEAR_BASE = 2000;
   private static final int NOON = 12;
+  private static final int RECENT_DAYS = 45;
   private static final String NUM = "(\\d(?:[\\d.,]*\\d)?)";
   private static final String CUR =
       "(EGP|E£|(?<![a-z])L\\.?E\\.?(?![a-z])|USD|US\\$|\\$|EUR|€|SAR|AED|GBP|KWD"
+          + "|(?-i:JPY|CHF|CAD|AUD|NZD|CNY|INR|TRY|RUB|KRW|SEK|NOK|DKK|PLN|CZK|HUF|ZAR|BRL|MXN|SGD"
+          + "|HKD|THB|MYR|IDR|PHP|QAR|BHD|OMR|JOD|LBP|MAD|TND|DZD|ILS)"
           + "|جنيهات|جنيه[اه]?"
           + "|(?<!\\p{L})ج\\.?م\\.?(?!\\p{L})"
           + "|دولار|يورو|ريال"
@@ -52,6 +55,8 @@ public final class SmsTemplateEngine {
       Pattern.compile(
           "(?:مبلغ|بمبلغ|قيمه" + "|بقيمه|amount(?: of)?)\\s*:?\\s*" + NUM,
           Pattern.CASE_INSENSITIVE);
+  private static final Pattern ANY_CURRENCY =
+      Pattern.compile("(?<![\\p{L}\\d])" + CUR + "(?!\\p{L})", Pattern.CASE_INSENSITIVE);
   private static final Pattern BALANCE_WORDS =
       Pattern.compile(
           "balance|\\bbal\\b|\\bavl\\b|avail|limit|remaining" + "|رصيد|المتاح|متاح",
@@ -72,7 +77,7 @@ public final class SmsTemplateEngine {
 
   private static final String TERM =
       "(?=\\s+(?:on|in|date|dated|with|using|from|via|avl|avail|available|balance|bal|ref|trx|txn"
-          + "|card|by|your|is)\\b"
+          + "|card|by|your|is|was|were|has|had|successful|successfully|completed|approved)\\b"
           + "|\\s+(?:بتاريخ|في|الرصيد"
           + "|رصيد|رصيدك|رقم"
           + "|باستخدام|عبر|من"
@@ -86,6 +91,13 @@ public final class SmsTemplateEngine {
           "(?:\\bto\\b|ال[يى]|لصالح|(?<!\\p{L})ل)\\s+" + MERCHANT + TERM, Pattern.CASE_INSENSITIVE);
   private static final Pattern FROM =
       Pattern.compile("(?:\\bfrom\\b|من)\\s+" + MERCHANT + TERM, Pattern.CASE_INSENSITIVE);
+  private static final Pattern STATUS_TAIL =
+      Pattern.compile(
+          "(?:\\s+(?:was|were|has|had|is|successful(?:ly)?|completed|approved|done|received))+$",
+          Pattern.CASE_INSENSITIVE);
+  private static final Pattern IBAN =
+      Pattern.compile("\\b[A-Z]{2}\\d{2}[A-Z0-9]{10,30}\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern LONG_DIGITS = Pattern.compile("\\d(?:[ -]?\\d){4,}");
   private static final Pattern BAD_MERCHANT =
       Pattern.compile(
           "^(?:(?:your|ur|my|the|an?|account|card|a/c|acct|wallet|ending)\\b|\\*|xx"
@@ -94,6 +106,10 @@ public final class SmsTemplateEngine {
               + "|.*\\d[\\d,]*\\.\\d{2}.*|.*\\b(?:egp|usd)\\b.*",
           Pattern.CASE_INSENSITIVE);
 
+  private static final Pattern NOT_A_TRANSACTION_DATE =
+      Pattern.compile(
+          "(?:valid|until|till|expires?|expiry|due|before|حتي|صالح|استحقاق|ينتهي)[^0-9]{0,20}$",
+          Pattern.CASE_INSENSITIVE);
   private static final Pattern DATE_ISO =
       Pattern.compile("(?<![\\d/.,:-])(\\d{4})-(\\d{1,2})-(\\d{1,2})(?!\\d)");
   private static final Pattern DATE_DOTTED =
@@ -223,9 +239,12 @@ public final class SmsTemplateEngine {
   /** First currency amount that is not a balance or limit. */
   private static @Nullable Money amount(String text, Budget budget) {
     TreeMap<Integer, Candidate> byNumber = new TreeMap<>();
+    // A bare "amount 1,500" is EGP only when the text names no currency anywhere; otherwise it is
+    // XXX (ISO "no currency") and the caller sends it to review rather than guessing.
+    String bare = matcher(ANY_CURRENCY, text, budget).find() ? "XXX" : "EGP";
     Matcher k = matcher(KEYWORD_AMOUNT, text, budget);
     while (k.find()) {
-      byNumber.put(k.start(1), new Candidate(k.start(), k.end(), k.group(1), "EGP"));
+      byNumber.put(k.start(1), new Candidate(k.start(), k.end(), k.group(1), bare));
     }
     Matcher a = matcher(CUR_FIRST, text, budget);
     while (a.find()) {
@@ -299,7 +318,17 @@ public final class SmsTemplateEngine {
     while (end > 0 && ".,;:-*".indexOf(raw.charAt(end - 1)) >= 0) {
       end--;
     }
-    return raw.substring(0, end).strip();
+    String stripped = STATUS_TAIL.matcher(raw.substring(0, end).strip()).replaceAll("");
+    String noIban = IBAN.matcher(stripped).replaceAll(m -> mask(m.group()));
+    return LONG_DIGITS.matcher(noIban).replaceAll(m -> mask(m.group())).strip();
+  }
+
+  /**
+   * Keeps only the last four digits or letters: IBANs, account and phone numbers are never stored.
+   */
+  private static String mask(String value) {
+    String compact = value.replaceAll("[ -]", "");
+    return "••" + compact.substring(Math.max(0, compact.length() - 4));
   }
 
   private static Instant occurredAt(String text, Instant receivedAt, Budget budget) {
@@ -316,23 +345,47 @@ public final class SmsTemplateEngine {
     return parsed.isAfter(receivedAt.plus(1, ChronoUnit.DAYS)) ? receivedAt : parsed;
   }
 
+  private record DateHit(int start, LocalDate date) {}
+
+  /**
+   * The transaction date: the first date in the text that is within the last 45 days (and not in
+   * the future) and is not a validity or due date. Anything else is ignored and the SMS received
+   * time is used, so "valid until 31/12" or a stray 2001 never becomes the expense date.
+   */
   private static @Nullable LocalDate date(String text, LocalDate received, Budget budget) {
+    List<DateHit> hits = new ArrayList<>();
     Matcher iso = matcher(DATE_ISO, text, budget);
-    if (iso.find()) {
-      return safeDate(iso.group(1), iso.group(3), iso.group(2), received);
+    while (iso.find()) {
+      add(hits, iso.start(), safeDate(iso.group(1), iso.group(3), iso.group(2), received));
     }
     Matcher dotted = matcher(DATE_DOTTED, text, budget);
-    if (dotted.find()) {
-      return safeDate(dotted.group(3), dotted.group(1), dotted.group(2), received);
+    while (dotted.find()) {
+      add(
+          hits,
+          dotted.start(),
+          safeDate(dotted.group(3), dotted.group(1), dotted.group(2), received));
     }
     Matcher slash = matcher(DATE_SLASH, text, budget);
     while (slash.find()) {
-      LocalDate d = safeDate(slash.group(3), slash.group(1), slash.group(2), received);
-      if (d != null) {
-        return d;
+      add(hits, slash.start(), safeDate(slash.group(3), slash.group(1), slash.group(2), received));
+    }
+    hits.sort((x, y) -> Integer.compare(x.start(), y.start()));
+    for (DateHit hit : hits) {
+      boolean recent =
+          !hit.date().isBefore(received.minusDays(RECENT_DAYS))
+              && !hit.date().isAfter(received.plusDays(1));
+      String before = text.substring(Math.max(0, hit.start() - 30), hit.start());
+      if (recent && !matcher(NOT_A_TRANSACTION_DATE, before, budget).find()) {
+        return hit.date();
       }
     }
     return null;
+  }
+
+  private static void add(List<DateHit> hits, int start, @Nullable LocalDate date) {
+    if (date != null) {
+      hits.add(new DateHit(start, date));
+    }
   }
 
   /**
