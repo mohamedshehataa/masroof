@@ -3,6 +3,7 @@ package eg.masroof.application.auth;
 import eg.masroof.application.auth.AuthException.Kind;
 import eg.masroof.application.auth.RefreshTokenStore.Outcome;
 import eg.masroof.domain.auth.FailureWindowLimiter;
+import eg.masroof.domain.auth.IpHasher;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,10 +16,12 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -33,6 +36,7 @@ public class AuthService {
   private static final int MAX_FAILURES = 10;
   private static final Duration WINDOW = Duration.ofMinutes(15);
   private static final int MAX_KEYS = 10_000;
+  private static final SecureRandom KEY_RANDOM = new SecureRandom();
 
   private final AccountStore accounts;
   private final RefreshTokenStore refreshTokens;
@@ -46,7 +50,10 @@ public class AuthService {
   private final FailureWindowLimiter ipLimiter =
       new FailureWindowLimiter(MAX_FAILURES, WINDOW, MAX_KEYS);
   private final AtomicLong blocked = new AtomicLong();
+  private final IpHasher ipHasher;
+  private final ConcurrentHashMap<String, Instant> blockedAudited = new ConcurrentHashMap<>();
 
+  /** Test-friendly form: a random per-instance audit key. */
   AuthService(
       AccountStore accounts,
       RefreshTokenStore refreshTokens,
@@ -54,6 +61,19 @@ public class AuthService {
       AccessTokens accessTokens,
       AuditLog audit,
       Clock clock) {
+    this(accounts, refreshTokens, hasher, accessTokens, audit, clock, randomHasher());
+  }
+
+  @Autowired
+  AuthService(
+      AccountStore accounts,
+      RefreshTokenStore refreshTokens,
+      PasswordHasher hasher,
+      AccessTokens accessTokens,
+      AuditLog audit,
+      Clock clock,
+      IpHasher ipHasher) {
+    this.ipHasher = ipHasher;
     this.audit = audit;
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
@@ -77,7 +97,9 @@ public class AuthService {
     if (wait.isPresent()) {
       blocked.incrementAndGet();
       LOG.warn("auth_login_blocked_total={}", blocked.get());
-      audit("LOGIN_BLOCKED", accounts.findByEmail(emailKey), clientIp);
+      if (firstBlockInWindow(emailKey, ipKey, now)) {
+        audit("LOGIN_BLOCKED", accounts.findByEmail(emailKey), clientIp);
+      }
       throw new AuthException(Kind.RATE_LIMITED, wait.get());
     }
     Optional<Account> found = accounts.findByEmail(emailKey);
@@ -141,10 +163,41 @@ public class AuthService {
    */
   private void audit(String action, Optional<Account> account, String clientIp) {
     try {
-      audit.record(action, account.map(Account::memberId).orElse(null), sha256("ip:" + clientIp));
+      audit.record(action, account.map(Account::memberId).orElse(null), ipHasher.hash(clientIp));
     } catch (RuntimeException e) {
       LOG.warn("audit write failed for {}", action);
     }
+  }
+
+  /** True once per window for each of the two keys, so a flood cannot fill the audit table. */
+  private boolean firstBlockInWindow(String emailKey, String ipKey, Instant now) {
+    if (blockedAudited.size() >= MAX_KEYS) {
+      blockedAudited.values().removeIf(at -> !at.plus(WINDOW).isAfter(now));
+      if (blockedAudited.size() >= MAX_KEYS) {
+        blockedAudited.clear();
+      }
+    }
+    boolean first = false;
+    for (String key : new String[] {emailKey, ipKey}) {
+      boolean[] fresh = {false};
+      blockedAudited.compute(
+          key,
+          (k, at) -> {
+            if (at == null || !at.plus(WINDOW).isAfter(now)) {
+              fresh[0] = true;
+              return now;
+            }
+            return at;
+          });
+      first |= fresh[0];
+    }
+    return first;
+  }
+
+  private static IpHasher randomHasher() {
+    byte[] key = new byte[32];
+    KEY_RANDOM.nextBytes(key);
+    return new IpHasher(key);
   }
 
   private Session session(Account account, String refresh, Instant now) {

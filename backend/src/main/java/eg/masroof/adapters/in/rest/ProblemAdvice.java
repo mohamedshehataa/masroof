@@ -66,6 +66,9 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
     ProblemDetail problem =
         problem(status, String.valueOf(e.getMessage()), request.getRequestURI());
     problem.setTitle(e.title());
+    if (!e.problemCode().isEmpty()) {
+      problem.setType(ProblemTypes.of(e.problemCode()));
+    }
     if (!e.issues().isEmpty()) {
       problem.setProperty(
           "errors",
@@ -232,7 +235,7 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
 
   private static ProblemDetail problem(HttpStatus status, String detail, @Nullable String path) {
     ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-    problem.setType(URI.create("about:blank"));
+    problem.setType(ProblemTypes.forStatus(status.value()));
     if (!"/health".equals(path)) { // /health keeps its fixed body (REQ-OPS-020)
       problem.setProperty("traceId", UUID.randomUUID().toString());
     }
