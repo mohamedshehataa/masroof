@@ -67,3 +67,10 @@ STORY-005, STORY-013, STORY-014.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-25 | 5 implement | backend-engineer | Manual create/list/get/patch/delete shipped (speed mode). Deferred, see DECISIONS: raw_message, expense_source and audit_log rows wait for the ingestion stories (Phase 3/4); createdBy waits for auth (STORY-009). |
+
+### Follow-ups (recorded, not built)
+- Household-scoped composite foreign keys (category, payment_account, member must belong to the expense household at the database level).
+- Optimistic locking via `version` (PATCH `version` is accepted and ignored; 409 on stale).
+- PATCH clearing nullable fields with an explicit `null` (today `null` means unchanged).
+- Items, splits, merchants, foreign currency (amountOriginal/fxRate) and recurring fields are rejected with 422.

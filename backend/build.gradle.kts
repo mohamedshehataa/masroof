@@ -15,6 +15,22 @@ buildscript {
             classpath("org.apache.commons:commons-lang3:3.21.0")
         }
     }
+    // openapi-generator-gradle-plugin 7.14.0 (latest release) ships vulnerable jackson 2.18/2.19, handlebars 4.3.1 and
+    // rhino 1.7.7.2 (jackson GHSA-7hhh-6rmp-j9qf and others, handlebars GHSA-r4gv-qr8j-p3pg, rhino GHSA-3w8q-xq97-5j7x).
+    // Forcing the fixed versions keeps the vulnerable poms out of the lockfile and verification metadata too.
+    configurations.classpath {
+        resolutionStrategy {
+            eachDependency {
+                when {
+                    requested.group.startsWith("com.fasterxml.jackson") &&
+                        requested.name != "jackson-annotations" -> useVersion("2.21.7")
+                    requested.group == "com.github.jknack" && requested.name == "handlebars" ->
+                        useVersion("4.5.2")
+                    requested.group == "org.mozilla" && requested.name == "rhino" -> useVersion("1.7.14.1")
+                }
+            }
+        }
+    }
 }
 
 plugins {
@@ -26,6 +42,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
+    id("org.openapi.generator") version "7.14.0"
 }
 
 group = "eg.masroof"
@@ -44,6 +61,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.jspecify:jspecify")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
@@ -56,6 +74,46 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Server interfaces + models from the contract (STORY-006, REQ-OPS-050). Generated code is never edited or committed.
+val openApiOut = layout.buildDirectory.dir("generated/openapi")
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = rootProject.file("../contracts/openapi.yaml").toURI().toString()
+    outputDir = openApiOut.map { it.asFile.absolutePath }
+    apiPackage = "eg.masroof.adapters.in.rest.generated.api"
+    modelPackage = "eg.masroof.adapters.in.rest.generated.model"
+    invokerPackage = "eg.masroof.adapters.in.rest.generated"
+    globalProperties = mapOf("apis" to "", "models" to "", "supportingFiles" to "ApiUtil.java")
+    typeMappings = mapOf("DateTime" to "Instant")
+    schemaMappings = mapOf("Money" to "Money")
+    importMappings = mapOf("Instant" to "java.time.Instant", "Money" to "eg.masroof.domain.money.Money")
+    configOptions = mapOf(
+        "interfaceOnly" to "true",
+        "useTags" to "true",
+        "useSpringBoot3" to "true",
+        "useBeanValidation" to "true",
+        "performBeanValidation" to "false",
+        "openApiNullable" to "false",
+        "documentationProvider" to "none",
+        "annotationLibrary" to "none",
+        "hideGenerationTimestamp" to "true",
+        "useOptional" to "false",
+        "skipDefaultInterface" to "false",
+        "generatedConstructorWithRequiredArgs" to "false",
+        "containerDefaultToNull" to "true", // absent list != empty list (PATCH must not erase tags)
+    )
+}
+sourceSets.main { java.srcDir(openApiOut.map { it.dir("src/main/java") }) }
+tasks.compileJava { dependsOn(tasks.openApiGenerate) }
+// Spring 7 deprecates org.springframework.lang.Nullable (the generator template imports it); the build fails on warnings.
+tasks.openApiGenerate {
+    doLast {
+        openApiOut.get().asFile.walkTopDown().filter { it.extension == "java" }.forEach {
+            it.writeText(it.readText().replace("import org.springframework.lang.Nullable;", "import org.jspecify.annotations.Nullable;"))
+        }
+    }
 }
 
 // /health build info (STORY-143): the Docker build passes -PgitSha/-PbuildTime; local builds read git, so checkFast needs no env.
@@ -74,6 +132,7 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-Xlint:all,-processing", "-Werror"))
     options.errorprone {
         disableWarningsInGeneratedCode = true
+        excludedPaths = ".*/build/generated/.*"
         error("NullAway", "RemoveUnusedImports")
         option("NullAway:AnnotatedPackages", "eg.masroof")
     }
@@ -96,8 +155,12 @@ checkstyle {
     configProperties["org.checkstyle.google.severity"] = "error" // ERROR-level lines stay visible under -q
 }
 tasks.checkstyleTest { enabled = false }
+tasks.checkstyleMain { exclude("**/generated/**") }
 
-spotbugs { reportLevel = Confidence.HIGH }
+spotbugs {
+    reportLevel = Confidence.HIGH
+    excludeFilter = file("config/spotbugs/exclude.xml") // generated OpenAPI code is not ours to fix
+}
 tasks.spotbugsTest { enabled = false }
 
 tasks.test {
@@ -135,7 +198,9 @@ tasks.jacocoTestReport {
     // Merges unit and integration runs; the XML lands in build/reports/jacoco/test/jacocoTestReport.xml.
     executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).include("test.exec", "integrationTest.exec"))
     classDirectories.setFrom(
-        sourceSets.main.get().output.classesDirs.asFileTree.matching { exclude("eg/masroof/MasroofApplication.class") }
+        sourceSets.main.get().output.classesDirs.asFileTree.matching {
+            exclude("eg/masroof/MasroofApplication.class", "**/rest/generated/**") // generated code is not ours to cover
+        }
     )
     reports {
         xml.required = true

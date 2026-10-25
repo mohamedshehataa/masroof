@@ -1,0 +1,8 @@
+# Local overlay loaded by `make up` (never by deploys): the single-household switch that stands in for
+# authentication until STORY-009. No host ports: only Caddy is published (REQ-OPS-022).
+# Profile `dev` because the backend refuses to start with profile `prod` and the switch together.
+services:
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      MASROOF_DEV_SINGLE_HOUSEHOLD: "true"

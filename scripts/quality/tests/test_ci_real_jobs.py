@@ -100,7 +100,10 @@ def make_tree(dest: Path, *, with_web: bool, with_build_script: bool = True, wit
 
 def make(dest: Path, target: str, extra_env: dict[str, str], bin_dir: Path | None = None) -> subprocess.CompletedProcess:
     pre = f'export PATH="{bin_dir.as_posix()}:$PATH"; ' if bin_dir else ""
-    env = {k: v for k, v in os.environ.items() if k not in ("IMAGE_TAG", "VERSION", "IMAGE_REGISTRY")}
+    # CLAUDE_PROJECT_DIR is set when the Stop hook runs `make check-fast`; env.sh would then resolve
+    # PROJECT_DIR to the real repo (real gradlew, web/, HEAD sha) instead of this throwaway tree.
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("IMAGE_TAG", "VERSION", "IMAGE_REGISTRY", "CLAUDE_PROJECT_DIR")}
     env.update(extra_env)
     return subprocess.run([BASH, "-c", f". scripts/env.sh && {pre}make {target}"], cwd=dest, env=env,
                           capture_output=True, text=True, encoding="utf-8", errors="replace")

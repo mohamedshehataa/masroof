@@ -53,7 +53,8 @@ class V1BaselineMigrationTest {
         jdbc.queryForList(
             "select version, success, script from flyway_schema_history order by installed_rank");
 
-    assertThat(rows)
+    // V2+ (STORY-004, STORY-020) now follow V1; V1 must still be the first applied migration.
+    assertThat(rows.subList(0, 1))
         .extracting(r -> r.get("version"), r -> r.get("success"), r -> r.get("script"))
         .containsExactly(tuple("1", true, "V1__baseline.sql"));
   }
