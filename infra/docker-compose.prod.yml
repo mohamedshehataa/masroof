@@ -53,7 +53,7 @@ services:
         limits: { cpus: "0.5", memory: 128M }
   backend:
     image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-backend:${BACKEND_IMAGE_TAG:?set BACKEND_IMAGE_TAG}
-    pull_policy: always
+    pull_policy: missing  # tags are immutable (sha / version)
     restart: always
     environment:
       CORS_ALLOWED_ORIGINS: https://${DOMAIN:?set DOMAIN (e.g. masroof.duckdns.org)}   # the web app is served from the same origin
@@ -77,7 +77,7 @@ services:
         limits: { cpus: "1.5", memory: 384M }
   web:
     image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG}
-    pull_policy: always
+    pull_policy: missing  # tags are immutable (sha / version)
     restart: always
     deploy:
       resources:

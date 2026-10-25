@@ -13,7 +13,7 @@ URL ?= http://localhost
 VERSION ?= dev
 IMAGE_TAG ?= dev
 
-.PHONY: help bootstrap up down logs check-fast check check-full e2e eval eval-fast security mutation perf trace metrics \
+.PHONY: help bootstrap bootstrap-host up down logs check-fast check check-full e2e eval eval-fast security mutation perf trace metrics \
         contract-lint contract-diff docs-api hooks-test hooks-unlock hooks-lock test-integrity sbom build-images build-web backend-integration \
         build-apk build-apk-release deploy-staging deploy-prod smoke rollback backup selftest sdlc-lint status
 
@@ -89,6 +89,8 @@ deploy-staging: ## Deploy VERSION to staging (requires STAGING_HOST; only via /r
 	@$(ENV) bash scripts/make/deploy.sh staging $(VERSION)
 deploy-prod: ## Deploy VERSION to prod over ssh: make deploy-prod HOST=<ip> DOMAIN=<name> VERSION=<tag> (only via /release)
 	@$(ENV) bash scripts/make/deploy.sh prod $(VERSION)
+bootstrap-host: ## One-time server setup: make bootstrap-host HOST=<ip> DOMAIN=<name>.duckdns.org DUCKDNS_TOKEN_FILE=<file> [STEP=setup|admin-add|admin-clear] (only via /release)
+	@$(ENV) bash scripts/make/deploy-guard.sh infra/scripts/bootstrap-host.sh $(or $(STEP),setup)
 smoke: ## Smoke test URL=$(URL)
 	@$(ENV) bash infra/scripts/smoke.sh $(URL)
 rollback: ## Roll back to the previously deployed images
