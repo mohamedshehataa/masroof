@@ -1,19 +1,56 @@
-# Production overlay (Oracle Always Free Ampere: 4 OCPU / 24 GB, linux/arm64).
+# Production overlay for the Google Cloud Free Tier VM: e2-micro, 2 shared vCPU, 1 GB RAM, linux/amd64 (docs/HOSTING.md).
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env up -d --no-build
 # Images come from GHCR by tag (never built on the server). Required in .env on the server (bootstrap.sh generates it):
-# DOMAIN, POSTGRES_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY. Required in the shell (deploy.sh exports them):
+# DOMAIN, POSTGRES_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY. Required in the shell (remote-deploy.sh exports them):
 # BACKEND_IMAGE_TAG, WEB_IMAGE_TAG; IMAGE_REGISTRY defaults to the project's GHCR namespace.
 # Only 80 and 443 are published; Postgres and MinIO stay on the internal network.
+#
+# Memory plan (limits are caps, the sum is what the kernel may have to honour; measured usage is in docs/HOSTING.md):
+#   postgres 192M + backend 384M + web 48M + caddy 64M = 688M; MinIO 128M = 816M total.
+#   The OS, dockerd and containerd take ~200M of the 1 GB; a 2 GB swapfile (bootstrap.sh) absorbs spikes.
 name: masroof
 services:
   postgres:
+    # Small-memory tuning (default max_connections=100 / shared_buffers=128MB would eat the whole budget).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=48MB
+      - -c
+      - effective_cache_size=192MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=24MB
+      - -c
+      - max_connections=20
+      - -c
+      - wal_buffers=2MB
+      - -c
+      - max_wal_size=256MB
+      - -c
+      - min_wal_size=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_max_workers=2
+      - -c
+      - autovacuum_work_mem=16MB
+      - -c
+      - jit=off
+      - -c
+      - track_activity_query_size=512
+    restart: always
     deploy:
       resources:
-        limits: { cpus: "1.5", memory: 4G }
+        limits: { cpus: "1.0", memory: 192M }
   minio:
+    environment:
+      GOMEMLIMIT: 96MiB         # Go GC works to this soft limit instead of growing to the cgroup cap
+    restart: always
     deploy:
       resources:
-        limits: { cpus: "0.5", memory: 1G }
+        limits: { cpus: "0.5", memory: 128M }
   backend:
     image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-backend:${BACKEND_IMAGE_TAG:?set BACKEND_IMAGE_TAG}
     pull_policy: always
@@ -21,19 +58,34 @@ services:
     environment:
       CORS_ALLOWED_ORIGINS: https://${DOMAIN:?set DOMAIN (e.g. masroof.duckdns.org)}   # the web app is served from the same origin
       MASROOF_TRUSTED_PROXIES: ${CADDY_IP:-172.28.0.10}/32   # exactly Caddy's pinned address (see docker-compose.yml)
+      # Heap 224M + metaspace <=96M + code cache 32M + thread stacks + direct buffers stays inside the 384M cap.
+      # SerialGC (no GC threads), C1 only (fast start, small code cache, enough for a two-person app), -Xshare uses the JDK CDS archive.
+      JAVA_TOOL_OPTIONS: >-
+        -Xms96m -Xmx224m -Xss512k
+        -XX:+UseSerialGC -XX:TieredStopAtLevel=1
+        -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=32m
+        -XX:CICompilerCount=1 -XX:-UsePerfData -Xshare:auto
+        -XX:+ExitOnOutOfMemoryError
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"      # Postgres max_connections=20
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "1"
+      SERVER_TOMCAT_THREADS_MAX: "16"
+      SERVER_TOMCAT_THREADS_MIN_SPARE: "2"
+    healthcheck:                # the shared vCPUs start Spring Boot slowly; do not mark it unhealthy while it boots
+      start_period: 240s
     deploy:
       resources:
-        limits: { cpus: "2", memory: 6G }
+        limits: { cpus: "1.5", memory: 384M }
   web:
     image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG}
     pull_policy: always
     restart: always
     deploy:
       resources:
-        limits: { cpus: "0.25", memory: 256M }
+        limits: { cpus: "0.25", memory: 48M }
   caddy:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN (e.g. masroof.duckdns.org)}
+      GOMEMLIMIT: 48MiB
     ports: !override
       - "80:80"
       - "443:443"
@@ -44,4 +96,4 @@ services:
     restart: always
     deploy:
       resources:
-        limits: { cpus: "0.5", memory: 256M }
+        limits: { cpus: "0.5", memory: 64M }

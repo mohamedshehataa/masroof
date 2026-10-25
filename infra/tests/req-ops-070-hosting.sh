@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # REQ: REQ-OPS-070
-# Oracle Always Free hosting (SDLC, owner decision 2026-10-25): production overlay validates and publishes only
+# Google Cloud e2-micro hosting (SDLC, owner decision 2026-10-26): production overlay validates and publishes only
 # 80/443, deploy.sh validates its inputs, rolls back when the smoke test fails (stubbed ssh, no network), the
-# Caddy prod config carries the security headers, cloud-init opens only 22/80/443 and holds no secrets.
+# Caddy prod config carries the security headers, the stack fits 1 GB RAM, bootstrap.sh opens only 22/80/443, adds swap and holds no secrets.
 # Needs docker (compose config only; nothing is started). Run via `make e2e`.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
@@ -67,7 +67,7 @@ req_ops_070_deploy_rolls_back_when_smoke_fails() {
   [ "$rc" -eq 1 ] || fail "REQ-OPS-070_rollback_exit: failed smoke exited $rc, want 1"
   grep -q 'bash -s -- restore' "$work/ssh.log" || fail "REQ-OPS-070_rollback_called: no restore after a failed smoke"
   if grep -q 'bash -s -- commit' "$work/ssh.log"; then fail "REQ-OPS-070_no_commit_on_failure: unhealthy release was committed"; fi
-  grep -q 'deploy@1.2.3.4' "$work/ssh.log" || fail "REQ-OPS-070_deploy_user: ssh did not use the deploy user"
+  grep -q 'masroof-deploy@1.2.3.4' "$work/ssh.log" || fail "REQ-OPS-070_deploy_user: ssh did not use the deploy user"
 }
 
 req_ops_070_deploy_rolls_back_when_up_fails() {
@@ -129,7 +129,7 @@ req_ops_070_remote_state_only_changes_after_commit() {
   mkdir -p "$bin" "$h/masroof/infra"
   : > "$h/masroof/infra/.env"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/docker"; chmod +x "$bin/docker"
-  rd() { (HOME="$h" PATH="$bin:$PATH" bash infra/oracle/remote-deploy.sh "$@" >/dev/null 2>&1); }
+  rd() { (HOME="$h" PATH="$bin:$PATH" bash infra/host/remote-deploy.sh "$@" >/dev/null 2>&1); }
   rd apply 1.0 1.0 ghcr.io/o; [ ! -f "$st/current.env" ] || fail "REQ-OPS-070_state_apply: apply wrote current.env"
   if rd restore; then fail "REQ-OPS-070_state_restore_first: restore with nothing healthy must fail"; fi
   rd apply 1.0 1.0 ghcr.io/o; rd commit
@@ -144,13 +144,48 @@ req_ops_070_remote_state_only_changes_after_commit() {
   grep -q 'BACKEND_IMAGE_TAG=2.0' "$st/current.env" || fail "REQ-OPS-070_state_failed_release: a failed candidate changed current.env"
 }
 
-req_ops_070_cloud_init_firewall_and_no_secrets() {
-  local f=infra/oracle/cloud-init.yaml p
-  head -n 1 "$f" | grep -q '^#cloud-config' || fail "REQ-OPS-070_cloud_init_header: first line must be #cloud-config"
-  for p in 22/tcp 80/tcp 443/tcp; do grep -q "ufw, allow, $p" "$f" || fail "REQ-OPS-070_ufw: cloud-init does not allow $p"; done
-  if grep -Eqi 'token=|password:|secret|BEGIN [A-Z ]*PRIVATE|[0-9a-f]{40}' "$f" || grep -Eqi 'BEGIN [A-Z ]*PRIVATE|[0-9a-f]{40}' infra/oracle/bootstrap.sh; then
-    fail "REQ-OPS-070_no_secrets: a secret-looking literal is present in the cloud-init or bootstrap script"
+# GCP has no cloud-init stage here: infra/host/bootstrap.sh is the single provisioning source (firewall, swap, no secrets).
+req_ops_070_bootstrap_firewall_swap_and_no_secrets() {
+  local f=infra/host/bootstrap.sh p
+  bash -n "$f" || fail "REQ-OPS-070_bootstrap_syntax: bash -n failed"
+  for p in 22/tcp 80/tcp 443/tcp; do grep -q "ufw allow $p" "$f" || fail "REQ-OPS-070_ufw: bootstrap does not allow $p"; done
+  [ "$(grep -c '^ufw allow' "$f")" -eq 3 ] || fail "REQ-OPS-070_ufw_only_three: bootstrap allows ports beyond 22/80/443"
+  if ! { grep -q 'vm.swappiness = 10' "$f" && grep -q '/swapfile none swap sw 0 0' "$f"; }; then
+    fail "REQ-OPS-070_swap: bootstrap does not create a persistent swapfile with swappiness 10"
   fi
+  grep -q 'DEPLOY_USER:-masroof-deploy' "$f" || fail "REQ-OPS-070_deploy_user: bootstrap default user is not masroof-deploy"
+  if grep -q 'iptables' "$f"; then fail "REQ-OPS-070_no_oracle_iptables: the Oracle iptables workaround is still present"; fi
+  if grep -q 'systemctl enable.*keepalive' "$f"; then fail "REQ-OPS-070_no_keepalive: the Oracle keep-alive timer is still installed"; fi
+  [ ! -e infra/oracle ] || fail "REQ-OPS-070_one_source: infra/oracle still exists next to infra/host"
+  if grep -Eqi 'token=[A-Za-z0-9]{8}|BEGIN [A-Z ]*PRIVATE|[0-9a-f]{40}' "$f"; then
+    fail "REQ-OPS-070_no_secrets: a secret-looking literal is present in the bootstrap script"
+  fi
+  if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck -x "$f" infra/host/remote-deploy.sh infra/scripts/deploy.sh infra/scripts/backup.sh infra/scripts/validate.sh >/dev/null 2>&1 \
+      || fail "REQ-OPS-070_shellcheck: shellcheck reports issues in the host/deploy scripts"
+  fi
+}
+
+# 1 GB RAM: every service has a cap, the caps sum below 900 MB, the JVM and Postgres are tuned for it.
+req_ops_070_stack_fits_one_gb() {
+  local json total svc mem
+  json=$(POSTGRES_PASSWORD=x DOMAIN=t.duckdns.org BACKEND_IMAGE_TAG=t1 WEB_IMAGE_TAG=t1 \
+    docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml config --format json 2>&1) \
+    || { fail "REQ-OPS-070_mem_config: compose config failed: $json"; return; }
+  for svc in postgres backend web caddy minio; do
+    mem=$(printf '%s' "$json" | jq -r --arg s "$svc" '.services[$s].deploy.resources.limits.memory // empty')
+    [ -n "$mem" ] || fail "REQ-OPS-070_mem_limit_$svc: no memory limit on $svc"
+  done
+  total=$(printf '%s' "$json" | jq '[.services[].deploy.resources.limits.memory | tonumber] | add')
+  { [ "${total:-0}" -gt 0 ] && [ "${total:-0}" -le 900000000 ]; } || fail "REQ-OPS-070_mem_sum: limits sum to '${total:-?}' bytes, want 1..900000000"
+  printf '%s' "$json" | jq -e '.services.backend.environment.JAVA_TOOL_OPTIONS | (test("-Xmx[0-9]+m") and test("UseSerialGC"))' >/dev/null \
+    || fail "REQ-OPS-070_jvm_flags: backend JAVA_TOOL_OPTIONS lacks an explicit -Xmx and SerialGC"
+  printf '%s' "$json" | jq -e '.services.backend.environment.SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE | (tonumber <= 10)' >/dev/null \
+    || fail "REQ-OPS-070_hikari: Hikari pool is not capped at 10 or fewer"
+  printf '%s' "$json" | jq -e '.services.postgres.command | (index("max_connections=20") != null and index("shared_buffers=48MB") != null)' >/dev/null \
+    || fail "REQ-OPS-070_pg_tuning: Postgres is not tuned for small memory (max_connections=20, shared_buffers=48MB)"
+  printf '%s' "$json" | jq -e '.services.backend.healthcheck.start_period' >/dev/null \
+    || fail "REQ-OPS-070_start_period: backend healthcheck start_period is not set for the slow shared vCPU"
 }
 
 req_ops_070_build_images_push_needs_registry() {
@@ -169,6 +204,7 @@ req_ops_070_deploy_commits_when_healthy
 req_ops_070_deploy_rejects_injection_and_option_hosts
 req_ops_070_backup_propagates_failure
 req_ops_070_remote_state_only_changes_after_commit
-req_ops_070_cloud_init_firewall_and_no_secrets
+req_ops_070_bootstrap_firewall_swap_and_no_secrets
+req_ops_070_stack_fits_one_gb
 req_ops_070_build_images_push_needs_registry
 [ "$fails" -eq 0 ] && echo "ok REQ-OPS-070 hosting" || exit 1

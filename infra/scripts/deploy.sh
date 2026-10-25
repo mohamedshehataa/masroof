@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # deploy.sh <staging|prod> <version>   (via `make deploy-prod HOST=<ip> VERSION=<image tag> [DOMAIN=<name>]`)
 #
-# Single-VM deploy over ssh (Oracle Always Free, docs/HOSTING.md):
+# Single-VM deploy over ssh (Google Cloud e2-micro, docs/HOSTING.md):
 #   1. ship the compose files to ~/masroof/infra on the server (no secrets: the server's own .env holds them)
-#   2. `apply`: pull <registry>/masroof-{backend,web}:<version> and `compose up -d` (infra/oracle/remote-deploy.sh)
+#   2. `apply`: pull <registry>/masroof-{backend,web}:<version> and `compose up -d` (infra/host/remote-deploy.sh)
 #   3. smoke the public URL (`make smoke URL=https://<domain>`)
 #   4. a failing apply (pull/up, e.g. unhealthy backend) OR a failing smoke -> `restore` the last healthy release,
 #      smoke again, exit 1. Only a healthy candidate is `commit`ted to current.env/previous.env.
 #
-# Env: HOST (ip or [user@]host; user defaults to deploy; falls back to PROD_HOST), DOMAIN (falls back to PROD_DOMAIN),
+# Env: HOST (ip or [user@]host; user defaults to masroof-deploy; falls back to PROD_HOST), DOMAIN (falls back to PROD_DOMAIN),
 #      IMAGE_REGISTRY (default ghcr.io/mohamedshehataa), SMOKE_TIMEOUT (default 180: first start issues the certificate),
 #      DEPLOY_DRY_RUN=1 (validate and print the plan, touch nothing), SSH_OPTS (extra ssh options),
 #      SSH_STRICT_HOSTKEY=yes (refuse unknown host keys; default accept-new), MASROOF_SMOKE_SCRIPT (test hook).
@@ -34,7 +34,7 @@ validate_version "$version"
 validate_registry "$registry"
 validate_domain "$domain"
 validate_host "$host"
-case "$host" in *@*) ;; *) host="deploy@$host" ;; esac
+case "$host" in *@*) ;; *) host="masroof-deploy@$host" ;; esac
 
 url="https://$domain"
 echo "deploy: $env_name -> $domain (images $registry/masroof-{backend,web}:$version)"
@@ -50,7 +50,7 @@ remote() {
   local a="" w
   for w in "$@"; do a="$a $(printf '%q' "$w")"; done
   # shellcheck disable=SC2029  # the command string is built client-side on purpose; every word is %q-quoted
-  ssh "${ssh_opts[@]}" -- "$host" "bash -s --$a" < infra/oracle/remote-deploy.sh
+  ssh "${ssh_opts[@]}" -- "$host" "bash -s --$a" < infra/host/remote-deploy.sh
 }
 smoke() { SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-180}" bash "$smoke_script" "$url"; }
 
