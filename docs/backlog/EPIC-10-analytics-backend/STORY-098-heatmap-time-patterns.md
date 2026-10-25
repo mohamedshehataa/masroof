@@ -63,3 +63,6 @@ STORY-025
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given expenses at different Cairo hours, When GET /api/analytics/heatmap is called, Then it returns spend per Cairo day and a Saturday-first 7x24 weekday-hour matrix, correct across DST.

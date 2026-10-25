@@ -60,3 +60,6 @@ STORY-025
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given several months of expenses, When GET /api/analytics/trend?months=N is called, Then it returns one point per household month, oldest first, with per-category totals, income and savings rate.

@@ -60,3 +60,6 @@ STORY-034, STORY-093, STORY-094
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given cached or fetched analytics, When the Insights tab opens, Then it shows the overview card and the category donut with ranked list, with loading, empty, error and offline states, in LTR and RTL.
