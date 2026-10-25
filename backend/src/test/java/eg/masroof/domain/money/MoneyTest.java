@@ -67,16 +67,12 @@ class MoneyTest {
   }
 
   @Test
-  void signPredicates() {
-    assertThat(Money.of(0, "EGP").isZero()).isTrue();
-    assertThat(Money.of(1, "EGP").isZero()).isFalse();
-    assertThat(Money.of(-1, "EGP").isZero()).isFalse();
-    assertThat(Money.of(1, "EGP").isPositive()).isTrue();
-    assertThat(Money.of(0, "EGP").isPositive()).isFalse();
-    assertThat(Money.of(-1, "EGP").isPositive()).isFalse();
-    assertThat(Money.of(-1, "EGP").isNegative()).isTrue();
-    assertThat(Money.of(0, "EGP").isNegative()).isFalse();
-    assertThat(Money.of(1, "EGP").isNegative()).isFalse();
+  void signum() {
+    assertThat(Money.of(0, "EGP").signum()).isZero();
+    assertThat(Money.of(1, "EGP").signum()).isEqualTo(1);
+    assertThat(Money.of(Long.MAX_VALUE, "EGP").signum()).isEqualTo(1);
+    assertThat(Money.of(-1, "EGP").signum()).isEqualTo(-1);
+    assertThat(Money.of(Long.MIN_VALUE, "EGP").signum()).isEqualTo(-1);
   }
 
   @Test

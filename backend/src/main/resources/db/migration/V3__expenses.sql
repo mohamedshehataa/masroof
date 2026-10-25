@@ -32,3 +32,13 @@ CREATE INDEX expense_category_idx ON expense (category_id);
 
 CREATE TRIGGER expense_set_updated_at BEFORE UPDATE ON expense
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- POST /api/expenses Idempotency-Key (REQ-EXP-020): same key + same body within 24 h returns the original row.
+CREATE TABLE idempotency_key (
+  household_id  uuid        NOT NULL REFERENCES household (id),
+  key           text        NOT NULL CHECK (char_length(key) BETWEEN 1 AND 128),
+  fingerprint   char(64)    NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+  expense_id    uuid        NOT NULL REFERENCES expense (id),
+  created_at    timestamptz NOT NULL,
+  PRIMARY KEY (household_id, key)
+);

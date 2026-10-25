@@ -1,6 +1,8 @@
 package eg.masroof.adapters.in.rest;
 
 import eg.masroof.adapters.in.rest.ApiProblemException.FieldProblem;
+import eg.masroof.application.expense.ExpenseException;
+import eg.masroof.application.household.HouseholdNotConfiguredException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
@@ -14,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -35,6 +38,35 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
       problem.setProperty("errors", e.errors());
     }
     return ResponseEntity.status(e.status()).body(problem);
+  }
+
+  @ExceptionHandler(ExpenseException.class)
+  ResponseEntity<Object> handleExpense(ExpenseException e, HttpServletRequest request) {
+    HttpStatus status =
+        switch (e.kind()) {
+          case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+          case NOT_FOUND -> HttpStatus.NOT_FOUND;
+          case CONFLICT -> HttpStatus.CONFLICT;
+          case UNPROCESSABLE -> HttpStatus.UNPROCESSABLE_CONTENT;
+        };
+    ProblemDetail problem =
+        problem(status, String.valueOf(e.getMessage()), request.getRequestURI());
+    problem.setTitle(e.title());
+    if (!e.issues().isEmpty()) {
+      problem.setProperty(
+          "errors",
+          e.issues().stream().map(i -> new FieldProblem(i.field(), i.message())).toList());
+    }
+    return ResponseEntity.status(status).body(problem);
+  }
+
+  @ExceptionHandler(HouseholdNotConfiguredException.class)
+  ResponseEntity<Object> handleNoHousehold(
+      HouseholdNotConfiguredException e, HttpServletRequest request) {
+    return handleApi(
+        new ApiProblemException(
+            HttpStatus.SERVICE_UNAVAILABLE, "No household is set up yet; seed the demo data"),
+        request);
   }
 
   @ExceptionHandler(ConstraintViolationException.class)
@@ -65,6 +97,29 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
     LOG.error("Unhandled error on {}", request.getRequestURI(), e);
     return handleApi(
         new ApiProblemException(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error"), request);
+  }
+
+  /**
+   * A well-formed body with an invalid currency code is semantically wrong (422), not malformed.
+   */
+  @Override
+  protected ResponseEntity<Object> handleHttpMessageNotReadable(
+      HttpMessageNotReadableException e,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t instanceof IllegalArgumentException
+          && String.valueOf(t.getMessage()).startsWith("currency must be")) {
+        ProblemDetail problem =
+            problem(HttpStatus.UNPROCESSABLE_CONTENT, "Validation failed", null);
+        problem.setProperty(
+            "errors", List.of(new FieldProblem("amount.currency", "is not an ISO-4217 code")));
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(problem);
+      }
+    }
+    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Request body is not valid JSON", null);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
   }
 
   @Override

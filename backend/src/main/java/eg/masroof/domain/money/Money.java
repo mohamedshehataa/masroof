@@ -46,16 +46,12 @@ public record Money(long amountMinor, String currency) {
     return new Money(Math.negateExact(amountMinor), currency);
   }
 
-  public boolean isZero() {
-    return amountMinor == 0;
-  }
-
-  public boolean isPositive() {
-    return amountMinor > 0;
-  }
-
-  public boolean isNegative() {
-    return amountMinor < 0;
+  /**
+   * Sign of the amount: -1, 0 or 1. Deliberately not an {@code isXxx()} predicate: bean-style names
+   * would leak into JSON as extra properties and break the contract's Money schema.
+   */
+  public int signum() {
+    return Long.signum(amountMinor);
   }
 
   /**
