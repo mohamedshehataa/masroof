@@ -71,3 +71,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 10:40 · P1 · STORY-007 · integrate · GREEN · loop 3/3 verify PASS + review APPROVE (CI run 40144396415 all green incl. semgrep + osv); DONE.
 2026-10-25 00:14 · P1 · SDLC · spec · RED · stop-gate: make check-fast MODULE="sdlc web" failed 3 times in a row (exit 2). Agent stopped with a red gate. Binary file /c/Personal/Masroof/.claude/state/last-check.log matches 
 2026-10-25 11:40 · P1 · SDLC · process · GREEN · check-fast/build-web reinstall web deps when package-lock.json is newer than the last install (stale node_modules after STORY-007 made the stop-gate red in the main checkout); stop-gate escalation resolved.
+2026-10-25 12:00 · P1 · SDLC · process · INFO · owner asked for speed and /usr/bin/bash always-on hosting: speed mode (feature builders, one verifier), Oracle Always Free target, rules-only parsing default.
