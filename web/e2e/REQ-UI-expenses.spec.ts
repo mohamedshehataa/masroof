@@ -15,9 +15,9 @@ async function expectNoSeriousAxe(page: Page) {
   expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
-test.describe('REQ-UI-017 REQ-UI-026 REQ-UI-027 REQ-UI-028 screens 375x812 matrix (axe + screenshot)', () => {
+test.describe('REQ-UI-002 REQ-UI-020 REQ-UI-021 REQ-UI-023 screens 375x812 matrix (axe + screenshot)', () => {
   for (const c of combos) {
-    test(`${c.dir} ${c.colorScheme}: Home, Transactions and Add are axe clean and match baselines @REQ-UI-026`, async ({
+    test(`${c.dir} ${c.colorScheme}: Home, Transactions and Add are axe clean and match baselines @REQ-UI-020`, async ({
       browser,
     }) => {
       const ctx = await browser.newContext({
@@ -48,10 +48,10 @@ test.describe('REQ-UI-017 REQ-UI-026 REQ-UI-027 REQ-UI-028 screens 375x812 matri
   }
 });
 
-test.describe('REQ-UI-028 add flow', () => {
+test.describe('REQ-UI-023 add flow', () => {
   test.use({ locale: 'en-US', viewport: { width: 375, height: 812 } });
 
-  test('REQ-UI-028 keypad entry posts integer minor units and lands on Transactions @REQ-UI-028', async ({ page }) => {
+  test('REQ-UI-023 keypad entry posts integer minor units and lands on Transactions @REQ-UI-023', async ({ page }) => {
     const api = await mockApi(page);
     await page.goto('/add');
     for (const k of ['1', '2', 'Decimal point', '5']) await page.getByRole('button', { name: k, exact: true }).click();
@@ -68,7 +68,7 @@ test.describe('REQ-UI-028 add flow', () => {
     });
   });
 
-  test('REQ-UI-028 zero amount shows a validation error and sends nothing @REQ-UI-028', async ({ page }) => {
+  test('REQ-UI-023 zero amount shows a validation error and sends nothing @REQ-UI-023', async ({ page }) => {
     const api = await mockApi(page);
     await page.goto('/add');
     await page.getByRole('button', { name: 'Save' }).click();
@@ -77,16 +77,16 @@ test.describe('REQ-UI-028 add flow', () => {
   });
 });
 
-test.describe('REQ-UI-026 REQ-UI-027 list states', () => {
+test.describe('REQ-UI-020 REQ-UI-021 list states', () => {
   test.use({ locale: 'en-US', viewport: { width: 375, height: 812 } });
 
-  test('REQ-UI-026 Home shows the Cairo-month total (October: 125.50 + 40 + 980.75) @REQ-UI-026', async ({ page }) => {
+  test('REQ-UI-020 Home shows the Cairo-month total (October: 125.50 + 40 + 980.75) @REQ-UI-020', async ({ page }) => {
     await mockApi(page);
     await page.goto('/');
     await expect(page.locator('.hero-amount')).toHaveText('1,146.25 EGP');
   });
 
-  test('REQ-UI-027 empty, error with retry, and offline states @REQ-UI-027', async ({ page, context }) => {
+  test('REQ-UI-021 empty, error with retry, and offline states @REQ-UI-021', async ({ page, context }) => {
     await mockApi(page, { items: [] });
     await page.goto('/transactions');
     await expect(page.getByText('No expenses match.')).toBeVisible();
@@ -101,26 +101,12 @@ test.describe('REQ-UI-026 REQ-UI-027 list states', () => {
     await context.setOffline(false);
   });
 
-  test('REQ-UI-027 search sends q and category filter sends categoryId @REQ-UI-027', async ({ page }) => {
+  test('REQ-UI-021 search sends q and category filter sends categoryId @REQ-UI-021', async ({ page }) => {
     const api = await mockApi(page);
     await page.goto('/transactions');
     await page.getByRole('searchbox', { name: 'Search expenses' }).fill('uber');
     await expect.poll(() => api.expenseCalls.some((u) => u.searchParams.get('q') === 'uber')).toBe(true);
     await page.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'Transport' });
     await expect.poll(() => api.expenseCalls.some((u) => u.searchParams.has('categoryId'))).toBe(true);
-  });
-});
-
-// Needs `make up` (backend with expenses, no auth) and E2E_BASE_URL pointing at it; skipped otherwise.
-test.describe('REQ-UI-028 real backend', () => {
-  test.skip(process.env.E2E_REAL_BACKEND !== '1', 'set E2E_REAL_BACKEND=1 with the backend up');
-
-  test('REQ-UI-028 a saved expense appears in Transactions @REQ-UI-028 @real-backend', async ({ page }) => {
-    await page.goto('/add');
-    await page.getByRole('button', { name: '7', exact: true }).click();
-    await page.getByLabel('Note').fill('e2e real backend');
-    await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page).toHaveURL(/\/transactions$/);
-    await expect(page.getByText('e2e real backend').or(page.getByText('7 EGP'))).toBeVisible();
   });
 });

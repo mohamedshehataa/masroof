@@ -90,8 +90,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('REQ-UI-026 Home', () => {
-  it('REQ-UI-026 shows the month total (sum of minor units) and recent expenses', async () => {
+describe('REQ-UI-020 Home', () => {
+  it('REQ-UI-020 shows the month total (sum of minor units) and recent expenses', async () => {
     const now = new Date().toISOString();
     mockApi({
       expenses: (url) =>
@@ -111,13 +111,13 @@ describe('REQ-UI-026 Home', () => {
     expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
   });
 
-  it('REQ-UI-026 shows the empty state', async () => {
+  it('REQ-UI-020 shows the empty state', async () => {
     mockApi();
     go('/');
     expect(await screen.findByText(/No expenses yet/)).toBeInTheDocument();
   });
 
-  it('REQ-UI-026 shows error with retry, and Retry refetches', async () => {
+  it('REQ-UI-020 shows error with retry, and Retry refetches', async () => {
     let fail = true;
     mockApi({
       expenses: () =>
@@ -136,7 +136,7 @@ describe('REQ-UI-026 Home', () => {
     });
   });
 
-  it('REQ-UI-026 renders Arabic with RTL and Arabic-Indic amounts', async () => {
+  it('REQ-UI-020 renders Arabic with RTL and Arabic-Indic amounts', async () => {
     const now = new Date().toISOString();
     mockApi({ expenses: () => ({ status: 200, body: { items: [expense(uid('1'), 125000, now)], nextCursor: null } }) });
     go('/', 'ar-EG');
@@ -146,8 +146,8 @@ describe('REQ-UI-026 Home', () => {
   });
 });
 
-describe('REQ-UI-027 Transactions', () => {
-  it('REQ-UI-027 groups by Cairo day, searches and loads more by cursor', async () => {
+describe('REQ-UI-021 Transactions', () => {
+  it('REQ-UI-021 groups by Cairo day, searches and loads more by cursor', async () => {
     const today = new Date().toISOString();
     const old = '2026-01-10T10:00:00Z';
     const seen: URL[] = [];
@@ -183,7 +183,7 @@ describe('REQ-UI-027 Transactions', () => {
     });
   });
 
-  it('REQ-UI-027 shows the empty state and the offline copy on failure while disconnected', async () => {
+  it('REQ-UI-021 shows the empty state and the offline copy on failure while disconnected', async () => {
     mockApi({ expenses: () => ({ status: 500, body: { type: 'about:blank', title: 'x', status: 500 } }) });
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     go('/transactions');
@@ -191,15 +191,15 @@ describe('REQ-UI-027 Transactions', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/offline/i);
   });
 
-  it('REQ-UI-027 shows the empty state', async () => {
+  it('REQ-UI-021 shows the empty state', async () => {
     mockApi();
     go('/transactions');
     expect(await screen.findByText('No expenses match.')).toBeInTheDocument();
   });
 });
 
-describe('REQ-UI-028 Add', () => {
-  it('REQ-UI-028 posts integer minor units, category, Cairo-today date and note, then goes to Transactions', async () => {
+describe('REQ-UI-023 Add', () => {
+  it('REQ-UI-023 posts integer minor units, category, Cairo-today date and note, then goes to Transactions', async () => {
     const { created } = mockApi();
     const user = userEvent.setup();
     go('/add');
@@ -226,7 +226,7 @@ describe('REQ-UI-028 Add', () => {
     });
   });
 
-  it('REQ-UI-028 rejects a zero amount without calling the API', async () => {
+  it('REQ-UI-023 rejects a zero amount without calling the API', async () => {
     const { created } = mockApi();
     const user = userEvent.setup();
     go('/add');
@@ -235,7 +235,7 @@ describe('REQ-UI-028 Add', () => {
     expect(created).toHaveLength(0);
   });
 
-  it('REQ-UI-028 shows a validation error when the server answers 422', async () => {
+  it('REQ-UI-023 shows a validation error when the server answers 422', async () => {
     const m = mockApi();
     const base = m.fetchMock.getMockImplementation();
     m.fetchMock.mockImplementation((input, init) =>

@@ -4,7 +4,7 @@ import { EMPTY_KEYPAD, formatMoney, keypadDisplay, keypadToMinor, pressKey, sumM
 
 const type = (keys: KeypadKey[]) => keys.reduce(pressKey, EMPTY_KEYPAD);
 
-describe('REQ-UI-017 money formatting', () => {
+describe('REQ-UI-002 money formatting', () => {
   it('formats Western digits with grouping, dropping .00 on whole amounts', () => {
     expect(formatMoney({ amountMinor: 125000, currency: 'EGP' }, { lang: 'en', digits: 'western' })).toBe('1,250 EGP');
     expect(formatMoney({ amountMinor: 125050, currency: 'EGP' }, { lang: 'en', digits: 'western' })).toBe(
@@ -30,7 +30,7 @@ describe('REQ-UI-017 money formatting', () => {
   });
 });
 
-describe('REQ-UI-028 amount keypad produces integer minor units', () => {
+describe('REQ-UI-023 amount keypad produces integer minor units', () => {
   it('12.5 is 1250 and 12.05 is 1205', () => {
     expect(keypadToMinor(type(['1', '2', '.', '5']))).toBe(1250);
     expect(keypadToMinor(type(['1', '2', '.', '0', '5']))).toBe(1205);
@@ -50,7 +50,7 @@ describe('REQ-UI-028 amount keypad produces integer minor units', () => {
   });
 });
 
-describe('REQ-UI-026 Cairo dates', () => {
+describe('REQ-UI-020 Cairo dates', () => {
   it('assigns instants to the Cairo day across the UTC midnight boundary', () => {
     expect(cairoDayKey('2026-03-10T22:30:00Z')).toBe('2026-03-11');
     expect(cairoDayKey('2026-01-10T21:30:00Z')).toBe('2026-01-10');

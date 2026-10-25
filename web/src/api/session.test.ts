@@ -9,7 +9,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('REQ-UI-017 in-memory session', () => {
+describe('REQ-UI-002 in-memory session', () => {
   it('holds the token in memory only and clears it', () => {
     setSession(pair('1'));
     expect(hasSession()).toBe(true);
