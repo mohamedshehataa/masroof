@@ -94,6 +94,8 @@ class V2CoreSchemaMigrationTest {
             "V2__core_schema.sql",
             "V3__expenses.sql",
             "V4__household_currency_check.sql",
+            "V5__refresh_token_family.sql",
+            "V6__audit_log_ip_hash.sql",
             "R__seed_reference.sql");
   }
 

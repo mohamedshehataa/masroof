@@ -19,7 +19,7 @@ A member signs in with email + password and receives a short-lived access JWT an
 
 ## Requirements and acceptance criteria
 ### REQ-SEC-001 — Login issues a token pair
-**Given** app user `mohamed@example.com` with a BCrypt password hash **When** `POST /auth/login` with `{email, password}` is valid **Then** `200` with `TokenPair {accessToken (JWT, exp ≤ 15 min, claims sub=memberId, hh=householdId, role), refreshToken (opaque ≥ 256 bits), expiresIn}` and the refresh token's SHA-256 is stored in `refresh_token` with `expires_at = now + 30 days`; the password is never logged.
+**Given** app user `mohamed@example.com` with a BCrypt password hash **When** `POST /auth/login` with `{email, password}` is valid **Then** `200` with `TokenPair {accessToken (JWT, exp ≤ 15 min, claims sub=userId (app_user.id), hid=householdId, role, iat, exp (15 min), jti), refreshToken (opaque ≥ 256 bits), expiresIn}` and the refresh token's SHA-256 is stored in `refresh_token` with `expires_at = now + 30 days`; the password is never logged.
 Unhappy path: **Given** a wrong password or unknown email **Then** `401 application/problem+json` with the same `title: "Invalid credentials"` for both (no user enumeration), response time within ±20% of the success path (constant-time compare).
 Unhappy path: **Given** a body missing `password` or with an email of 300 chars **Then** `422` Problem with `errors[]` naming the field.
 
@@ -46,7 +46,7 @@ N/A.
 Uses `app_user`, `refresh_token` from V2 (STORY-004); if `family_id`/`rotated_at` are missing, new migration `V5__refresh_token_family.sql` (expand).
 
 ## Security / privacy / LLM-safety impact
-Trust boundary: public internet → auth endpoints. BCrypt cost ≥ 10; JWT signed HS256/RS256 with key from `.env` (`JWT_SECRET`); refresh tokens stored hashed; constant-time comparisons; rate limit per email and IP; triggers `security-reviewer` (`**/auth/**`).
+Trust boundary: public internet → auth endpoints. BCrypt cost 12; JWT signed HS256 with the key from `.env` (`MASROOF_JWT_SECRET`, >= 32 bytes, checked at prod start); refresh tokens stored hashed; constant-time comparisons; rate limit per email and IP; triggers `security-reviewer` (`**/auth/**`).
 
 ## Eval impact
 None.

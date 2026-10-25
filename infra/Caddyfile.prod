@@ -10,7 +10,7 @@
 		-Server
 	}
 
-	@backend path /health /api/*
+	@backend path /health /api/* /auth/*
 	handle @backend {
 		reverse_proxy backend:8080
 	}

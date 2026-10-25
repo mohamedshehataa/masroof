@@ -78,7 +78,7 @@ export const refreshToken = <ThrowOnError extends boolean = true>(options: Optio
 /**
  * Log out
  *
- * Revokes the presented refresh token (and optionally all sessions of the user).
+ * Revokes the presented refresh token's session (or all sessions of its user). Holding the refresh token is proof enough, so the bearer is optional and may be expired; unknown or already revoked tokens still give 204.
  */
 export const logout = <ThrowOnError extends boolean = true>(options?: Options<LogoutData, ThrowOnError>): RequestResult<LogoutResponses, LogoutErrors, ThrowOnError, 'data'> => (options?.client ?? client).post<LogoutResponses, LogoutErrors, ThrowOnError, 'data'>({
     responseValidator: async (data) => await v.parseAsync(vLogoutResponse, data),
