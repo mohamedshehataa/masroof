@@ -4,12 +4,12 @@ import eg.masroof.ingest.DefaultSenders
 import eg.masroof.ingest.senderKey
 import java.math.BigDecimal
 import java.security.MessageDigest
+import java.time.DateTimeException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.DateTimeException
 import java.util.Locale
 
 /**
@@ -21,6 +21,7 @@ import java.util.Locale
  * and (3) an amount with an unambiguous currency is found. Anything else is a [ParseOutcome.Review] (kept on the phone)
  * or a [ParseOutcome.Ignore] (OTP, promotion, declined payment, statement reminder).
  */
+@Suppress("LargeClass", "CyclomaticComplexMethod", "SpreadOperator", "MaxLineLength", "LoopWithTooManyJumpStatements")
 object MessageParser {
     private val cairo: ZoneId = ZoneId.of("Africa/Cairo")
     private val ci = setOf(RegexOption.IGNORE_CASE)
@@ -49,20 +50,83 @@ object MessageParser {
     private val balanceBefore = Regex("(?:balance|\\bbal\\b|avl|avail\\w*|limit|رصيد\\w*|الرصيد|المتاح|remaining)[^\\d]{0,18}$", ci)
     private val amountStopWords =
         setOf(
-            "at", "to", "from", "on", "in", "for", "using", "via", "with", "by", "was", "has", "is", "and", "of",
-            "لدي", "عند", "من", "الي", "في", "علي", "على", "عبر", "بتاريخ", "لصالح", "و", "ب", "بنجاح", "تم", "هو", "ل", "من",
+            "at",
+            "to",
+            "from",
+            "on",
+            "in",
+            "for",
+            "using",
+            "via",
+            "with",
+            "by",
+            "was",
+            "has",
+            "is",
+            "and",
+            "of",
+            "لدي",
+            "عند",
+            "من",
+            "الي",
+            "في",
+            "علي",
+            "على",
+            "عبر",
+            "بتاريخ",
+            "لصالح",
+            "و",
+            "ب",
+            "بنجاح",
+            "تم",
+            "هو",
+            "ل",
+            "من",
         )
     private val foreignWord = Regex("\\b(?:usd|eur|gbp|sar|aed|kwd|qar|jpy|cad|chf|cny|yen|riyal|dhs)\\b|\\$|€|دولار|يورو|ريال|درهم", ci)
     private val groupedDigits = Regex("^ \\d{3}(?!\\d)")
 
     private val currencyOf =
         mapOf(
-            "egp" to "EGP", "le" to "EGP", "l.e" to "EGP", "l.e." to "EGP", "e£" to "EGP", "جنيها" to "EGP", "جنيه" to "EGP",
-            "جنية" to "EGP", "ج.م" to "EGP", "ج.م." to "EGP", "جم" to "EGP",
-            "usd" to "USD", "$" to "USD", "دولار" to "USD", "eur" to "EUR", "€" to "EUR", "يورو" to "EUR", "gbp" to "GBP",
-            "£" to "GBP", "sar" to "SAR", "sr" to "SAR", "ريال" to "SAR", "riyal" to "SAR", "aed" to "AED", "dhs" to "AED",
-            "dh" to "AED", "درهم" to "AED", "kwd" to "KWD", "qar" to "QAR", "jpy" to "JPY", "yen" to "JPY", "try" to "TRY",
-            "tl" to "TRY", "cad" to "CAD", "chf" to "CHF", "cny" to "CNY", "omr" to "OMR", "bhd" to "BHD", "jod" to "JOD",
+            "egp" to "EGP",
+            "le" to "EGP",
+            "l.e" to "EGP",
+            "l.e." to "EGP",
+            "e£" to "EGP",
+            "جنيها" to "EGP",
+            "جنيه" to "EGP",
+            "جنية" to "EGP",
+            "ج.م" to "EGP",
+            "ج.م." to "EGP",
+            "جم" to "EGP",
+            "usd" to "USD",
+            "$" to "USD",
+            "دولار" to "USD",
+            "eur" to "EUR",
+            "€" to "EUR",
+            "يورو" to "EUR",
+            "gbp" to "GBP",
+            "£" to "GBP",
+            "sar" to "SAR",
+            "sr" to "SAR",
+            "ريال" to "SAR",
+            "riyal" to "SAR",
+            "aed" to "AED",
+            "dhs" to "AED",
+            "dh" to "AED",
+            "درهم" to "AED",
+            "kwd" to "KWD",
+            "qar" to "QAR",
+            "jpy" to "JPY",
+            "yen" to "JPY",
+            "try" to "TRY",
+            "tl" to "TRY",
+            "cad" to "CAD",
+            "chf" to "CHF",
+            "cny" to "CNY",
+            "omr" to "OMR",
+            "bhd" to "BHD",
+            "jod" to "JOD",
         )
 
     private class Amount(
@@ -84,7 +148,10 @@ object MessageParser {
         )
     private val reversal = Regex("\\b(?:reversal|reversed|voided|cancell?ed transaction)\\b|تم عكس|عكس عمليه|الغاء عمليه", ci)
     private val statement =
-        Regex("statement is ready|e-?statement|كشف حساب|payment due|\\bdue date\\b|\\breminder\\b|تاريخ الاستحقاق|تذكير|minimum payment", ci)
+        Regex(
+            "statement is ready|e-?statement|كشف حساب|payment due|\\bdue date\\b|\\breminder\\b|تاريخ الاستحقاق|تذكير|minimum payment",
+            ci,
+        )
     private val promoWords =
         Regex(
             "% off|\\boffers?\\b|cashback|\\bpoints\\b|rewards|subscribe|t&c|terms apply|congratulations|\\bpromo|coupon|discount|" +
@@ -93,7 +160,8 @@ object MessageParser {
         )
     private val outAnchor =
         Regex(
-            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
+            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent" +
+                "|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
                 "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه",
             ci,
         )
@@ -113,7 +181,10 @@ object MessageParser {
             ci,
         )
     private val transferWords =
-        Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|credited to (?!your)|تحويل|ارسال|ارسلت|حولت|instapay|انستاباي|\\bipa\\b|انستا باي", ci)
+        Regex(
+            "\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|credited to (?!your)|تحويل|ارسال|ارسلت|حولت|instapay|انستاباي|\\bipa\\b|انستا باي",
+            ci,
+        )
     private val paymentWords =
         Regex("payment|\\bpaid\\b|\\bpay\\b|purchase|spent|\\bbill\\b|merchant|\\bqr\\b|charged|دفع|سداد|شراء|فاتوره|تاجر|مشتريات", ci)
     private val ownAccount = Regex("from your (?:a/c|account|card|wallet)|من حسابك|من بطاقتك|من محفظتك", ci)
@@ -132,24 +203,136 @@ object MessageParser {
     private val dateIso = Regex("(?<![\\d/.:-])(\\d{4})-(\\d{1,2})-(\\d{1,2})(?![\\d])")
     private val dateShort = Regex("(?<![\\d/.:-])(\\d{1,2})/(\\d{1,2})(?![\\d/:]|\\.\\d)")
     private val timeAfter = Regex("^ ?(?:at |في |الساعه )?(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?![\\p{L}\\d])", ci)
-    private val dateNot = Regex("(?:until|till|valid|due|expiry|expires?|exp|start|starts|from|استحقاق|حتي|صلاحيه|ينتهي|ابتداء|يبدا|تبدا)[^\\d]{0,12}$", ci)
+    private val dateNot =
+        Regex("(?:until|till|valid|due|expiry|expires?|exp|start|starts|from|استحقاق|حتي|صلاحيه|ينتهي|ابتداء|يبدا|تبدا)[^\\d]{0,12}$", ci)
 
     // ---- merchant label -----------------------------------------------------------------------------------------
     private val stopWords =
         setOf(
-            "on", "at", "with", "using", "via", "from", "for", "card", "ending", "ends", "a/c", "account", "acct", "avl", "avail",
-            "available", "balance", "bal", "ref", "trx", "txn", "date", "dated", "is", "was", "has", "have", "are", "were", "will",
-            "successful", "successfully", "completed", "approved", "declined", "and", "your", "you", "by", "in", "time", "thank",
-            "thanks", "if", "until", "till", "valid", "confirm", "code", "pin", "otp", "expires", "remaining", "limit", "to", "the",
-            "has", "been", "transaction", "reference", "paid", "id", "no",
-            "بتاريخ", "بنجاح", "عبر", "من", "في", "الرصيد", "رصيدك", "رصيد", "المتاح", "بطاقه", "بطاقتك", "البطاقه", "حساب",
-            "حسابك", "رقم", "كود", "رمز", "هو", "تم", "الي", "الى", "و", "ثم", "مع", "قيمه", "بمبلغ", "مبلغ", "الساعه", "وتم", "باستخدام",
-            "المنتهيه", "ب",
+            "on",
+            "at",
+            "with",
+            "using",
+            "via",
+            "from",
+            "for",
+            "card",
+            "ending",
+            "ends",
+            "a/c",
+            "account",
+            "acct",
+            "avl",
+            "avail",
+            "available",
+            "balance",
+            "bal",
+            "ref",
+            "trx",
+            "txn",
+            "date",
+            "dated",
+            "is",
+            "was",
+            "has",
+            "have",
+            "are",
+            "were",
+            "will",
+            "successful",
+            "successfully",
+            "completed",
+            "approved",
+            "declined",
+            "and",
+            "your",
+            "you",
+            "by",
+            "in",
+            "time",
+            "thank",
+            "thanks",
+            "if",
+            "until",
+            "till",
+            "valid",
+            "confirm",
+            "code",
+            "pin",
+            "otp",
+            "expires",
+            "remaining",
+            "limit",
+            "to",
+            "the",
+            "has",
+            "been",
+            "transaction",
+            "reference",
+            "paid",
+            "id",
+            "no",
+            "بتاريخ",
+            "بنجاح",
+            "عبر",
+            "من",
+            "في",
+            "الرصيد",
+            "رصيدك",
+            "رصيد",
+            "المتاح",
+            "بطاقه",
+            "بطاقتك",
+            "البطاقه",
+            "حساب",
+            "حسابك",
+            "رقم",
+            "كود",
+            "رمز",
+            "هو",
+            "تم",
+            "الي",
+            "الى",
+            "و",
+            "ثم",
+            "مع",
+            "قيمه",
+            "بمبلغ",
+            "مبلغ",
+            "الساعه",
+            "وتم",
+            "باستخدام",
+            "المنتهيه",
+            "ب",
         )
     private val badFirst =
         setOf(
-            "your", "you", "account", "a/c", "acct", "card", "wallet", "the", "my", "iban", "an", "a", "this", "that", "it",
-            "حساب", "حسابك", "بطاقه", "بطاقتك", "البطاقه", "محفظه", "محفظتك", "رقم", "مبلغ", "الحساب", "حسابكم",
+            "your",
+            "you",
+            "account",
+            "a/c",
+            "acct",
+            "card",
+            "wallet",
+            "the",
+            "my",
+            "iban",
+            "an",
+            "a",
+            "this",
+            "that",
+            "it",
+            "حساب",
+            "حسابك",
+            "بطاقه",
+            "بطاقتك",
+            "البطاقه",
+            "محفظه",
+            "محفظتك",
+            "رقم",
+            "مبلغ",
+            "الحساب",
+            "حسابكم",
         )
     private val secretLabel =
         Regex(
@@ -157,16 +340,24 @@ object MessageParser {
                 "activation|authenti[a-z]*)\\b|كود|رمز|تحقق|سري|كلمه المرور|كلمه السر|لا تشارك",
             ci,
         )
-    private val enPrep = mapOf(
-        "out" to Regex("(?<![\\p{L}\\d])(?:at|to)[ ]+", ci),
-        "transfer" to Regex("(?<![\\p{L}\\d])to[ ]+", ci),
-        "in" to Regex("(?<![\\p{L}\\d])from[ ]+", ci),
-    )
-    private val arPrep = mapOf(
-        "out" to Regex("(?<![\\p{L}\\d])(?:لدي|عند|الي|لصالح|ل)[ ]+"),
-        "transfer" to Regex("(?<![\\p{L}\\d])(?:الي|لصالح|للمستفيد|ل)[ ]+"),
-        "in" to Regex("(?<![\\p{L}\\d])من[ ]+"),
-    )
+    private val enPrep =
+        mapOf(
+            "out" to Regex("(?<![\\p{L}\\d])(?:at|to)[ ]+", ci),
+            "transfer" to Regex("(?<![\\p{L}\\d])to[ ]+", ci),
+            "in" to Regex("(?<![\\p{L}\\d])from[ ]+", ci),
+        )
+    private val arPrep =
+        mapOf(
+            "out" to Regex("(?<![\\p{L}\\d])(?:لدي|عند|الي|لصالح|ل)[ ]+"),
+            "transfer" to Regex("(?<![\\p{L}\\d])(?:الي|لصالح|للمستفيد|ل)[ ]+"),
+            "in" to Regex("(?<![\\p{L}\\d])من[ ]+"),
+        )
+
+    /** The first plausible amount in minor units, to prefill the manual form from a review item (never uploaded). */
+    fun suggestAmountMinor(text: String): Long? {
+        val t = SecretDetector.fold(TextNormalizer.normalizeText(text))
+        return findAmounts(t).firstOrNull { !it.balance && !it.ambiguous }?.minor?.takeIf { it in 1..MAX_AMOUNT_MINOR }
+    }
 
     /** Parses one message. [received] is the SMS received time or the notification post time. */
     fun parse(msg: IncomingMessage): ParseOutcome {
@@ -223,7 +414,7 @@ object MessageParser {
                 kind = kind,
                 amountMinor = amount.minor,
                 currency = currency,
-                occurredAtMillis = occurredAt(norm, t, msg.receivedAtMillis),
+                occurredAtMillis = occurredAt(t, msg.receivedAtMillis),
                 instrumentLast4 = last4(t),
                 senderId = uploadSenderId(sender, institution),
                 institution = institution,
@@ -233,7 +424,11 @@ object MessageParser {
         return ParseOutcome.Record(record)
     }
 
-    private fun strongTransaction(t: String) = Regex("\\b(?:debited|purchase|paid|spent|withdrawn)\\b|تم خصم|تم شراء|تم دفع", ci).containsMatchIn(t)
+    private fun strongTransaction(t: String) =
+        Regex(
+            "\\b(?:debited|purchase|paid|spent|withdrawn)\\b|تم خصم|تم شراء|تم دفع",
+            ci,
+        ).containsMatchIn(t)
 
     /** The direction is whichever verb comes first: "transfer ... was received" is outgoing, "received ... sent by" incoming. */
     private fun firstDirection(t: String): Boolean? {
@@ -264,6 +459,7 @@ object MessageParser {
     private fun findAmounts(t: String): List<Amount> {
         val out = mutableListOf<Amount>()
         val taken = mutableSetOf<Int>()
+
         fun add(
             numRange: IntRange,
             span: IntRange,
@@ -317,7 +513,10 @@ object MessageParser {
     private fun toMinor(raw: String): Long? {
         val s =
             when {
-                Regex("\\d\\.\\d{3},\\d").containsMatchIn(raw) || Regex("^\\d+,\\d{1,2}$").matches(raw) -> raw.replace(".", "").replace(',', '.')
+                Regex(
+                    "\\d\\.\\d{3},\\d",
+                ).containsMatchIn(raw) ||
+                    Regex("^\\d+,\\d{1,2}$").matches(raw) -> raw.replace(".", "").replace(',', '.')
                 raw.contains(',') && !raw.contains('.') && Regex(",\\d{3}$").containsMatchIn(raw) -> raw.replace(",", "")
                 else -> raw.replace(",", "")
             }
@@ -333,6 +532,7 @@ object MessageParser {
     }
 
     // ---- leftover digits ----------------------------------------------------------------------------------------
+
     /** After removing everything the engine understands, a long digit run is a code or an account number: do not trust it. */
     private fun hasUnexplainedNumber(
         t: String,
@@ -362,7 +562,6 @@ object MessageParser {
     }
 
     private fun occurredAt(
-        norm: String,
         t: String,
         receivedMillis: Long,
     ): Long {
@@ -462,7 +661,11 @@ object MessageParser {
         kind: TxKind,
     ): String? =
         when {
-            institution == "InstaPay" || instapay.containsMatchIn(t) || instapay.containsMatchIn(sender.lowercase(Locale.ROOT)) -> "INSTAPAY"
+            institution == "InstaPay" ||
+                instapay.containsMatchIn(
+                    t,
+                ) ||
+                instapay.containsMatchIn(sender.lowercase(Locale.ROOT)) -> "INSTAPAY"
             institution in walletInstitutions -> "WALLET"
             Regex("card|بطاق", ci).containsMatchIn(t) -> "CARD"
             kind == TxKind.TRANSFER_OUT || kind == TxKind.TRANSFER_IN -> "BANK_TRANSFER"
@@ -513,7 +716,12 @@ object MessageParser {
             i = j
         }
         var label = tokens.joinToString(" ").trim(*PUNCT).replace(Regex("\\s+"), " ")
-        label = label.codePoints().filter { !Character.isDigit(it) }.toArray().let { String(it, 0, it.size) }
+        label =
+            label
+                .codePoints()
+                .filter { !Character.isDigit(it) }
+                .toArray()
+                .let { String(it, 0, it.size) }
         if (label.length > MAX_LABEL) label = label.take(MAX_LABEL).substringBeforeLast(' ', label.take(MAX_LABEL))
         if (label.count { it.isLetter() } < 2) return null
         if (secretLabel.containsMatchIn(SecretDetector.fold(label))) return null

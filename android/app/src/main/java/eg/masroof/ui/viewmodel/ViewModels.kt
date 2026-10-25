@@ -205,6 +205,12 @@ class AddExpenseViewModel
 
         fun onDate(text: String) = form.update { it.copy(dateText = text, dateInvalid = false) }
 
+        /** Prefill from a review item (REQ-SMS-014): amount and note only; the user still reviews and saves. */
+        fun prefill(
+            amountText: String,
+            notes: String,
+        ) = form.update { it.copy(amountText = amountText, notes = notes.take(MAX_NOTES)) }
+
         // The contract caps notes at 500 characters (ADR-0007); the form cannot exceed it.
         fun onNotes(text: String) = form.update { it.copy(notes = text.take(MAX_NOTES)) }
 

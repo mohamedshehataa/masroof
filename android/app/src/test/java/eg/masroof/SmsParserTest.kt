@@ -39,7 +39,12 @@ internal fun message(
     source: CaptureSource = CaptureSource.SMS,
 ) = IncomingMessage(source, sender, body, at)
 
-internal fun digitsRemoved(s: String) = s.filterNot { it.isDigit() }.replace("•", "").replace("*", "").trim()
+internal fun digitsRemoved(s: String) =
+    s
+        .filterNot { it.isDigit() }
+        .replace("•", "")
+        .replace("*", "")
+        .trim()
 
 /** Everything that could leave the phone for this outcome, as text. */
 internal fun wireText(outcome: ParseOutcome): String =
@@ -72,6 +77,7 @@ class SmsParserTest {
         }
     }
 
+    @Suppress("LoopWithTooManyJumpStatements")
     @Test
     fun `REQ-SMS-010 template fixtures parse to the expected kind, amount, currency, last4 and digit-free merchant`() {
         // "unknown-sender-generic" carries a long number next to the label: kept on the phone for review on purpose.
@@ -146,7 +152,12 @@ class SmsParserTest {
                     if (outcome is ParseOutcome.Record) {
                         val bad = expect.getValue("notKind").jsonArray.map { it.jsonPrimitive.content }
                         assertFalse("$id direction ${outcome.record.kind}", outcome.record.kind.name in bad)
-                        assertFalse("$id label ${outcome.record.merchant}", outcome.record.merchant.orEmpty().any { it.isDigit() })
+                        assertFalse(
+                            "$id label ${outcome.record.merchant}",
+                            outcome.record.merchant
+                                .orEmpty()
+                                .any { it.isDigit() },
+                        )
                     }
                     assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
                 }
@@ -178,7 +189,10 @@ class SmsParserTest {
 
     @Test
     fun `REQ-SMS-010 an OTP-looking purchase is kept masked for the user and a plain OTP is dropped`() {
-        val purchaseOtp = MessageParser.parse(message("CIB", "Your OTP for purchase of EGP 500.00 at AMAZON is 889900, do not share it with anyone"))
+        val purchaseOtp =
+            MessageParser.parse(
+                message("CIB", "Your OTP for purchase of EGP 500.00 at AMAZON is 889900, do not share it with anyone"),
+            )
         assertTrue(purchaseOtp is ParseOutcome.Review)
         assertFalse((purchaseOtp as ParseOutcome.Review).text.contains("889900"))
         assertTrue(MessageParser.parse(message("CIB", "Your OTP is 482915. Do not share it with anyone.")) is ParseOutcome.Ignore)
@@ -197,12 +211,20 @@ class SmsParserTest {
     @Test
     fun `REQ-SMS-012 the occurred time is Cairo local converted to UTC within 45 days, else the received time`() {
         val r =
-            (MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 12/03/2026 14:05", CASES_RECEIVED)) as ParseOutcome.Record).record
+            (
+                MessageParser.parse(
+                    message("CIB", "Purchase of EGP 90.00 at UBER on 12/03/2026 14:05", CASES_RECEIVED),
+                ) as ParseOutcome.Record
+            ).record
         assertEquals(Instant.parse("2026-03-12T12:05:00Z").toEpochMilli(), r.occurredAtMillis)
         val summer =
             (
                 MessageParser.parse(
-                    message("CIB", "Purchase of EGP 90.00 at UBER on 25/10/2026 23:50", Instant.parse("2026-10-26T10:00:00Z").toEpochMilli()),
+                    message(
+                        "CIB",
+                        "Purchase of EGP 90.00 at UBER on 25/10/2026 23:50",
+                        Instant.parse("2026-10-26T10:00:00Z").toEpochMilli(),
+                    ),
                 ) as ParseOutcome.Record
             ).record
         assertEquals(Instant.parse("2026-10-25T20:50:00Z").toEpochMilli(), summer.occurredAtMillis)
@@ -249,7 +271,13 @@ class InstaPaySmsTest {
     @Test
     fun `REQ-SMS-013 an InstaPay handle keeps its name, never a phone or account number`() {
         val handle = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to sara99@instapay was successful"))
-        if (handle is ParseOutcome.Record) assertFalse(handle.record.merchant.orEmpty().any { it.isDigit() })
+        if (handle is ParseOutcome.Record) {
+            assertFalse(
+                handle.record.merchant
+                    .orEmpty()
+                    .any { it.isDigit() },
+            )
+        }
         val phone = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to 01000000012 was successful"))
         assertFalse(phone is ParseOutcome.Record && phone.record.toString().contains("0100000"))
     }

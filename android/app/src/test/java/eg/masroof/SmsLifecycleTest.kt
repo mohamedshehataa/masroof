@@ -93,7 +93,12 @@ class RoomMigrationTest {
                 assertEquals("manual-1", outbox.clientId)
                 assertEquals(12_500L, outbox.amountMinor)
                 assertEquals(2, outbox.attempts)
-                val expense = db.expenses().observeAll().first().single()
+                val expense =
+                    db
+                        .expenses()
+                        .observeAll()
+                        .first()
+                        .single()
                 assertNull("old rows have no source", expense.source)
                 assertTrue(db.parsedOutbox().all().isEmpty())
                 assertTrue(db.reviews().all().isEmpty())
@@ -121,14 +126,23 @@ class RoomMigrationTest {
                     .allowMainThreadQueries()
                     .build()
             try {
-                assertEquals("manual-1", db.outbox().all().single().clientId)
+                assertEquals(
+                    "manual-1",
+                    db
+                        .outbox()
+                        .all()
+                        .single()
+                        .clientId,
+                )
                 val tables = mutableListOf<String>()
                 db.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type='table'").use {
                     while (it.moveToNext()) tables += it.getString(0)
                 }
                 assertFalse("no table keeps SMS text any more", "sms_outbox" in tables)
                 assertTrue("parsed_outbox" in tables && "review_item" in tables)
-                db.parsedOutbox().insert(ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2))
+                db.parsedOutbox().insert(
+                    ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2),
+                )
                 assertEquals(1, db.parsedOutbox().all().size)
             } finally {
                 db.close()
@@ -178,7 +192,9 @@ class SignOutSmsTest {
             scheduler.enqueueIntake(IncomingMessage(CaptureSource.SMS, "CIB", "Purchase of EGP 99.00 at X", 1_000L))
             scheduler.scheduleUpload()
             scheduler.scheduleUploadRetry(60, 1)
-            db.parsedOutbox().insert(ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2))
+            db.parsedOutbox().insert(
+                ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2),
+            )
             db.reviews().insert(ReviewItemEntity("r1", "SMS", "CIB", "unparsed text", "no_template", 1, 2))
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().isNotEmpty())
 

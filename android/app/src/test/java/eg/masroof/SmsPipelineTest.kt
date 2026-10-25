@@ -268,6 +268,7 @@ class SmsOutboxTest {
 
     private val pipeline get() = SmsPipeline(db, settings, notifications, scheduler, clock)
     private val uploader get() = SmsUploader(db, remote, device, clock)
+
     private fun sms(
         body: String,
         sender: String = "CIB",
@@ -385,7 +386,14 @@ class SmsOutboxTest {
             remote.next = SmsUploadResult.Retry(null)
             val report = uploader.uploadPending()
             assertTrue(report.retry)
-            assertEquals(1, db.parsedOutbox().all().single().attempts)
+            assertEquals(
+                1,
+                db
+                    .parsedOutbox()
+                    .all()
+                    .single()
+                    .attempts,
+            )
         }
 
     @Test
@@ -394,7 +402,13 @@ class SmsOutboxTest {
             pipeline.accept(sms(purchase))
             remote.next = SmsUploadResult.Rejected
             assertEquals(1, uploader.uploadPending().rejected)
-            assertTrue(db.parsedOutbox().all().single().failed)
+            assertTrue(
+                db
+                    .parsedOutbox()
+                    .all()
+                    .single()
+                    .failed,
+            )
             assertTrue(db.parsedOutbox().pending().isEmpty())
 
             pipeline.accept(sms("Purchase of EGP 10.00 at KIOSK", at = 2_000L))
@@ -417,7 +431,13 @@ class SmsOutboxTest {
     fun `REQ-SMS-061 failed rows are purged after seven days`() =
         runTest {
             pipeline.accept(sms(purchase))
-            db.parsedOutbox().markFailed(db.parsedOutbox().all().single().localId)
+            db.parsedOutbox().markFailed(
+                db
+                    .parsedOutbox()
+                    .all()
+                    .single()
+                    .localId,
+            )
             val later = Clock.fixed(Instant.parse("2026-10-18T09:00:00Z"), ZoneOffset.UTC)
             SmsUploader(db, remote, device, later).uploadPending()
             assertEquals(1, db.parsedOutbox().all().size)
@@ -461,7 +481,10 @@ class NoRawTextUploadTest {
 
     @Test
     fun `REQ-SMS-001 the wire request type has no free text field except the digit-free merchant label`() {
-        val names = eg.masroof.api.models.IngestParsedTransactionRequest::class.java.declaredFields.map { it.name }.toSet()
+        val names =
+            eg.masroof.api.models.IngestParsedTransactionRequest::class.java.declaredFields
+                .map { it.name }
+                .toSet()
         val stringFields = setOf("localId", "currency", "senderId", "instrumentLast4", "institution", "merchant")
         assertTrue(names.containsAll(stringFields))
         assertFalse(names.any { it.equals("body", true) || it.equals("text", true) || it.equals("message", true) })

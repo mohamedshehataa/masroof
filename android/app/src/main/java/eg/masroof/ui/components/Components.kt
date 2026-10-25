@@ -208,9 +208,15 @@ fun ExpenseListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (row.source == "SMS") {
+                val sourceLabel =
+                    when (row.source) {
+                        "SMS" -> R.string.source_sms
+                        "PUSH" -> R.string.source_notification
+                        else -> null
+                    }
+                if (sourceLabel != null) {
                     Text(
-                        stringResource(R.string.source_sms),
+                        stringResource(sourceLabel),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                     )

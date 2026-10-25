@@ -93,14 +93,36 @@
         <item quantity="other">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
     </plurals>
     <string name="source_sms">رسالة</string>
+    <string name="source_notification">إشعار</string>
     <string name="sms_title">تسجيل رسائل البنك</string>
-    <string name="sms_rationale">يقدر مصروف يضيف المصروف تلقائيا لما توصلك رسالة من البنك أو المحفظة. بنقرأ الرسائل من الجهات المسموح بيها بس، ورموز التحقق (OTP) عمرها ما بتتخزن ولا بتترفع، والتطبيق شغال كامل من غير الإذن ده.</string>
+    <string name="sms_rationale">مصروف بيقرأ رسالة البنك أو المحفظة على موبايلك، ويطلّع منها المبلغ واسم اللي اتدفعله، ويبعت ده بس: نص الرسالة عمره ما بيسيب الموبايل. بنقرأ الجهات المسموح بيها بس، وأي رمز تحقق (OTP) بيتتجاهل، والتطبيق شغال كامل من غير الإذن ده.</string>
     <string name="sms_enable">شغّل تسجيل الرسائل</string>
     <string name="sms_on">تسجيل الرسائل شغال</string>
     <string name="sms_denied">الإذن مش متاح. تقدر تضيف مصروفاتك بإيدك.</string>
     <string name="sms_suggested_title">جهات مقترحة</string>
     <string name="sms_suggested_body">الجهات دي بعتت رسالة شكلها دفع. مفيش حاجة اتخزنت. ضيف الجهة لو عايز نسجل رسايلها.</string>
     <string name="sms_add_sender">إضافة</string>
+    <string name="ntf_title">تسجيل إشعارات إنستاباي وتطبيقات البنوك</string>
+    <string name="ntf_rationale">مصروف يقدر يقرأ إشعارات تطبيق إنستاباي وتطبيقات البنوك اللي تضيفها، على موبايلك بس، ويبعت المبلغ واسم اللي اتدفعله بس. محتاج إعداد \"الوصول إلى الإشعارات\" في النظام، وتقدر توقفه في أي وقت. التطبيق شغال كامل من غيره.</string>
+    <string name="ntf_enable">شغّل تسجيل الإشعارات</string>
+    <string name="ntf_open_settings">افتح إعدادات الوصول إلى الإشعارات</string>
+    <string name="ntf_on">تسجيل الإشعارات شغال</string>
+    <string name="ntf_needs_access">اسمح كمان لمصروف من \"الوصول إلى الإشعارات\" في إعدادات النظام.</string>
+    <string name="ntf_disable">إيقاف</string>
+    <string name="ntf_packages_title">التطبيقات اللي بتتقرأ</string>
+    <string name="ntf_package_hint">اسم الحزمة، مثال com.example.bank</string>
+    <string name="ntf_add_package">إضافة تطبيق</string>
+    <string name="ntf_remove_package">إزالة</string>
+    <string name="review_open">رسائل محتاجة مراجعة (%1$d)</string>
+    <string name="review_title">محتاج مراجعة</string>
+    <string name="review_intro">الرسائل دي بتفضل على الموبايل ده. مفيش حاجة بتتبعت غير لو حفظت مصروف منها.</string>
+    <string name="review_empty">مفيش حاجة للمراجعة. الرسائل اللي مصروف مش متأكد منها هتظهر هنا.</string>
+    <string name="review_create">إنشاء مصروف</string>
+    <string name="review_dismiss">تجاهل</string>
+    <string name="review_reason_secret">شكلها فيها رمز، علشان كده الأرقام مخفية</string>
+    <string name="review_reason_unsupported_currency">عملة أجنبية</string>
+    <string name="review_reason_unexplained_number">فيها رقم مصروف مش عارفه</string>
+    <string name="review_reason_other">مش مفهومة</string>
 
     <string name="nav_insights">التحليلات</string>
 

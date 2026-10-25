@@ -35,8 +35,8 @@ import eg.masroof.data.insights.InsightsCache
 import eg.masroof.data.insights.InsightsRemote
 import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.data.remote.ApiRemoteSource
-import eg.masroof.data.remote.RemoteSource
 import eg.masroof.data.remote.ParsedRemote
+import eg.masroof.data.remote.RemoteSource
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.PrefsNotificationSettings

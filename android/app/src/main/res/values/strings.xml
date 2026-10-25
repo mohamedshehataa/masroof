@@ -85,14 +85,36 @@
         <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>
     </plurals>
     <string name="source_sms">SMS</string>
+    <string name="source_notification">Notification</string>
     <string name="sms_title">Capture bank SMS</string>
-    <string name="sms_rationale">Masroof can add an expense automatically when a message arrives from your bank or wallet. Only messages from listed senders are read, one-time passwords are never stored or uploaded, and the app works fully without this permission.</string>
+    <string name="sms_rationale">Masroof reads a message from your bank or wallet on this phone, works out the amount and who was paid, and sends only that: no message text ever leaves the phone. Only listed senders are read, one-time passwords are dropped, and the app works fully without this permission.</string>
     <string name="sms_enable">Turn on SMS capture</string>
     <string name="sms_on">SMS capture is on</string>
     <string name="sms_denied">Permission not granted. You can still add expenses by hand.</string>
     <string name="sms_suggested_title">Suggested senders</string>
     <string name="sms_suggested_body">These senders sent a message that looks like a payment. Nothing was stored. Add one to start capturing it.</string>
     <string name="sms_add_sender">Add</string>
+    <string name="ntf_title">Capture InstaPay and bank-app notifications</string>
+    <string name="ntf_rationale">Masroof can read notifications from the InstaPay app and other bank apps you list, on this phone only, and send just the amount and who was paid. It needs the system setting \"Notification access\", which you can switch off at any time. The app works fully without it.</string>
+    <string name="ntf_enable">Turn on notification capture</string>
+    <string name="ntf_open_settings">Open notification access settings</string>
+    <string name="ntf_on">Notification capture is on</string>
+    <string name="ntf_needs_access">Also allow Masroof under Notification access in system settings.</string>
+    <string name="ntf_disable">Turn off</string>
+    <string name="ntf_packages_title">Apps that are read</string>
+    <string name="ntf_package_hint">Package name, for example com.example.bank</string>
+    <string name="ntf_add_package">Add app</string>
+    <string name="ntf_remove_package">Remove</string>
+    <string name="review_open">Messages that need review (%1$d)</string>
+    <string name="review_title">Needs review</string>
+    <string name="review_intro">These messages stay on this phone. Nothing is sent unless you save an expense from one.</string>
+    <string name="review_empty">Nothing to review. Messages Masroof cannot read with confidence will appear here.</string>
+    <string name="review_create">Create expense</string>
+    <string name="review_dismiss">Dismiss</string>
+    <string name="review_reason_secret">Looks like it contains a code, so digits are hidden</string>
+    <string name="review_reason_unsupported_currency">Foreign currency</string>
+    <string name="review_reason_unexplained_number">Contains a number Masroof does not recognise</string>
+    <string name="review_reason_other">Not recognised</string>
 
     <string name="nav_insights">Insights</string>
 

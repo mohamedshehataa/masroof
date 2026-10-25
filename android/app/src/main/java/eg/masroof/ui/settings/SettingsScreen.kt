@@ -41,6 +41,7 @@ import eg.masroof.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
+    onOpenReview: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -56,7 +57,7 @@ fun SettingsRoute(
             viewModel::syncNow,
             onToggleLanguage,
         ),
-        extra = { SmsCaptureSection() },
+        extra = { SmsCaptureSection(onOpenReview = onOpenReview) },
     )
 }
 

@@ -13,6 +13,7 @@ import java.util.Locale
  *
  * Input is the output of [TextNormalizer.normalizeText] (ASCII digits, no invisible characters).
  */
+@Suppress("MaxLineLength")
 object SecretDetector {
     private val ci = setOf(RegexOption.IGNORE_CASE)
 
@@ -69,7 +70,8 @@ object SecretDetector {
     private val footer =
         Regex(
             "(?:never|do not|don't|dont|not)\\s+(?:to\\s+)?share[^.!?\\n]*" +
-                "|will never ask[^.!?\\n]*|for (?:your )?security[^.!?\\n]*|beware[^.!?\\n]*|if (?:you did not|this was not|it was not)[^.!?\\n]*" +
+                "|will never ask[^.!?\\n]*|for (?:your )?security[^.!?\\n]*" +
+                "|beware[^.!?\\n]*|if (?:you did not|this was not|it was not)[^.!?\\n]*" +
                 "|لا\\s*تشارك[^.!?\\n]*|لا\\s*تقم\\s*بمشاركه[^.!?\\n]*|لا\\s*تفصح[^.!?\\n]*|لا\\s*تعطي[^.!?\\n]*|للاستفسار[^.!?\\n]*|اتصل[^.!?\\n]*",
             ci,
         )
@@ -79,7 +81,8 @@ object SecretDetector {
     /** Number labels whose number is a harmless reference, not a code. */
     private val referenceNumber =
         Regex(
-            "\\b(?:ref(?:erence)?|trx|txn|trans(?:action)?|operation|approval|authori[sz]ation|auth|invoice|id|no\\.?|number)[ :#.-]*\\d{4,14}" +
+            "\\b(?:ref(?:erence)?|trx|txn|trans(?:action)?|operation|approval|authori[sz]ation|auth|invoice" +
+                "|id|no\\.?|number)[ :#.-]*\\d{4,14}" +
                 "|(?:رقم|الرقم) (?:ال)?(?:مرجع|المرجعي|عمليه|العمليه|فاتوره|طلب)[^\\d]{0,12}\\d{4,14}",
             ci,
         )
@@ -115,7 +118,16 @@ object SecretDetector {
         }
 
     /** The text with every run of four or more digits masked: how a secret message is kept in the local review list. */
-    fun mask(text: String): String = Regex("\\d(?:[\\d .,/:-]*\\d)?").replace(text) { m -> if (m.value.count(Char::isDigit) >= MASK_FROM) "•".repeat(m.value.length) else m.value }
+    fun mask(text: String): String =
+        Regex("\\d(?:[\\d .,/:-]*\\d)?").replace(text) { m ->
+            if (m.value.count(Char::isDigit) >=
+                MASK_FROM
+            ) {
+                "•".repeat(m.value.length)
+            } else {
+                m.value
+            }
+        }
 
     private const val MASK_FROM = 4
 

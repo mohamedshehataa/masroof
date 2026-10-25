@@ -25,7 +25,6 @@ object TextNormalizer {
             }
         }
 
-
     /** NFKC, one ASCII digit set, no invisible or bidi characters, unified dashes/dots/spaces; idempotent, bounded. */
     fun normalizeText(input: String): String {
         var current = input
