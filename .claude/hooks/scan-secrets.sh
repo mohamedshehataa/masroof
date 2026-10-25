@@ -70,8 +70,22 @@ def found(name):
         emit()
         sys.exit(0)
 
+# Each regex runs only when its literal anchor occurs in the text (str.__contains__ is a memchr-speed scan; a
+# 5 MB clean write then costs almost nothing here). The anchors are necessary conditions of the patterns.
+ANCHORS = {
+    "anthropic-api-key": ("sk-ant-",),
+    "openai-style-key": ("sk-",),
+    "meta-access-token": ("EAA",),
+    "github-token": ("ghp_", "gho_", "ghu_", "ghs_", "ghr_"),
+    "github-fine-grained-token": ("github_pat_",),
+    "aws-access-key": ("AKIA", "ASIA"),
+    "slack-token": ("xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"),
+    "google-api-key": ("AIza",),
+    "private-key": ("-----BEGIN ",),
+    "jwt-token": ("eyJ",),
+}
 for name, pat in VENDOR:
-    if re.search(pat, text, re.M):
+    if any(a in text for a in ANCHORS[name]) and re.search(pat, text, re.M):
         found(name)
 
 # generic NAME_SECRET = "<long random value>" (same rules as the bash fallback).
@@ -121,6 +135,8 @@ for i in range(10):
     NORM[0x6F0 + i] = 48 + i
     NORM[0xFF10 + i] = 48 + i
 digits = text.translate(NORM)
+SHAPE = {48 + i: "D" for i in range(10)}
+SHAPE.update({32: "-", 46: "-"})
 TEST_PANS = {"4111111111111111", "4242424242424242", "5555555555554444", "378282246310005", "4000000000000002"}
 def luhn(s):
     total = 0
@@ -150,7 +166,16 @@ PAN_B = re.compile(r"(?<![\w.-])(?<!\d )(?<!\d  )\d{4}(?:%s\d{4}){3}(?:%s\d{3})?
 # joined by one space or '-' (dots never join: they are decimals)
 MOB = re.compile(r"(?<![\w+.-])(?:\+|00)?(?:\(\d{2,4}\)[ -]?|\d{2,})(?:[ -]\d{2,}){0,4}(?!\w)(?![.-]\d)")
 card_hit = mobile_hit = False
-for rx in (PAN_A, PAN_B):
+# Literal prefilters (necessary conditions): every digit becomes 'D' and runs of the PAN separators
+# (space, '.', '-', one or two long) become '-'. PAN_A needs 14 D in a row; PAN_B needs DDDD-DDDD-DDDD-DDDD.
+# A substring search over 5 MB costs ~10 ms where the regexes cost ~70 ms each.
+shape = digits.translate(SHAPE).replace("--", "-")
+pan_rx = []
+if "D" * 14 in shape:
+    pan_rx.append(PAN_A)
+if "DDDD-DDDD-DDDD-DDDD" in shape:
+    pan_rx.append(PAN_B)
+for rx in pan_rx:
     for m in rx.finditer(digits):
         acc = re.sub(r"\D", "", m.group(0))
         if acc[0] in "3456" and acc not in TEST_PANS and len(set(acc)) > 1 and luhn(acc):
@@ -158,9 +183,19 @@ for rx in (PAN_A, PAN_B):
             break
     if card_hit:
         break
-for m in MOB.finditer(digits):
+NON_DIGIT = re.compile(r"\D")
+# A mobile needs 11+ digits and starts with '+', '0' (0.., 00..), '(' (area prefix) or 20; cheap checks first.
+# The regex finds 100k+ candidates in a long list of amounts, so per-match work must stay tiny.
+# The whole loop is skipped unless the text holds 01x (x in 0,1,2,5) followed by 8 more digits, with at most
+# three separator characters between digits and no separator after a lone digit (groups are 2+ digits).
+# mobile() always sees 01x + 8 digits (the 20 / 0020 country code ends in a 0), so this is a necessary condition.
+MOB_GAP = r"(?:[ ()-]{1,3}(?=\d\d))?"
+MOB_NEEDS = re.compile(r"0%s1%s[0125](?:%s\d){8}" % (MOB_GAP, MOB_GAP, MOB_GAP))
+for m in (MOB.finditer(digits) if MOB_NEEDS.search(digits) else ()):
     s = m.group(0)
-    acc = re.sub(r"\D", "", s)
+    if len(s) < 11 or s[0] not in "+0(2":
+        continue
+    acc = NON_DIGIT.sub("", s)
     if not 11 <= len(acc) <= 14:
         continue
     intl = s.startswith(("+", "00")) or (acc.startswith("20") and len(acc) == 12)
