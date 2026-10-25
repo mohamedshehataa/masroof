@@ -185,6 +185,7 @@ org.springframework.boot:spring-boot-web-server:4.1.2=compileClasspath,productio
 org.springframework.boot:spring-boot-webmvc-test:4.1.2=testCompileClasspath,testRuntimeClasspath
 org.springframework.boot:spring-boot-webmvc:4.1.2=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework.boot:spring-boot:4.1.2=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.springframework.security:spring-security-crypto:7.1.2=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-aop:7.0.10=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-beans:7.0.10=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-context:7.0.10=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath

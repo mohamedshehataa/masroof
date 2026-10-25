@@ -140,6 +140,11 @@ In STORY-143 the endpoint is reachable only from the compose network and, throug
 | I | Receipt images via guessable URLs | Presigned MinIO URLs, 5-minute expiry, scoped per object | REQ-SEC-008 | Planned |
 | D | Export endpoint abuse | Rate limit + async job for full export | REQ-SEC-004, REQ-SEC-025 | Planned |
 | E | Member escalates to admin | Role claims in JWT verified server-side; admin-only endpoints under `/api/admin/**` with method security | REQ-SEC-023 | Planned |
+| S | Refresh token stolen from the JSON body or JS memory (XSS) | Accepted residual risk for v1: the token is in the response body and kept in memory by the clients; strict CSP, the 15 min access TTL and reuse detection limit the damage (STORY-009) | REQ-SEC-005 | Accepted |
+| E | Access token still valid up to 15 min after logout | Accepted residual risk for v1: logout revokes refresh tokens only; the JWT is stateless (STORY-009) | REQ-SEC-006 | Accepted |
+| D | Per-email lockout lets an attacker lock a known user out for 15 min | Accepted residual risk for v1: 10 failures per 15 min per e-mail and per IP, in memory; a correct guess does not bypass it (STORY-009) | REQ-SEC-007 | Accepted |
+| T | Concurrent refresh with the same token looks like reuse and revokes the family | Accepted residual risk for v1: both clients must run single-flight refresh; a lost race forces a new login (STORY-009) | REQ-SEC-005 | Accepted |
+| D | Floods against unauthenticated routes (`/health`, `/auth/*`) | 60 requests per 60 s per client IP in the backend, 429 Problem+JSON with Retry-After; the client IP comes from X-Forwarded-For only when the peer is in `MASROOF_TRUSTED_PROXIES` (default: Docker's 172.16.0.0/12 pool) (STORY-010) | REQ-SEC-051 | Implemented |
 
 ### B6 backend -> Anthropic API (and STT / FX)
 

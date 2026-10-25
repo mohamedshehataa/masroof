@@ -6,19 +6,17 @@ import org.springframework.core.env.Environment;
 
 /**
  * Fails the start when profile {@code prod} is active together with {@code
- * masroof.dev.single-household=true}: that switch serves the first household to anyone, so it must
- * never run in production.
+ * masroof.dev.single-household} set to anything but a clear false: that switch serves the first
+ * household to anyone, so it must never run in production.
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("prod")
 class ProdSingleHouseholdGuard {
 
-  private static final String PROPERTY = "masroof.dev.single-household";
-
   ProdSingleHouseholdGuard(Environment environment) {
-    if (Boolean.parseBoolean(environment.getProperty(PROPERTY, "false"))) {
+    if (DevSwitch.enabled(environment)) {
       throw new IllegalStateException(
-          PROPERTY + " must not be true when profile 'prod' is active (no authentication yet)");
+          DevSwitch.PROPERTY + " must be unset or false when profile 'prod' is active");
     }
   }
 }
