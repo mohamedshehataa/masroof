@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore, type FC } from 'react';
+import { useTranslation } from 'react-i18next';
 import App from '../App';
-import { getSessionStatus, restoreSession, subscribeSession } from '../api/session';
+import { getSessionStatus, initCrossTab, isPersistFailed, restoreSession, subscribeSession } from '../api/session';
 import { BottomNav } from '../components/BottomNav';
 import { OfflineBanner, SkeletonRows } from '../components/common';
 import { LoginScreen } from '../features/auth/LoginScreen';
@@ -32,7 +33,10 @@ const Screen: FC = () => {
 const Shell: FC = () => {
   const status = useSyncExternalStore(subscribeSession, getSessionStatus);
   const queryClient = useQueryClient();
+  const volatile = useSyncExternalStore(subscribeSession, isPersistFailed);
+  const { t } = useTranslation();
   useEffect(() => {
+    initCrossTab();
     void restoreSession();
   }, []);
   useEffect(() => {
@@ -49,6 +53,11 @@ const Shell: FC = () => {
   return (
     <div className="shell">
       <OfflineBanner />
+      {volatile ? (
+        <p role="status" className="banner">
+          {t('more.volatileSession')}
+        </p>
+      ) : null}
       <main className="page">
         <Screen />
       </main>

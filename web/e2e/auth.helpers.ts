@@ -67,6 +67,7 @@ export async function mockAuth(page: Page): Promise<AuthMock> {
     state.loginCalls += 1;
     if (state.rateLimit) return problem(route, 429, { 'Retry-After': '120' });
     const body = route.request().postDataJSON() as { password?: string };
+    if ((body.password ?? '').length < 8) return problem(route, 400);
     if (body.password !== GOOD_PASSWORD) return problem(route, 401, { 'WWW-Authenticate': 'Bearer' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(issue(state)) });
   });
@@ -76,6 +77,7 @@ export async function mockAuth(page: Page): Promise<AuthMock> {
     if (body.refreshToken !== state.validRefresh) return problem(route, 401, { 'WWW-Authenticate': 'Bearer' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(issue(state)) });
   });
+  // Matches the revised contract: the refresh token in the body is enough (no bearer), unknown tokens still get 204.
   await page.route('**/auth/logout', async (route) => {
     state.logoutBodies.push(route.request().postDataJSON());
     await route.fulfill({ status: 204 });

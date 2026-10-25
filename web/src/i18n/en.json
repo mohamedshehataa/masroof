@@ -83,6 +83,7 @@
     "digits": "Arabic-Indic digits",
     "version": "Server version",
     "signOut": "Sign out",
+    "volatileSession": "Private mode: you'll be signed out when you reload.",
     "signedInAs": "Signed in as {{name}}"
   },
   "login": {
@@ -92,6 +93,10 @@
     "submit": "Sign in",
     "error": "Wrong email or password.",
     "errorGeneric": "Couldn't sign in. Try again.",
+    "network": "Can't reach the server. Check your connection.",
+    "retry": "Retry",
+    "show": "Show",
+    "showPassword": "Show password",
     "rateLimited": "Too many attempts. Try again in {{wait}}."
   }
 }

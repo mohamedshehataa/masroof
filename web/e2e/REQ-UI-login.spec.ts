@@ -18,7 +18,7 @@ async function expectNoSeriousAxe(page: Page) {
 
 async function signIn(page: Page, password = GOOD_PASSWORD) {
   await page.getByLabel('Email').fill('mohamed@example.com');
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
@@ -61,7 +61,7 @@ test.describe('REQ-UI-010 REQ-UI-011 session flows', () => {
     await page.goto('/');
     await signIn(page, 'wrong-password');
     await expect(page.getByRole('alert')).toHaveText('Wrong email or password.');
-    await expect(page.getByLabel('Password')).toHaveValue('');
+    await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Email')).toHaveValue('mohamed@example.com');
   });
 
@@ -80,7 +80,7 @@ test.describe('REQ-UI-010 REQ-UI-011 session flows', () => {
     api.auth.rateLimit = true;
     await page.goto('/');
     await page.getByLabel('البريد الإلكتروني').fill('mohamed@example.com');
-    await page.getByLabel('كلمة المرور').fill(GOOD_PASSWORD);
+    await page.getByLabel('كلمة المرور', { exact: true }).fill(GOOD_PASSWORD);
     await page.getByRole('button', { name: 'دخول' }).click();
     await expect(page.getByRole('alert')).toContainText('محاولات كتير');
     await expect(page.getByRole('alert')).toContainText('دقيقتان');
@@ -108,7 +108,7 @@ test.describe('REQ-UI-010 REQ-UI-011 session flows', () => {
     await page.getByRole('link', { name: 'Transactions' }).click();
     await expect(page.locator('.row')).toHaveCount(3);
     expect(api.auth.refreshCalls).toBe(1);
-    await expect(page.getByLabel('Password')).toHaveCount(0);
+    await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
   });
 
   test('a rejected refresh (rotated token reuse) lands on login @REQ-UI-011', async ({ page }) => {
@@ -132,5 +132,108 @@ test.describe('REQ-UI-010 REQ-UI-011 session flows', () => {
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
     expect(api.auth.logoutBodies).toEqual([{ refreshToken: api.auth.validRefresh }]);
     expect(await page.evaluate(() => window.sessionStorage.getItem('masroof.rt'))).toBeNull();
+  });
+
+  test('sign out with an expired access token still sends the refresh token and lands on login @REQ-UI-011', async ({
+    page,
+  }) => {
+    const api = await mockApi(page);
+    await page.goto('/');
+    await expect(page.locator('.row')).toHaveCount(3);
+    const stored = await page.evaluate(() => window.sessionStorage.getItem('masroof.rt'));
+    api.auth.validAccess = 'expired-elsewhere';
+    await page.getByRole('link', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    expect(api.auth.logoutBodies).toEqual([{ refreshToken: stored }]);
+    expect(api.auth.refreshCalls).toBe(1);
+  });
+
+  test('a short password gets the same generic message and is cleared @REQ-UI-010', async ({ page }) => {
+    await mockApi(page, { signedIn: false });
+    await page.goto('/');
+    await signIn(page, 'short');
+    await expect(page.getByRole('alert')).toHaveText('Wrong email or password.');
+    await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
+  });
+
+  test('show/hide password toggle is a pressed-state button @REQ-UI-010', async ({ page }) => {
+    await mockApi(page, { signedIn: false });
+    await page.goto('/');
+    const field = page.getByLabel('Password', { exact: true });
+    const toggle = page.getByRole('button', { name: 'Show password' });
+    await field.fill('secret-value');
+    await expect(field).toHaveAttribute('type', 'password');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(field).toHaveAttribute('type', 'text');
+  });
+
+  test('language toggle switches to Arabic and RTL @REQ-UI-010', async ({ page }) => {
+    await mockApi(page, { signedIn: false });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'العربية' }).click();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByRole('button', { name: 'دخول' })).toBeVisible();
+  });
+
+  test('submit shows a spinner with aria-busy while the request is in flight @REQ-UI-010', async ({ page }) => {
+    await mockApi(page, { signedIn: false });
+    await page.route('**/auth/login', async (route) => {
+      await new Promise((r) => setTimeout(r, 600));
+      await route.fallback();
+    });
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByRole('button', { name: 'Sign in' })).toHaveAttribute('aria-busy', 'true');
+    await expect(page.locator('.spinner')).toBeVisible();
+    await expect(page.locator('.row')).toHaveCount(3);
+  });
+
+  test('network failure shows an error with Retry that signs in once the network is back @REQ-UI-010', async ({
+    page,
+  }) => {
+    await mockApi(page, { signedIn: false });
+    let down = true;
+    await page.route('**/auth/login', async (route) => {
+      if (down) await route.abort('connectionrefused');
+      else await route.fallback();
+    });
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByRole('alert')).toHaveText("Can't reach the server. Check your connection.");
+    down = false;
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.locator('.row')).toHaveCount(3);
+  });
+
+  test('offline shows the banner and disables submit @REQ-UI-010', async ({ page, context }) => {
+    await mockApi(page, { signedIn: false });
+    await page.goto('/');
+    await context.setOffline(true);
+    await expect(page.getByText("You're offline. Showing saved data.")).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    await context.setOffline(false);
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  });
+
+  test('reload with a dead network keeps the skeleton (not login) and restores on the online event @REQ-UI-011', async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await page.goto('/');
+    await expect(page.locator('.row')).toHaveCount(3);
+    let up = false;
+    await page.route('**/auth/refresh', async (route) => {
+      if (up) await route.fallback();
+      else await route.abort('internetdisconnected');
+    });
+    await page.reload();
+    await expect(page.locator('[aria-busy="true"]')).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
+    up = true;
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect(page.locator('.row')).toHaveCount(3);
   });
 });
