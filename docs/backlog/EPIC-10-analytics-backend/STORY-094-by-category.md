@@ -3,7 +3,7 @@ id: STORY-094
 epic: EPIC-10
 title: "By category: donut data, ranked list, drill into subcategories and items, MoM change"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025]
@@ -60,3 +60,6 @@ STORY-025
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given categorised expenses, When GET /api/analytics/by-category is called, Then categories are ranked with share and month-over-month change, sub-categories roll up, and parentId drills down. Trimmed: item-level drill-down.

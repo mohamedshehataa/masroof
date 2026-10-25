@@ -2,6 +2,7 @@ package eg.masroof.data.auth
 
 import androidx.work.WorkManager
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.insights.InsightsCache
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.SMS_UPLOAD_RETRY_WORK
@@ -18,6 +19,7 @@ class RoomDataWiper
     @Inject
     constructor(
         private val db: AppDatabase,
+        private val insights: InsightsCache,
         private val workManager: WorkManager,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) : LocalDataWiper {
@@ -34,5 +36,6 @@ class RoomDataWiper
             workManager.cancelAllWorkByTag(SMS_INTAKE_TAG)
             workManager.pruneWork()
             withContext(io) { db.clearAllTables() }
+            withContext(io) { insights.clear() }
         }
     }

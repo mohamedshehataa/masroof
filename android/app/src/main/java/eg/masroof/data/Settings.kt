@@ -13,6 +13,7 @@ import eg.masroof.core.DigitStyle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -92,10 +93,15 @@ class DataStoreSettings
         }
     }
 
-/** Normalises user input to a Retrofit-safe base URL (scheme required, trailing slash). Null when unusable. */
+/**
+ * Normalises user input to a Retrofit-safe base URL (scheme required, trailing slash). Whitespace anywhere in the
+ * text (a stray space pasted into the host, as in `http://10.0.0.5 /`) is dropped. Null when the result is not a
+ * valid http(s) URL, so callers report "invalid URL" instead of letting Retrofit throw later.
+ */
 fun normalizeServerUrl(input: String): String? {
-    val trimmed = input.trim()
-    if (!(trimmed.startsWith("http://") || trimmed.startsWith("https://"))) return null
-    if (trimmed.substringAfter("://").isBlank()) return null
-    return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+    val cleaned = input.filterNot { it.isWhitespace() }
+    if (!(cleaned.startsWith("http://") || cleaned.startsWith("https://"))) return null
+    if (cleaned.substringAfter("://").isBlank()) return null
+    val withSlash = if (cleaned.endsWith("/")) cleaned else "$cleaned/"
+    return withSlash.takeIf { it.toHttpUrlOrNull() != null }
 }

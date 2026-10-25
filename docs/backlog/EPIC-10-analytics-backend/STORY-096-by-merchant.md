@@ -3,7 +3,7 @@ id: STORY-096
 epic: EPIC-10
 title: "By merchant: top merchants, visit frequency, average ticket"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: S
 modules: [backend]
 depends_on: [STORY-025, STORY-051]
@@ -60,3 +60,6 @@ STORY-025, STORY-051
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given expenses with merchant text, When GET /api/analytics/by-merchant is called, Then merchants group case-insensitively with total, visits and average ticket. Trimmed: last visit.

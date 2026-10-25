@@ -240,7 +240,7 @@ public final class SmsTemplateEngine {
   private static @Nullable Money amount(String text, Budget budget) {
     TreeMap<Integer, Candidate> byNumber = new TreeMap<>();
     // A bare "amount 1,500" is EGP only when the text names no currency anywhere; otherwise it is
-    // XXX (ISO "no currency") and the caller sends it to review rather than guessing.
+    // the ISO "no currency" code and the caller sends it to review rather than guessing.
     String bare = matcher(ANY_CURRENCY, text, budget).find() ? "XXX" : "EGP";
     Matcher k = matcher(KEYWORD_AMOUNT, text, budget);
     while (k.find()) {

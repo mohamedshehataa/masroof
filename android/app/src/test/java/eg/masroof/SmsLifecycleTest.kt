@@ -14,6 +14,7 @@ import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.MIGRATION_2_3
 import eg.masroof.data.db.SmsOutboxEntity
+import eg.masroof.data.insights.InsightsCache
 import eg.masroof.ingest.IncomingSms
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.WorkManagerSmsScheduler
@@ -94,6 +95,17 @@ class RoomMigrationTest {
         }
 }
 
+private object NoInsightsCache : InsightsCache {
+    override fun read(key: String): String? = null
+
+    override fun write(
+        key: String,
+        json: String,
+    ) = Unit
+
+    override fun clear() = Unit
+}
+
 private class HangingFactory : WorkerFactory() {
     override fun createWorker(
         appContext: Context,
@@ -128,7 +140,7 @@ class SignOutSmsTest {
             db.smsOutbox().insert(SmsOutboxEntity("s1", "CIB", "body", 1L, createdAtMillis = 2L))
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().isNotEmpty())
 
-            RoomDataWiper(db, workManager, Dispatchers.Unconfined).wipe()
+            RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined).wipe()
 
             assertTrue(db.smsOutbox().all().isEmpty())
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().all { it.state.isFinished })

@@ -7,7 +7,7 @@
 #   IMAGE_TAG       tag (default dev, the tag compose and infra/tests inspect)
 #   IMAGE_REGISTRY  e.g. ghcr.io/mohamedshehataa -> images are named ${IMAGE_REGISTRY}/masroof-backend:<tag> and
 #                   .../masroof-web:<tag> (lower-cased: GHCR rejects upper case)
-#   PLATFORMS       e.g. linux/amd64,linux/arm64 -> buildx multi-arch build (Oracle Always Free is Ampere ARM).
+#   PLATFORMS       e.g. linux/amd64,linux/arm64 -> buildx multi-arch build (the Google Cloud e2-micro host is amd64, so CI builds linux/amd64 only).
 #                   One platform is loaded into the local daemon; several are built and only kept when IMAGE_PUSH=1
 #                   (a daemon cannot hold a multi-arch index without the containerd image store).
 #   IMAGE_PUSH=1    push to IMAGE_REGISTRY (requires it, and a prior `docker login`); never set locally.

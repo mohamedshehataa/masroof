@@ -12,7 +12,7 @@ if [ -z "$host" ]; then
   exit 0
 fi
 validate_host "$host"
-case "$host" in *@*) ;; *) host="deploy@$host" ;; esac
+case "$host" in *@*) ;; *) host="masroof-deploy@$host" ;; esac
 # shellcheck disable=SC2206
 ssh_opts=(-o BatchMode=yes -o "StrictHostKeyChecking=${SSH_STRICT_HOSTKEY:-accept-new}" -o ConnectTimeout=20 ${SSH_OPTS:-})
 # The job is root-owned (reads the passphrase, writes /var/backups); the deploy user may run exactly this via sudo.

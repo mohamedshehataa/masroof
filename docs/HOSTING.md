@@ -1,68 +1,57 @@
-# Hosting Masroof for free (Oracle Cloud Always Free + DuckDNS)
+# Hosting Masroof on the Google Cloud Free Tier (e2-micro + DuckDNS)
 
-Goal: Masroof runs 24/7 at `https://<name>.duckdns.org` for 0 EGP/month. You do the three account-side steps below
+Goal: Masroof runs 24/7 at `https://<name>.duckdns.org` on one small VM. You do the account-side steps below
 (about 30 minutes, once). Then you send back **three values** and the rest is automated.
+
+**Honest cost: about USD 3.65 per month (about EGP 180), all of it the VM's public IPv4 address.** The VM, its 30 GB
+disk and 1 GB of monthly traffic are free; the IPv4 address is not (see "What it costs" below). New Google Cloud
+accounts get a USD 300 trial credit for 90 days that covers it.
+
+**Current instance (created by the owner, 2026-10-26):** e2-micro in `us-central1-c`, Ubuntu 24.04 x86_64, 30 GB standard
+disk, no snapshot schedule, Ops Agent off, HTTP/HTTPS firewall tags on, ephemeral external IP `35.254.195.156`, login user
+`masroof-deploy` with the key `~/.ssh/masroof_deploy`. The owner steps below are the recipe that produced it.
 
 ## What you send back
 
-1. **The server's public IP** (looks like `129.151.10.20`)
+1. **The VM's external IP** (looks like `34.123.45.67`)
 2. **The DuckDNS subdomain** you chose (just the name, e.g. `masroof-mo`)
 3. **The DuckDNS token** (a long string shown on the DuckDNS page after you log in)
 
 **Never send a private key to anyone, in chat or anywhere else.** The orchestrator generates the SSH key pair on its own
-side and gives you only the *public* key to paste into Oracle (step 2). Keep the DuckDNS token out of GitHub issues and commits.
+side and gives you only the *public* key (one line: `ssh-ed25519 AAAA... masroof-deploy`). Keep the DuckDNS token out of
+GitHub issues and commits.
 
-## Step 1: Oracle Cloud account
+## Owner steps (Google Cloud console, https://console.cloud.google.com)
 
-1. Go to https://www.oracle.com/cloud/free/ and click "Start for free".
-2. Sign up. A credit/debit card is needed **for identity verification only**; Always Free resources are not charged.
-   Pick a home region close to you (e.g. Frankfurt or Marseille). You cannot change it later, and Ampere capacity differs by region.
-3. Stay on **Always Free** resources only. Do not click "Upgrade" unless you want to (see "Idle reclaim" below).
+1. **Project and billing.** Create a project (name `masroof`) and attach a billing account (a card is required for
+   identity; the Free Tier resources below are not charged). Then **Billing -> Budgets & alerts -> Create budget**:
+   amount **USD 5** per month, alerts at 50%, 90% and 100%. (A USD 1 budget would fire in the first week from the IPv4
+   address alone; USD 5 fires only if something else starts costing money.)
+2. **Compute Engine -> VM instances -> Create instance.**
+   - Name `masroof`. **Region `us-east1` (South Carolina, closest to Egypt)**, or `us-central1` / `us-west1`. Only these three are free.
+   - Machine: series **E2**, type **e2-micro** (2 shared vCPU, 1 GB). Provisioning model: Standard (not Spot).
+3. **OS and storage -> Change.** Operating system **Ubuntu**, version **Ubuntu 24.04 LTS** (x86/64, not Arm), boot disk type
+   **Standard persistent disk** (not Balanced or SSD: those are billed), size **30 GB**.
+4. **Networking:** tick **Allow HTTP traffic** and **Allow HTTPS traffic**. (Port 22 is already open by the default VPC
+   rule.) Leave the external IPv4 on **Ephemeral**: a reserved static IP costs the same, and the server updates DuckDNS
+   by itself if the address ever changes.
+5. **Security -> Manage access -> Add manually generated SSH key -> Add item**, and paste the public key the
+   orchestrator gave you. Google creates the login user from the comment, so it becomes the user `masroof-deploy`.
+6. **Data protection / Backups:** make sure **no snapshot schedule** is attached (snapshots are billed; the server makes
+   its own encrypted backups). Do not enable "Back up your data".
+7. Click **Create**, then copy the **External IP** from the VM list.
+8. **DuckDNS** (https://www.duckdns.org, sign in with Google/GitHub): in "domains" type a name (e.g. `masroof-mo`),
+   click **add domain**, paste the VM's external IP into "current ip", click **update ip**, copy the **token**.
 
-## Step 2: Create the VM
-
-1. Console menu -> **Compute -> Instances -> Create instance**.
-2. Name: `masroof`.
-3. Image: **Canonical Ubuntu 24.04** (the aarch64 / ARM build). Shape: **Change shape -> Ampere -> VM.Standard.A1.Flex**,
-   set **4 OCPU and 24 GB** memory (this is the whole Always Free allowance; fewer is fine too: 2 OCPU / 12 GB).
-   The shape must carry the "Always Free-eligible" label.
-4. Networking: keep the default VCN and public subnet, **Assign a public IPv4 address = yes**.
-5. SSH keys: choose **Paste public keys** and paste the **public** key the orchestrator gives you (one line starting with
-   `ssh-ed25519`). Do not use "Generate a key pair": that would create a private key you would then have to hand over.
-6. Boot volume: 100 GB is within the free 200 GB.
-7. Optional but recommended: **Show advanced options -> Management -> Cloud-init script** and paste the contents of
-   `infra/oracle/cloud-init.yaml`. It firewalls, patches and installs Docker before anyone logs in. (If you skip it,
-   `bootstrap.sh` does the same later.)
-8. Create. If you see **"Out of capacity for shape VM.Standard.A1.Flex"**, try again later, try another availability
-   domain, or pick 2 OCPU / 12 GB. This is common; it is not an error on your side.
-9. When it is running, copy the **Public IP address** from the instance page.
-
-### Open the ports in Oracle's network (required, in addition to the server firewall)
-
-Oracle blocks traffic at the network level before it reaches the VM. Instance page -> **Primary VNIC -> Subnet ->
-Security Lists -> Default Security List -> Add Ingress Rules**:
-
-| Source CIDR | Protocol | Dest. port | Why |
-|---|---|---|---|
-| `0.0.0.0/0` | TCP | `22` | ssh (usually already present) |
-| `0.0.0.0/0` | TCP | `80` | HTTP, certificate issuance + redirect |
-| `0.0.0.0/0` | TCP | `443` | HTTPS |
-
-Leave "Stateless" unticked. The server's own firewall (ufw) allows the same three ports and nothing else.
-
-## Step 3: DuckDNS subdomain
-
-1. Go to https://www.duckdns.org and sign in (Google/GitHub login).
-2. In "domains" type a name (e.g. `masroof-mo`) and click **add domain**. Your address is `masroof-mo.duckdns.org`.
-3. Put the VM's public IP in the "current ip" box and click **update ip**.
-4. Copy the **token** shown at the top of the page.
+Send back the three values. That is all.
 
 ## Then: what the orchestrator does (no action from you)
 
 ```bash
-# 1. one-time server setup (as the default ubuntu user), token goes in over stdin, never on a command line
-ssh ubuntu@<ip> 'sudo install -d -m 700 /etc/masroof && sudo install -m 600 /dev/stdin /etc/masroof/duckdns.env' <<< "DUCKDNS_TOKEN=<token>"
-ssh ubuntu@<ip> 'sudo DOMAIN=<name>.duckdns.org DUCKDNS_SUBDOMAIN=<name> bash -s' < infra/oracle/bootstrap.sh
+# 1. one-time server setup. GCP gives the metadata-key user passwordless sudo. The token goes in over stdin,
+#    never on a command line.
+ssh masroof-deploy@<ip> 'sudo install -d -m 700 /etc/masroof && sudo install -m 600 /dev/stdin /etc/masroof/duckdns.env' <<< "DUCKDNS_TOKEN=<token>"
+ssh masroof-deploy@<ip> 'sudo DOMAIN=<name>.duckdns.org DUCKDNS_SUBDOMAIN=<name> bash -s' < infra/host/bootstrap.sh
 
 # 2. GitHub secrets for tag-driven deploys (values never printed)
 gh secret set PROD_HOST   --body "<ip>"
@@ -79,24 +68,78 @@ gh variable set PROD_KNOWN_HOSTS --body "<ip> <ssh-ed25519 key printed by bootst
 make deploy-prod HOST=<ip> DOMAIN=<name>.duckdns.org VERSION=<image tag>
 ```
 
-If you want to set the secrets yourself instead (you only ever type values you own; the SSH private key stays with the
-orchestrator, so for `PROD_SSH_KEY` the orchestrator must run `gh secret set`): GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository
-secret, names exactly `PROD_HOST`, `PROD_DOMAIN`, `PROD_SSH_KEY`. If any of the three is missing the release workflow
-skips the deploy with a visible warning; it never fails because of that.
+`HOST=<ip>` means `masroof-deploy@<ip>`; pass `HOST=user@ip` to override. `PROD_HOST` (a secret) may carry either form.
+If any of `PROD_HOST`, `PROD_DOMAIN`, `PROD_SSH_KEY` is missing the release workflow skips the deploy with a visible
+warning; it never fails because of that.
+
+## What it costs (checked 2026-10-26)
+
+| Item | Free Tier allowance | Masroof usage | Cost |
+|---|---|---|---|
+| e2-micro VM, us-west1 / us-central1 / us-east1 | 1 non-preemptible instance, a full month of hours | 1 VM, 24/7 | USD 0 |
+| Boot disk | 30 GB-months of **standard** persistent disk | 30 GB standard | USD 0 (Balanced/SSD would be billed; beyond 30 GB is USD 0.04 per GB-month) |
+| **External IPv4 address** | **none** (Free Tier is 1 hour per month per account) | 1 address in use, 24/7 | **USD 0.005 per hour, about USD 3.65 per month, ephemeral or static alike** |
+| Internet egress | **1 GB per month** from North America to all destinations except China and Australia | see below | USD 0.12 per GB (first 1 TiB, Premium Tier standard rate) above the free GB |
+| Ingress (uploads, `docker pull`, Let's Encrypt, DuckDNS) | n/a | any | free |
+| Snapshots / backup service | none | not used | keep disabled |
+
+Sources: [Google Cloud Free Tier features](https://cloud.google.com/free/docs/free-cloud-features) (e2-micro regions,
+30 GB-months standard disk, 1 GB egress); [VPC network pricing](https://cloud.google.com/vpc/network-pricing)
+(external IPv4 in use on a standard VM: USD 0.005 per hour, free tier 1 hour per month; internet egress to worldwide
+destinations excluding Australia USD 0.12 per GiB for the first TiB); [Disk pricing](https://cloud.google.com/compute/disks-image-pricing)
+(standard provisioned space: first 30 GiB-months free). Rates change; confirm on those pages before relying on them. I
+could not read a per-country Egypt rate off the pricing page (the table is an interactive widget), so the USD 0.12 per
+GB is the headline worldwide rate: check **Billing -> Reports** once, after the first month.
+
+**Typical household usage stays inside the free 1 GB.** A first load of the PWA is about 110 KB of gzip JavaScript and is
+then cached by the service worker; an API response is 2 to 20 KB. Two people making about 30 calls a day is on the order of
+20 MB per month. Receipt photos (when that feature lands) are about 0.3 to 2 MB each and count as egress only when viewed
+again: 100 per month is roughly 30 to 200 MB. Plan for 100 to 300 MB per month, so egress is USD 0; a bad month of 5 GB
+would be about USD 0.50. The APK is served from GitHub Releases, not from the VM.
 
 ## How it works
 
-- **Images**: `main.yml` builds `linux/amd64` + `linux/arm64` images and pushes `ghcr.io/mohamedshehataa/masroof-backend`
-  and `-web` tagged with the commit sha; `release.yml` pushes version tags. The Ampere VM pulls them; nothing is built on the server.
+- **Images**: `main.yml` builds `linux/amd64` images (the e2-micro is x86_64; arm64 was dropped with Oracle) and pushes
+  `ghcr.io/mohamedshehataa/masroof-backend` and `-web` tagged with the commit sha; `release.yml` pushes version tags.
+  Nothing is built on the server.
 - **Stack**: `infra/docker-compose.yml` + `infra/docker-compose.prod.yml` (Caddy with automatic Let's Encrypt HTTPS,
-  HSTS, CSP, redirect from HTTP; only ports 80 and 443 are published; Postgres data in a Docker volume; restart
-  policies; memory/CPU limits that fit 4 OCPU / 24 GB).
+  HSTS, CSP, redirect from HTTP; only ports 80 and 443 are published; Postgres and MinIO data in Docker volumes;
+  restart policies; per-service memory and CPU caps sized for 1 GB RAM).
 - **Deploy**: `make deploy-prod HOST=<ip> DOMAIN=<domain> VERSION=<tag>` copies the compose files over ssh, pulls the
   images, runs `compose up -d`, then `make smoke URL=https://<domain>`. If the smoke test fails it restores the previous
   tag on the server, re-runs the smoke test and exits non-zero. Server state lives in `~/masroof/infra/.deployed/`.
   The first deploy has nothing to roll back to and just reports the failure.
-- **Secrets**: generated on the server in `~deploy/masroof/infra/.env` (mode 600) by `bootstrap.sh`; the DuckDNS token is in
-  `/etc/masroof/duckdns.env` (root only). Nothing secret is in the repo, the images, or cloud-init.
+- **Secrets**: generated on the server in `~masroof-deploy/masroof/infra/.env` (mode 600) by `bootstrap.sh`
+  (`MASROOF_JWT_SECRET`, `MASROOF_AUDIT_KEY`, DB and MinIO passwords) and never printed; the DuckDNS token is in
+  `/etc/masroof/duckdns.env` (root only). Nothing secret is in the repo or the images.
+
+### Memory budget (1 GB RAM, measured)
+
+The prod overlay caps every service. The numbers below come from running the exact overlay locally (Docker 29.9.2,
+linux/amd64, project `masrooftest` on a random subnet, caps applied, images built from `main` at 8c30840, MinIO included),
+`docker stats --no-stream`:
+
+| Service | Cap | After startup | After 600 requests* |
+|---|---|---|---|
+| backend (JVM: `-Xmx224m`, SerialGC, C1 only, 5-connection Hikari pool) | 384 MiB | 164 MiB | 175 MiB |
+| postgres (`shared_buffers=48MB`, `max_connections=20`, `jit=off`) | 192 MiB | 38 MiB | 45 MiB |
+| minio (`GOMEMLIMIT=96MiB`) | 128 MiB | 32 MiB | 32 MiB |
+| web (static nginx) | 48 MiB | 19 MiB | 19 MiB |
+| caddy (`GOMEMLIMIT=48MiB`) | 64 MiB | 11 MiB | 16 MiB |
+| **Total** | **816 MiB** | **264 MiB** | **286 MiB** |
+
+\* 300 expense creates, 100 list, 100 category and 100 web-page requests with 4 in parallel, plus 6 logins; every
+request returned 2xx; no container was OOM-killed or restarted.
+
+The OS, dockerd and containerd take roughly 200 to 250 MB, so a running host sits near 500 MB of the roughly 970 MB an
+e2-micro reports, and `bootstrap.sh` adds a 2 GB swapfile (`vm.swappiness=10`) for spikes such as `apt` upgrades.
+Backend start time: **4.1 s** with the 1.5 CPU cap on the (fast) test machine, 6.1 s at 0.4 CPU, **27.8 s at 0.1 CPU**.
+The e2-micro's shared vCPUs sustain 0.25 CPU each and burst higher for short periods, so expect roughly 10 to 40 s; the
+backend health check allows 240 s before declaring it unhealthy and `deploy.sh` waits up to 180 s for the first smoke test.
+No startup-snapshot (AppCDS) is built: it needs a training run at image build time and the start time is already fine.
+
+MinIO is kept (32 MiB measured, capped at 128 MiB) because the next stories need object storage; the backend does not
+use it yet.
 
 ### First login
 `bootstrap.sh` generates `MASROOF_JWT_SECRET`. To create the first admin, add `MASROOF_BOOTSTRAP_ADMIN_EMAIL` and
@@ -120,30 +163,37 @@ handling would no longer match the pinned Caddy address. The DuckDNS refresh job
 | Security updates (unattended-upgrades) | daily | apt |
 | ssh brute-force bans (fail2ban) | always | 5 failures -> 1 h ban |
 | DuckDNS IP refresh | every 5 min (cron) | `/usr/local/sbin/masroof-duckdns` |
-| Encrypted `pg_dump` + MinIO media tar | 01:30 UTC nightly (systemd timer) | `/var/backups/masroof/`, 7-day retention |
-| Keep-alive CPU burst | hourly, 20 min, niced | `masroof-keepalive.timer` |
+| Encrypted `pg_dump` + MinIO media tar, verified | 01:30 UTC nightly (systemd timer) | `/var/backups/masroof/`, 7-day retention |
+| Firewall (ufw) | always | 22, 80, 443 only |
+| Docker log rotation, journald cap | always | 10 MB x 3 per container, 100 MB journal |
+
+There is no idle-reclaim keep-alive job: the e2-micro Free Tier is not reclaimed for being idle (that was an Oracle
+behaviour). Re-running `bootstrap.sh` on a server bootstrapped for Oracle removes the old keep-alive timer.
 
 ### Backups
 
 Both the database dump (`masroof-<stamp>.sql.gz.gpg`) and the MinIO media (`masroof-media-<stamp>.tar.gz.gpg`) are gzip + AES-256 gpg encrypted with `/etc/masroof/backup.pass` (generated on the server). **Copy that passphrase
-somewhere safe** (a password manager); without it the dumps cannot be read. Restore:
+somewhere safe** (a password manager); without it the dumps cannot be read. Each file is decrypted and gunzip-tested right after it
+is written (a failed file is deleted and the job fails). The disk is only 30 GB and shared with Docker: the job refuses
+to start under 3 GB free (after first deleting all but the newest dump of each kind), keeps 7 days, and drops
+dangling Docker layers afterwards. Restore:
 `gpg --batch --passphrase-file /etc/masroof/backup.pass -d masroof-<stamp>.sql.gz.gpg | gunzip | docker exec -i <postgres container> psql -U masroof masroof`.
-These backups live on the VM disk, so they protect against mistakes, not against losing the VM. For an off-box copy
-create a free Object Storage bucket (Oracle gives 20 GB), install the `oci` CLI for root, and set
-`OCI_BACKUP_BUCKET=<bucket>` in `/etc/masroof/backup.env`; the nightly job then uploads each dump. Run one by hand:
-`make backup HOST=<ip>`.
-
-### Idle reclaim
-
-Oracle may reclaim Always Free instances that stay idle (CPU 95th percentile, network and memory all under 20% for
-7 days). The keep-alive timer adds a low-priority 20-minute all-core burst every hour (about 33% CPU in each hourly sample) so the CPU figure stays above that line; it uses no
-billable resource. The only fully reliable alternative is upgrading the account to **Pay As You Go**: Always Free
-resources stay free and are not reclaimed, you are only charged if you create paid resources. Your call, not needed to start.
+These backups live on the VM disk, so they protect against mistakes, not against losing the VM or the disk. For an
+off-box copy, pull them from your own machine, for example
+`ssh masroof-deploy@<ip> 'sudo cat /var/backups/masroof/<file>' > <file>` (egress counts against the free 1 GB; a dump is a few MB).
+Run one by hand: `make backup HOST=<ip>`.
 
 ## Troubleshooting
 
-- Browser cannot connect: check the three ingress rules above, then `sudo ufw status` on the VM.
+- Browser cannot connect: check "Allow HTTP traffic" and "Allow HTTPS traffic" on the VM (Compute Engine -> VM ->
+  Edit -> Networking), then `sudo ufw status` on the VM.
 - Certificate not issued: DuckDNS must point at the VM IP (`nslookup <name>.duckdns.org`) and port 80 must be reachable.
   Caddy retries by itself; `docker logs masroof-caddy-1`.
-- `exec format error` in a container: an image was built without the arm64 platform; re-run the `main` workflow.
+- VM was stopped and started: the external IP changed. The DuckDNS cron fixes DNS within 5 minutes; check
+  `sudo /usr/local/sbin/masroof-duckdns`.
+- Out of memory symptoms (a container restarting, `OOMKilled` in `docker inspect`): `free -m` and `docker stats --no-stream`
+  on the VM; the caps in `infra/docker-compose.prod.yml` are the first thing to adjust.
+- `exec format error` in a container: an image was built for the wrong platform; the VM is linux/amd64, re-run the `main` workflow.
 - Smoke fails after deploy: the script already rolled back; read `docker compose -p masroof logs --tail=200 backend` on the server.
+- Disk filling up: `df -h /`, `docker system df`; old tagged images can be removed with `docker image rm` (keep the two
+  releases listed in `~/masroof/infra/.deployed/`).
