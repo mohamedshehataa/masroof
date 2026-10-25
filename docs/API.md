@@ -96,7 +96,7 @@ Request body (`application/json`): `RefreshRequest`
 
 - operationId: `logout`
 
-Revokes the presented refresh token (and optionally all sessions of the user).
+Revokes the presented refresh token's session (or all sessions of its user). Holding the refresh token is proof enough, so the bearer is optional and may be expired; unknown or already revoked tokens still give 204.
 
 Request body (`application/json`): `LogoutRequest`
 

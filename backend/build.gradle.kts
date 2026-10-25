@@ -62,6 +62,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.security:spring-security-crypto") // BCrypt only (ADR-0005 not needed: no web security stack)
     implementation("org.jspecify:jspecify")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
@@ -214,6 +215,7 @@ pitest {
     targetClasses = setOf(
         "eg.masroof.domain.*", "eg.masroof.*.money.*", "eg.masroof.*.parsing.*",
         "eg.masroof.*.dedup.*", "eg.masroof.*.analytics.*",
+        "eg.masroof.adapters.out.security.*", "eg.masroof.application.auth.*",
     )
     excludedGroups = setOf("integration", "migration", "arch")
     outputFormats = setOf("XML", "HTML")

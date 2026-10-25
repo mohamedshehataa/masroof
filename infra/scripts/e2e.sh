@@ -39,6 +39,7 @@ git ls-files -co --exclude-standard -z | tar -c --null -T - 2>/dev/null | tar -x
 rm -f "$WORK/.env" "$WORK/infra/scripts/seed-demo.sh"
 sed -e '/^DOMAIN=/d' -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=e2e$RANDOM$RANDOM/" .env.example >"$WORK/.env"
 echo "DOMAIN=" >>"$WORK/.env"
+sed -i "s|^MASROOF_JWT_SECRET=.*|MASROOF_JWT_SECRET=e2e$(openssl rand -hex 24)|" "$WORK/.env"
 if (cd "$WORK" && bash scripts/make/compose.sh up); then
   (cd "$REPO/web" && E2E_BASE_URL=http://localhost npm run e2e) || { echo "FAIL web npm run e2e"; rc=1; }
 else

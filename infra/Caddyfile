@@ -1,8 +1,8 @@
 # Edge router (STORY-142). DOMAIN empty -> plain HTTP on :80, no redirect; DOMAIN set -> automatic HTTPS.
-# /health and /api/* go to the backend; everything else (incl. /actuator/*) goes to the static web image.
-# Routes for /auth/* and /webhooks/* arrive with the stories that add those endpoints.
+# /health, /api/* and /auth/* go to the backend; everything else (incl. /actuator/*) goes to the static web image.
+# /auth/* is the login API (STORY-009); /webhooks/* arrives with the story that adds it.
 {$DOMAIN::80} {
-	@backend path /health /api/*
+	@backend path /health /api/* /auth/*
 	handle @backend {
 		reverse_proxy backend:8080
 	}
