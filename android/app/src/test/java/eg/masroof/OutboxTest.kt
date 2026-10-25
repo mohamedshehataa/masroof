@@ -9,6 +9,7 @@ import eg.masroof.data.NewExpense
 import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.remote.UploadResult
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -45,7 +46,7 @@ class OutboxTest {
     private fun entry(minor: Long = 12_500) = NewExpense(Money(minor), clock.millis(), null, null, "lunch")
 
     @Test
-    fun `REQ-AND-OUTBOX add is saved locally first and queued`() =
+    fun `REQ-AND-015 add is saved locally first and queued`() =
         runTest {
             repo.add(entry())
             val rows = repo.observeAll().first()
@@ -55,7 +56,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX month total includes offline entries in Cairo month`() =
+    fun `REQ-AND-015 month total includes offline entries in Cairo month`() =
         runTest {
             repo.add(entry(10_000))
             repo.add(entry(2_500))
@@ -63,7 +64,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX sync uploads with the client id as idempotency key and swaps in the server row`() =
+    fun `REQ-AND-015 sync uploads with the client id as idempotency key and swaps in the server row`() =
         runTest {
             val id = repo.add(entry())
             remote.uploadResult = { UploadResult.Created(expense("server-1", it.amountMinor)) }
@@ -79,7 +80,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX unreachable server keeps the entry and asks for retry with backoff`() =
+    fun `REQ-AND-015 unreachable server keeps the entry and asks for retry with backoff`() =
         runTest {
             repo.add(entry())
             repo.add(entry(500))
@@ -94,7 +95,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX rejected entries leave the queue but stay visible`() =
+    fun `REQ-AND-015 rejected entries leave the queue but stay visible`() =
         runTest {
             repo.add(entry())
             remote.uploadResult = { UploadResult.Rejected }
@@ -108,7 +109,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX refresh reports offline and keeps cached rows`() =
+    fun `REQ-AND-015 refresh reports offline and keeps cached rows`() =
         runTest {
             remote.expenses = listOf(expense("a", 100))
             assertEquals(RefreshOutcome.Ok, repo.refresh())
@@ -118,12 +119,74 @@ class OutboxTest {
         }
 
     @Test
-    fun `REQ-AND-OUTBOX refresh never drops locally pending rows`() =
+    fun `REQ-AND-015 refresh never drops locally pending rows`() =
         runTest {
             val id = repo.add(entry())
             remote.expenses = listOf(expense("a", 100))
             remote.uploadResult = { UploadResult.Retry }
             repo.refresh()
             assertTrue(repo.observeAll().first().any { it.id == id && it.pending })
+        }
+
+    @Test
+    fun `REQ-AND-015 a rejected entry is marked failed and excluded from the month total`() =
+        runTest {
+            val id = repo.add(entry(10_000))
+            repo.add(entry(2_500))
+            remote.uploadResult = { if (it.clientId == id) UploadResult.Rejected else UploadResult.Retry }
+
+            repo.syncOutbox()
+
+            val failed = repo.observeAll().first().single { it.id == id }
+            assertTrue(failed.failed)
+            assertEquals(Money(2_500), repo.observeMonthTotal().first())
+        }
+
+    @Test
+    fun `REQ-AND-015 retrying a failed entry requeues it and deleting drops it`() =
+        runTest {
+            val id = repo.add(entry(10_000))
+            remote.uploadResult = { UploadResult.Rejected }
+            repo.syncOutbox()
+            assertEquals(0, repo.observePendingCount().first())
+
+            repo.retryFailed(id)
+            assertEquals(1, repo.observePendingCount().first())
+            assertEquals(Money(10_000), repo.observeMonthTotal().first())
+
+            repo.syncOutbox()
+            repo.deleteFailed(id)
+            assertTrue(repo.observeAll().first().isEmpty())
+            assertTrue(db.outbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-015 unauthorized keeps the entry queued and does not ask for endless retries`() =
+        runTest {
+            repo.add(entry())
+            remote.uploadResult = { UploadResult.Unauthorized }
+
+            val report = repo.syncOutbox()
+
+            assertTrue(report.unauthorized)
+            assertEquals(false, report.retry)
+            assertEquals(1, repo.observePendingCount().first())
+        }
+
+    @Test
+    fun `REQ-AND-015 concurrent syncs never upload the same entry twice`() =
+        runTest {
+            repo.add(entry())
+            remote.uploadResult = {
+                kotlinx.coroutines.delay(50)
+                UploadResult.Created(expense("server-1", it.amountMinor))
+            }
+
+            val a = async(kotlinx.coroutines.Dispatchers.Default) { repo.syncOutbox() }
+            val b = async(kotlinx.coroutines.Dispatchers.Default) { repo.syncOutbox() }
+            a.await()
+            b.await()
+
+            assertEquals(1, remote.uploadedKeys.size)
         }
 }

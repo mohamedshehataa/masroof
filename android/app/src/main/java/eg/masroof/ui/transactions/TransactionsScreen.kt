@@ -25,7 +25,7 @@ import eg.masroof.ui.components.StatusBanner
 @Composable
 fun TransactionsRoute(viewModel: TransactionsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    TransactionsContent(state, onRetry = viewModel::refresh)
+    TransactionsContent(state, onRetry = viewModel::refresh, onRetryEntry = viewModel::retryEntry, onDeleteEntry = viewModel::deleteEntry)
 }
 
 @Composable
@@ -33,13 +33,15 @@ fun TransactionsContent(
     state: TransactionsUiState,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onRetryEntry: (String) -> Unit = {},
+    onDeleteEntry: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.transactions_title), style = MaterialTheme.typography.headlineSmall)
         if (state.rows.isNotEmpty()) StatusBanner(state.status, onRetry)
         ListStates(state.status, isEmpty = state.rows.isEmpty(), onRetry = onRetry) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.rows, key = { it.id }) { ExpenseListItem(it) }
+                items(state.rows, key = { it.id }) { ExpenseListItem(it, onRetryEntry = onRetryEntry, onDeleteEntry = onDeleteEntry) }
             }
         }
     }

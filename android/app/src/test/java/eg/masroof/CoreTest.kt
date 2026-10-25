@@ -13,7 +13,7 @@ import java.time.LocalDate
 
 class CoreTest {
     @Test
-    fun `REQ-UI-MONEY formats english with western digits`() {
+    fun `REQ-AND-004 formats english with western digits`() {
         assertEquals("1,250 EGP", MoneyFormat.format(Money(125_000), arabic = false, digits = DigitStyle.WESTERN))
         assertEquals("1,250.50 EGP", MoneyFormat.format(Money(125_050), arabic = false, digits = DigitStyle.WESTERN))
         assertEquals("0.05 EGP", MoneyFormat.format(Money(5), arabic = false, digits = DigitStyle.WESTERN))
@@ -21,18 +21,18 @@ class CoreTest {
     }
 
     @Test
-    fun `REQ-UI-MONEY formats arabic with arabic-indic digits and currency symbol`() {
+    fun `REQ-AND-004 formats arabic with arabic-indic digits and currency symbol`() {
         assertEquals("١٬٢٥٠ ج.م", MoneyFormat.format(Money(125_000), arabic = true, digits = DigitStyle.ARABIC_INDIC))
         assertEquals("١٬٢٥٠ ج.م", MoneyFormat.format(Money(125_000), arabic = true, digits = DigitStyle.ARABIC_INDIC))
     }
 
     @Test
-    fun `REQ-UI-MONEY arabic ui can still show western digits`() {
+    fun `REQ-AND-004 arabic ui can still show western digits`() {
         assertEquals("1,250 ج.م", MoneyFormat.format(Money(125_000), arabic = true, digits = DigitStyle.WESTERN))
     }
 
     @Test
-    fun `REQ-UI-MONEY large amounts group every three digits without overflow`() {
+    fun `REQ-AND-004 large amounts group every three digits without overflow`() {
         assertEquals(
             "92,233,720,368,547,758.07 EGP",
             MoneyFormat.format(Money(Long.MAX_VALUE), false, DigitStyle.WESTERN),
@@ -40,7 +40,7 @@ class CoreTest {
     }
 
     @Test
-    fun `REQ-UI-MONEY parses input into minor units without floating point`() {
+    fun `REQ-AND-004 parses input into minor units without floating point`() {
         assertEquals(12_550L, MoneyFormat.parseMinor("125.5"))
         assertEquals(12_500L, MoneyFormat.parseMinor("125"))
         assertEquals(1_250L, MoneyFormat.parseMinor("12,5"))
@@ -49,19 +49,19 @@ class CoreTest {
     }
 
     @Test
-    fun `REQ-UI-MONEY rejects invalid or non positive input`() {
+    fun `REQ-AND-004 rejects invalid or non positive input`() {
         listOf("", "abc", "0", "0.00", "1.234", "1.2.3", "-5", ".", "99999999999999999999").forEach {
             assertNull("input '$it'", MoneyFormat.parseMinor(it))
         }
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `REQ-UI-MONEY mixed currencies cannot be added`() {
+    fun `REQ-AND-004 mixed currencies cannot be added`() {
         Money(1, "EGP") + Money(1, "USD")
     }
 
     @Test
-    fun `REQ-UI-DATES month window uses Cairo calendar not UTC`() {
+    fun `REQ-AND-013 month window uses Cairo calendar not UTC`() {
         // 2026-03-31T22:30Z is already 2026-04-01 00:30 in Cairo (UTC+2).
         val now = Instant.parse("2026-03-31T22:30:00Z")
         val (start, end) = CairoTime.monthRangeMillis(now)
@@ -70,13 +70,13 @@ class CoreTest {
     }
 
     @Test
-    fun `REQ-UI-DATES noon of a date stays on that date`() {
+    fun `REQ-AND-013 noon of a date stays on that date`() {
         val date = LocalDate.of(2026, 7, 1)
         assertEquals(date, CairoTime.dateOf(CairoTime.noonOf(date).toEpochMilli()))
     }
 
     @Test
-    fun `REQ-UI-SETTINGS server url normalisation`() {
+    fun `REQ-AND-017 server url normalisation`() {
         assertEquals("http://10.0.2.2/", normalizeServerUrl(" http://10.0.2.2 "))
         assertEquals("https://masroof.example/", normalizeServerUrl("https://masroof.example/"))
         assertNull(normalizeServerUrl("masroof.example"))

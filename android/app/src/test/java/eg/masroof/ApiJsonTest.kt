@@ -15,7 +15,7 @@ import java.util.UUID
 /** Guards the generated client against the real wire format: Money.amountMinor is Long, enums/UUID/Instant round-trip. */
 class ApiJsonTest {
     @Test
-    fun `REQ-AND-CLIENT create request serialises money as integer minor units`() {
+    fun `REQ-OPS-055 create request serialises money as integer minor units`() {
         val body =
             ExpenseCreate(
                 type = TransactionType.EXPENSE,
@@ -32,7 +32,7 @@ class ApiJsonTest {
     }
 
     @Test
-    fun `REQ-AND-CLIENT expense page deserialises and ignores unknown fields`() {
+    fun `REQ-OPS-055 expense page deserialises and ignores unknown fields`() {
         val json =
             """
             {"items":[{"id":"7a1a4a7e-5d3e-4a0e-9d0a-1b2c3d4e5f60","householdId":"0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f",

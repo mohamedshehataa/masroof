@@ -15,8 +15,11 @@ sealed interface UploadResult {
         val expense: ExpenseEntity,
     ) : UploadResult
 
-    /** Transient: network down, 5xx, 401/408/429. Keep in the outbox and back off. */
+    /** Transient: network down, 5xx, 408/429. Keep in the outbox and back off. */
     data object Retry : UploadResult
+
+    /** 401: credentials missing/expired. Retrying cannot help until the user signs in again. */
+    data object Unauthorized : UploadResult
 
     /** Permanent: the server rejected the payload (400/422...). Retrying cannot help. */
     data object Rejected : UploadResult

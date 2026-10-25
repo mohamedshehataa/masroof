@@ -35,7 +35,13 @@ fun HomeRoute(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    HomeContent(state, onRetry = viewModel::refresh, onSeeAll = onSeeAll)
+    HomeContent(
+        state,
+        onRetry = viewModel::refresh,
+        onSeeAll = onSeeAll,
+        onRetryEntry = viewModel::retryEntry,
+        onDeleteEntry = viewModel::deleteEntry,
+    )
 }
 
 @Composable
@@ -44,6 +50,8 @@ fun HomeContent(
     onRetry: () -> Unit,
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
+    onRetryEntry: (String) -> Unit = {},
+    onDeleteEntry: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(Modifier.fillMaxWidth()) {
@@ -73,7 +81,7 @@ fun HomeContent(
         }
         ListStates(state.status, isEmpty = state.recent.isEmpty(), onRetry = onRetry) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.recent, key = { it.id }) { ExpenseListItem(it) }
+                items(state.recent, key = { it.id }) { ExpenseListItem(it, onRetryEntry = onRetryEntry, onDeleteEntry = onDeleteEntry) }
             }
         }
     }

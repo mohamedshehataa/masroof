@@ -15,6 +15,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Masroof">
 
+        <!-- Reason: this is the launcher activity (MAIN/LAUNCHER); it must be exported to be startable. It takes
+             no extras, reads no intent data and is the only exported component. -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

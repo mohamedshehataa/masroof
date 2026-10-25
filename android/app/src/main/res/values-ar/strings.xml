@@ -21,6 +21,11 @@
     <string name="offline_title">أنت غير متصل</string>
     <string name="offline_body">نعرض ما هو محفوظ على هذا الجهاز. ستتم مزامنة الإدخالات الجديدة عند عودة الاتصال.</string>
     <string name="retry">إعادة المحاولة</string>
+    <string name="delete">حذف</string>
+    <string name="sync_failed">تعذرت المزامنة</string>
+    <string name="banner_sign_in">سجّل الدخول مجددًا - حدّث رمز الوصول في الإعدادات</string>
+    <string name="sign_in_title">سجّل الدخول مجددًا</string>
+    <string name="sign_in_body">لم يقبل الخادم رمز الوصول. حدّثه من الإعدادات. إدخالاتك المحفوظة باقية.</string>
     <string name="banner_offline">غير متصل - نعرض البيانات المحفوظة</string>
     <string name="banner_error">تعذر التحديث - نعرض البيانات المحفوظة</string>
     <string name="pending_sync">في انتظار المزامنة</string>

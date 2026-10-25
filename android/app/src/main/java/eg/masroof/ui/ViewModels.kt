@@ -29,7 +29,7 @@ import java.time.format.DateTimeParseException
 import javax.inject.Inject
 
 /** Where the last server refresh stands. Lists always render from Room regardless of this. */
-enum class LoadStatus { LOADING, READY, OFFLINE, ERROR }
+enum class LoadStatus { LOADING, READY, OFFLINE, ERROR, SIGN_IN }
 
 data class ExpenseRow(
     val id: String,
@@ -37,12 +37,14 @@ data class ExpenseRow(
     val money: Money,
     val date: LocalDate,
     val pending: Boolean,
+    val failed: Boolean,
     val category: CategoryEntity?,
     val notes: String?,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val RECENT_LIMIT = 5
+private const val MAX_NOTES = 2000
 
 private fun toRows(
     expenses: List<ExpenseEntity>,
@@ -55,7 +57,8 @@ private fun toRows(
             merchant = it.merchant,
             money = Money(it.amountMinor, it.currency),
             date = CairoTime.dateOf(it.occurredAtMillis),
-            pending = it.pending,
+            pending = it.pending && !it.failed,
+            failed = it.failed,
             category = it.categoryId?.let(byId::get),
             notes = it.notes,
         )
@@ -64,8 +67,22 @@ private fun toRows(
 
 abstract class RefreshingViewModel(
     private val repository: ExpenseRepository,
+    private val scheduler: SyncScheduler,
 ) : ViewModel() {
     protected val status = MutableStateFlow(LoadStatus.LOADING)
+
+    /** "Retry" on a row the server rejected: re-queue it and let WorkManager upload it. */
+    fun retryEntry(id: String) {
+        viewModelScope.launch {
+            repository.retryFailed(id)
+            scheduler.schedule()
+        }
+    }
+
+    /** "Delete" on a row that could not be synced. */
+    fun deleteEntry(id: String) {
+        viewModelScope.launch { repository.deleteFailed(id) }
+    }
 
     fun refresh() {
         status.value = LoadStatus.LOADING
@@ -75,6 +92,7 @@ abstract class RefreshingViewModel(
                     RefreshOutcome.Ok -> LoadStatus.READY
                     RefreshOutcome.Offline -> LoadStatus.OFFLINE
                     RefreshOutcome.Failed -> LoadStatus.ERROR
+                    RefreshOutcome.SignIn -> LoadStatus.SIGN_IN
                 }
         }
     }
@@ -92,7 +110,8 @@ class HomeViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
-    ) : RefreshingViewModel(repository) {
+        scheduler: SyncScheduler,
+    ) : RefreshingViewModel(repository, scheduler) {
         val state: StateFlow<HomeUiState> =
             combine(
                 repository.observeMonthTotal(),
@@ -119,7 +138,8 @@ class TransactionsViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
-    ) : RefreshingViewModel(repository) {
+        scheduler: SyncScheduler,
+    ) : RefreshingViewModel(repository, scheduler) {
         val state: StateFlow<TransactionsUiState> =
             combine(
                 repository.observeAll(),
@@ -159,6 +179,7 @@ class AddExpenseViewModel
         private val scheduler: SyncScheduler,
         private val clock: java.time.Clock,
     ) : ViewModel() {
+        private var saving = false
         private val form = MutableStateFlow(AddFormState(dateText = CairoTime.today(clock.instant()).toString()))
 
         val state: StateFlow<AddUiState> =
@@ -177,11 +198,13 @@ class AddExpenseViewModel
 
         fun onDate(text: String) = form.update { it.copy(dateText = text, dateInvalid = false) }
 
-        fun onNotes(text: String) = form.update { it.copy(notes = text) }
+        // The contract caps notes at 2000 characters; the form cannot exceed it.
+        fun onNotes(text: String) = form.update { it.copy(notes = text.take(MAX_NOTES)) }
 
         /** Validates, writes to Room + outbox, then asks WorkManager to sync. Never touches the network itself. */
         fun save() {
             val f = form.value
+            if (saving || f.saved) return // double tap: one entry only
             val minor = MoneyFormat.parseMinor(f.amountText)
             val date =
                 try {
@@ -193,18 +216,23 @@ class AddExpenseViewModel
                 form.update { it.copy(amountInvalid = minor == null, dateInvalid = date == null) }
                 return
             }
+            saving = true
             viewModelScope.launch {
-                repository.add(
-                    NewExpense(
-                        amount = Money(minor, Money.EGP),
-                        occurredAtMillis = CairoTime.noonOf(date).toEpochMilli(),
-                        categoryId = f.categoryId,
-                        accountId = f.accountId,
-                        notes = f.notes.trim().ifEmpty { null },
-                    ),
-                )
-                scheduler.schedule()
-                form.update { it.copy(saved = true) }
+                try {
+                    repository.add(
+                        NewExpense(
+                            amount = Money(minor, Money.EGP),
+                            occurredAtMillis = CairoTime.noonOf(date).toEpochMilli(),
+                            categoryId = f.categoryId,
+                            accountId = f.accountId,
+                            notes = f.notes.trim().ifEmpty { null },
+                        ),
+                    )
+                    scheduler.schedule()
+                    form.update { it.copy(saved = true) }
+                } finally {
+                    saving = false
+                }
             }
         }
     }

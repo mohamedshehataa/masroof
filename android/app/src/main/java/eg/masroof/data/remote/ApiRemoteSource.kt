@@ -41,6 +41,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 object UuidSerializer : KSerializer<UUID> {
     override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
@@ -175,6 +176,7 @@ class ApiRemoteSource
                 .items
                 .map { it.toEntity() }
 
+        @Suppress("TooGenericExceptionCaught")
         override suspend fun upload(item: OutboxEntity): UploadResult {
             val body =
                 ExpenseCreate(
@@ -191,11 +193,17 @@ class ApiRemoteSource
                 val created = response.body()
                 when {
                     response.isSuccessful && created != null -> UploadResult.Created(created.toEntity())
+                    response.code() == UNAUTHORIZED -> UploadResult.Unauthorized
                     response.code() in RETRYABLE -> UploadResult.Retry
                     response.code() >= SERVER_ERROR -> UploadResult.Retry
                     else -> UploadResult.Rejected
                 }
             } catch (_: IOException) {
+                UploadResult.Retry
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Anything unexpected (bad id, malformed body) must not kill the worker or lose the entry.
                 UploadResult.Retry
             }
         }
@@ -223,6 +231,7 @@ class ApiRemoteSource
             const val TIMEOUT_SECONDS = 15L
             const val PAGE_LIMIT = 200
             const val SERVER_ERROR = 500
-            val RETRYABLE = setOf(401, 408, 429)
+            const val UNAUTHORIZED = 401
+            val RETRYABLE = setOf(408, 429)
         }
     }

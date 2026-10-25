@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,8 @@ fun AmountText(
 fun ExpenseListItem(
     row: ExpenseRow,
     modifier: Modifier = Modifier,
+    onRetryEntry: (String) -> Unit = {},
+    onDeleteEntry: (String) -> Unit = {},
 ) {
     val arabic = LocalMoneyStyle.current.arabic
     val categoryName =
@@ -72,6 +75,21 @@ fun ExpenseListItem(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
                     )
+                }
+                if (row.failed) {
+                    Text(
+                        stringResource(R.string.sync_failed),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Row {
+                        TextButton(onClick = { onRetryEntry(row.id) }, modifier = Modifier.height(48.dp)) {
+                            Text(stringResource(R.string.retry))
+                        }
+                        TextButton(onClick = { onDeleteEntry(row.id) }, modifier = Modifier.height(48.dp)) {
+                            Text(stringResource(R.string.delete))
+                        }
+                    }
                 }
             }
             AmountText(row.money)
@@ -132,8 +150,13 @@ fun StatusBanner(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (status != LoadStatus.OFFLINE && status != LoadStatus.ERROR) return
-    val text = if (status == LoadStatus.OFFLINE) R.string.banner_offline else R.string.banner_error
+    if (status != LoadStatus.OFFLINE && status != LoadStatus.ERROR && status != LoadStatus.SIGN_IN) return
+    val text =
+        when (status) {
+            LoadStatus.OFFLINE -> R.string.banner_offline
+            LoadStatus.SIGN_IN -> R.string.banner_sign_in
+            else -> R.string.banner_error
+        }
     Row(
         modifier
             .fillMaxWidth()
@@ -144,7 +167,7 @@ fun StatusBanner(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(text), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        androidx.compose.material3.TextButton(onClick = onRetry, modifier = Modifier.height(48.dp)) {
+        TextButton(onClick = onRetry, modifier = Modifier.height(48.dp)) {
             Text(stringResource(R.string.retry))
         }
     }
@@ -167,6 +190,10 @@ fun ListStates(
         status == LoadStatus.LOADING -> SkeletonList(modifier.padding(16.dp))
         status == LoadStatus.OFFLINE ->
             MessageState(stringResource(R.string.offline_title), stringResource(R.string.offline_body), modifier) {
+                RetryButton(onRetry)
+            }
+        status == LoadStatus.SIGN_IN ->
+            MessageState(stringResource(R.string.sign_in_title), stringResource(R.string.sign_in_body), modifier) {
                 RetryButton(onRetry)
             }
         status == LoadStatus.ERROR ->

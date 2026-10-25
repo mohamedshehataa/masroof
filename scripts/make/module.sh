@@ -5,10 +5,11 @@
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 cd "$PROJECT_DIR" || exit 1
+. "$(dirname "${BASH_SOURCE[0]}")/gradlew-guard.sh"
 mod="${1:?module}"; task="${2:?task}"
 case "$mod" in
   backend|android)
-    [ -x "$mod/gradlew" ] || { echo "skip: $mod module not present"; exit 0; }
+    gradlew_state "$mod"; case $? in 2) echo "skip: $mod module not present"; exit 0 ;; 1) exit 1 ;; esac
     case "$task" in mutation) gtask=pitest ;; *) gtask="$task" ;; esac
     if [ "$task" = mutation ] && [ "$mod" = backend ]; then
       # PIT with zero target classes writes no mutations.xml. Leave an explicit marker (only when PIT itself says so)

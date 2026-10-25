@@ -6,6 +6,7 @@
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 cd "$PROJECT_DIR" || exit 1
+. "$(dirname "${BASH_SOURCE[0]}")/gradlew-guard.sh"
 export LC_ALL=C.UTF-8
 mods="$*"; [ -z "$mods" ] && mods="sdlc"
 fail=0
@@ -69,7 +70,7 @@ sys.exit(bad)' $yml_files
 }
 
 check_backend() {
-  [ -x backend/gradlew ] || { echo "skip: backend module not present"; return 0; }
+  gradlew_state backend; case $? in 2) echo "skip: backend module not present"; return 0 ;; 1) fail=1; return 1 ;; esac
   run "backend: ./gradlew checkFast" bash -c 'cd backend && ./gradlew --console=plain -q checkFast'
 }
 check_web() {
@@ -79,7 +80,7 @@ check_web() {
   run "web: npm run check-fast" bash -c 'cd web && npm run -s check-fast'
 }
 check_android() {
-  [ -x android/gradlew ] || { echo "skip: android module not present"; return 0; }
+  gradlew_state android; case $? in 2) echo "skip: android module not present"; return 0 ;; 1) fail=1; return 1 ;; esac
   run "android: ./gradlew checkFast" bash -c 'cd android && ./gradlew --console=plain -q checkFast'
 }
 

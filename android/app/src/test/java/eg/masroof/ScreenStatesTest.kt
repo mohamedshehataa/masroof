@@ -26,13 +26,13 @@ class ScreenStatesTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `REQ-UI-HOME empty state is shown when ready with no rows`() {
+    fun `REQ-AND-010 empty state is shown when ready with no rows`() {
         compose.setContent { MasroofTheme { HomeContent(HomeUiState(status = LoadStatus.READY), {}, {}) } }
         compose.onNodeWithText("No expenses yet").assertIsDisplayed()
     }
 
     @Test
-    fun `REQ-UI-TX offline state with retry is shown when nothing is cached`() {
+    fun `REQ-AND-011 offline state with retry is shown when nothing is cached`() {
         compose.setContent {
             MasroofTheme { TransactionsContent(TransactionsUiState(status = LoadStatus.OFFLINE), onRetry = {}) }
         }
@@ -41,7 +41,7 @@ class ScreenStatesTest {
     }
 
     @Test
-    fun `REQ-UI-TX error state with retry is shown when refresh failed and nothing is cached`() {
+    fun `REQ-AND-011 error state with retry is shown when refresh failed and nothing is cached`() {
         compose.setContent {
             MasroofTheme { TransactionsContent(TransactionsUiState(status = LoadStatus.ERROR), onRetry = {}) }
         }
@@ -49,9 +49,9 @@ class ScreenStatesTest {
     }
 
     @Test
-    fun `REQ-UI-HOME total and cached rows still render when offline`() {
+    fun `REQ-AND-010 total and cached rows still render when offline`() {
         val row =
-            ExpenseRow("1", "Cafe", Money(5_000), LocalDate.of(2026, 10, 15), false, null, null)
+            ExpenseRow("1", "Cafe", Money(5_000), LocalDate.of(2026, 10, 15), false, false, null, null)
         val state =
             HomeUiState(
                 total = Money(125_000),

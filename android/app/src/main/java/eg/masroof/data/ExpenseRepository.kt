@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.time.Clock
 import java.util.UUID
@@ -27,6 +29,9 @@ sealed interface RefreshOutcome {
     data object Offline : RefreshOutcome
 
     data object Failed : RefreshOutcome
+
+    /** The server answered 401: the access token is missing or expired. */
+    data object SignIn : RefreshOutcome
 }
 
 data class NewExpense(
@@ -42,6 +47,7 @@ data class SyncReport(
     val uploaded: Int,
     val rejected: Int,
     val retry: Boolean,
+    val unauthorized: Boolean = false,
 )
 
 interface ExpenseRepository {
@@ -63,6 +69,12 @@ interface ExpenseRepository {
     suspend fun add(entry: NewExpense): String
 
     suspend fun syncOutbox(): SyncReport
+
+    /** Re-queue an entry the server rejected, e.g. after the user fixed the server side. */
+    suspend fun retryFailed(id: String)
+
+    /** Drop an entry that could not be synced. */
+    suspend fun deleteFailed(id: String)
 }
 
 @Singleton
@@ -100,8 +112,8 @@ class DefaultExpenseRepository
                 RefreshOutcome.Ok
             } catch (_: IOException) {
                 RefreshOutcome.Offline
-            } catch (_: HttpFailure) {
-                RefreshOutcome.Failed
+            } catch (e: HttpFailure) {
+                if (e.code == UNAUTHORIZED) RefreshOutcome.SignIn else RefreshOutcome.Failed
             } catch (_: kotlinx.serialization.SerializationException) {
                 RefreshOutcome.Failed
             }
@@ -120,6 +132,7 @@ class DefaultExpenseRepository
                     accountId = entry.accountId,
                     notes = entry.notes,
                     pending = true,
+                    failed = false,
                 ),
                 OutboxEntity(
                     clientId = id,
@@ -135,30 +148,45 @@ class DefaultExpenseRepository
             return id
         }
 
-        override suspend fun syncOutbox(): SyncReport {
-            var uploaded = 0
-            var rejected = 0
-            var retry = false
-            for (item in db.outbox().pending()) {
-                when (val result = remote.upload(item)) {
-                    is UploadResult.Created -> {
-                        // Swap the local pending row for the server's canonical row, then drop the outbox entry.
-                        db.expenses().delete(item.clientId)
-                        db.expenses().upsert(result.expense)
-                        db.outbox().delete(item.clientId)
-                        uploaded++
+        // One pass at a time: refresh() and the worker both call syncOutbox, and a double POST must never happen.
+        private val syncMutex = Mutex()
+
+        override suspend fun syncOutbox(): SyncReport =
+            syncMutex.withLock {
+                var uploaded = 0
+                var rejected = 0
+                var retry = false
+                var unauthorized = false
+                for (item in db.outbox().pending()) {
+                    when (val result = remote.upload(item)) {
+                        is UploadResult.Created -> {
+                            db.completeUpload(item.clientId, result.expense)
+                            uploaded++
+                        }
+                        UploadResult.Retry -> {
+                            db.outbox().bumpAttempts(item.clientId)
+                            retry = true
+                        }
+                        UploadResult.Unauthorized -> {
+                            // Not retried by WorkManager: it needs the user to sign in again; the entry stays queued.
+                            unauthorized = true
+                        }
+                        UploadResult.Rejected -> {
+                            db.markRejected(item.clientId)
+                            rejected++
+                        }
                     }
-                    UploadResult.Retry -> {
-                        db.outbox().bumpAttempts(item.clientId)
-                        retry = true
-                        break // server unreachable: later items would fail the same way, and order is preserved
-                    }
-                    UploadResult.Rejected -> {
-                        db.outbox().markFailed(item.clientId)
-                        rejected++
-                    }
+                    // Unreachable server or bad credentials: later items would fail the same way, and order is preserved.
+                    if (retry || unauthorized) break
                 }
+                SyncReport(uploaded, rejected, retry, unauthorized)
             }
-            return SyncReport(uploaded, rejected, retry)
+
+        override suspend fun retryFailed(id: String) = db.resetFailed(id)
+
+        override suspend fun deleteFailed(id: String) = db.discard(id)
+
+        private companion object {
+            const val UNAUTHORIZED = 401
         }
     }

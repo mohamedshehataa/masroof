@@ -18,7 +18,7 @@ interface ExpenseDao {
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE occurredAtMillis >= :from AND occurredAtMillis < :to",
+        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND occurredAtMillis >= :from AND occurredAtMillis < :to",
     )
     fun observeTotal(
         from: Long,
@@ -33,6 +33,12 @@ interface ExpenseDao {
 
     @Query("DELETE FROM expense WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("UPDATE expense SET failed = :failed WHERE id = :id")
+    suspend fun setFailed(
+        id: String,
+        failed: Boolean,
+    )
 
     /** Replace the server-known rows; local pending rows are never touched by a refresh. */
     @Query("DELETE FROM expense WHERE pending = 0")
@@ -62,6 +68,9 @@ interface OutboxDao {
     @Query("UPDATE outbox SET failed = 1 WHERE clientId = :clientId")
     suspend fun markFailed(clientId: String)
 
+    @Query("UPDATE outbox SET failed = 0, attempts = 0 WHERE clientId = :clientId")
+    suspend fun reset(clientId: String)
+
     @Query("DELETE FROM outbox WHERE clientId = :clientId")
     suspend fun delete(clientId: String)
 
@@ -86,7 +95,7 @@ interface LookupDao {
 
 @Database(
     entities = [ExpenseEntity::class, CategoryEntity::class, AccountEntity::class, OutboxEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -104,5 +113,35 @@ abstract class AppDatabase : RoomDatabase() {
     ) {
         expenses().upsert(expense)
         outbox().insert(outbox)
+    }
+
+    /** Swap the local pending row for the server's canonical row and drop the outbox entry, atomically. */
+    @Transaction
+    open suspend fun completeUpload(
+        clientId: String,
+        serverRow: ExpenseEntity,
+    ) {
+        expenses().delete(clientId)
+        expenses().upsert(serverRow)
+        outbox().delete(clientId)
+    }
+
+    /** The server permanently rejected the entry: keep it visible as failed, out of totals. */
+    @Transaction
+    open suspend fun markRejected(clientId: String) {
+        outbox().markFailed(clientId)
+        expenses().setFailed(clientId, true)
+    }
+
+    @Transaction
+    open suspend fun resetFailed(clientId: String) {
+        outbox().reset(clientId)
+        expenses().setFailed(clientId, false)
+    }
+
+    @Transaction
+    open suspend fun discard(clientId: String) {
+        outbox().delete(clientId)
+        expenses().delete(clientId)
     }
 }

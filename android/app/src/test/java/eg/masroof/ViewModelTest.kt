@@ -35,10 +35,10 @@ class ViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `REQ-UI-HOME shows total and recent from the cache and ends ready`() =
+    fun `REQ-AND-010 shows total and recent from the cache and ends ready`() =
         runTest {
             repo.all.value = listOf(expense("a", 12_500), expense("b", 2_500))
-            val vm = HomeViewModel(repo)
+            val vm = HomeViewModel(repo, FakeScheduler())
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             val state = vm.state.value
@@ -48,11 +48,11 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-UI-HOME offline refresh keeps cached rows and reports offline`() =
+    fun `REQ-AND-010 offline refresh keeps cached rows and reports offline`() =
         runTest {
             repo.all.value = listOf(expense("a", 100))
             repo.outcome = RefreshOutcome.Offline
-            val vm = HomeViewModel(repo)
+            val vm = HomeViewModel(repo, FakeScheduler())
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             assertEquals(LoadStatus.OFFLINE, vm.state.value.status)
@@ -60,10 +60,10 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-UI-TX server error maps to error state and retry refreshes again`() =
+    fun `REQ-AND-011 server error maps to error state and retry refreshes again`() =
         runTest {
             repo.outcome = RefreshOutcome.Failed
-            val vm = TransactionsViewModel(repo)
+            val vm = TransactionsViewModel(repo, FakeScheduler())
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             assertEquals(LoadStatus.ERROR, vm.state.value.status)
@@ -78,7 +78,7 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-UI-ADD invalid amount is rejected and nothing is saved`() =
+    fun `REQ-AND-013 invalid amount is rejected and nothing is saved`() =
         runTest {
             val scheduler = FakeScheduler()
             val vm = AddExpenseViewModel(repo, scheduler, clock)
@@ -92,7 +92,7 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-UI-ADD invalid date is rejected`() =
+    fun `REQ-AND-013 invalid date is rejected`() =
         runTest {
             val vm = AddExpenseViewModel(repo, FakeScheduler(), clock)
             backgroundScope.launch { vm.state.collect {} }
@@ -106,7 +106,7 @@ class ViewModelTest {
         }
 
     @Test
-    fun `REQ-UI-ADD valid entry is stored in minor units on the Cairo date and sync is scheduled`() =
+    fun `REQ-AND-013 valid entry is stored in minor units on the Cairo date and sync is scheduled`() =
         runTest {
             val scheduler = FakeScheduler()
             val vm = AddExpenseViewModel(repo, scheduler, clock)
@@ -121,5 +121,49 @@ class ViewModelTest {
             assertEquals("lunch", saved.notes)
             assertEquals(1, scheduler.calls)
             assertTrue(vm.state.value.form.saved)
+        }
+
+    @Test
+    fun `REQ-AND-013 notes are capped at the contract limit of 2000 characters`() =
+        runTest {
+            val vm = AddExpenseViewModel(repo, FakeScheduler(), clock)
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            vm.onNotes("x".repeat(2_500))
+            assertEquals(2_000, vm.state.value.form.notes.length)
+        }
+
+    @Test
+    fun `REQ-AND-013 double tap on save creates one entry`() =
+        runTest {
+            val vm = AddExpenseViewModel(repo, FakeScheduler(), clock)
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            vm.onAmount("10")
+            vm.save()
+            vm.save()
+            assertEquals(1, repo.added.size)
+        }
+
+    @Test
+    fun `REQ-AND-011 a 401 refresh maps to the sign in again state`() =
+        runTest {
+            repo.outcome = RefreshOutcome.SignIn
+            val vm = TransactionsViewModel(repo, FakeScheduler())
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            assertEquals(LoadStatus.SIGN_IN, vm.state.value.status)
+        }
+
+    @Test
+    fun `REQ-AND-015 retry and delete on a failed row go to the repository`() =
+        runTest {
+            val scheduler = FakeScheduler()
+            val vm = TransactionsViewModel(repo, scheduler)
+            vm.retryEntry("a")
+            vm.deleteEntry("b")
+            assertEquals(listOf("a"), repo.retried)
+            assertEquals(listOf("b"), repo.deleted)
+            assertEquals(1, scheduler.calls)
         }
 }

@@ -21,6 +21,11 @@
     <string name="offline_title">You are offline</string>
     <string name="offline_body">Showing what is saved on this device. New entries sync when you are back online.</string>
     <string name="retry">Retry</string>
+    <string name="delete">Delete</string>
+    <string name="sync_failed">Couldn\'t sync</string>
+    <string name="banner_sign_in">Sign in again - set your access token in Settings</string>
+    <string name="sign_in_title">Sign in again</string>
+    <string name="sign_in_body">The server did not accept your access token. Update it in Settings. Your saved entries are kept.</string>
     <string name="banner_offline">Offline - showing saved data</string>
     <string name="banner_error">Could not refresh - showing saved data</string>
     <string name="pending_sync">Waiting to sync</string>

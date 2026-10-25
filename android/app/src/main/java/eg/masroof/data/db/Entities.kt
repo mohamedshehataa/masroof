@@ -15,6 +15,7 @@ data class ExpenseEntity(
     val accountId: String?,
     val notes: String?,
     val pending: Boolean,
+    val failed: Boolean = false,
 )
 
 @Entity(tableName = "category")

@@ -39,7 +39,12 @@ object ProvidersModule {
     @Provides @Singleton
     fun database(
         @ApplicationContext context: Context,
-    ): AppDatabase = Room.databaseBuilder(context, AppDatabase::class.java, "masroof.db").build()
+    ): AppDatabase =
+        Room
+            .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
+            // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
 
     @Provides @Singleton
     fun workManager(

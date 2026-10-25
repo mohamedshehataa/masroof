@@ -10,10 +10,24 @@ kotlin { jvmToolchain(21) }
 
 val generatedDir = layout.buildDirectory.dir("generated/openapi")
 
+// The generator mis-renders two things in this contract: inline map-of-enum (Health.checks) unless inline enums are
+// resolved, and then the hoisted `sort` default (-occurredAt). The contract itself is never edited; this build-time copy
+// only drops that one default line, which the server applies anyway.
+val patchedSpec = layout.buildDirectory.file("openapi/openapi-for-kotlin.yaml")
+val patchSpec by tasks.registering {
+    val source = rootProject.file("../contracts/openapi.yaml")
+    inputs.file(source)
+    outputs.file(patchedSpec)
+    doLast {
+        val lines = source.readLines().filterNot { it.trim() == "default: -occurredAt" }
+        patchedSpec.get().asFile.apply { parentFile.mkdirs() }.writeText(lines.joinToString("\n") + "\n")
+    }
+}
+
 openApiGenerate {
     generatorName.set("kotlin")
     library.set("jvm-retrofit2")
-    inputSpec.set(rootProject.file("../contracts/openapi.yaml").toURI().toString())
+    inputSpec.set(patchedSpec.get().asFile.toURI().toString())
     outputDir.set(generatedDir.get().asFile.absolutePath)
     packageName.set("eg.masroof.api")
     apiPackage.set("eg.masroof.api.apis")
@@ -25,6 +39,7 @@ openApiGenerate {
     generateModelDocumentation.set(false)
     // Only apis + models (+ CollectionFormats): the app builds its own Retrofit/OkHttp stack.
     globalProperties.set(mapOf("apis" to "", "models" to "", "supportingFiles" to "CollectionFormats.kt"))
+    inlineSchemaOptions.set(mapOf("RESOLVE_INLINE_ENUMS" to "true"))
     typeMappings.set(mapOf("AnyType" to "JsonElement"))
     importMappings.set(mapOf("JsonElement" to "kotlinx.serialization.json.JsonElement"))
     configOptions.set(
@@ -39,6 +54,7 @@ openApiGenerate {
 }
 
 tasks.named("openApiGenerate") {
+    dependsOn(patchSpec)
     // Stale files from earlier runs must not leak into the build.
     doFirst { delete(generatedDir) }
 }

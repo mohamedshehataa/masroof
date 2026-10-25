@@ -18,7 +18,7 @@ import java.io.IOException
 class FakeRemote : RemoteSource {
     var expenses: List<ExpenseEntity> = emptyList()
     var offline = false
-    var uploadResult: (OutboxEntity) -> UploadResult = { UploadResult.Retry }
+    var uploadResult: suspend (OutboxEntity) -> UploadResult = { UploadResult.Retry }
     val uploadedKeys = mutableListOf<String>()
 
     override suspend fun fetchExpenses(): List<ExpenseEntity> {
@@ -75,6 +75,17 @@ class FakeRepository : ExpenseRepository {
     }
 
     override suspend fun syncOutbox() = SyncReport(0, 0, false)
+
+    val retried = mutableListOf<String>()
+    val deleted = mutableListOf<String>()
+
+    override suspend fun retryFailed(id: String) {
+        retried += id
+    }
+
+    override suspend fun deleteFailed(id: String) {
+        deleted += id
+    }
 }
 
 fun expense(
