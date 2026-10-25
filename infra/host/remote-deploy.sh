@@ -18,8 +18,13 @@ dc() { docker compose -p masroof -f docker-compose.yml -f docker-compose.prod.ym
 val() { grep -E "^$2=" "$1" | head -n 1 | cut -d= -f2- || true; }
 up_with() { # up_with <registry> <backend-tag> <web-tag>
   export IMAGE_REGISTRY="$1" BACKEND_IMAGE_TAG="$2" WEB_IMAGE_TAG="$3"
-  dc pull --quiet backend web
-  dc up -d --no-build --remove-orphans
+  # Images shipped over ssh (deploy.sh SHIP_IMAGES=1) are already here; pull only what is missing.
+  if docker image inspect "$1/masroof-backend:$2" "$1/masroof-web:$3" >/dev/null 2>&1; then
+    echo "remote-deploy: images present locally, not pulling"
+  else
+    dc pull --quiet backend web
+  fi
+  dc up -d --no-build --pull never --remove-orphans
 }
 
 case "$cmd" in
