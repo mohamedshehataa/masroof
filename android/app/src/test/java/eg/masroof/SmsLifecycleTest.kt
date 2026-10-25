@@ -140,7 +140,10 @@ class SignOutSmsTest {
             db.smsOutbox().insert(SmsOutboxEntity("s1", "CIB", "body", 1L, createdAtMillis = 2L))
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().isNotEmpty())
 
-            RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined).wipe()
+            val wiper = RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined)
+            assertEquals("the logout warning counts queued SMS", 1, wiper.unsyncedCount())
+            assertEquals(1, wiper.retryableCount())
+            wiper.wipe()
 
             assertTrue(db.smsOutbox().all().isEmpty())
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().all { it.state.isFinished })

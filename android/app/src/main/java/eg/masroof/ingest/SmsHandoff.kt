@@ -38,7 +38,10 @@ class SmsHandoff(
         val policy = settings.policy()
         for (sms in messages) {
             if (policy.isAllowed(sms.sender)) {
-                if (OtpPromoFilter.classify(sms.body) != MessageClass.OTP) scheduler.enqueueIntake(sms.copy(body = sms.body.take(MAX_BODY)))
+                if (OtpPromoFilter.classify(sms.body) != MessageClass.OTP) {
+                    // Only the redacted body leaves this function: the raw text never reaches WorkManager, Room or the server.
+                    scheduler.enqueueIntake(sms.copy(body = SmsRedactor.redact(sms.body).take(MAX_BODY)))
+                }
             } else if (isSuggestible(sms)) {
                 settings.suggest(sms.sender)
             }

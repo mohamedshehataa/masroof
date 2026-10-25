@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 /**
  * Guards {@code POST /api/ingest/sms} (REQ-SMS-001): at most {@value #MAX_BODY_BYTES} bytes of body
@@ -38,7 +39,10 @@ final class IngestGuardFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !"POST".equals(request.getMethod()) || !PATH.equals(request.getRequestURI());
+    // Spring routes ";x=1" and "%73ms" to the controller, so compare the decoded path with matrix
+    // parameters removed, never the raw request URI.
+    return !"POST".equals(request.getMethod())
+        || !PATH.equals(UrlPathHelper.defaultInstance.getPathWithinApplication(request));
   }
 
   @Override

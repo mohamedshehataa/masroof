@@ -1,70 +1,59 @@
 package eg.masroof.ingest
 
-import java.text.Normalizer
 import java.util.Locale
 
 /** What an incoming message is, decided on the device before anything is stored or uploaded. */
 enum class MessageClass { OTP, PROMO, OTHER }
 
 /**
- * On-device OTP and promotion filter (REQ-SMS-030, REQ-SMS-032). An OTP never leaves the device: any OTP keyword wins
- * over everything else, because a false positive costs one missed expense and a false negative leaks a code.
- * Keywords follow the egypt-bank-sms skill; the server runs the same check again.
+ * On-device OTP and promotion hygiene filter (REQ-SMS-030, REQ-SMS-032). It is NOT what keeps codes secret:
+ * [SmsRedactor] masks every digit sequence that is not an amount, date, time or card last four before anything is
+ * queued, so a code that slips past this filter is already unreadable.
+ *
+ * An OTP is recognised by strong signals only. A message with a currency amount and a purchase/debit verb is a
+ * transaction even if it carries "Auth code", "Approval code", a reference code or a security footer: the footer
+ * sentences are ignored for it and its codes are masked. Mirrors the server's `MessageClassifier.java`.
  */
 object OtpPromoFilter {
-    private val otpWords =
-        listOf(
-            "otp",
-            "one-time",
-            "one time",
-            "passcode",
-            "verification code",
-            "security code",
-            "code is",
-            "your code",
-            "do not share",
-            "don't share",
-            "dont share",
-            "never share",
-            "password",
-            "valid for",
-            "expires in",
-            "رمز",
-            "كود",
-            "لا تشارك",
-            "لا تقم بمشاركه",
-            "لا تفصح",
-            "كلمه السر",
-            "كلمه المرور",
-            "صالح لمده",
-            "تنتهي صلاحيه",
-        )
-    private val pin = Regex("\\bpin\\b|\\bo\\W?t\\W?p\\b")
-    private val codeToConfirm = Regex("(?<!\\d)\\d{4,8}(?!\\d).{0,40}(?:to confirm|to complete|to verify|لتاكيد|لاتمام)")
-    private val codeEnter =
-        Regex("(?:\\b(?:enter|use|type|input)|ادخل|استخدم|اكتب)\\s+(?:the\\s+)?(?:code\\s+)?(?<!\\d)\\d{4,8}(?!\\d)")
-    private val digitsOnly = Regex("^\\W*\\d{4,8}\\W*$")
-
-    // Structural rule (same as the server): a code-like word plus a standalone 4-8 digit number that is not part of an
-    // amount, date, time or card last four is an OTP, whatever else the sentence says.
-    private val codeWord =
+    private val ci = setOf(RegexOption.IGNORE_CASE)
+    private val strong =
         Regex(
-            "\\b(?:code|pin|otp|passcode|password|verification|authentication|approve|secure|activation|security)\\b" +
-                "|\\bo\\W?t\\W?p\\b|رمز|كود|كلمه السر|كلمه المرور|الرقم السري|رقم سري|تحقق|توثيق|وافق|موافق|تفعيل",
+            "\\b[o0][ ._-]{0,2}t[ ._-]{0,2}p\\b" +
+                "|one[ _-]?time" +
+                "|\\b(?:verification|authentication|secur(?:e|ity)|activation|login|secret|confirmation" +
+                "|temporary|dynamic)[ _-]?(?:code|number|key|pin|password|token)" +
+                "|\\b(?:passcode|password|passkey|pin|token)\\b" +
+                "|\\bcode is\\b|\\byour code\\b" +
+                "|3[ _-]?d[ _-]?secure|\\b3ds\\b" +
+                "|\\b(?:approve|authori[sz]e)\\b" +
+                "|\\bconfirm\\b.{0,30}\\b(?:with|using)\\b" +
+                "|\\b(?:enter|use|type|input)\\b.{0,40}(?<![\\d])\\d{4,8}(?![\\d])" +
+                "|(?<![\\d])\\d{4,8}(?![\\d]).{0,40}\\bto (?:confirm|complete|verify)\\b" +
+                "|\\bis your\\b.{0,30}\\b(?:code|pin|number|key|token|otp)\\b" +
+                "|(?:do not|don't|dont|never) share|expires? in|valid for \\d+ ?(?:min|sec|hour)" +
+                "|(?:رمز|كود) (?:ال)?(?:تحقق|تاكيد|تفعيل|دخول|امان)" +
+                "|الرمز السري|رمز سري|الرقم السري|رقم سري|كلمه السر|كلمه المرور|كلمه سر|لمره واحده" +
+                "|تحقق|وافق|للموافقه|الموافقه" +
+                "|(?:ادخل|استخدم|اكتب)\\s+(?<![\\d])\\d{4,8}(?![\\d])" +
+                "|(?<![\\d])\\d{4,8}(?![\\d]).{0,40}(?:لتاكيد|لاتمام)" +
+                "|لا\\s*تشارك|لا\\s*تقم\\s*بمشاركه|لا\\s*تفصح|لا\\s*تعطي|صالح لمده|تنتهي صلاحيه",
+            ci,
         )
-    private const val CURRENCY =
-        "(?:(?<![a-z])(?:egp|l\\.?e|usd|eur|sar|aed|gbp)(?![a-z])|\\$|€|جنيه|ج\\.م|جم|دولار|ريال|درهم|يورو)"
-    private val notACode =
-        listOf(
-            Regex("$CURRENCY\\s*\\d[\\d.,]*"),
-            Regex("\\d[\\d.,]*\\s*$CURRENCY"),
-            Regex("\\d{1,4}[/-]\\d{1,2}(?:[/-]\\d{1,4})?"),
-            Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"),
-            Regex("(?:[*x•]{2,}|\\.{3})\\s*\\d{4}"),
-            Regex("(?:ending(?: with| in)?|ends with|a/c|acct|account|card)\\s*(?:no\\.?|number)?\\s*[*x•.\\- ]*\\d{4}(?!\\d)"),
-            Regex("(?:المنتهيه|منتهيه|رقم)\\s*(?:ب)?\\s*[*x. ]*\\d{4}(?!\\d)"),
+    private val footer =
+        Regex(
+            "(?:never|do not|don't|dont|not)\\s+share|will never ask|for security|call\\s+\\d{3,5}" +
+                "|if (?:you did not|this was not|it was not)|beware|fraud|scam" +
+                "|لا\\s*تشارك|لا\\s*تقم\\s*بمشاركه|لا\\s*تعطي|لا\\s*تفصح|للاستفسار|اتصل",
+            ci,
         )
-    private val standaloneNumber = Regex("(?<![\\w.,/:+-])\\d{4,8}(?![\\w/:]|[.,]\\d)")
+    private val sentenceBreak = Regex("(?:\\. |[!\\n؟])")
+    private val purchaseVerb =
+        Regex(
+            "\\b(?:purchase|purchased|debited|spent|charged|withdrawn|used for|paid)\\b" +
+                "|تم خصم|تم شراء|تم سحب|تم دفع|خصم مبلغ|عمليه شراء",
+            ci,
+        )
+    private val digitsOnly = Regex("^[^\\p{L}\\p{N}]*\\d{4,8}[^\\p{L}\\p{N}]*$")
     private val promoWords =
         listOf(
             "offer",
@@ -121,79 +110,23 @@ object OtpPromoFilter {
 
     fun classify(body: String): MessageClass {
         val text = normalize(body)
+        if (digitsOnly.matches(text)) return MessageClass.OTP
+        val transaction = purchaseVerb.containsMatchIn(text) && SmsRedactor.hasCurrencyAmount(text)
+        val signals = if (transaction) withoutFooters(text) else text
         return when {
-            otpWords.any { text.contains(it) } ||
-                pin.containsMatchIn(text) ||
-                codeToConfirm.containsMatchIn(text) ||
-                codeEnter.containsMatchIn(text) ||
-                digitsOnly.matches(text) ||
-                looksLikeCode(text) -> MessageClass.OTP
+            strong.containsMatchIn(signals) -> MessageClass.OTP
             promoWords.any { text.contains(it) } && transactionWords.none { text.contains(it) } -> MessageClass.PROMO
             else -> MessageClass.OTHER
         }
     }
 
-    /** NFKC, Western digits, no tatweel/harakat/bidi marks, folded Arabic letters, lower case, single spaces. */
-    internal fun normalize(input: String): String {
-        val out = StringBuilder(input.length)
-        for (c in Normalizer.normalize(input, Normalizer.Form.NFKC)) {
-            val code = c.code
-            when {
-                code in ARABIC_INDIC_ZERO..ARABIC_INDIC_NINE -> out.append('0' + (code - ARABIC_INDIC_ZERO))
-                code in PERSIAN_ZERO..PERSIAN_NINE -> out.append('0' + (code - PERSIAN_ZERO))
-                code == ARABIC_DECIMAL -> out.append('.')
-                code == ARABIC_THOUSANDS || code == ARABIC_COMMA -> out.append(',')
-                code in DASHES || code == MINUS_SIGN -> out.append('-')
-                code == ONE_DOT_LEADER || code == HYPHENATION_POINT -> out.append('.')
-                isIgnorable(code) -> Unit
-                else -> out.append(fold(c))
-            }
-        }
-        return out
-            .toString()
-            .lowercase(Locale.ROOT)
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
+    private fun withoutFooters(text: String): String =
+        sentenceBreak
+            .split(text)
+            .filterNot { footer.containsMatchIn(it) }
+            .joinToString("") { "$it. " }
 
-    private fun looksLikeCode(text: String): Boolean {
-        if (!codeWord.containsMatchIn(text)) return false
-        val rest = notACode.fold(text) { acc, pattern -> pattern.replace(acc, " ") }
-        return standaloneNumber.containsMatchIn(rest)
-    }
-
-    private fun isIgnorable(code: Int) =
-        code == TATWEEL ||
-            code in HARAKAT ||
-            code == 0x0670 ||
-            code in 0x06D6..0x06ED ||
-            code in 0x200B..0x200F ||
-            code in 0x202A..0x202E ||
-            code in 0x2066..0x2069 ||
-            code == 0x061C ||
-            code == 0xFEFF ||
-            code == 0x2060
-
-    private fun fold(c: Char): Char =
-        when (c.code) {
-            0x0623, 0x0625, 0x0622, 0x0671 -> 'ا'
-            0x0649, 0x06CC -> 'ي'
-            0x0629 -> 'ه'
-            0x06A9 -> 'ك'
-            else -> c
-        }
-
-    private const val ARABIC_INDIC_ZERO = 0x0660
-    private const val ARABIC_INDIC_NINE = 0x0669
-    private const val PERSIAN_ZERO = 0x06F0
-    private const val PERSIAN_NINE = 0x06F9
-    private const val ARABIC_DECIMAL = 0x066B
-    private const val ARABIC_THOUSANDS = 0x066C
-    private const val ARABIC_COMMA = 0x060C
-    private const val TATWEEL = 0x0640
-    private val DASHES = 0x2010..0x2015
-    private const val MINUS_SIGN = 0x2212
-    private const val ONE_DOT_LEADER = 0x2024
-    private const val HYPHENATION_POINT = 0x2027
-    private val HARAKAT = 0x064B..0x065F
+    /** Normalized (see [SmsRedactor.normalizeText]), letter-folded and lower-cased: what the matching runs on. */
+    internal fun normalize(input: String): String =
+        SmsRedactor.fold(SmsRedactor.normalizeText(input)).lowercase(Locale.ROOT)
 }

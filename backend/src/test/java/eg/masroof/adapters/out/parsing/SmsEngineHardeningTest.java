@@ -45,12 +45,9 @@ class SmsEngineHardeningTest {
           "482915 is your verification number",
           "Your O.T.P. is 334455",
           "Use this login code 771204 to sign in",
-          "Auth code 556677 for purchase of EGP 500.00 at AMAZON",
           "Approve your payment of EGP 120.00 at NOON with 4455",
-          "Purchase of EGP 75.00 at STARBUCKS. Code: 889900",
           "كود التفعيل 5521 لتسجيل الدخول",
-          "رقم التحقق 884213 لعملية شراء بمبلغ 500.00 جنيه",
-          "عملية شراء بقيمة 75.00 جنيه لدى ستاربكس الرمز: 889900"
+          "رقم التحقق 884213 لعملية شراء بمبلغ 500.00 جنيه"
         }) {
       assertThat(MessageClassifier.classify(body)).as(body).isEqualTo(MessageClass.OTP);
     }
@@ -162,5 +159,53 @@ class SmsEngineHardeningTest {
                     "Purchase of EGP 10.00 at X valid until 31/12 card used on 25/10/2026 10:00")
                 .occurredAt())
         .isEqualTo(Instant.parse("2026-10-25T07:00:00Z"));
+  }
+
+  @Test
+  @Tag("REQ-SMS-012")
+  @DisplayName(
+      "REQ-SMS-012 an outgoing transfer that mentions receipt by the beneficiary is not income")
+  void outgoingTransferIsNotIncome() throws IOException {
+    for (String body :
+        new String[] {
+          "You have sent EGP 500.00 to Ahmed. The money was received by the beneficiary",
+          "Transfer of EGP 500.00 to Ahmed was received successfully",
+          "تم تحويل 500 جنيه من حسابك الى حساب Ahmed وتم استلامها بنجاح",
+          "تم ارسال 200 جنيه الى Ahmed وتم الاستلام"
+        }) {
+      assertThat(parse("InstaPay", body).kind()).as(body).isEqualTo(SmsKind.TRANSFER);
+    }
+    assertThat(parse("InstaPay", "You have received EGP 40.00 from OMAR via InstaPay").kind())
+        .isEqualTo(SmsKind.INCOME);
+    assertThat(parse("NBE", "You received a transfer of EGP 90.00 from OMAR").kind())
+        .isEqualTo(SmsKind.INCOME);
+  }
+
+  @Test
+  @Tag("REQ-SMS-010")
+  @DisplayName("REQ-SMS-010 amount: N with SR, Yen, TL, Dhs or jpy in any case is never EGP")
+  void foreignTokensAfterKeywordAmount() throws IOException {
+    for (String token : new String[] {"SR", "sr", "Yen", "TL", "tl", "Dhs", "jpy", "JPY"}) {
+      ParsedSms p = parse("CIB", "Purchase amount: 1,500 " + token + " at JARIR RIYADH");
+      Money amount = java.util.Objects.requireNonNull(p.amount());
+      assertThat(amount.currency()).as(token).isNotEqualTo("EGP");
+      assertThat(amount.amountMinor()).as(token).isEqualTo(150_000);
+    }
+    assertThat(parse("CIB", "Purchase amount: 1,500 SR at JARIR").amount())
+        .isEqualTo(Money.of(150_000, "SAR"));
+    assertThat(parse("CIB", "Purchase amount: 1,500 EGP at JARIR").amount())
+        .isEqualTo(Money.of(150_000, "EGP"));
+  }
+
+  @Test
+  @Tag("REQ-SMS-012")
+  @DisplayName("REQ-SMS-012 a card purchase with a cashback-credited tail stays a purchase")
+  void cashbackTail() throws IOException {
+    ParsedSms p =
+        parse(
+            "CIB",
+            "Your card ending 1234 was debited EGP 500.00 at AMAZON. Cashback of EGP 5.00 will be credited to your account");
+    assertThat(p.kind()).isEqualTo(SmsKind.PURCHASE);
+    assertThat(p.amount()).isEqualTo(Money.of(50_000, "EGP"));
   }
 }

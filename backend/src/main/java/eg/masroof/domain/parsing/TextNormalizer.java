@@ -102,7 +102,15 @@ public final class TextNormalizer {
   private static char mapOther(char c) {
     boolean harakat = (c >= 0x064B && c <= 0x065F) || c == 0x0670 || (c >= 0x06D6 && c <= 0x06ED);
     boolean bidi = (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069);
-    if (harakat || bidi) {
+    // soft hyphen, invisible operators/separators (U+2061..U+2064), combining grapheme joiner,
+    // variation selectors, Mongolian vowel separator: invisible, and used to split digit groups
+    boolean invisible =
+        c == 0x00AD
+            || (c >= 0x2061 && c <= 0x2064)
+            || c == 0x034F
+            || (c >= 0xFE00 && c <= 0xFE0F)
+            || c == 0x180E;
+    if (harakat || bidi || invisible) {
       return 0;
     }
     if ((c >= 0x2010 && c <= 0x2015) || c == 0x2212 || c == 0xFE58 || c == 0xFE63) {
@@ -268,6 +276,10 @@ public final class TextNormalizer {
           case "eur", "€", "يورو" -> "EUR";
           case "sar", "ريال" -> "SAR";
           case "aed", "درهم" -> "AED";
+          case "sr" -> "SAR";
+          case "yen" -> "JPY";
+          case "tl" -> "TRY";
+          case "dhs" -> "AED";
           case "gbp" -> "GBP";
           case "kwd" -> "KWD";
           default ->

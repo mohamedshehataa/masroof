@@ -128,6 +128,9 @@ interface SmsOutboxDao {
     @Query("SELECT COUNT(*) FROM sms_outbox WHERE failed = 0")
     suspend fun countPending(): Int
 
+    @Query("SELECT COUNT(*) FROM sms_outbox")
+    suspend fun countAll(): Int
+
     @Query("SELECT * FROM sms_outbox")
     suspend fun all(): List<SmsOutboxEntity>
 }

@@ -5,6 +5,7 @@ import eg.masroof.application.household.CurrentHousehold;
 import eg.masroof.application.household.CurrentHousehold.Household;
 import eg.masroof.domain.parsing.MessageClassifier;
 import eg.masroof.domain.parsing.MessageClassifier.MessageClass;
+import eg.masroof.domain.parsing.SmsRedactor;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -85,7 +86,8 @@ public class SmsIngestService {
                 cmd.deviceId(),
                 cmd.smsId(),
                 cmd.sender().strip(),
-                cmd.body(),
+                // never store an unredacted body: only amounts, dates, times and last four survive
+                SmsRedactor.redact(cmd.body()),
                 cmd.receivedAt(),
                 now));
     return new Accepted(stored.id(), stored.inserted() ? Outcome.ACCEPTED : Outcome.DUPLICATE);

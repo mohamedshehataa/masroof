@@ -66,17 +66,17 @@
     {
       "id": "transfer-debit-credit",
       "kind": "TRANSFER",
-      "detect": "(?s)\\bdebited\\b.{0,120}\\bcredited to\\b"
+      "detect": "(?s)^(?!.*(?:cashback|will be credited|refund)).*\\bdebited\\b.{0,120}\\bcredited to\\b"
     },
     {
       "id": "income",
       "kind": "INCOME",
-      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment|purchase|spent|charged|withdraw|\\bdebit\\b|تم خصم|تم دفع|شراء|سحب|خصم|دفع)).*(?:\\b(?:received|credited|deposit(?:ed)?|salary|incoming)\\b|ايداع|استلام|استلمت|وارد|راتب|مرتب|اضافه مبلغ|تم اضافه)"
+      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment|purchase|spent|charged|withdraw|\\bdebit\\b|\\bsent\\b|\\bsend\\b|beneficiary|(?:was|were|been) received|received (?:by|successfully)|تم خصم|تم دفع|شراء|سحب|خصم|دفع|ارسال|ارسلت|حولت|المستفيد|استلامها)).*(?:\\b(?:received|credited|deposit(?:ed)?|salary|incoming)\\b|ايداع|(?<!ال)استلام|استلمت|وارد|راتب|مرتب|اضافه مبلغ|تم اضافه)"
     },
     {
       "id": "transfer",
       "kind": "TRANSFER",
-      "detect": "(?s)^(?!.*(?:\\breceived\\b|\\bcredited\\b|استلام|استلمت|وارد|ايداع)).*(?:\\btransfer(?:red)?\\b|\\bsent to\\b|تحويل|حولت|تم ارسال|ارسال مبلغ)"
+      "detect": "(?s)^(?!.*(?:you(?: have)? received|\\breceived (?:egp|an?\\b|\\d)|credited with|وارد|ايداع|استلمت|(?<!ال)استلام(?!ها))).*(?:\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|تحويل|حولت|تم ارسال|ارسال مبلغ|ارسلت)"
     },
     {
       "id": "purchase",

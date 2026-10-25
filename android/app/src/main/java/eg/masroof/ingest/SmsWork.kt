@@ -87,12 +87,14 @@ class SmsPipeline
         suspend fun accept(sms: IncomingSms): Boolean {
             if (!settings.policy().isAllowed(sms.sender)) return false
             if (OtpPromoFilter.classify(sms.body) != MessageClass.OTHER) return false
+            // Defence in depth: redaction is idempotent, so a body that was already redacted is unchanged.
+            val clean = sms.copy(body = SmsRedactor.redact(sms.body))
             val inserted =
                 db.smsOutbox().insert(
                     SmsOutboxEntity(
-                        smsId = smsId(sms),
+                        smsId = smsId(clean),
                         sender = sms.sender.take(MAX_SENDER),
-                        body = sms.body.take(MAX_BODY),
+                        body = clean.body.take(MAX_BODY),
                         receivedAtMillis = sms.timestampMillis,
                         createdAtMillis = clock.millis(),
                     ),

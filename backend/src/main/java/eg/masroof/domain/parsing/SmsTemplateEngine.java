@@ -38,7 +38,7 @@ public final class SmsTemplateEngine {
   private static final int RECENT_DAYS = 45;
   private static final String NUM = "(\\d(?:[\\d.,]*\\d)?)";
   private static final String CUR =
-      "(EGP|E£|(?<![a-z])L\\.?E\\.?(?![a-z])|USD|US\\$|\\$|EUR|€|SAR|AED|GBP|KWD"
+      "(EGP|E£|(?<![a-z])L\\.?E\\.?(?![a-z])|USD|US\\$|\\$|EUR|€|SAR|AED|GBP|KWD|SR|YEN|DHS|TL|JPY"
           + "|(?-i:JPY|CHF|CAD|AUD|NZD|CNY|INR|TRY|RUB|KRW|SEK|NOK|DKK|PLN|CZK|HUF|ZAR|BRL|MXN|SGD"
           + "|HKD|THB|MYR|IDR|PHP|QAR|BHD|OMR|JOD|LBP|MAD|TND|DZD|ILS)"
           + "|جنيهات|جنيه[اه]?"
@@ -241,7 +241,7 @@ public final class SmsTemplateEngine {
     TreeMap<Integer, Candidate> byNumber = new TreeMap<>();
     // A bare "amount 1,500" is EGP only when the text names no currency anywhere; otherwise it is
     // the ISO "no currency" code and the caller sends it to review rather than guessing.
-    String bare = matcher(ANY_CURRENCY, text, budget).find() ? "XXX" : "EGP";
+    String bare = bareCurrency(text, budget);
     Matcher k = matcher(KEYWORD_AMOUNT, text, budget);
     while (k.find()) {
       byNumber.put(k.start(1), new Candidate(k.start(), k.end(), k.group(1), bare));
@@ -281,6 +281,17 @@ public final class SmsTemplateEngine {
       return Money.of(minor.getAsLong(), c.currency());
     }
     return null;
+  }
+
+  /** EGP when the text names no currency or only EGP; any other currency token means review. */
+  private static String bareCurrency(String text, Budget budget) {
+    Matcher m = matcher(ANY_CURRENCY, text, budget);
+    while (m.find()) {
+      if (!"EGP".equals(TextNormalizer.currencyCode(m.group(1)).orElse("XXX"))) {
+        return "XXX";
+      }
+    }
+    return "EGP";
   }
 
   private static @Nullable String last4(String text, Budget budget) {

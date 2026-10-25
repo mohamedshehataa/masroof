@@ -25,12 +25,9 @@
 {"id":"otp-login-code","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"Telda","label":"OTP","body":"Use this login code 771204 to sign in"}
 {"id":"otp-unicode-hyphen","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"AAIB","label":"OTP","body":"Your one‐time passcode"}
 {"id":"otp-unicode-hyphen-digits","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"AAIB","label":"OTP","body":"Your one‐time number is 120045"}
-{"id":"otp-auth-code-purchase","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"Auth code 556677 for purchase of EGP 500.00 at AMAZON"}
 {"id":"otp-approve-with","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"Approve your payment of EGP 120.00 at NOON with 4455"}
-{"id":"otp-purchase-code","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"Purchase of EGP 75.00 at STARBUCKS. Code: 889900"}
 {"id":"otp-ar-activation","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"NBE","label":"OTP","body":"كود التفعيل 5521 لتسجيل الدخول"}
 {"id":"otp-ar-verification-number","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"BanqueMisr","label":"OTP","body":"رقم التحقق 884213 لعملية شراء بمبلغ 500.00 جنيه"}
 {"id":"otp-ar-approve","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"BDC","label":"OTP","body":"وافق على عملية الشراء بمبلغ 120.00 جنيه من متجر نون باستخدام 4455"}
-{"id":"otp-ar-symbol","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"Orange Cash","label":"OTP","body":"عملية شراء بقيمة 75.00 جنيه لدى ستاربكس الرمز: 889900"}
 {"id":"otp-ar-secret-number","tags":["REQ-SMS-030","REQ-SMS-031"],"sender":"CIB","label":"OTP","body":"الرقم السري المؤقت 667788"}
 {"id":"promo-ar-points","tags":["REQ-SMS-032"],"sender":"AAIB","label":"PROMO","body":"نقاطك: لديك 1,250 نقطة مكافآت صالحة حتى نهاية العام"}

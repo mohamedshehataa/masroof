@@ -522,9 +522,7 @@ class SmsIngestApiIT {
   void structuralOtpIsRefused() throws Exception {
     String[] bodies = {
       "Your 3D Secure code for EGP 64.00 at EMU WEBSHOP is 556677",
-      "Auth code 556677 for purchase of EGP 500.00 at AMAZON",
       "Approve your payment of EGP 120.00 at NOON with 4455",
-      "Purchase of EGP 75.00 at STARBUCKS. Code: 889900",
       "رقم التحقق 884213 لعملية شراء بمبلغ 500.00 جنيه"
     };
     int i = 0;
@@ -540,6 +538,56 @@ class SmsIngestApiIT {
   }
 
   @Test
+  @Tag("REQ-SMS-030")
+  @DisplayName(
+      "REQ-SMS-030 a purchase that carries a code is kept, but only the masked body is stored")
+  void codeBearingPurchaseIsStoredMasked() throws Exception {
+    String raw =
+        json(ingest(
+                tokenA,
+                "CIB",
+                "Auth code:551234 for purchase of EGP 500.00 at AMAZON",
+                "sms-masked-1"))
+            .get("rawMessageId")
+            .asString();
+    String arabic =
+        json(ingest(tokenA, "NBE", "تم خصم 1500 جنيه لدى جرير", "sms-masked-2"))
+            .get("rawMessageId")
+            .asString();
+    String spaced =
+        json(ingest(
+                tokenA,
+                "CIB",
+                "Purchase of EGP 64.00 at EMU WEBSHOP. Code 556 677",
+                "sms-masked-3"))
+            .get("rawMessageId")
+            .asString();
+    String stored =
+        jdbc.queryForObject("select body from raw_message where id = ?::uuid", String.class, raw);
+    assertThat(stored).doesNotContain("551234").contains("500.00");
+    assertThat(
+            jdbc.queryForObject(
+                "select body from raw_message where id = ?::uuid", String.class, spaced))
+        .doesNotContain("556")
+        .doesNotContain("677");
+    assertThat(
+            jdbc.queryForObject(
+                "select body from raw_message where id = ?::uuid", String.class, arabic))
+        .contains("1500");
+    // no message of any test ever stored a run of 5 or more digits
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from raw_message where body ~ '[0-9]{5,}' and external_id <> 'sms-otp-queued'",
+                Integer.class))
+        .isZero();
+    while (processor.drain(10) > 0) {
+      // drain
+    }
+    assertThat(status(raw)).isEqualTo("DONE");
+    assertThat(status(arabic)).isEqualTo("DONE");
+  }
+
+  @Test
   @Tag("REQ-SMS-001")
   @DisplayName(
       "REQ-SMS-001 more than 100 uploads a minute from one member answer 429 with Retry-After")
@@ -551,6 +599,18 @@ class SmsIngestApiIT {
     assertThat(limited.getStatus()).isEqualTo(429);
     assertThat(limited.getHeader("Retry-After")).isNotNull();
     assertThat(limited.getContentType()).startsWith("application/problem+json");
+    // path variants Spring routes to the same controller are guarded too
+    for (String variant : new String[] {"/api/ingest/sms;x=1", "/api/ingest/%73ms"}) {
+      MockHttpServletResponse viaVariant =
+          mvc.perform(
+                  post(java.net.URI.create(variant))
+                      .header("Authorization", "Bearer " + tokenC)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content("{}"))
+              .andReturn()
+              .getResponse();
+      assertThat(viaVariant.getStatus()).as(variant).isEqualTo(429);
+    }
     // another member is not affected
     assertThat(ingest(tokenA, "CIB", PURCHASE, "sms-rate-other").getStatus()).isEqualTo(202);
   }
@@ -570,6 +630,15 @@ class SmsIngestApiIT {
             .getResponse();
     assertThat(r.getStatus()).isEqualTo(413);
     assertThat(r.getContentType()).startsWith("application/problem+json");
+    MockHttpServletResponse viaVariant =
+        mvc.perform(
+                post(java.net.URI.create("/api/ingest/sms;x=1"))
+                    .header("Authorization", "Bearer " + tokenA)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(huge))
+            .andReturn()
+            .getResponse();
+    assertThat(viaVariant.getStatus()).isEqualTo(413);
   }
 
   @Test

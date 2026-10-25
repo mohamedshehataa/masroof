@@ -118,7 +118,7 @@ class OtpPromoFilterTest {
     @Test
     fun `REQ-SMS-030 Arabic-Indic digits, tatweel and diacritics do not hide an OTP`() {
         assertEquals(MessageClass.OTP, OtpPromoFilter.classify("رَمْز التحقق ٤٥٦٧٨٩"))
-        assertEquals(MessageClass.OTP, OtpPromoFilter.classify("رـمز"))
+        assertEquals(MessageClass.OTP, OtpPromoFilter.classify("رـمز التحقق"))
         assertEquals(MessageClass.OTHER, OtpPromoFilter.classify(""))
     }
 }
