@@ -19,11 +19,27 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 class JdbcAuthStore implements AccountStore, RefreshTokenStore {
 
-  private static final String ACCOUNT_SELECT =
-      "select u.id as user_id, m.id as member_id, h.id as household_id, h.base_currency,"
-          + " m.display_name, m.role, u.password_hash"
-          + " from app_user u join member m on m.id = u.member_id"
-          + " join household h on h.id = m.household_id ";
+  // Each statement is one literal (semgrep masroof-no-string-concat-sql); parameters are always
+  // bound.
+  private static final String FIND_BY_EMAIL =
+      """
+      select u.id as user_id, m.id as member_id, h.id as household_id, h.base_currency,
+             m.display_name, m.role, u.password_hash
+      from app_user u
+      join member m on m.id = u.member_id
+      join household h on h.id = m.household_id
+      where lower(u.email) = lower(?)
+      """;
+
+  private static final String FIND_BY_USER_ID =
+      """
+      select u.id as user_id, m.id as member_id, h.id as household_id, h.base_currency,
+             m.display_name, m.role, u.password_hash
+      from app_user u
+      join member m on m.id = u.member_id
+      join household h on h.id = m.household_id
+      where u.id = ?
+      """;
 
   private static final RowMapper<Account> ACCOUNT =
       (rs, n) ->
@@ -44,13 +60,12 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
 
   @Override
   public Optional<Account> findByEmail(String email) {
-    return jdbc.query(ACCOUNT_SELECT + "where lower(u.email) = lower(?)", ACCOUNT, email).stream()
-        .findFirst();
+    return jdbc.query(FIND_BY_EMAIL, ACCOUNT, email).stream().findFirst();
   }
 
   @Override
   public Optional<Account> findByUserId(UUID userId) {
-    return jdbc.query(ACCOUNT_SELECT + "where u.id = ?", ACCOUNT, userId).stream().findFirst();
+    return jdbc.query(FIND_BY_USER_ID, ACCOUNT, userId).stream().findFirst();
   }
 
   @Override
@@ -99,8 +114,10 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
   public Outcome rotate(String oldHash, String newHash, Instant newExpiresAt, Instant now) {
     List<Row> rows =
         jdbc.query(
-            "select id, user_id, family_id, expires_at, revoked_at, rotated_at"
-                + " from refresh_token where token_hash = ? for update",
+            """
+            select id, user_id, family_id, expires_at, revoked_at, rotated_at
+            from refresh_token where token_hash = ? for update
+            """,
             (rs, n) ->
                 new Row(
                     rs.getObject("user_id", UUID.class),
@@ -116,9 +133,11 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
     if (row.rotated()) {
       revokeFamilyById(row.familyId(), now);
       jdbc.update(
-          "insert into audit_log (id, household_id, member_id, action)"
-              + " select ?, m.household_id, m.id, 'REFRESH_REUSE'"
-              + " from app_user u join member m on m.id = u.member_id where u.id = ?",
+          """
+          insert into audit_log (id, household_id, member_id, action)
+          select ?, m.household_id, m.id, 'REFRESH_REUSE'
+          from app_user u join member m on m.id = u.member_id where u.id = ?
+          """,
           UUID.randomUUID(),
           row.userId());
       return new Outcome.Reuse();
@@ -137,8 +156,11 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
   @Override
   public void revokeFamily(String tokenHash, UUID userId, Instant now) {
     jdbc.update(
-        "update refresh_token set revoked_at = ? where revoked_at is null and family_id ="
-            + " (select family_id from refresh_token where token_hash = ? and user_id = ?)",
+        """
+        update refresh_token set revoked_at = ?
+        where revoked_at is null
+          and family_id = (select family_id from refresh_token where token_hash = ? and user_id = ?)
+        """,
         utc(now),
         tokenHash,
         userId);
@@ -161,8 +183,10 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore {
 
   private void insertToken(UUID id, UUID userId, UUID family, String hash, Instant expiresAt) {
     jdbc.update(
-        "insert into refresh_token (id, user_id, family_id, token_hash, expires_at)"
-            + " values (?, ?, ?, ?, ?)",
+        """
+        insert into refresh_token (id, user_id, family_id, token_hash, expires_at)
+        values (?, ?, ?, ?, ?)
+        """,
         id,
         userId,
         family,
