@@ -11,6 +11,20 @@ sha=$(git -C "$REPO" rev-parse HEAD | cut -c1-7)
 WORK=""
 WORKS=()
 
+# pick_net <env-file>: a free 172.28.<n>.0/24 for this throwaway project (CADDY_IP = .10), so parallel stacks never clash.
+pick_net() {
+  local n used
+  used=$(docker network ls -q | xargs -r docker network inspect --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null)
+  for _ in $(seq 1 50); do
+    n=$((RANDOM % 200 + 20))
+    case " $used " in *" 172.28.$n.0/24 "*) continue ;; esac
+    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nCADDY_IP=172.28.%s.10\n' "$n" "$n" >>"$1"
+    return 0
+  done
+  echo "pick_net: no free subnet" >&2
+  return 1
+}
+
 # mkwork [noenv]: temp copy of tracked+untracked files; .env from .env.example with DOMAIN empty unless noenv.
 mkwork() {
   WORK=$(mktemp -d)
@@ -22,6 +36,7 @@ mkwork() {
     sed -e '/^DOMAIN=/d' -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=t022$RANDOM$RANDOM/" "$REPO/.env.example" >"$WORK/.env"
     echo "DOMAIN=" >>"$WORK/.env"
     sed -i "s|^MASROOF_JWT_SECRET=.*|MASROOF_JWT_SECRET=t022$(openssl rand -hex 24)|" "$WORK/.env"
+    pick_net "$WORK/.env"
   fi
   trap cleanup_work EXIT
 }

@@ -66,6 +66,7 @@ class AuthApiIT {
 
   @Autowired MockMvc mvc;
   @Autowired JdbcTemplate jdbc;
+  @Autowired eg.masroof.domain.auth.IpHasher ipHasher;
 
   UUID householdA;
   UUID householdB;
@@ -638,13 +639,17 @@ class AuthApiIT {
                 """,
                 Integer.class,
                 victimUser,
-                sha("ip:" + ip)))
+                ipHasher.hash(ip)))
         .isEqualTo(10);
     assertThat(
             jdbc.queryForObject(
-                "select count(*) from audit_log where action = 'LOGIN_BLOCKED' and ip_hash = ?",
+                """
+                select count(*) from audit_log where action = 'LOGIN_BLOCKED' and ip_hash = ?
+                and member_id = (select member_id from app_user where id = ?)
+                """,
                 Integer.class,
-                sha("ip:" + ip)))
+                ipHasher.hash(ip),
+                victimUser))
         .isEqualTo(1);
     assertThat(
             login("ghost-" + UUID.randomUUID() + "@example.com", PASSWORD, freshIp()).getStatus())

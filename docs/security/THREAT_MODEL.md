@@ -80,6 +80,7 @@ Legend: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure
 | I | Verbose errors, stack traces, server headers | Problem+JSON errors without internals; Caddy strips `Server`; security headers (CSP, X-Content-Type-Options, Referrer-Policy) | REQ-SEC-001 | Planned |
 | D | Request floods, slowloris, oversized bodies | Caddy rate limit per IP on `/api/ingest/*` and `/webhooks/*`; body size limits (text 64 KB, media 10 MB); timeouts | REQ-SEC-004 | Planned |
 | E | Direct access to backend/Postgres/MinIO ports | Only Caddy publishes ports; `ufw` default deny; compose internal network | REQ-SEC-020, REQ-SEC-021 | Planned |
+| S | Any container on the compose network can send `X-Forwarded-For` to the backend directly and pick the rate-limit key / audit identity | The backend trusts the header only from Caddy's pinned address (`172.28.0.10/32`), so the internet cannot spoof it. **Residual (accepted in v1):** a compromised container on the same network can still spoof XFF; the network holds only our own images. No AAAA record is published (docs/HOSTING.md) | REQ-SEC-051 | Accepted risk |
 
 ### B1a compose network / loopback -> backend `GET /health` (STORY-143)
 

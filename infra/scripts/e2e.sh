@@ -40,6 +40,14 @@ rm -f "$WORK/.env" "$WORK/infra/scripts/seed-demo.sh"
 sed -e '/^DOMAIN=/d' -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=e2e$RANDOM$RANDOM/" .env.example >"$WORK/.env"
 echo "DOMAIN=" >>"$WORK/.env"
 sed -i "s|^MASROOF_JWT_SECRET=.*|MASROOF_JWT_SECRET=e2e$(openssl rand -hex 24)|" "$WORK/.env"
+# a random free 172.28.<n>.0/24 so this stack cannot clash with another project's pinned network
+for _ in $(seq 1 50); do
+  n=$((RANDOM % 200 + 20))
+  if ! docker network ls -q | xargs -r docker network inspect --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | grep -q "172.28.$n.0/24"; then
+    printf 'MASROOF_NET_SUBNET=172.28.%s.0/24\nCADDY_IP=172.28.%s.10\n' "$n" "$n" >>"$WORK/.env"
+    break
+  fi
+done
 if (cd "$WORK" && bash scripts/make/compose.sh up); then
   (cd "$REPO/web" && E2E_BASE_URL=http://localhost npm run e2e) || { echo "FAIL web npm run e2e"; rc=1; }
 else

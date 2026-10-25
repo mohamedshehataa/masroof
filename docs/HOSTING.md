@@ -102,8 +102,15 @@ skips the deploy with a visible warning; it never fails because of that.
 `bootstrap.sh` generates `MASROOF_JWT_SECRET`. To create the first admin, add `MASROOF_BOOTSTRAP_ADMIN_EMAIL` and
 `MASROOF_BOOTSTRAP_ADMIN_PASSWORD` (12+ characters) to the server `.env` before the first start. **Remove both
 lines after the first start**: they only act while no login exists, and the backend logs a warning (without values)
-when they are still set later. If Caddy is not the only way in, set `MASROOF_TRUSTED_PROXIES` (CIDR list; default is
-Docker's `172.16.0.0/12` pool) so client IPs for rate limiting come from the right proxy.
+when they are still set later. The compose network is pinned (`172.28.0.0/24`, Caddy at `172.28.0.10`; override with `MASROOF_NET_SUBNET`/`CADDY_IP` if it
+collides with something on the host) and the backend trusts `X-Forwarded-For` only from that one address
+(`MASROOF_TRUSTED_PROXIES` is set by compose, do not put it in `.env`). `MASROOF_AUDIT_KEY` (optional, 32+ bytes) keys the audit-log
+IP hashes; without it the key is derived from `MASROOF_JWT_SECRET`.
+
+### DNS: publish an A record only
+Create only an **A** record (IPv4) for the domain, **no AAAA**, until Docker IPv6 is native and the proxy trust model has been
+re-checked: with Docker's IPv6 NAT/userland proxy, clients can reach Caddy from a bridge-gateway address and X-Forwarded-For
+handling would no longer match the pinned Caddy address. The DuckDNS refresh job sets IPv4 only.
 
 ## What the server does on its own
 

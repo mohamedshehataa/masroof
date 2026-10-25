@@ -1376,7 +1376,7 @@ RFC 9457 problem details. Every 4xx/5xx body has this shape.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `type` | string (uri) | yes | Problem type URI (`about:blank` for plain HTTP semantics). |
+| `type` | string (uri) | yes | Problem type URI. Clients switch on this, never on `title`. Stable values under `https://masroof.app/problems/`: `validation` (400/422), `unauthorized` (401), `not-found` (404), `conflict` (409), `rate-limited` (429), and for createExpense 409s `idempotency-in-progress` (retry later), `idempotency-key-reused` and `idempotency-expense-deleted` (permanent: use a new key). Framework-generated responses (404 for unknown routes, 415, 501, 503) use `about:blank`. |
 | `title` | string | yes |  |
 | `status` | integer | yes |  |
 | `detail` | string | no |  |

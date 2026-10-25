@@ -20,6 +20,7 @@ services:
     restart: always
     environment:
       CORS_ALLOWED_ORIGINS: https://${DOMAIN:?set DOMAIN (e.g. masroof.duckdns.org)}   # the web app is served from the same origin
+      MASROOF_TRUSTED_PROXIES: ${CADDY_IP:-172.28.0.10}/32   # exactly Caddy's pinned address (see docker-compose.yml)
     deploy:
       resources:
         limits: { cpus: "2", memory: 6G }

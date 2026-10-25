@@ -215,6 +215,21 @@ class AuthServiceTest {
 
   @Test
   @Tag("REQ-SEC-007")
+  @DisplayName("REQ-SEC-007 LOGIN_BLOCKED is audited once per window per key")
+  void blockedAuditedOncePerWindow() {
+    for (int i = 0; i < 10; i++) {
+      failure(() -> service.login("m@example.com", "wrong", "198.51.100.5"));
+    }
+    clock.now = T0.plusSeconds(60);
+    for (int i = 0; i < 5; i++) {
+      failure(() -> service.login("m@example.com", "wrong", "198.51.100.5"));
+    }
+    assertThat(service.blockedTotal()).isEqualTo(5);
+    assertThat(audited.stream().filter("LOGIN_BLOCKED"::equals).count()).isEqualTo(1);
+  }
+
+  @Test
+  @Tag("REQ-SEC-007")
   @DisplayName("REQ-SEC-007 the 10th failure is still a plain 401; the IP key blocks other e-mails")
   void ipLockout() {
     for (int i = 0; i < 9; i++) {

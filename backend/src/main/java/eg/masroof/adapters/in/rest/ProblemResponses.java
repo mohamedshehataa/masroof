@@ -40,7 +40,9 @@ final class ProblemResponses {
     response.setContentType("application/problem+json");
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     String json =
-        "{\"type\":\"about:blank\",\"title\":\""
+        "{\"type\":\""
+            + ProblemTypes.forStatus(status)
+            + "\",\"title\":\""
             + title
             + "\",\"status\":"
             + status
