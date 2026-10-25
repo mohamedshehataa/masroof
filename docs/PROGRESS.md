@@ -70,3 +70,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 10:45 · P1 · STORY-006 · tdd · INFO · started (low tier).
 2026-10-25 10:10 · P1 · STORY-007 · verify · RED · loop 2/3 FAIL: semgrep blocks the PR gate on 3 findings in the test-designer's generated.test.ts (spawn shell, 2x non-literal RegExp); impl findings resolved; loop 3 (last) routed to test-designer.
 2026-10-25 10:40 · P1 · STORY-007 · integrate · GREEN · loop 3/3 verify PASS + review APPROVE (CI run 40144396415 all green incl. semgrep + osv); DONE.
+2026-10-24 23:58 · P1 · SDLC · spec · RED · stop-gate: make check-fast MODULE="sdlc" failed 3 times in a row (exit 2). Agent stopped with a red gate. 23:sdlc-lint: 0 error(s), 0 warning(s) 34:test-stop-gate: 40 passed, 0 failed 68:commit-msg-lint tests: 26 passed, 0 failed 
