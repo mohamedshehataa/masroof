@@ -15,6 +15,22 @@ buildscript {
             classpath("org.apache.commons:commons-lang3:3.21.0")
         }
     }
+    // openapi-generator-gradle-plugin 7.14.0 (latest release) ships vulnerable jackson 2.18/2.19, handlebars 4.3.1 and
+    // rhino 1.7.7.2 (jackson GHSA-7hhh-6rmp-j9qf and others, handlebars GHSA-r4gv-qr8j-p3pg, rhino GHSA-3w8q-xq97-5j7x).
+    // Forcing the fixed versions keeps the vulnerable poms out of the lockfile and verification metadata too.
+    configurations.classpath {
+        resolutionStrategy {
+            eachDependency {
+                when {
+                    requested.group.startsWith("com.fasterxml.jackson") &&
+                        requested.name != "jackson-annotations" -> useVersion("2.21.7")
+                    requested.group == "com.github.jknack" && requested.name == "handlebars" ->
+                        useVersion("4.5.2")
+                    requested.group == "org.mozilla" && requested.name == "rhino" -> useVersion("1.7.14.1")
+                }
+            }
+        }
+    }
 }
 
 plugins {
