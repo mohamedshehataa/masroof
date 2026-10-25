@@ -89,3 +89,5 @@ when `vars.STAGING_ENABLED == 'true'`; `make smoke URL=$STAGING_URL` gates it.
 
 Health: `GET /health` (must contain `UP`). Metrics: `/actuator/prometheus` (internal network only).
 Alerts and dashboards: `infra/observability/` (TODO, S13).
+
+Free single-VM hosting (Oracle Always Free + DuckDNS) is described in [HOSTING.md](HOSTING.md); `make deploy-prod` there supersedes the VPS notes above for the first deployment target.

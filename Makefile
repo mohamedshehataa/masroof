@@ -74,7 +74,7 @@ sbom: ## CycloneDX SBOMs for backend, web, android into build/sbom/
 	@$(ENV) bash scripts/make/sbom.sh
 backend-integration: ## Backend Testcontainers integrationTest + ArchUnit archTest; fails on zero tests (CI job)
 	@$(ENV) bash scripts/make/backend-integration.sh
-build-images: ## Build masroof/backend + masroof/web docker images tagged IMAGE_TAG (default dev)
+build-images: ## Build backend + web images tagged IMAGE_TAG (default dev); PLATFORMS=linux/amd64,linux/arm64 = multi-arch, IMAGE_REGISTRY/IMAGE_PUSH=1 = push
 	@$(ENV) IMAGE_TAG=$(IMAGE_TAG) bash scripts/make/build.sh images
 build-web: ## Production web bundle
 	@$(ENV) bash scripts/make/build.sh web
@@ -85,13 +85,13 @@ build-apk-release: ## Signed release APK (needs keystore env vars)
 
 deploy-staging: ## Deploy VERSION to staging (requires STAGING_HOST; only via /release)
 	@$(ENV) bash scripts/make/deploy.sh staging $(VERSION)
-deploy-prod: ## Deploy VERSION to production (requires PROD_HOST; only via /release)
+deploy-prod: ## Deploy VERSION to prod over ssh: make deploy-prod HOST=<ip> DOMAIN=<name> VERSION=<tag> (only via /release)
 	@$(ENV) bash scripts/make/deploy.sh prod $(VERSION)
 smoke: ## Smoke test URL=$(URL)
 	@$(ENV) bash infra/scripts/smoke.sh $(URL)
 rollback: ## Roll back to the previously deployed images
 	@$(ENV) bash infra/scripts/rollback.sh
-backup: ## Encrypted Postgres + media backup
+backup: ## Run the server backup now (HOST=<ip>); the VM also backs up nightly
 	@$(ENV) bash infra/scripts/backup.sh
 
 selftest: ## Prove every SDLC guard blocks (writes docs/SDLC_SELFTEST.md)
