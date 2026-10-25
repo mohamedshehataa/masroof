@@ -7,7 +7,10 @@ import eg.masroof.api.apis.ExpensesApi
 import eg.masroof.api.apis.IngestApi
 import eg.masroof.api.models.Expense
 import eg.masroof.api.models.ExpenseCreate
-import eg.masroof.api.models.IngestSmsRequest
+import eg.masroof.api.models.IngestParsedTransactionRequest
+import eg.masroof.api.models.IngestParsedTransactionRequestKind
+import eg.masroof.api.models.IngestParsedTransactionRequestPaymentMethod
+import eg.masroof.api.models.IngestParsedTransactionRequestSource
 import eg.masroof.api.models.Money
 import eg.masroof.api.models.PaymentAccount
 import eg.masroof.api.models.PaymentMethod
@@ -20,7 +23,7 @@ import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.OutboxEntity
-import eg.masroof.data.db.SmsOutboxEntity
+import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.normalizeServerUrl
 import kotlinx.datetime.Instant
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -141,6 +144,26 @@ val apiJson: Json =
             }
     }
 
+/** The exact wire shape of a parsed record. It has no field for message text; tests serialize it to prove that. */
+fun parsedRequest(
+    deviceId: String,
+    item: ParsedOutboxEntity,
+): IngestParsedTransactionRequest =
+    IngestParsedTransactionRequest(
+        deviceId = UUID.fromString(deviceId),
+        localId = item.localId,
+        source = IngestParsedTransactionRequestSource.valueOf(item.source),
+        kind = IngestParsedTransactionRequestKind.valueOf(item.kind),
+        amountMinor = item.amountMinor,
+        currency = item.currency,
+        occurredAt = Instant.fromEpochMilliseconds(item.occurredAtMillis),
+        senderId = item.senderId,
+        instrumentLast4 = item.instrumentLast4,
+        institution = item.institution,
+        paymentMethod = item.paymentMethod?.let { IngestParsedTransactionRequestPaymentMethod.valueOf(it) },
+        merchant = item.merchant,
+    )
+
 /** [RemoteSource] backed by the Kotlin client generated from contracts/openapi.yaml. */
 @Singleton
 class ApiRemoteSource
@@ -149,7 +172,7 @@ class ApiRemoteSource
         private val settings: SettingsRepository,
         bare: OkHttpClient,
         session: SessionManager,
-    ) : RemoteSource, SmsRemote {
+    ) : RemoteSource, ParsedRemote {
         private var cachedKey: String? = null
         private var cachedRetrofit: Retrofit? = null
 
@@ -250,20 +273,13 @@ class ApiRemoteSource
         }
 
         @Suppress("TooGenericExceptionCaught")
-        override suspend fun uploadSms(
+        override suspend fun uploadParsed(
             deviceId: String,
-            item: SmsOutboxEntity,
+            item: ParsedOutboxEntity,
         ): SmsUploadResult =
             try {
-                val body =
-                    IngestSmsRequest(
-                        sender = item.sender,
-                        body = item.body,
-                        receivedAt = Instant.fromEpochMilliseconds(item.receivedAtMillis),
-                        deviceId = UUID.fromString(deviceId),
-                        smsId = item.smsId,
-                    )
-                val response = retrofit().create(IngestApi::class.java).ingestSms(body)
+                val body = parsedRequest(deviceId, item)
+                val response = retrofit().create(IngestApi::class.java).ingestParsedTransaction(body)
                 if (response.isSuccessful) {
                     SmsUploadResult.Sent
                 } else {

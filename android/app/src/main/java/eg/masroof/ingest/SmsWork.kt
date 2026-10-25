@@ -14,9 +14,15 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import eg.masroof.data.db.AppDatabase
-import eg.masroof.data.db.SmsOutboxEntity
-import eg.masroof.data.remote.SmsRemote
+import eg.masroof.data.db.ParsedOutboxEntity
+import eg.masroof.data.db.REVIEW_RETENTION_DAYS
+import eg.masroof.data.db.ReviewItemEntity
+import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.SmsUploadResult
+import eg.masroof.ingest.parse.CaptureSource
+import eg.masroof.ingest.parse.IncomingMessage
+import eg.masroof.ingest.parse.MessageParser
+import eg.masroof.ingest.parse.ParseOutcome
 import eg.masroof.work.OutboxBackoff
 import java.time.Clock
 import java.util.concurrent.TimeUnit
@@ -26,12 +32,13 @@ import javax.inject.Singleton
 const val SMS_INTAKE_TAG = "sms-intake"
 const val SMS_UPLOAD_WORK = "sms-upload"
 const val SMS_UPLOAD_RETRY_WORK = "sms-upload-retry"
+private const val KEY_SOURCE = "source"
 private const val KEY_SENDER = "sender"
-private const val KEY_BODY = "body"
+private const val KEY_TEXT = "text"
 private const val KEY_TS = "ts"
 private const val KEY_ATTEMPT = "attempt"
 
-/** Where the app keeps a random id for this installation, sent with every SMS (idempotency key part). */
+/** Where the app keeps a random id for this installation, sent with every record (idempotency key part). */
 interface DeviceIdProvider {
     fun get(): String
 }
@@ -44,13 +51,19 @@ class WorkManagerSmsScheduler
     ) : SmsWorkScheduler {
         private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-        override fun enqueueIntake(sms: IncomingSms) {
+        override fun enqueueIntake(message: IncomingMessage) {
             val request =
                 OneTimeWorkRequestBuilder<SmsIntakeWorker>()
                     .addTag(SMS_INTAKE_TAG)
-                    .setInputData(workDataOf(KEY_SENDER to sms.sender, KEY_BODY to sms.body, KEY_TS to sms.timestampMillis))
-                    .build()
-            // Not unique by name: every message is its own job; the outbox insert dedups on the message id.
+                    .setInputData(
+                        workDataOf(
+                            KEY_SOURCE to message.source.name,
+                            KEY_SENDER to message.sender,
+                            KEY_TEXT to message.text,
+                            KEY_TS to message.receivedAtMillis,
+                        ),
+                    ).build()
+            // Not unique by name: every message is its own job; the outbox insert dedups on the local id.
             workManager.enqueue(request)
         }
 
@@ -73,43 +86,82 @@ class WorkManagerSmsScheduler
         }
     }
 
-/** Background half of the receiver: filters again and queues the message for upload (REQ-SMS-030, REQ-SMS-060). */
+/** What the pipeline did with one message. */
+enum class Disposition { QUEUED, REVIEW, DROPPED }
+
+/**
+ * Background half of the receiver and the notification listener: parses on the device and decides (REQ-SMS-030,
+ * REQ-SMS-060). A record goes to the upload outbox; anything unclear or secret goes to the local review list; the rest is
+ * forgotten. The message text is never written anywhere except the review list.
+ */
 @Singleton
 class SmsPipeline
     @Inject
     constructor(
         private val db: AppDatabase,
         private val settings: SenderSettings,
+        private val notifications: NotificationSettings,
         private val scheduler: SmsWorkScheduler,
         private val clock: Clock,
     ) {
-        /** True when the message was queued; OTPs, promos and senders that are no longer allowlisted are dropped. */
-        suspend fun accept(sms: IncomingSms): Boolean {
-            if (!settings.policy().isAllowed(sms.sender)) return false
-            if (OtpPromoFilter.classify(sms.body) != MessageClass.OTHER) return false
-            // Defence in depth: redaction is idempotent, so a body that was already redacted is unchanged.
-            val clean = sms.copy(body = SmsRedactor.redact(sms.body))
-            val inserted =
-                db.smsOutbox().insert(
-                    SmsOutboxEntity(
-                        smsId = smsId(clean),
-                        sender = sms.sender.take(MAX_SENDER),
-                        body = clean.body.take(MAX_BODY),
-                        receivedAtMillis = sms.timestampMillis,
-                        createdAtMillis = clock.millis(),
-                    ),
-                )
-            scheduler.scheduleUpload()
-            return inserted != -1L
+        suspend fun accept(message: IncomingMessage): Disposition {
+            if (!isAllowed(message)) return Disposition.DROPPED
+            return when (val outcome = MessageParser.parse(message)) {
+                is ParseOutcome.Record -> {
+                    val r = outcome.record
+                    db.parsedOutbox().insert(
+                        ParsedOutboxEntity(
+                            localId = r.localId,
+                            source = r.source.name,
+                            kind = r.kind.name,
+                            amountMinor = r.amountMinor,
+                            currency = r.currency,
+                            occurredAtMillis = r.occurredAtMillis,
+                            instrumentLast4 = r.instrumentLast4,
+                            senderId = r.senderId,
+                            institution = r.institution,
+                            paymentMethod = r.paymentMethod,
+                            merchant = r.merchant,
+                            createdAtMillis = clock.millis(),
+                        ),
+                    )
+                    scheduler.scheduleUpload()
+                    Disposition.QUEUED
+                }
+                is ParseOutcome.Review -> {
+                    val now = clock.millis()
+                    db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
+                    db.reviews().insert(
+                        ReviewItemEntity(
+                            id = MessageParser.localId(message),
+                            source = message.source.name,
+                            sender = message.sender.take(MAX_SENDER),
+                            text = outcome.text.take(MAX_REVIEW_TEXT),
+                            reason = outcome.reason,
+                            receivedAtMillis = message.receivedAtMillis,
+                            createdAtMillis = now,
+                        ),
+                    )
+                    Disposition.REVIEW
+                }
+                is ParseOutcome.Ignore -> Disposition.DROPPED
+            }
         }
 
+        private fun isAllowed(message: IncomingMessage): Boolean =
+            when (message.source) {
+                CaptureSource.SMS -> settings.policy().isAllowed(message.sender)
+                CaptureSource.NOTIFICATION -> notifications.enabled() && notifications.isMonitored(message.sender)
+            }
+
         private companion object {
-            const val MAX_SENDER = 40
-            const val MAX_BODY = 2000
+            const val MAX_SENDER = 60
+            const val MAX_REVIEW_TEXT = 1000
+            const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
         }
     }
 
-/** Result of one upload pass over the SMS outbox. */
+/** Result of one upload pass over the outbox. */
 data class SmsSyncReport(
     val sent: Int,
     val rejected: Int,
@@ -117,46 +169,46 @@ data class SmsSyncReport(
     val retryAfterSeconds: Long? = null,
 )
 
-/** Uploads queued SMS one by one, in order. The body is deleted as soon as the server acknowledged it (REQ-SMS-061). */
+/** Uploads queued records one by one, in order. A row is deleted as soon as the server acknowledged it (REQ-SMS-061). */
 @Singleton
 class SmsUploader
     @Inject
     constructor(
         private val db: AppDatabase,
-        private val remote: SmsRemote,
+        private val remote: ParsedRemote,
         private val device: DeviceIdProvider,
         private val clock: Clock,
     ) {
         suspend fun uploadPending(): SmsSyncReport {
-            val dao = db.smsOutbox()
+            val dao = db.parsedOutbox()
             dao.purgeFailedBefore(clock.millis() - RETENTION_MILLIS)
             var sent = 0
             var rejected = 0
             var retry = false
             var retryAfter: Long? = null
             for (item in dao.pending()) {
-                when (val result = remote.uploadSms(device.get(), item)) {
+                when (val result = remote.uploadParsed(device.get(), item)) {
                     SmsUploadResult.Sent -> {
-                        dao.delete(item.smsId)
+                        dao.delete(item.localId)
                         sent++
                     }
                     is SmsUploadResult.Retry -> {
-                        dao.bumpAttempts(item.smsId)
+                        dao.bumpAttempts(item.localId)
                         retry = true
                         retryAfter = result.afterSeconds
                     }
                     SmsUploadResult.RetryLimited ->
                         if (item.attempts + 1 >= MAX_LIMITED_ATTEMPTS) {
-                            dao.markFailed(item.smsId)
+                            dao.markFailed(item.localId)
                             rejected++
                         } else {
-                            dao.bumpAttempts(item.smsId)
+                            dao.bumpAttempts(item.localId)
                             retry = true
                         }
                     // Needs a new sign-in; the rows stay queued and the next sign-in/app start uploads them.
                     SmsUploadResult.Unauthorized -> return SmsSyncReport(sent, rejected, false)
                     SmsUploadResult.Rejected -> {
-                        dao.markFailed(item.smsId)
+                        dao.markFailed(item.localId)
                         rejected++
                     }
                 }
@@ -181,8 +233,9 @@ class SmsIntakeWorker
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
-            val body = inputData.getString(KEY_BODY) ?: return Result.failure()
-            pipeline.accept(IncomingSms(sender, body, inputData.getLong(KEY_TS, 0L)))
+            val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
+            val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
+            pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
             return Result.success()
         }
     }

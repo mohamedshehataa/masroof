@@ -27,6 +27,7 @@ import eg.masroof.data.auth.SessionStore
 import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.MIGRATION_2_3
+import eg.masroof.data.db.MIGRATION_3_4
 import eg.masroof.data.insights.ApiInsightsRemote
 import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.FileInsightsCache
@@ -35,8 +36,10 @@ import eg.masroof.data.insights.InsightsRemote
 import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.RemoteSource
-import eg.masroof.data.remote.SmsRemote
+import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.ingest.DeviceIdProvider
+import eg.masroof.ingest.NotificationSettings
+import eg.masroof.ingest.PrefsNotificationSettings
 import eg.masroof.ingest.PrefsSenderSettings
 import eg.masroof.ingest.SenderSettings
 import eg.masroof.ingest.SmsWorkScheduler
@@ -74,7 +77,7 @@ abstract class BindingsModule {
 
     @Binds abstract fun network(impl: ConnectivityNetworkMonitor): NetworkMonitor
 
-    @Binds abstract fun smsRemote(impl: ApiRemoteSource): SmsRemote
+    @Binds abstract fun parsedRemote(impl: ApiRemoteSource): ParsedRemote
 
     @Binds abstract fun smsScheduler(impl: WorkManagerSmsScheduler): SmsWorkScheduler
 
@@ -95,7 +98,7 @@ object ProvidersModule {
         Room
             .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
             // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
-            .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigrationFrom(true, 1)
             .build()
 
@@ -103,6 +106,11 @@ object ProvidersModule {
     fun workManager(
         @ApplicationContext context: Context,
     ): WorkManager = WorkManager.getInstance(context)
+
+    @Provides @Singleton
+    fun notificationSettings(
+        @ApplicationContext context: Context,
+    ): NotificationSettings = PrefsNotificationSettings(context.getSharedPreferences("masroof_notifications", Context.MODE_PRIVATE))
 
     @Provides @Singleton
     fun senderSettings(

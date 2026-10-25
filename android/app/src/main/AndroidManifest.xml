@@ -49,6 +49,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Reason: the system binds the listener from outside the app, so it must be exported; BIND_NOTIFICATION_
+             LISTENER_SERVICE means only the system can bind it. It only hands allowlisted notification text to
+             WorkManager (REQ-NTF-001); the user must grant "Notification access" in system settings. -->
+        <!-- nosemgrep: java.android.security.exported_service.exported_service -->
+        <service
+            android:name=".ingest.MasroofNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider
             android:name="androidx.startup.InitializationProvider"

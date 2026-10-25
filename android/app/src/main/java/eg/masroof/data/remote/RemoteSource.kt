@@ -67,10 +67,10 @@ sealed interface SmsUploadResult {
     data object Rejected : SmsUploadResult
 }
 
-/** Upload of one filtered SMS to POST /api/ingest/sms (REQ-SMS-060). */
-interface SmsRemote {
-    suspend fun uploadSms(
+/** Upload of one structured on-device parse to POST /api/ingest/parsed-transactions (REQ-SMS-060). */
+interface ParsedRemote {
+    suspend fun uploadParsed(
         deviceId: String,
-        item: eg.masroof.data.db.SmsOutboxEntity,
+        item: eg.masroof.data.db.ParsedOutboxEntity,
     ): SmsUploadResult
 }

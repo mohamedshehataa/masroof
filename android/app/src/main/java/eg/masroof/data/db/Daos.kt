@@ -104,35 +104,59 @@ interface LookupDao {
 }
 
 @Dao
-interface SmsOutboxDao {
-    /** IGNORE: the same SMS seen live and in a backfill is stored once. Returns the new row id, or -1 if it existed. */
+interface ParsedOutboxDao {
+    /** IGNORE: the same message seen live and in a backfill is stored once. Returns the new row id, or -1 if it existed. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insert(item: SmsOutboxEntity): Long
+    suspend fun insert(item: ParsedOutboxEntity): Long
 
-    @Query("SELECT * FROM sms_outbox WHERE failed = 0 ORDER BY receivedAtMillis")
-    suspend fun pending(): List<SmsOutboxEntity>
+    @Query("SELECT * FROM parsed_outbox WHERE failed = 0 ORDER BY occurredAtMillis")
+    suspend fun pending(): List<ParsedOutboxEntity>
 
-    @Query("UPDATE sms_outbox SET attempts = attempts + 1 WHERE smsId = :smsId")
-    suspend fun bumpAttempts(smsId: String)
+    @Query("UPDATE parsed_outbox SET attempts = attempts + 1 WHERE localId = :localId")
+    suspend fun bumpAttempts(localId: String)
 
-    @Query("UPDATE sms_outbox SET failed = 1 WHERE smsId = :smsId")
-    suspend fun markFailed(smsId: String)
+    @Query("UPDATE parsed_outbox SET failed = 1 WHERE localId = :localId")
+    suspend fun markFailed(localId: String)
 
-    @Query("DELETE FROM sms_outbox WHERE smsId = :smsId")
-    suspend fun delete(smsId: String)
+    @Query("DELETE FROM parsed_outbox WHERE localId = :localId")
+    suspend fun delete(localId: String)
 
-    /** Bodies never linger: permanently failed rows go after the retention window. */
-    @Query("DELETE FROM sms_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
+    /** Permanently failed rows go after the retention window. */
+    @Query("DELETE FROM parsed_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
     suspend fun purgeFailedBefore(olderThanMillis: Long)
 
-    @Query("SELECT COUNT(*) FROM sms_outbox WHERE failed = 0")
+    @Query("SELECT COUNT(*) FROM parsed_outbox WHERE failed = 0")
     suspend fun countPending(): Int
 
-    @Query("SELECT COUNT(*) FROM sms_outbox")
+    @Query("SELECT COUNT(*) FROM parsed_outbox")
     suspend fun countAll(): Int
 
-    @Query("SELECT * FROM sms_outbox")
-    suspend fun all(): List<SmsOutboxEntity>
+    @Query("SELECT * FROM parsed_outbox")
+    suspend fun all(): List<ParsedOutboxEntity>
+}
+
+@Dao
+interface ReviewDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: ReviewItemEntity): Long
+
+    @Query("SELECT * FROM review_item ORDER BY receivedAtMillis DESC")
+    fun observeAll(): Flow<List<ReviewItemEntity>>
+
+    @Query("SELECT COUNT(*) FROM review_item")
+    fun observeCount(): Flow<Int>
+
+    @Query("SELECT * FROM review_item WHERE id = :id")
+    suspend fun find(id: String): ReviewItemEntity?
+
+    @Query("DELETE FROM review_item WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM review_item WHERE createdAtMillis < :olderThanMillis")
+    suspend fun purgeBefore(olderThanMillis: Long)
+
+    @Query("SELECT * FROM review_item")
+    suspend fun all(): List<ReviewItemEntity>
 }
 
 @Database(
@@ -142,9 +166,10 @@ interface SmsOutboxDao {
             CategoryEntity::class,
             AccountEntity::class,
             OutboxEntity::class,
-            SmsOutboxEntity::class,
+            ParsedOutboxEntity::class,
+            ReviewItemEntity::class,
         ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -154,7 +179,9 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun lookups(): LookupDao
 
-    abstract fun smsOutbox(): SmsOutboxDao
+    abstract fun parsedOutbox(): ParsedOutboxDao
+
+    abstract fun reviews(): ReviewDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction
@@ -209,6 +236,28 @@ CREATE TABLE IF NOT EXISTS sms_outbox (
   PRIMARY KEY(smsId)
 )
 """
+
+/**
+ * v3 -> v4: SMS text no longer leaves or lingers on the phone. The v3 `sms_outbox` (which held redacted text) is dropped
+ * and replaced by a typed `parsed_outbox` (no text) and the local `review_item` list.
+ */
+val MIGRATION_3_4: Migration =
+    object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS sms_outbox")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS parsed_outbox (localId TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL, " +
+                    "amountMinor INTEGER NOT NULL, currency TEXT NOT NULL, occurredAtMillis INTEGER NOT NULL, " +
+                    "instrumentLast4 TEXT, senderId TEXT NOT NULL, institution TEXT, paymentMethod TEXT, merchant TEXT, " +
+                    "attempts INTEGER NOT NULL, failed INTEGER NOT NULL, createdAtMillis INTEGER NOT NULL, PRIMARY KEY(localId))",
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS review_item (id TEXT NOT NULL, source TEXT NOT NULL, sender TEXT NOT NULL, " +
+                    "text TEXT NOT NULL, reason TEXT NOT NULL, receivedAtMillis INTEGER NOT NULL, " +
+                    "createdAtMillis INTEGER NOT NULL, PRIMARY KEY(id))",
+            )
+        }
+    }
 
 /** v2 -> v3: where an expense came from, and the SMS upload queue. Keeps the manual-entry outbox intact. */
 val MIGRATION_2_3: Migration =

@@ -51,18 +51,44 @@ data class OutboxEntity(
 )
 
 /**
- * One filtered bank SMS waiting to be uploaded. [smsId] is stable for the same message (live and backfill), so a
- * re-insert is a no-op and the server dedups on (deviceId, smsId). The body is deleted once the server acknowledged it.
+ * One structured transaction parsed on the device, waiting to be uploaded (REQ-SMS-060). It holds NO message text: only
+ * typed fields and a digit-free [merchant] label. [localId] is a hash computed on the device, so a re-insert is a no-op
+ * and the server dedups on (deviceId, localId).
  */
-@Entity(tableName = "sms_outbox")
-data class SmsOutboxEntity(
-    @PrimaryKey val smsId: String,
-    val sender: String,
-    val body: String,
-    val receivedAtMillis: Long,
+@Entity(tableName = "parsed_outbox")
+data class ParsedOutboxEntity(
+    @PrimaryKey val localId: String,
+    val source: String,
+    val kind: String,
+    val amountMinor: Long,
+    val currency: String,
+    val occurredAtMillis: Long,
+    val instrumentLast4: String?,
+    val senderId: String,
+    val institution: String?,
+    val paymentMethod: String?,
+    val merchant: String?,
     val attempts: Int = 0,
     val failed: Boolean = false,
     val createdAtMillis: Long,
+)
+
+/**
+ * A message the engine could not turn into a record, or that looked secret. The text lives ONLY here, on the phone
+ * (digit runs of a secret one are masked); nothing is uploaded unless the user saves an expense from it. Cleared on
+ * logout and after [REVIEW_RETENTION_DAYS] days.
+ */
+@Entity(tableName = "review_item")
+data class ReviewItemEntity(
+    @PrimaryKey val id: String,
+    val source: String,
+    val sender: String,
+    val text: String,
+    val reason: String,
+    val receivedAtMillis: Long,
+    val createdAtMillis: Long,
 ) {
-    override fun toString() = "SmsOutboxEntity(smsId=$smsId)"
+    override fun toString() = "ReviewItemEntity(id=$id, reason=$reason)"
 }
+
+const val REVIEW_RETENTION_DAYS = 30L

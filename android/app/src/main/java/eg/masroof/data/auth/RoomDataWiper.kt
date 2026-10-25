@@ -23,9 +23,9 @@ class RoomDataWiper
         private val workManager: WorkManager,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) : LocalDataWiper {
-        override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() + db.smsOutbox().countAll() }
+        override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() + db.parsedOutbox().countAll() }
 
-        override suspend fun retryableCount(): Int = withContext(io) { db.outbox().countRetryable() + db.smsOutbox().countPending() }
+        override suspend fun retryableCount(): Int = withContext(io) { db.outbox().countRetryable() + db.parsedOutbox().countPending() }
 
         override suspend fun wipe() {
             workManager.cancelUniqueWork(OUTBOX_WORK_NAME)

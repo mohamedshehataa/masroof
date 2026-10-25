@@ -1,6 +1,9 @@
 package eg.masroof.ingest
 
-import java.security.MessageDigest
+import eg.masroof.ingest.parse.CaptureSource
+import eg.masroof.ingest.parse.IncomingMessage
+import eg.masroof.ingest.parse.SecretDetector
+import eg.masroof.ingest.parse.TextNormalizer
 
 /** One received SMS (multi-part messages already joined). Never logged: [toString] hides the text. */
 data class IncomingSms(
@@ -9,12 +12,14 @@ data class IncomingSms(
     val timestampMillis: Long,
 ) {
     override fun toString() = "IncomingSms(ts=$timestampMillis)"
+
+    fun toMessage() = IncomingMessage(CaptureSource.SMS, sender, body, timestampMillis)
 }
 
 /** Seam to WorkManager so the receiver logic is unit-testable. */
 interface SmsWorkScheduler {
-    /** Hand one allowlisted, non-OTP message to the background pipeline. */
-    fun enqueueIntake(sms: IncomingSms)
+    /** Hand one allowlisted, non-OTP message (SMS or notification) to the background pipeline. */
+    fun enqueueIntake(message: IncomingMessage)
 
     fun scheduleUpload()
 
@@ -25,9 +30,9 @@ interface SmsWorkScheduler {
 }
 
 /**
- * What the BroadcastReceiver does: a sender lookup in SharedPreferences, a keyword check, and a WorkManager enqueue. No
- * parsing, no database, no network (REQ-SMS-020/021). OTPs and messages of senders that are not allowlisted never leave
- * this function: an unknown money-looking sender only leaves a suggestion (its name), never its text.
+ * What the BroadcastReceiver does: a sender lookup in SharedPreferences, a cheap secrecy check, and a WorkManager
+ * enqueue. No parsing, no database, no network (REQ-SMS-020/021). A plain OTP and a message of a sender that is not
+ * allowlisted never leave this function: an unknown money-looking sender only leaves a suggestion (its name).
  */
 class SmsHandoff(
     private val settings: SenderSettings,
@@ -38,10 +43,7 @@ class SmsHandoff(
         val policy = settings.policy()
         for (sms in messages) {
             if (policy.isAllowed(sms.sender)) {
-                if (OtpPromoFilter.classify(sms.body) != MessageClass.OTP) {
-                    // Only the redacted body leaves this function: the raw text never reaches WorkManager, Room or the server.
-                    scheduler.enqueueIntake(sms.copy(body = SmsRedactor.redact(sms.body).take(MAX_BODY)))
-                }
+                if (!MessageHygiene.isPlainSecret(sms.body)) scheduler.enqueueIntake(sms.toMessage().capped())
             } else if (isSuggestible(sms)) {
                 settings.suggest(sms.sender)
             }
@@ -49,9 +51,21 @@ class SmsHandoff(
     }
 
     private fun isSuggestible(sms: IncomingSms): Boolean =
-        sms.sender.any { it.isLetter() } &&
-            MoneyLike.looksLikeMoney(sms.body) &&
-            OtpPromoFilter.classify(sms.body) == MessageClass.OTHER
+        sms.sender.any { it.isLetter() } && MoneyLike.looksLikeMoney(sms.body) && !MessageHygiene.isPlainSecret(sms.body)
+}
+
+/** WorkManager input data is capped at 10 KB; a bank message is far shorter. */
+private const val MAX_TEXT = 2000
+
+internal fun IncomingMessage.capped() = copy(text = text.take(MAX_TEXT))
+
+/** Cheap keyword-level checks usable from the receiver. */
+object MessageHygiene {
+    /** A secret (OTP, PIN, verification code) that is not also a money message: dropped before WorkManager sees it. */
+    fun isPlainSecret(text: String): Boolean {
+        val norm = TextNormalizer.normalizeText(text)
+        return SecretDetector.isSecret(norm) && !MoneyLike.looksLikeMoney(text)
+    }
 }
 
 /** Cheap check that a text reads like a bank message: an amount next to an Egyptian-pound word. */
@@ -60,20 +74,7 @@ object MoneyLike {
     private val currencyThenAmount = Regex("(?:egp|l\\.e|جنيه|ج\\.م)\\s*\\d")
 
     fun looksLikeMoney(body: String): Boolean {
-        val text = OtpPromoFilter.normalize(body)
+        val text = SecretDetector.fold(TextNormalizer.normalizeText(body))
         return amountThenCurrency.containsMatchIn(text) || currencyThenAmount.containsMatchIn(text)
     }
 }
-
-/** Stable id of a message so the live receiver and a later backfill agree: sender, sent-second and normalized text. */
-fun smsId(sms: IncomingSms): String {
-    val material = "${senderKey(sms.sender)}|${sms.timestampMillis / MILLIS_PER_SECOND}|${OtpPromoFilter.normalize(sms.body)}"
-    val digest = MessageDigest.getInstance("SHA-256").digest(material.toByteArray(Charsets.UTF_8))
-    return digest.take(ID_BYTES).joinToString("") { "%02x".format(it) }
-}
-
-private const val MILLIS_PER_SECOND = 1000L
-private const val ID_BYTES = 16
-
-/** WorkManager input data is capped at 10 KB; the server accepts 2000 characters anyway. */
-private const val MAX_BODY = 2000
