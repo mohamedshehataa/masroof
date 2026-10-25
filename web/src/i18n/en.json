@@ -6,7 +6,10 @@
   },
   "common": {
     "retry": "Retry",
-    "language": { "en": "English", "ar": "العربية" },
+    "language": {
+      "en": "English",
+      "ar": "العربية"
+    },
     "unnamed": "Untitled"
   },
   "nav": {
@@ -17,7 +20,9 @@
     "insights": "Insights",
     "more": "More"
   },
-  "offline": { "banner": "You're offline. Showing saved data." },
+  "offline": {
+    "banner": "You're offline. Showing saved data."
+  },
   "list": {
     "error": "Couldn't load this list.",
     "offline": "You're offline and nothing is saved yet.",
@@ -41,7 +46,8 @@
     "loadingMore": "Loading more",
     "today": "Today",
     "yesterday": "Yesterday",
-    "uncategorized": "Uncategorized"
+    "uncategorized": "Uncategorized",
+    "loadMoreError": "Couldn't load more."
   },
   "add": {
     "title": "Add expense",
@@ -63,9 +69,14 @@
     "errorSave": "Couldn't save the expense. Try again.",
     "errorOffline": "You're offline. Connect and try again.",
     "categoriesError": "Couldn't load categories.",
-    "noCategories": "No categories yet."
+    "noCategories": "No categories yet.",
+    "errorDate": "Date can be at most one day ahead.",
+    "accountsError": "Couldn't load accounts."
   },
-  "insights": { "title": "Insights", "soon": "Charts are coming soon." },
+  "insights": {
+    "title": "Insights",
+    "soon": "Charts are coming soon."
+  },
   "more": {
     "title": "More",
     "language": "Language",

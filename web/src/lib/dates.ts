@@ -59,7 +59,7 @@ export function occurredAtFor(dayKey: string, now: Date = new Date()): string {
   return new Date(noonUtc.getTime() - cairoOffsetMinutes(noonUtc) * 60_000).toISOString();
 }
 
-function addDays(dayKey: string, delta: number): string {
+export function addDays(dayKey: string, delta: number): string {
   const [y, m, d] = dayKey.split('-').map(Number);
   return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + delta)).toISOString().slice(0, 10);
 }

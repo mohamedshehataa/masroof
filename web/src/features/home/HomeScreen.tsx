@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCategories, useMonthSpent, useRecentExpenses } from '../../api/queries';
-import { AmountText, ErrorState, ExpenseRow, QueryBoundary, SkeletonRows } from '../../components/common';
+import { AmountText, ExpenseRow, QueryBoundary } from '../../components/common';
 import { Link } from '../../router';
 
 const SpentCard: FC = () => {
@@ -12,20 +12,19 @@ const SpentCard: FC = () => {
       <h2 id="spent-title" className="muted">
         {t('home.spentThisMonth')}
       </h2>
-      {spent.data ? (
-        <p className="hero-amount">
-          <AmountText money={spent.data} alwaysDecimals />
-        </p>
-      ) : spent.isError ? (
-        <ErrorState
-          message={t('home.summaryError')}
-          onRetry={() => {
-            void spent.refetch();
-          }}
-        />
-      ) : (
-        <SkeletonRows count={1} />
-      )}
+      <QueryBoundary
+        query={spent}
+        isEmpty={() => false}
+        emptyMessage=""
+        errorMessage={t('home.summaryError')}
+        skeletonCount={1}
+      >
+        {(total) => (
+          <p className="hero-amount">
+            <AmountText money={total} alwaysDecimals />
+          </p>
+        )}
+      </QueryBoundary>
     </section>
   );
 };

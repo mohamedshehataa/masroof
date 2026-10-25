@@ -89,6 +89,11 @@ export const TransactionsScreen: FC = () => {
                 </section>
               );
             })}
+            {list.isFetchNextPageError ? (
+              <p role="alert" className="state">
+                {t('tx.loadMoreError')}
+              </p>
+            ) : null}
             {list.hasNextPage ? (
               <button
                 type="button"
@@ -98,7 +103,11 @@ export const TransactionsScreen: FC = () => {
                   void list.fetchNextPage();
                 }}
               >
-                {list.isFetchingNextPage ? t('tx.loadingMore') : t('tx.loadMore')}
+                {list.isFetchingNextPage
+                  ? t('tx.loadingMore')
+                  : list.isFetchNextPageError
+                    ? t('common.retry')
+                    : t('tx.loadMore')}
               </button>
             ) : null}
           </>

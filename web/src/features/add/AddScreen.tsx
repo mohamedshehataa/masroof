@@ -1,10 +1,10 @@
-import { useState, type FC } from 'react';
+import { useRef, useState, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ExpenseCreate } from '../../api/generated';
 import { useAccounts, useCategories, useCreateExpense } from '../../api/queries';
 import { usePrefs } from '../../app/prefs';
-import { useOnline } from '../../components/common';
-import { cairoToday, occurredAtFor } from '../../lib/dates';
+import { SkeletonRows, useOnline } from '../../components/common';
+import { addDays, cairoToday, occurredAtFor } from '../../lib/dates';
 import { EMPTY_KEYPAD, keypadDisplay, keypadToMinor, pressKey, type KeypadKey } from '../../lib/money';
 import { useRouter } from '../../router';
 
@@ -31,6 +31,10 @@ export const AddScreen: FC = () => {
   const [day, setDay] = useState(() => cairoToday());
   const [note, setNote] = useState('');
   const [amountError, setAmountError] = useState(false);
+  const [dateError, setDateError] = useState(false);
+  // One Idempotency-Key per entry: retries of the same entry reuse it (a lost response cannot create a duplicate);
+  // editing any field starts a new entry with a new key. The time of day is excluded from the signature.
+  const attempt = useRef<{ signature: string; key: string } | null>(null);
 
   const keyLabel = (k: KeypadKey) => (k === 'back' ? t('add.backspace') : k === '.' ? t('add.decimal') : k);
 
@@ -40,7 +44,12 @@ export const AddScreen: FC = () => {
       setAmountError(true);
       return;
     }
+    if (day > addDays(cairoToday(), 1)) {
+      setDateError(true);
+      return;
+    }
     setAmountError(false);
+    setDateError(false);
     const body: ExpenseCreate = {
       type: 'EXPENSE',
       amount: { amountMinor, currency: 'EGP' },
@@ -49,11 +58,16 @@ export const AddScreen: FC = () => {
       ...(accountId === '' ? { paymentMethod: 'CASH' as const } : { paymentAccountId: accountId }),
       ...(note.trim() === '' ? {} : { notes: note.trim() }),
     };
-    create.mutate(body, {
-      onSuccess: () => {
-        navigate('/transactions');
+    const signature = JSON.stringify([amountMinor, categoryId, accountId, day, note.trim()]);
+    if (attempt.current?.signature !== signature) attempt.current = { signature, key: crypto.randomUUID() };
+    create.mutate(
+      { body, idempotencyKey: attempt.current.key },
+      {
+        onSuccess: () => {
+          navigate('/transactions');
+        },
       },
-    });
+    );
   };
 
   return (
@@ -122,6 +136,8 @@ export const AddScreen: FC = () => {
               {t('common.retry')}
             </button>
           </p>
+        ) : categories.isPending && categories.fetchStatus !== 'paused' ? (
+          <SkeletonRows count={2} />
         ) : categories.data?.length === 0 ? (
           <p className="muted">{t('add.noCategories')}</p>
         ) : (
@@ -162,18 +178,34 @@ export const AddScreen: FC = () => {
           ))}
         </select>
       </label>
+      {accounts.isError ? (
+        <p role="alert">
+          {t('add.accountsError')}{' '}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void accounts.refetch();
+            }}
+          >
+            {t('common.retry')}
+          </button>
+        </p>
+      ) : null}
       <label className="field">
         <span>{t('add.date')}</span>
         <input
           type="date"
           value={day}
-          max={cairoToday()}
+          max={addDays(cairoToday(), 1)}
+          aria-invalid={dateError}
           required
           onChange={(e) => {
             if (e.target.value !== '') setDay(e.target.value);
           }}
         />
       </label>
+      {dateError ? <p role="alert">{t('add.errorDate')}</p> : null}
       <label className="field">
         <span>{t('add.note')}</span>
         <input
@@ -187,8 +219,12 @@ export const AddScreen: FC = () => {
         />
       </label>
 
-      {create.isError ? <p role="alert">{t(`add.${failureKey(create.error, online)}`)}</p> : null}
-      <button type="submit" className="btn btn-block" disabled={create.isPending}>
+      {!online ? (
+        <p role="alert">{t('add.errorOffline')}</p>
+      ) : create.isError ? (
+        <p role="alert">{t(`add.${failureKey(create.error, online)}`)}</p>
+      ) : null}
+      <button type="submit" className="btn btn-block" disabled={create.isPending || !online}>
         {create.isPending ? t('add.saving') : t('add.save')}
       </button>
     </form>

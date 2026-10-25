@@ -8,7 +8,7 @@ export interface MoneyValue {
 }
 
 const ARABIC_INDIC = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-const MINOR_PER_MAJOR = 100;
+const MINOR_PER_MAJOR = 100; // keypad is EGP-only
 const MAX_INT_DIGITS = 9;
 const MAX_FRACTION_DIGITS = 2;
 
@@ -24,17 +24,34 @@ function groupThousands(int: string, sep: string): string {
   return int.replace(/\B(?=(\d{3})+(?!\d))/g, sep);
 }
 
-/** `1,250 EGP` / `1,250.50 EGP` / `١٬٢٥٠ ج.م`. Whole amounts drop the decimals unless `alwaysDecimals`. */
+/** Minor-unit digits of an ISO-4217 currency (EGP 2, JPY 0, KWD 3); unknown codes fall back to 2. */
+export function minorDigits(currency: string): number {
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+}
+
+/**
+ * `1,250 EGP` / `1,250.50 EGP` / `١٬٢٥٠ ج.م`. Whole amounts drop the decimals unless `alwaysDecimals`.
+ * Throws RangeError for non-integer or unsafe minor units: money is never silently rounded.
+ */
 export function formatMoney(money: MoneyValue, opts: { lang: Lang; digits: Digits; alwaysDecimals?: boolean }): string {
+  if (!Number.isSafeInteger(money.amountMinor)) throw new RangeError('amountMinor must be a safe integer');
+  const fractionDigits = minorDigits(money.currency);
+  const scale = 10 ** fractionDigits; // integer power of ten; not money arithmetic
   const negative = money.amountMinor < 0;
   const abs = Math.abs(money.amountMinor);
-  const major = Math.trunc(abs / MINOR_PER_MAJOR);
-  const minor = abs % MINOR_PER_MAJOR;
+  const major = Math.trunc(abs / scale);
+  const minor = abs % scale;
   const arabic = opts.digits === 'arabic';
   const group = arabic ? '٬' : ',';
   const decimal = arabic ? '٫' : '.';
   let body = groupThousands(String(major), group);
-  if (minor !== 0 || opts.alwaysDecimals === true) body += decimal + String(minor).padStart(2, '0');
+  if (fractionDigits > 0 && (minor !== 0 || opts.alwaysDecimals === true)) {
+    body += decimal + String(minor).padStart(fractionDigits, '0');
+  }
   return `${negative ? '-' : ''}${localizeDigits(body, opts.digits)} ${currencyLabel(money.currency, opts.lang)}`;
 }
 

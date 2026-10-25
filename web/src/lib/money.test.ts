@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { cairoDayKey, cairoToday, monthRange, occurredAtFor, relativeDay } from './dates';
-import { EMPTY_KEYPAD, formatMoney, keypadDisplay, keypadToMinor, pressKey, sumMinor, type KeypadKey } from './money';
+import {
+  EMPTY_KEYPAD,
+  formatMoney,
+  keypadDisplay,
+  keypadToMinor,
+  minorDigits,
+  pressKey,
+  sumMinor,
+  type KeypadKey,
+} from './money';
 
 const type = (keys: KeypadKey[]) => keys.reduce(pressKey, EMPTY_KEYPAD);
 
@@ -72,5 +81,22 @@ describe('REQ-UI-020 Cairo dates', () => {
     expect(relativeDay('2026-05-05', now)).toBe('today');
     expect(relativeDay('2026-05-04', now)).toBe('yesterday');
     expect(relativeDay('2026-05-01', now)).toBeNull();
+  });
+});
+
+describe('REQ-UI-002 money guards and currency scale', () => {
+  it('uses the currency minor digits (JPY 0, KWD 3, EGP 2)', () => {
+    const o = { lang: 'en', digits: 'western' } as const;
+    expect(formatMoney({ amountMinor: 1250, currency: 'JPY' }, o)).toBe('1,250 JPY');
+    expect(formatMoney({ amountMinor: 1250, currency: 'KWD' }, o)).toBe('1.250 KWD');
+    expect(formatMoney({ amountMinor: 1000, currency: 'KWD' }, o)).toBe('1 KWD');
+    expect(formatMoney({ amountMinor: 1005, currency: 'KWD' }, { ...o, alwaysDecimals: true })).toBe('1.005 KWD');
+    expect(minorDigits('EGP')).toBe(2);
+  });
+  it('rejects non-integer and unsafe amounts', () => {
+    const o = { lang: 'en', digits: 'western' } as const;
+    expect(() => formatMoney({ amountMinor: 12.5, currency: 'EGP' }, o)).toThrow(RangeError);
+    expect(() => formatMoney({ amountMinor: Number.NaN, currency: 'EGP' }, o)).toThrow(RangeError);
+    expect(() => formatMoney({ amountMinor: 2 ** 53, currency: 'EGP' }, o)).toThrow(RangeError);
   });
 });

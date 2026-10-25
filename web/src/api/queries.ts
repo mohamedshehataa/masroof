@@ -70,7 +70,10 @@ export const useExpenseList = (q: string, categoryId: string) =>
 export const useCreateExpense = () => {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (body: ExpenseCreate) => createExpense({ body }),
+    // networkMode 'always': offline fails fast instead of pausing forever on "Saving".
+    networkMode: 'always',
+    mutationFn: ({ body, idempotencyKey }: { body: ExpenseCreate; idempotencyKey: string }) =>
+      createExpense({ body, headers: { 'Idempotency-Key': idempotencyKey } }),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.expenses }),
   });
 };

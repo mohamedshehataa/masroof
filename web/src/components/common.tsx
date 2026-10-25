@@ -82,12 +82,14 @@ export function QueryBoundary<T>({
   isEmpty,
   emptyMessage,
   errorMessage,
+  skeletonCount,
   children,
 }: {
   query: QueryLike<T>;
   isEmpty: (data: T) => boolean;
   emptyMessage: string;
   errorMessage?: string;
+  skeletonCount?: number;
   children: (data: T) => ReactNode;
 }) {
   const retry = () => {
@@ -99,7 +101,7 @@ export function QueryBoundary<T>({
   if (query.isError || (query.isPending && query.fetchStatus === 'paused')) {
     return <ErrorState message={errorMessage} onRetry={retry} />;
   }
-  return <SkeletonRows />;
+  return <SkeletonRows count={skeletonCount} />;
 }
 
 export function categoryName(

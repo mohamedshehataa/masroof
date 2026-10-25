@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Category, Expense } from '../api/generated';
@@ -45,6 +46,8 @@ function expense(id: string, amountMinor: number, occurredAt: string, extra: Par
 interface Api {
   expenses: (url: URL) => { status: number; body: unknown };
   created: unknown[];
+  failPosts: number;
+  accountsFail: boolean;
 }
 
 const reply = (status: number, body: unknown): Promise<Response> =>
@@ -57,11 +60,20 @@ const reply = (status: number, body: unknown): Promise<Response> =>
 
 function mockApi(api: Partial<Api> = {}) {
   const created: unknown[] = [];
+  const keys: string[] = [];
+  let failures = api.failPosts ?? 0;
   const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     if (url.pathname === '/api/categories') return reply(200, { items: [cat] });
+    if (url.pathname === '/api/accounts' && api.accountsFail === true)
+      return reply(500, { type: 'about:blank', title: 'x', status: 500 });
     if (url.pathname === '/api/accounts') return reply(200, { items: [] });
     if (url.pathname === '/api/expenses' && init?.method === 'POST') {
+      keys.push(new Headers(init.headers).get('idempotency-key') ?? '');
+      if (failures > 0) {
+        failures -= 1;
+        return reply(503, { type: 'about:blank', title: 'x', status: 503 });
+      }
       created.push(JSON.parse(new TextDecoder().decode(init.body as ArrayBuffer)));
       return reply(201, expense(uid('9'), 100, new Date().toISOString()));
     }
@@ -72,7 +84,7 @@ function mockApi(api: Partial<Api> = {}) {
     return reply(404, { type: 'about:blank', title: 'nf', status: 404 });
   });
   vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, created };
+  return { fetchMock, created, keys };
 }
 
 function go(path: string, lang = 'en-US') {
@@ -249,5 +261,108 @@ describe('REQ-UI-023 Add', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
     const alert = await screen.findByRole('alert');
     expect(within(alert.parentElement as HTMLElement).getByText(/server rejected/)).toBeInTheDocument();
+  });
+});
+
+describe('REQ-UI-023 Add hardening', () => {
+  const enter = async (user: ReturnType<typeof userEvent.setup>, digit: string) => {
+    await user.click(screen.getByRole('button', { name: digit }));
+  };
+
+  it('REQ-UI-023 sends a UUID Idempotency-Key and reuses it when the same entry is retried', async () => {
+    const { keys, created } = mockApi({ failPosts: 1 });
+    const user = userEvent.setup();
+    go('/add');
+    await enter(user, '5');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/Couldn't save the expense/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(created).toHaveLength(1);
+    });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('REQ-UI-023 an edited entry gets a new Idempotency-Key', async () => {
+    const { keys } = mockApi({ failPosts: 1 });
+    const user = userEvent.setup();
+    go('/add');
+    await enter(user, '5');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Couldn't save the expense/);
+    await enter(user, '6');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(keys).toHaveLength(2);
+    });
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('REQ-UI-023 offline disables Save and shows the offline message instead of hanging', () => {
+    const { created } = mockApi();
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    go('/add');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByText("You're offline. Connect and try again.")).toBeInTheDocument();
+    expect(created).toHaveLength(0);
+  });
+
+  it('REQ-UI-023 rejects a date more than one day ahead', async () => {
+    const { created } = mockApi();
+    const user = userEvent.setup();
+    go('/add');
+    await enter(user, '5');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2999-01-01' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Date can be at most one day ahead.')).toBeInTheDocument();
+    expect(created).toHaveLength(0);
+  });
+
+  it('REQ-UI-023 shows a category skeleton while loading and an accounts load error', async () => {
+    mockApi({ accountsFail: true });
+    go('/add');
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn't load accounts/)).toBeInTheDocument();
+  });
+});
+
+describe('REQ-UI-021 load-more failure and REQ-UI-020 offline total', () => {
+  it('REQ-UI-021 shows an error and a retry when load-more fails, then recovers', async () => {
+    let failNext = true;
+    const oldItems = [expense(uid('2'), 300, '2026-01-10T10:00:00Z', { merchantName: 'Old shop' })];
+    const todayItems = [expense(uid('1'), 1000, new Date().toISOString(), { merchantName: 'Today shop' })];
+    mockApi({
+      expenses: (url) => {
+        if (url.searchParams.get('cursor') === 'next') {
+          return failNext
+            ? { status: 500, body: { type: 'about:blank', title: 'x', status: 500 } }
+            : { status: 200, body: { items: oldItems, nextCursor: null } };
+        }
+        return { status: 200, body: { items: todayItems, nextCursor: 'next' } };
+      },
+    });
+    const user = userEvent.setup();
+    go('/transactions');
+    await screen.findByText('Today shop');
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText("Couldn't load more.")).toBeInTheDocument();
+    expect(screen.getByText('Today shop')).toBeInTheDocument();
+    failNext = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Old shop')).toBeInTheDocument();
+  });
+
+  it('REQ-UI-020 the month total shows the offline copy when disconnected with nothing cached', async () => {
+    mockApi();
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    onlineManager.setOnline(false); // queries pause (fetchStatus 'paused') instead of failing
+    go('/');
+    try {
+      expect((await screen.findAllByText(/You're offline and nothing is saved/)).length).toBeGreaterThan(0);
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });
