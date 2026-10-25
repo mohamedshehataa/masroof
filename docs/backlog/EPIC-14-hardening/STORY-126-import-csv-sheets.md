@@ -18,6 +18,8 @@ owner_agent: backend-engineer
 
 ## Goal
 History from the old tracker lands in Masroof once (PROMPT §9).
+Cross-epic note (EPIC-16, 2026-10-26): imported rows without a time column are stored with `timeKnown = false`
+(STORY-149 REQ-AN-100 default rule), so they never count as late-night purchases.
 
 ## Requirements and acceptance criteria
 ### REQ-EXP-008 — POST /api/import (multipart CSV / Sheets export) with column mapping preview, dry-run, dedup against existing entries, ImportResult report
