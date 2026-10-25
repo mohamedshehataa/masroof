@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { SESSION_KEY, SESSION_VALUE } from './shell.helpers';
 import { AR_VERSION, EN_VERSION, mockHealth, ok } from './health.helpers';
 
 const combos = [
@@ -19,6 +20,12 @@ test.describe('REQ-OPS-021 375x812 matrix (axe + screenshot)', () => {
         locale: c.locale,
         colorScheme: c.colorScheme,
       });
+      await ctx.addInitScript(
+        ([k, v]) => {
+          window.localStorage.setItem(k as string, v as string);
+        },
+        [SESSION_KEY, SESSION_VALUE],
+      );
       const page = await ctx.newPage();
       await mockHealth(page, ok);
       await page.goto('/');

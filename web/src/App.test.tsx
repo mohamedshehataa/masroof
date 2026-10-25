@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { byFullText } from './test/matchers';
+import { signIn } from './test/session';
 
 const good = {
   status: 'UP',
@@ -46,9 +47,20 @@ function setOnline(online: boolean) {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(online);
 }
 
+// App-shell setup (STORY-017): a signed-in visitor, no stored language/theme, starting at Home (/).
 beforeEach(() => {
+  localStorage.clear();
+  signIn();
+  window.history.replaceState({}, '', '/');
   setLanguage('en-US');
 });
+
+// The language switch now lives in More -> Language; the version line lives on Home. Client-side navigation only.
+async function goTo(user: ReturnType<typeof userEvent.setup>, path: string) {
+  const link = document.querySelector(`nav a[href="${path}"]`);
+  if (!link) throw new Error(`no tab link to ${path}`);
+  await user.click(link);
+}
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -92,11 +104,15 @@ describe('REQ-OPS-021 version page states', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText(byFullText(EN_VERSION));
-    await user.click(screen.getByRole('button', { name: 'العربية' }));
+    await goTo(user, '/more');
+    await user.click(await screen.findByText('العربية'));
+    await goTo(user, '/');
     expect(await screen.findByText(byFullText('الخادم 0.1.0 (1a2b3c4)'))).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('lang', 'ar');
     expect(document.documentElement).toHaveAttribute('dir', 'rtl');
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await goTo(user, '/more');
+    await user.click(await screen.findByText('English'));
+    await goTo(user, '/');
     expect(await screen.findByText(byFullText(EN_VERSION))).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('dir', 'ltr');
     expect(fetchMock).toHaveBeenCalledTimes(1);
