@@ -24,3 +24,6 @@ not-yet-built expense operations.
 Clients regenerate from the contract (the web client is regenerated in the same PR). Lengths in the service and the
 database count Unicode code points; the generated Bean Validation counts UTF-16 units, so text made mostly of
 astral characters (emoji) is rejected slightly earlier by request validation than the code-point rule alone would.
+
+## Status codes
+Text-limit violations (notes > 500 code points, more than 10 tags, a tag over 30 characters) are rejected by request validation with **400** Problem+JSON naming the field. REQ-EXP-002's text says 422; the contract-level limit makes these malformed requests, and the service-level 422 checks stay as a backstop. STORY-020's acceptance text is to be aligned when the story closes.

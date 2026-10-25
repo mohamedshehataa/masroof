@@ -124,6 +124,7 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, 'breaking-change')
         run: |
           echo "MASROOF_ALLOW_BREAKING=1" >> "$GITHUB_ENV"
+          echo "PR_LABELS=breaking-change" >> "$GITHUB_ENV"
           echo "::warning::PR is labeled breaking-change: oasdiff breaking changes are allowed. An ADR is required (S9)."
       - name: Lint contract
         run: make contract-lint

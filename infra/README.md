@@ -10,7 +10,8 @@ Operator runbook: [`docs/DEPLOY.md`](../docs/DEPLOY.md). Security posture:
 | Path | Status | Purpose |
 |---|---|---|
 | `docker-compose.yml` | partly done (STORY-143, 142) | Base stack: `postgres`, `minio`, `backend`, `web`, `caddy` (only caddy publishes a port, 80); every service has a healthcheck; pinned digests; `otel-collector` still TODO |
-| `docker-compose.dev.yml` | done (STORY-143) | Dev-only overlay on top of the base file: publishes the backend on `127.0.0.1:8080`; never loaded by `make up` or deploys |
+| `docker-compose.dev.yml` | done (STORY-143) | Dev-only overlay on top of the base file: publishes the backend on `127.0.0.1:8080` with the single-household switch, for the Vite dev server; never loaded by `make up` or deploys |
+| `docker-compose.local.yml` | done (STORY-020) | Loaded by `make up`: profile `dev` + the single-household switch until STORY-009 auth; no host ports |
 | `docker-compose.staging.yml` | TODO | Staging overlay: separate compose project `masroof-staging`, own DB/bucket, Meta test number |
 | `docker-compose.prod.yml` | TODO | Production overlay: resource limits, log rotation, restart policies |
 | `Caddyfile` | partly done (STORY-142) | `DOMAIN` empty -> plain HTTP :80; `/health`, `/api/*` -> backend, everything else (never `/actuator/*`) -> web. TODO: HSTS, headers, body limits, rate limits (REQ-SEC-001, REQ-SEC-004) |
