@@ -1,19 +1,21 @@
 package eg.masroof.adapters.in.rest;
 
+import eg.masroof.adapters.in.rest.generated.api.HealthApi;
+import eg.masroof.adapters.in.rest.generated.model.Health;
+import eg.masroof.adapters.in.rest.generated.model.Health.InnerEnum;
+import eg.masroof.adapters.in.rest.generated.model.Health.StatusEnum;
 import eg.masroof.application.health.HealthReport;
 import eg.masroof.application.health.HealthService;
-import java.net.URI;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** GET /health (REQ-OPS-020). The preset Content-Type makes Spring skip Accept negotiation. */
 @RestController
-final class HealthController {
+class HealthController implements HealthApi {
 
   private final HealthService service;
 
@@ -21,36 +23,23 @@ final class HealthController {
     this.service = service;
   }
 
-  record HealthResponse(
-      String status,
-      String version,
-      String gitSha,
-      String buildTime,
-      String time,
-      Map<String, String> checks) {}
-
+  // Re-declared without the interface's `produces`: /health ignores Accept and never answers 406.
+  @Override
   @GetMapping("/health")
-  ResponseEntity<Object> getHealth() {
+  public ResponseEntity<Health> getHealth() {
     HealthReport report = service.check();
     if (!report.databaseUp()) {
-      ProblemDetail problem =
-          ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Database unavailable");
-      problem.setType(URI.create("about:blank"));
-      problem.setTitle("Service Unavailable");
-      problem.setInstance(URI.create("/health"));
-      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-          .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-          .body(problem);
+      throw new ApiProblemException(HttpStatus.SERVICE_UNAVAILABLE, "Database unavailable");
     }
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .body(
-            new HealthResponse(
-                "UP",
-                report.version(),
-                report.gitSha(),
-                report.buildTime().toString(),
-                report.time().toString(),
-                Map.of("db", "UP")));
+            new Health()
+                .status(StatusEnum.UP)
+                .version(report.version())
+                .gitSha(report.gitSha())
+                .buildTime(report.buildTime())
+                .time(report.time())
+                .checks(Map.of("db", InnerEnum.UP)));
   }
 }

@@ -379,6 +379,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
@@ -473,6 +475,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
 
   /api/expenses/{expenseId}/split:
     parameters:
@@ -504,6 +508,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
 
   /api/expenses/{expenseId}/restore:
     parameters:
@@ -526,6 +532,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
 
   # ---------------------------------------------------------------- Review
   /api/review:
@@ -2140,6 +2148,12 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    NotImplemented:
+      description: The operation is part of the contract but not built yet.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     TooManyRequests:
       description: Rate limited.
       headers:
@@ -2542,12 +2556,13 @@ components:
           description: Parser confidence (not money; a probability).
         notes:
           type: [string, 'null']
-          maxLength: 2000
+          maxLength: 500
         tags:
           type: array
+          maxItems: 10
           items:
             type: string
-            maxLength: 40
+            maxLength: 30
         isRecurring:
           type: boolean
         recurringSeriesId:
@@ -2693,12 +2708,14 @@ components:
           $ref: '#/components/schemas/PaymentMethod'
         notes:
           type: string
-          maxLength: 2000
+          maxLength: 500
+          description: Free text, at most 500 characters (Unicode code points); must not contain NUL.
         tags:
           type: array
+          maxItems: 10
           items:
             type: string
-            maxLength: 40
+            maxLength: 30
         items:
           type: array
           items:
@@ -2742,12 +2759,14 @@ components:
           $ref: '#/components/schemas/ExpenseStatus'
         notes:
           type: [string, 'null']
-          maxLength: 2000
+          maxLength: 500
+          description: Free text, at most 500 characters (Unicode code points); must not contain NUL.
         tags:
           type: array
+          maxItems: 10
           items:
             type: string
-            maxLength: 40
+            maxLength: 30
         isRecurring:
           type: boolean
         recurringSeriesId:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make up|down|logs -> compose.sh up|down [1]|logs  (infra/docker-compose.yml, arrives in Phase 1)
+# make up|down|logs -> compose.sh (infra/docker-compose.yml + infra/docker-compose.local.yml: the single-household switch, no host ports)
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/stubs.sh"
 cmd="${1:?up|down|logs}"
@@ -8,8 +8,8 @@ cmd="${1:?up|down|logs}"
 case "$cmd" in
   up)
     export GIT_SHA="${GIT_SHA:-$(git rev-parse HEAD | cut -c1-7)}"
-    docker compose --env-file .env -f infra/docker-compose.yml up -d --build --wait || exit 1
+    docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build --wait || exit 1
     if [ -f infra/scripts/seed-demo.sh ]; then bash infra/scripts/seed-demo.sh; fi ;;
-  down) if [ "${2:-}" = "1" ]; then docker compose --env-file .env -f infra/docker-compose.yml down -v; else docker compose --env-file .env -f infra/docker-compose.yml down; fi ;;
-  logs) docker compose --env-file .env -f infra/docker-compose.yml logs -f --tail=200 ;;
+  down) if [ "${2:-}" = "1" ]; then docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml down -v; else docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml down; fi ;;
+  logs) docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml logs -f --tail=200 ;;
 esac

@@ -1,5 +1,6 @@
 *
 !backend/
+!contracts/openapi.yaml
 backend/build/
 backend/.gradle/
 backend/out/

@@ -315,6 +315,9 @@ export type ExpenseCreate = {
     paidByMemberId?: string;
     paymentAccountId?: string;
     paymentMethod?: PaymentMethod;
+    /**
+     * Free text, at most 500 characters (Unicode code points); must not contain NUL.
+     */
     notes?: string;
     tags?: Array<string>;
     items?: Array<ExpenseItem>;
@@ -336,6 +339,9 @@ export type ExpensePatch = {
     paymentAccountId?: string | null;
     paymentMethod?: PaymentMethod;
     status?: ExpenseStatus;
+    /**
+     * Free text, at most 500 characters (Unicode code points); must not contain NUL.
+     */
     notes?: string | null;
     tags?: Array<string>;
     isRecurring?: boolean;
@@ -1517,6 +1523,10 @@ export type CreateExpenseErrors = {
      */
     401: Problem;
     /**
+     * State conflict (duplicate, already merged, optimistic lock).
+     */
+    409: Problem;
+    /**
      * Semantically invalid (e.g. split shares do not sum to the total).
      */
     422: Problem;
@@ -1664,6 +1674,10 @@ export type MergeExpensesErrors = {
      * State conflict (duplicate, already merged, optimistic lock).
      */
     409: Problem;
+    /**
+     * The operation is part of the contract but not built yet.
+     */
+    501: Problem;
 };
 
 export type MergeExpensesError = MergeExpensesErrors[keyof MergeExpensesErrors];
@@ -1703,6 +1717,10 @@ export type SplitExpenseErrors = {
      * Semantically invalid (e.g. split shares do not sum to the total).
      */
     422: Problem;
+    /**
+     * The operation is part of the contract but not built yet.
+     */
+    501: Problem;
 };
 
 export type SplitExpenseError = SplitExpenseErrors[keyof SplitExpenseErrors];
@@ -1738,6 +1756,10 @@ export type RestoreExpenseErrors = {
      * State conflict (duplicate, already merged, optimistic lock).
      */
     409: Problem;
+    /**
+     * The operation is part of the contract but not built yet.
+     */
+    501: Problem;
 };
 
 export type RestoreExpenseError = RestoreExpenseErrors[keyof RestoreExpenseErrors];

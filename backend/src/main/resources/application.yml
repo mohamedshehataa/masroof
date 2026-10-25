@@ -1,6 +1,11 @@
 spring:
   application:
     name: masroof-backend
+  jackson:
+    deserialization:
+      accept-float-as-int: false # amountMinor: 1e5 as a JSON float is a 400 (REQ-EXP-021)
+    mapper:
+      allow-coercion-of-scalars: false # amountMinor: "20000" or true is a 400, never coerced
   main:
     banner-mode: "off"
   datasource:
