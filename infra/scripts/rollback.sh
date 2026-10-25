@@ -29,6 +29,7 @@ infra_dir="$(cd "$here/.." && pwd)"
 state_dir="${MASROOF_DEPLOY_STATE_DIR:-$infra_dir/.deployed}"
 compose_file="${MASROOF_COMPOSE_FILE:-$infra_dir/docker-compose.yml}"
 compose_project="${MASROOF_COMPOSE_PROJECT:-masroof}"
+compose_overlay="${MASROOF_COMPOSE_OVERLAY:-}"   # e.g. docker-compose.prod.yml (production: overlay + .env next to it)
 dry_run=0
 [ "${1:-}" = "--dry-run" ] && dry_run=1
 
@@ -85,12 +86,19 @@ fi
 
 command -v docker >/dev/null 2>&1 || { say "docker is required on this host"; exit 1; }
 
+dc() {
+  local args=(-p "$compose_project" -f "$compose_file")
+  [ -n "$compose_overlay" ] && args+=(-f "$compose_overlay")
+  [ -f "$(dirname "$compose_file")/.env" ] && [ -n "$compose_overlay" ] && args+=(--env-file "$(dirname "$compose_file")/.env")
+  docker compose "${args[@]}" "$@"
+}
+
 export IMAGE_REGISTRY="${prev_registry:-}"
 export BACKEND_IMAGE_TAG="$prev_backend"
 export WEB_IMAGE_TAG="$prev_web"
 
-docker compose -p "$compose_project" -f "$compose_file" pull --quiet backend web 2>/dev/null || say "pull skipped (images may already be local)"
-docker compose -p "$compose_project" -f "$compose_file" up -d --no-build --remove-orphans
+dc pull --quiet backend web 2>/dev/null || say "pull skipped (images may already be local)"
+dc up -d --no-build --remove-orphans
 
 # Wait for health (compose healthcheck or the local smoke script).
 health_url="${MASROOF_HEALTH_URL:-http://localhost:8080/health}"

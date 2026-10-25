@@ -1,6 +1,8 @@
 # Backend image (STORY-143, ADR-0004). From the repo root:
 #   docker build -f backend/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD | cut -c1-7) .
-FROM eclipse-temurin:21.0.12.1_1-jdk-noble@sha256:107215954359f1ab0be058a247d7c64ed6e69c71c1682d471d38ef751ec8e964 AS build
+# The build stage runs on the builder's own architecture (--platform=$BUILDPLATFORM): the jar is architecture-
+# independent, so a linux/arm64 image only emulates the small runtime stage (make build-images PLATFORMS=...).
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.12.1_1-jdk-noble@sha256:107215954359f1ab0be058a247d7c64ed6e69c71c1682d471d38ef751ec8e964 AS build
 ARG GIT_SHA
 RUN echo "${GIT_SHA}" | grep -Eqx '[0-9a-f]{7,40}' || { echo "ERROR: build arg GIT_SHA must match ^[0-9a-f]{7,40}\$ (got '${GIT_SHA}'); pass --build-arg GIT_SHA=\$(git rev-parse HEAD | cut -c1-7)" >&2; exit 1; }
 WORKDIR /src/backend
