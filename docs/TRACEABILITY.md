@@ -6,11 +6,11 @@ REQ → story (status, phase) → tests (file · name, last result) → implemen
 ## Summary
 | metric | value |
 |---|---|
-| total REQs | 336 |
+| total REQs | 376 |
 | covered (at least one test) | 85 |
 | passing | 67 |
 | failing | 0 |
-| pending (story not DONE, no test yet) | 250 |
+| pending (story not DONE, no test yet) | 290 |
 | orphans (DONE story, no test) | 0 |
 | unknown REQ references | 0 |
 | duplicate REQ ids | 0 |
@@ -219,6 +219,46 @@ None.
 | REQ-AN-061 | Alerts when a recurring charge changes amount or is missed | STORY-103 | DRAFT | 7 | — | — | — |
 | REQ-AN-070 | Every number in the report matches the analytics API (deterministic check fails the run) | STORY-104 | DRAFT | 7 | — | — | — |
 | REQ-AN-071 | LLM-as-judge rubric (different model) ≥ 4/5 average, no item < 3 | STORY-104 | DRAFT | 7 | — | — | — |
+| REQ-AN-100 | Time-of-day flag is set from the source at creation | STORY-149 | DRAFT | 7 | — | — | — |
+| REQ-AN-101 | Edits keep the flag honest and existing rows are backfilled | STORY-149 | DRAFT | 7 | — | — | — |
+| REQ-AN-102 | Habits report envelope | STORY-150 | DRAFT | 7 | — | — | — |
+| REQ-AN-103 | Eligible spend, discretionary flag and scope | STORY-150 | DRAFT | 7 | — | — | — |
+| REQ-AN-104 | History and cold-start rules | STORY-150 | DRAFT | 7 | — | — | — |
+| REQ-AN-105 | Performance budget | STORY-150 | DRAFT | 7 | — | — | — |
+| REQ-AN-106 | Salary stream detection | STORY-151 | DRAFT | 7 | — | — | — |
+| REQ-AN-107 | Pay cycles, missed salary, fallback and API | STORY-151 | DRAFT | 7 | — | — | — |
+| REQ-AN-108 | Pace curve and status per category | STORY-152 | DRAFT | 7 | — | — | — |
+| REQ-AN-109 | Period edges, DST and edits | STORY-152 | DRAFT | 7 | — | — | — |
+| REQ-AN-110 | Payday-effect computation | STORY-153 | DRAFT | 7 | — | — | — |
+| REQ-AN-111 | Payday card text | STORY-153 | DRAFT | 7 | — | — | — |
+| REQ-AN-112 | Household weekend days setting | STORY-154 | DRAFT | 7 | — | — | — |
+| REQ-AN-113 | Weekend card computation and text | STORY-154 | DRAFT | 7 | — | — | — |
+| REQ-AN-114 | Late-night window setting | STORY-155 | DRAFT | 7 | — | — | — |
+| REQ-AN-115 | Late-night card computation and text | STORY-155 | DRAFT | 7 | — | — | — |
+| REQ-AN-116 | Small-purchase threshold | STORY-156 | DRAFT | 7 | — | — | — |
+| REQ-AN-117 | Small-purchases card computation and text | STORY-156 | DRAFT | 7 | — | — | — |
+| REQ-AN-118 | Creep detection | STORY-157 | DRAFT | 7 | — | — | — |
+| REQ-AN-119 | Creep card output and text | STORY-157 | DRAFT | 7 | — | — | — |
+| REQ-AN-120 | Inflation reference setting | STORY-158 | DRAFT | 7 | — | — | — |
+| REQ-AN-121 | Creep compared with inflation | STORY-158 | DRAFT | 7 | — | — | — |
+| REQ-AN-122 | Daily evaluation and candidate rules | STORY-159 | DRAFT | 7 | — | — | — |
+| REQ-AN-123 | Frequency limits and idempotency | STORY-159 | DRAFT | 7 | — | — | — |
+| REQ-AN-124 | Nudge wording and tone | STORY-159 | DRAFT | 7 | — | — | — |
+| REQ-AN-125 | In-app nudge feed | STORY-159 | DRAFT | 7 | — | — | — |
+| REQ-AN-126 | Per-member insight preferences | STORY-160 | DRAFT | 7 | — | — | — |
+| REQ-AN-127 | Channel routing and privacy between members | STORY-160 | DRAFT | 7 | — | — | — |
+| REQ-AN-128 | Quiet hours, freshness and failures | STORY-160 | DRAFT | 7 | — | — | — |
+| REQ-AN-129 | Habits tab, scope toggle and drill-down | STORY-161 | DRAFT | 7 | — | — | — |
+| REQ-AN-130 | Card text, numbers and states | STORY-161 | DRAFT | 7 | — | — | — |
+| REQ-AN-131 | Home nudge card | STORY-162 | DRAFT | 7 | — | — | — |
+| REQ-AN-132 | "Usual by now" list in the Habits tab | STORY-162 | DRAFT | 7 | — | — | — |
+| REQ-AN-133 | Nudge and habits settings | STORY-162 | DRAFT | 7 | — | — | — |
+| REQ-AN-134 | Habits tab, scope toggle and drill-down (Compose) | STORY-163 | DRAFT | 7 | — | — | — |
+| REQ-AN-135 | Card text, numbers, states and offline cache | STORY-163 | DRAFT | 7 | — | — | — |
+| REQ-AN-136 | "Habit nudges" notification channel and tap target | STORY-164 | DRAFT | 7 | — | — | — |
+| REQ-AN-137 | Home nudge card and "usual by now" list | STORY-164 | DRAFT | 7 | — | — | — |
+| REQ-AN-138 | Nudge and habits settings | STORY-164 | DRAFT | 7 | — | — | — |
+| REQ-AN-139 | Web push channel for nudges | STORY-165 | DRAFT | 8 | — | — | — |
 
 ## Area UI
 | REQ | name | story | status | phase | tests | result | files |
