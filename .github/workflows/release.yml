@@ -18,8 +18,10 @@
 #   ANDROID_KEYSTORE_PASSWORD  keystore password                      (required with the keystore)
 #   ANDROID_KEY_ALIAS          key alias inside the keystore           (required with the keystore)
 #   ANDROID_KEY_PASSWORD       key password                           (required with the keystore)
-#   PROD_SSH_KEY               private key of the deploy user on the production VPS (optional: skips deploy)
-#   PROD_HOST                  user@host of the production VPS         (required with PROD_SSH_KEY)
+#   PROD_SSH_KEY               private key of the deploy user on the Oracle VM  (optional: skips deploy)
+#   PROD_HOST                  IP (or user@IP) of the Oracle VM                 (required with PROD_SSH_KEY)
+#   PROD_DOMAIN                public name, e.g. masroof.duckdns.org            (required with PROD_SSH_KEY)
+#                              Setup: docs/HOSTING.md
 #   STAGING_SSH_KEY            used by main.yml, not here
 #   STAGING_HOST               used by main.yml, not here
 #   COSIGN_KEY                 cosign private key (PEM) to sign images  (optional: skips signing)
@@ -172,9 +174,12 @@ jobs:
       IMAGE_TAG: ${{ needs.detect.outputs.version }}
       IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
       IMAGE_PUSH: "1"
+      PLATFORMS: linux/amd64,linux/arm64 # Oracle Always Free hosts are Ampere ARM
       COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -202,10 +207,9 @@ jobs:
         run: |
           set -euo pipefail
           for svc in masroof-backend masroof-web; do
-            ref="${IMAGE_REGISTRY}/${svc}:${IMAGE_TAG}"
-            if docker image inspect "$ref" >/dev/null 2>&1; then
-              digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ref")"
-              cosign sign --yes --key env://COSIGN_KEY "$digest"
+            ref="${IMAGE_REGISTRY,,}/${svc}:${IMAGE_TAG}"
+            if digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+              cosign sign --yes --key env://COSIGN_KEY "${ref%:*}@${digest}"
             else
               echo "::notice::image $ref not built; nothing to sign"
             fi
@@ -243,59 +247,45 @@ jobs:
       name: production
       url: ${{ vars.PROD_URL }}
     env:
+      # Oracle Always Free host (docs/HOSTING.md). Missing secrets skip the deploy with a notice; values are never echoed.
       PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
       PROD_HOST: ${{ secrets.PROD_HOST }}
-      PROD_URL: ${{ vars.PROD_URL }}
+      PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
       IMAGE_TAG: ${{ needs.detect.outputs.version }}
       IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-      DEPLOY_HOST: ${{ secrets.PROD_HOST }}
-      DEPLOY_ENV: prod
       MASROOF_RELEASE_ACTIVE: "1" # the same flag the /release skill sets; guard-bash.sh checks it
     steps:
       - name: Skip notice
-        if: env.PROD_SSH_KEY == '' || env.PROD_HOST == ''
+        if: env.PROD_SSH_KEY == '' || env.PROD_HOST == '' || env.PROD_DOMAIN == ''
         run: |
-          echo "::warning::PROD_SSH_KEY / PROD_HOST missing: skipping production deploy."
+          echo "::warning::PROD_HOST / PROD_SSH_KEY / PROD_DOMAIN not all set: skipping the production deploy (see docs/HOSTING.md)."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_DOMAIN != ''
       - uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_DOMAIN != ''
         with:
           ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
       - name: Known hosts
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_DOMAIN != ''
         env:
           KNOWN_HOSTS: ${{ vars.PROD_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           if [ -n "$KNOWN_HOSTS" ]; then
             printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
+            echo "SSH_STRICT_HOSTKEY=yes" >> "$GITHUB_ENV" # pinned key: refuse anything else
           else
             echo "::warning::vars.PROD_KNOWN_HOSTS not set; trusting the host key on first use (TODO(owner): pin it)."
             ssh-keyscan -H "${PROD_HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null
           fi
-      - name: Backup database + media before deploying
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
-        run: make backup
-      - id: deploy
-        name: Deploy to production
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != ''
-        continue-on-error: true
-        run: make deploy-prod
-      - id: smoke
-        name: Post-deploy smoke tests
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && steps.deploy.outcome == 'success'
-        continue-on-error: true
-        run: make smoke URL="${PROD_URL}"
-      - name: Automatic rollback
-        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && (steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure')
-        run: |
-          echo "::error::deploy=${{ steps.deploy.outcome }} smoke=${{ steps.smoke.outcome }} -> rolling back to the previous images"
-          make rollback
-          make smoke URL="${PROD_URL}" || echo "::error::smoke still failing after rollback: manual intervention required (docs/DEPLOY.md)"
-      - name: Fail the release when deploy or smoke failed
-        if: steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure'
-        run: exit 1
+      - name: Backup database before deploying
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_DOMAIN != ''
+        run: make backup HOST="$PROD_HOST"
+      # `make deploy-prod` pulls the images, brings the stack up, runs `make smoke URL=https://<domain>` and, when the
+      # smoke test fails, rolls back to the previous tag on the server, re-runs the smoke test and exits non-zero.
+      - name: Deploy to production, smoke, auto-rollback
+        if: env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_DOMAIN != ''
+        run: make deploy-prod VERSION="$IMAGE_TAG" HOST="$PROD_HOST" DOMAIN="$PROD_DOMAIN"
 
   # --------------------------------------------------------------------------
   github-release:

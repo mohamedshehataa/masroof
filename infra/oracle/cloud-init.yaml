@@ -1,0 +1,62 @@
+#cloud-config
+# Optional first stage: paste into "Advanced options > Management > Cloud-init script" when creating the VM, so it is
+# firewalled, patched and has Docker before anyone logs in. Holds nothing sensitive (user-data is readable from inside the VM).
+# Stage two is infra/oracle/bootstrap.sh (idempotent; also does everything below when cloud-init was not used).
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - curl
+  - gnupg
+  - openssl
+  - cron
+  - ca-certificates
+
+users:
+  - default
+  - name: deploy
+    gecos: Masroof deploy user
+    shell: /bin/bash
+    lock_passwd: true
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+  - path: /etc/fail2ban/jail.d/masroof-sshd.local
+    permissions: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 5
+      findtime = 10m
+      bantime = 1h
+  - path: /etc/ssh/sshd_config.d/99-masroof.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      PermitRootLogin no
+
+runcmd:
+  # the deploy user logs in with the same key Oracle injected for the default user
+  - [sh, -c, "install -d -m 700 -o deploy -g deploy /home/deploy/.ssh && cp /home/ubuntu/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys && chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/.ssh/authorized_keys"]
+  - [usermod, -aG, docker, deploy]
+  # Oracle's Ubuntu image REJECTs everything but ssh in iptables before ufw is consulted
+  - [sh, -c, "apt-get purge -y iptables-persistent netfilter-persistent || true"]
+  - [sh, -c, "iptables -F INPUT && iptables -P INPUT ACCEPT"]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, 22/tcp]
+  - [ufw, allow, 80/tcp]
+  - [ufw, allow, 443/tcp]
+  - [ufw, --force, enable]
+  - [systemctl, enable, --now, fail2ban]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, reload, ssh]
