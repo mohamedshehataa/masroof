@@ -83,6 +83,7 @@
     </plurals>
     <string name="logout_sync_now">زامن الآن</string>
     <string name="logout_anyway">سجّل الخروج على أي حال</string>
+    <string name="logout_cancel">إلغاء</string>
     <plurals name="logout_unsynced_warning">
         <item quantity="zero">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
         <item quantity="one">سيتم حذف إدخال غير متزامن واحد. زامن أولًا أو سجّل الخروج على أي حال؟</item>

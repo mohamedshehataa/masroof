@@ -93,12 +93,57 @@ class UploadConflictTest {
 
     @Test
     fun `REQ-AND-015 other statuses keep their meaning`() {
-        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(429, false))
-        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(503, false))
         assertEquals(UploadResult.Unauthorized, classifyUploadStatus(401, false))
         assertEquals(UploadResult.Rejected, classifyUploadStatus(422, false))
         assertEquals(UploadResult.Rejected, classifyUploadStatus(400, false))
     }
+
+    @Test
+    fun `REQ-AND-015 5xx 408 and 429 are transient and uncapped`() {
+        for (code in listOf(408, 429, 500, 502, 503, 504)) {
+            assertEquals("HTTP $code", UploadResult.Retry, classifyUploadStatus(code, false))
+        }
+    }
+
+    @Test
+    fun `REQ-AND-015 a Retry-After on a transient status is carried through`() {
+        assertEquals(UploadResult.RetryAfter(120), classifyUploadStatus(429, false, retryAfterSeconds = 120))
+        assertEquals(UploadResult.RetryAfter(30), classifyUploadStatus(503, false, retryAfterSeconds = 30))
+        assertEquals(UploadResult.Retry, classifyUploadStatus(503, false, retryAfterSeconds = 0))
+    }
+
+    @Test
+    fun `REQ-AND-015 a long outage never fails queued entries`() =
+        runTest {
+            val id = repo.add(entry())
+            for (code in listOf(502, 503, 429, 408, 500)) {
+                remote.uploadResult = { classifyUploadStatus(code, false) }
+                repeat(10) { assertTrue(repo.syncOutbox().retry) }
+            }
+            val row = repo.observeAll().first().single { it.id == id }
+            assertEquals(false, row.failed)
+            assertEquals(1, repo.observePendingCount().first())
+        }
+
+    @Test
+    fun `REQ-AND-015 the sync report carries the server's Retry-After`() =
+        runTest {
+            repo.add(entry())
+            remote.uploadResult = { classifyUploadStatus(429, false, retryAfterSeconds = 900) }
+            val report = repo.syncOutbox()
+            assertTrue(report.retry)
+            assertEquals(900L, report.retryAfterSeconds)
+        }
+
+    @Test
+    fun `REQ-AND-015 a Retry-After outage then recovery uploads the entry`() =
+        runTest {
+            repo.add(entry())
+            remote.uploadResult = { classifyUploadStatus(503, false, retryAfterSeconds = 60) }
+            repeat(8) { repo.syncOutbox() }
+            remote.uploadResult = { UploadResult.Created(expense("server-1", it.amountMinor)) }
+            assertEquals(1, repo.syncOutbox().uploaded)
+        }
 
     // ---- outbox behaviour
 

@@ -10,6 +10,7 @@ import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.ProviderException
 
 /**
  * AES-256-GCM keyset, itself wrapped by a non-exportable Android Keystore master key. EncryptedSharedPreferences is
@@ -35,6 +36,10 @@ object TinkKeystore {
         } catch (_: IOException) {
             reset(context)
             build(context)
+        } catch (_: ProviderException) {
+            // A Keystore provider failure (RuntimeException) is recovered the same way as a lost key.
+            reset(context)
+            build(context)
         }
     }
 
@@ -58,6 +63,8 @@ object TinkKeystore {
         } catch (_: GeneralSecurityException) {
             // Already gone or unusable: build() creates a new one.
         } catch (_: IOException) {
+            // Same.
+        } catch (_: ProviderException) {
             // Same.
         }
     }

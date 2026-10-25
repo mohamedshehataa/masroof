@@ -169,6 +169,16 @@ class LoginViewModelTest {
         }
 
     @Test
+    fun `REQ-AND-007 the logout dialog knows how many entries can still sync`() =
+        runTest {
+            wiper.retryable = 1
+            val vm = signedInSettingsVm(unsynced = 3)
+            vm.logout()
+            assertEquals(3, vm.state.value.confirmLogoutUnsynced)
+            assertEquals(1, vm.state.value.confirmLogoutRetryable)
+        }
+
+    @Test
     fun `REQ-AND-007 dismissing the logout dialog changes nothing`() =
         runTest {
             val vm = signedInSettingsVm(unsynced = 1)

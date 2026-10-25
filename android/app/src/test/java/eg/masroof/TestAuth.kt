@@ -98,10 +98,13 @@ class FakeAuthRemote : AuthRemote {
 
 class FakeWiper(
     var unsynced: Int = 0,
+    var retryable: Int? = null,
 ) : LocalDataWiper {
     var wipes = 0
 
     override suspend fun unsyncedCount() = unsynced
+
+    override suspend fun retryableCount() = retryable ?: unsynced
 
     override suspend fun wipe() {
         wipes++

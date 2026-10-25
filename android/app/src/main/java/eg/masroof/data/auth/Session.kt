@@ -121,5 +121,8 @@ interface LocalDataWiper {
     /** Queued entries (pending or failed) that exist only on this device. */
     suspend fun unsyncedCount(): Int
 
+    /** The part of [unsyncedCount] that can still sync (not permanently failed). */
+    suspend fun retryableCount(): Int
+
     suspend fun wipe()
 }

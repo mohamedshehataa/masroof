@@ -210,6 +210,7 @@ class ApiRemoteSource
                         response.code(),
                         response.isSuccessful,
                         problemTitle(response.errorBody()?.string()),
+                        response.headers()["Retry-After"]?.trim()?.toLongOrNull(),
                     )
                 }
             } catch (_: IOException) {

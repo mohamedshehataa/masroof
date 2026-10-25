@@ -35,19 +35,21 @@ fun problemTitle(body: String?): String? =
 
 /**
  * Outcome of a non-created upload response. Pure so the status table is unit tested.
- * [UploadResult.RetryLimited] = the server answered but cannot take it now (counts toward MAX_ATTEMPTS, then the
- * entry is marked failed); plain [UploadResult.Retry] is reserved for an unreachable network.
+ * 5xx, 408 and 429 are transient ([UploadResult.Retry], or [UploadResult.RetryAfter] when the server says how long)
+ * and are never capped. Only the ambiguous 409 ([UploadResult.RetryLimited]) counts toward MAX_ATTEMPTS.
  */
 fun classifyUploadStatus(
     code: Int,
     successful: Boolean,
     title: String? = null,
+    retryAfterSeconds: Long? = null,
 ): UploadResult =
     when {
         successful -> UploadResult.Unexpected
         code == UNAUTHORIZED -> UploadResult.Unauthorized
         code == CONFLICT -> if (title == PERMANENT_CONFLICT_TITLE) UploadResult.Rejected else UploadResult.RetryLimited
-        code in RETRYABLE -> UploadResult.RetryLimited
-        code >= SERVER_ERROR -> UploadResult.RetryLimited
+        // An outage (VM reboot, proxy 502) can outlast any attempt cap: these are transient and never fail an entry.
+        code in RETRYABLE || code >= SERVER_ERROR ->
+            if (retryAfterSeconds != null && retryAfterSeconds > 0) UploadResult.RetryAfter(retryAfterSeconds) else UploadResult.Retry
         else -> UploadResult.Rejected
     }

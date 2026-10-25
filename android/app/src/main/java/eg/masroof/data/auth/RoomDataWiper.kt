@@ -3,6 +3,7 @@ package eg.masroof.data.auth
 import androidx.work.WorkManager
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.di.IoDispatcher
+import eg.masroof.work.OUTBOX_RETRY_WORK_NAME
 import eg.masroof.work.OUTBOX_WORK_NAME
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -19,8 +20,11 @@ class RoomDataWiper
     ) : LocalDataWiper {
         override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() }
 
+        override suspend fun retryableCount(): Int = withContext(io) { db.outbox().countRetryable() }
+
         override suspend fun wipe() {
             workManager.cancelUniqueWork(OUTBOX_WORK_NAME)
+            workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME)
             withContext(io) { db.clearAllTables() }
         }
     }

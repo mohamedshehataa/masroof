@@ -115,13 +115,42 @@ class LoginScreenTest {
     }
 
     @Test
+    fun `REQ-AND-007 the logout dialog has an explicit Cancel`() {
+        var dismissed = 0
+        compose.setContent {
+            MasroofTheme {
+                SettingsContent(
+                    SettingsUiState(confirmLogoutUnsynced = 2, confirmLogoutRetryable = 2),
+                    SettingsActions({}, {}, {}, {}, {}, { dismissed++ }, {}),
+                )
+            }
+        }
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun `REQ-AND-007 Sync now is hidden when every unsynced entry is permanently failed`() {
+        compose.setContent {
+            MasroofTheme {
+                SettingsContent(
+                    SettingsUiState(confirmLogoutUnsynced = 2, confirmLogoutRetryable = 0),
+                    SettingsActions({}, {}, {}, {}, {}, {}, {}),
+                )
+            }
+        }
+        compose.onNodeWithText("Sign out anyway").assertIsDisplayed()
+        compose.onNodeWithText("Sync now").assertDoesNotExist()
+    }
+
+    @Test
     fun `REQ-AND-007 the logout confirmation names the count and offers sync now and sign out anyway`() {
         var synced = 0
         var confirmed = 0
         compose.setContent {
             MasroofTheme {
                 SettingsContent(
-                    SettingsUiState(confirmLogoutUnsynced = 3),
+                    SettingsUiState(confirmLogoutUnsynced = 3, confirmLogoutRetryable = 3),
                     SettingsActions({}, {}, {}, {}, { confirmed++ }, {}, { synced++ }),
                 )
             }

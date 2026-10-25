@@ -246,6 +246,8 @@ data class SettingsUiState(
     val loggingOut: Boolean = false,
     /** Non-null while the "N unsynced expenses will be deleted" confirmation is showing. */
     val confirmLogoutUnsynced: Int? = null,
+    /** Of those, how many can still sync. When 0, "Sync now" is pointless and hidden. */
+    val confirmLogoutRetryable: Int = 0,
 )
 
 @HiltViewModel
@@ -280,7 +282,7 @@ class SettingsViewModel
             viewModelScope.launch {
                 val unsynced = session.unsyncedCount()
                 if (unsynced > 0) {
-                    draft.value = state.value.copy(confirmLogoutUnsynced = unsynced)
+                    draft.value = state.value.copy(confirmLogoutUnsynced = unsynced, confirmLogoutRetryable = session.retryableCount())
                 } else {
                     performLogout()
                 }
@@ -294,7 +296,7 @@ class SettingsViewModel
         }
 
         fun dismissLogout() {
-            draft.value = state.value.copy(confirmLogoutUnsynced = null)
+            draft.value = state.value.copy(confirmLogoutUnsynced = null, confirmLogoutRetryable = 0)
         }
 
         /** "Sync now": leave the dialog and let WorkManager upload the queue; the user can log out again afterwards. */
@@ -304,7 +306,7 @@ class SettingsViewModel
         }
 
         private suspend fun performLogout() {
-            draft.value = state.value.copy(loggingOut = true, confirmLogoutUnsynced = null)
+            draft.value = state.value.copy(loggingOut = true, confirmLogoutUnsynced = null, confirmLogoutRetryable = 0)
             session.logout()
             draft.value = null
         }

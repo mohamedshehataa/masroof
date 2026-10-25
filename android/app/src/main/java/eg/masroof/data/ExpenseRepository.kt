@@ -48,6 +48,8 @@ data class SyncReport(
     val rejected: Int,
     val retry: Boolean,
     val unauthorized: Boolean = false,
+    /** Server-requested minimum wait before the next attempt (Retry-After), if any. */
+    val retryAfterSeconds: Long? = null,
 )
 
 interface ExpenseRepository {
@@ -157,6 +159,7 @@ class DefaultExpenseRepository
                 var rejected = 0
                 var retry = false
                 var unauthorized = false
+                var retryAfter: Long? = null
                 for (item in db.outbox().pending()) {
                     when (val result = remote.upload(item)) {
                         is UploadResult.Created -> {
@@ -166,6 +169,11 @@ class DefaultExpenseRepository
                         UploadResult.Retry -> {
                             db.outbox().bumpAttempts(item.clientId)
                             retry = true
+                        }
+                        is UploadResult.RetryAfter -> {
+                            db.outbox().bumpAttempts(item.clientId)
+                            retry = true
+                            retryAfter = result.seconds
                         }
                         UploadResult.Unauthorized -> {
                             // Not retried by WorkManager: it needs the user to sign in again; the entry stays queued.
@@ -190,7 +198,7 @@ class DefaultExpenseRepository
                     // Unreachable server or bad credentials: later items would fail the same way, and order is preserved.
                     if (retry || unauthorized) break
                 }
-                SyncReport(uploaded, rejected, retry, unauthorized)
+                SyncReport(uploaded, rejected, retry, unauthorized, retryAfter)
             }
 
         override suspend fun retryFailed(id: String) = db.resetFailed(id)

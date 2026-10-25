@@ -78,13 +78,19 @@ fun SettingsContent(
                 Text(pluralStringResource(R.plurals.logout_unsynced_warning, count, count))
             },
             confirmButton = {
-                TextButton(onClick = actions.onSyncNow, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.logout_sync_now))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = actions.onConfirmLogout, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.logout_anyway))
+                Column(horizontalAlignment = Alignment.End) {
+                    // Nothing left that can sync (all permanently failed): offering "Sync now" would do nothing.
+                    if (state.confirmLogoutRetryable > 0) {
+                        TextButton(onClick = actions.onSyncNow, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.logout_sync_now))
+                        }
+                    }
+                    TextButton(onClick = actions.onConfirmLogout, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.logout_anyway))
+                    }
+                    TextButton(onClick = actions.onDismissLogout, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.logout_cancel))
+                    }
                 }
             },
         )
