@@ -118,6 +118,14 @@ if ! grep -q '^MASROOF_JWT_SECRET=.' "$envf"; then # servers bootstrapped before
   printf 'MASROOF_JWT_SECRET=%s\n' "$(openssl rand -base64 48 | tr -d '\n')" >> "$envf"
   say "generated MASROOF_JWT_SECRET in $envf"
 fi
+# Independent of the JWT secret so rotating that never changes audit hashes. Never overwritten once present.
+if ! grep -q '^MASROOF_AUDIT_KEY=.' "$envf"; then
+  sed -i '/^MASROOF_AUDIT_KEY=/d' "$envf"
+  printf 'MASROOF_AUDIT_KEY=%s
+' "$(openssl rand -base64 48 | tr -d '
+')" >> "$envf"
+  say "generated MASROOF_AUDIT_KEY in $envf"
+fi
 if [ -n "$DOMAIN" ]; then
   if grep -q '^DOMAIN=' "$envf"; then sed -i "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" "$envf"; else printf 'DOMAIN=%s\n' "$DOMAIN" >> "$envf"; fi
 fi
