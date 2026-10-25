@@ -181,7 +181,9 @@ tasks.jacocoTestReport {
     // Merges unit and integration runs; the XML lands in build/reports/jacoco/test/jacocoTestReport.xml.
     executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).include("test.exec", "integrationTest.exec"))
     classDirectories.setFrom(
-        sourceSets.main.get().output.classesDirs.asFileTree.matching { exclude("eg/masroof/MasroofApplication.class") }
+        sourceSets.main.get().output.classesDirs.asFileTree.matching {
+            exclude("eg/masroof/MasroofApplication.class", "**/rest/generated/**") // generated code is not ours to cover
+        }
     )
     reports {
         xml.required = true
