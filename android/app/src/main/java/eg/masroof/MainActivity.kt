@@ -39,6 +39,8 @@ import eg.masroof.data.auth.SessionState
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.home.HomeRoute
+import eg.masroof.ui.insights.InsightsIcon
+import eg.masroof.ui.insights.InsightsRoute
 import eg.masroof.ui.login.LoginRoute
 import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.theme.MasroofTheme
@@ -54,6 +56,7 @@ private enum class Tab(
 ) {
     Home("home", R.string.nav_home, Icons.Filled.Home),
     Transactions("transactions", R.string.nav_transactions, Icons.AutoMirrored.Filled.List),
+    Insights("insights", R.string.nav_insights, InsightsIcon),
     Settings("settings", R.string.nav_settings, Icons.Filled.Settings),
 }
 
@@ -98,7 +101,13 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.padding(padding),
                             )
                         }
-                    is SessionState.SignedIn -> MasroofRoot()
+                    is SessionState.SignedIn ->
+                        MasroofRoot(
+                            onToggleLanguage = {
+                                AppLanguage.toggle(this@MainActivity)
+                                recreate()
+                            },
+                        )
                 }
             }
         }
@@ -106,7 +115,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MasroofRoot() {
+private fun MasroofRoot(onToggleLanguage: () -> Unit) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val destination = entry?.destination
@@ -139,10 +148,14 @@ private fun MasroofRoot() {
     ) { padding ->
         NavHost(nav, startDestination = Tab.Home.route, modifier = Modifier.padding(padding)) {
             composable(Tab.Home.route) {
-                HomeRoute(onSeeAll = { nav.navigate(Tab.Transactions.route) })
+                HomeRoute(
+                    onSeeAll = { nav.navigate(Tab.Transactions.route) },
+                    onOpenInsights = { nav.navigate(Tab.Insights.route) },
+                )
             }
+            composable(Tab.Insights.route) { InsightsRoute() }
             composable(Tab.Transactions.route) { TransactionsRoute() }
-            composable(Tab.Settings.route) { SettingsRoute() }
+            composable(Tab.Settings.route) { SettingsRoute(onToggleLanguage = onToggleLanguage) }
             composable(ADD_ROUTE) { AddExpenseRoute(onDone = { nav.popBackStack() }) }
         }
     }

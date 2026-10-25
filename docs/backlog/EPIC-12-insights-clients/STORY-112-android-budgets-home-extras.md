@@ -3,7 +3,7 @@ id: STORY-112
 epic: EPIC-12
 title: "Android Budgets screen, Home extras and onboarding budget step"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-034, STORY-070, STORY-092, STORY-103, STORY-104, STORY-059]
@@ -66,3 +66,6 @@ STORY-034, STORY-070, STORY-092, STORY-103, STORY-104, STORY-059
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given cached analytics, When Home opens, Then the spent card shows the change vs last month, a mini trend and the review banner. Trimmed: budgets, upcoming bills, AI insight card.

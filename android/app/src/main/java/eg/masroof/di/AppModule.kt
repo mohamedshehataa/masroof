@@ -25,6 +25,12 @@ import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.auth.SessionStore
 import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.insights.ApiInsightsRemote
+import eg.masroof.data.insights.DefaultInsightsRepository
+import eg.masroof.data.insights.FileInsightsCache
+import eg.masroof.data.insights.InsightsCache
+import eg.masroof.data.insights.InsightsRemote
+import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.RemoteSource
 import eg.masroof.work.SyncScheduler
@@ -32,6 +38,7 @@ import eg.masroof.work.WorkManagerSyncScheduler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import okhttp3.OkHttpClient
+import java.io.File
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
@@ -57,6 +64,10 @@ abstract class BindingsModule {
     @Binds abstract fun wiper(impl: RoomDataWiper): LocalDataWiper
 
     @Binds abstract fun network(impl: ConnectivityNetworkMonitor): NetworkMonitor
+
+    @Binds abstract fun insights(impl: DefaultInsightsRepository): InsightsRepository
+
+    @Binds abstract fun insightsRemote(impl: ApiInsightsRemote): InsightsRemote
 }
 
 @Module
@@ -93,6 +104,12 @@ object ProvidersModule {
             .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
+
+    /** Last good analytics answer per period, as files in private storage (offline Insights; wiped on logout). */
+    @Provides @Singleton
+    fun insightsCache(
+        @ApplicationContext context: Context,
+    ): InsightsCache = FileInsightsCache(File(context.filesDir, "insights"))
 
     @Provides @Singleton
     fun sessionStore(

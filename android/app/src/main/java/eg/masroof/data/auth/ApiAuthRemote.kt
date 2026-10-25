@@ -53,9 +53,19 @@ class ApiAuthRemote
                 .build()
                 .create(AuthApi::class.java)
 
-        private suspend fun call(block: suspend () -> Response<TokenPair>): AuthResult =
-            try {
-                block().toAuthResult()
+        private suspend fun call(
+            baseUrl: String,
+            block: suspend (AuthApi) -> Response<TokenPair>,
+        ): AuthResult {
+            // Retrofit validates the base URL while building: that failure is "invalid URL", not "server problem".
+            val api =
+                try {
+                    api(baseUrl)
+                } catch (_: IllegalArgumentException) {
+                    return AuthResult.InvalidUrl
+                }
+            return try {
+                block(api).toAuthResult()
             } catch (_: IOException) {
                 AuthResult.Network
             } catch (_: SerializationException) {
@@ -63,18 +73,19 @@ class ApiAuthRemote
             } catch (_: IllegalArgumentException) {
                 AuthResult.Server
             }
+        }
 
         override suspend fun login(
             baseUrl: String,
             email: String,
             password: String,
             deviceName: String,
-        ) = call { api(baseUrl).login(LoginRequest(email, password, deviceName)) }
+        ) = call(baseUrl) { it.login(LoginRequest(email, password, deviceName)) }
 
         override suspend fun refresh(
             baseUrl: String,
             refreshToken: String,
-        ) = call { api(baseUrl).refreshToken(RefreshRequest(refreshToken)) }
+        ) = call(baseUrl) { it.refreshToken(RefreshRequest(refreshToken)) }
 
         override suspend fun logout(
             baseUrl: String,
@@ -98,6 +109,8 @@ class ApiAuthRemote
             } catch (_: IOException) {
                 false
             } catch (_: SerializationException) {
+                false
+            } catch (_: IllegalArgumentException) {
                 false
             }
     }

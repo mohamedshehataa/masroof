@@ -3,7 +3,7 @@ id: STORY-097
 epic: EPIC-10
 title: "Trends: 6/12-period stacked bars by category, total line, income vs expense vs savings rate"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025]
@@ -60,3 +60,6 @@ STORY-025
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given several months of expenses, When GET /api/analytics/trend?months=N is called, Then it returns one point per household month, oldest first, with per-category totals, income and savings rate.
