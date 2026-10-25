@@ -36,6 +36,9 @@ defaults:
     shell: bash
 
 env:
+  # Trivy DB sources: mirror.gcr.io first, ghcr.io as fallback (a mirror 404 once failed a PR gate).
+  TRIVY_DB_REPOSITORY: "mirror.gcr.io/aquasec/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2"
+  TRIVY_JAVA_DB_REPOSITORY: "mirror.gcr.io/aquasec/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1"
   PYTHON_VERSION: "3.12"
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
