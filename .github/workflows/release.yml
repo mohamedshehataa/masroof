@@ -273,6 +273,7 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           if [ -n "$KNOWN_HOSTS" ]; then
             printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
+            echo "SSH_STRICT_HOSTKEY=yes" >> "$GITHUB_ENV" # pinned key: refuse anything else
           else
             echo "::warning::vars.PROD_KNOWN_HOSTS not set; trusting the host key on first use (TODO(owner): pin it)."
             ssh-keyscan -H "${PROD_HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null

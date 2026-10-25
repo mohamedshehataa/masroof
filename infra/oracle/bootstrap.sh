@@ -126,7 +126,9 @@ f=/etc/masroof/duckdns.env
 token="$(grep -E '^DUCKDNS_TOKEN=' "$f" | head -n 1 | cut -d= -f2-)"
 sub="$(grep -E '^DUCKDNS_SUBDOMAIN=' "$f" | head -n 1 | cut -d= -f2-)"
 [ -n "$token" ] && [ -n "$sub" ] || { echo "masroof-duckdns: DUCKDNS_TOKEN/DUCKDNS_SUBDOMAIN not set in $f" >&2; exit 1; }
-res="$(curl -fsS --max-time 20 -G --data-urlencode "domains=$sub" --data-urlencode "token=$token" --data-urlencode "ip=" https://www.duckdns.org/update 2>/dev/null || true)"
+[[ "$token" =~ ^[A-Za-z0-9-]+$ ]] && [[ "$sub" =~ ^[A-Za-z0-9-]+$ ]] || { echo "masroof-duckdns: unexpected characters in token/subdomain" >&2; exit 1; }
+# The token goes to curl through a config file on stdin (printf is a builtin), so it never appears in any argv/ps.
+res="$(printf 'url = "https://www.duckdns.org/update?domains=%s&token=%s&ip="\n' "$sub" "$token" | curl -fsS --max-time 20 -K - 2>/dev/null || true)"
 [ "$res" = "OK" ] || { echo "masroof-duckdns: update failed" >&2; exit 1; }
 EOF
 chmod 755 /usr/local/sbin/masroof-duckdns
@@ -159,13 +161,31 @@ umask 077
 docker exec "$cid" sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip -9 \
   | gpg --batch --yes --pinentry-mode loopback --passphrase-file /etc/masroof/backup.pass --symmetric --cipher-algo AES256 -o "$tmp"
 mv "$tmp" "$out"
-find "$dir" -name 'masroof-*.sql.gz.gpg' -mtime +7 -delete
 echo "masroof-backup: wrote $(basename "$out") ($(stat -c %s "$out") bytes)"
+# Media: tar of the MinIO data volume (mounted read-only into a throwaway container of the already-present postgres
+# image, no network), encrypted the same way.
+mid="$(docker ps -q --filter label=com.docker.compose.project=masroof --filter label=com.docker.compose.service=minio | head -n 1)"
+if [ -n "$mid" ]; then
+  vol="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$mid")"
+  img="$(docker inspect -f '{{.Image}}' "$cid")"
+  [ -n "$vol" ] || { echo "masroof-backup: MinIO data volume not found" >&2; exit 1; }
+  mout="$dir/masroof-media-$stamp.tar.gz.gpg"
+  docker run --rm --network none --user 0 -v "$vol:/data:ro" --entrypoint tar "$img" -C /data -cf - . | gzip -9 \
+    | gpg --batch --yes --pinentry-mode loopback --passphrase-file /etc/masroof/backup.pass --symmetric --cipher-algo AES256 -o "$mout.part"
+  mv "$mout.part" "$mout"
+  echo "masroof-backup: wrote $(basename "$mout") ($(stat -c %s "$mout") bytes)"
+else
+  echo "masroof-backup: MinIO not running; media not backed up" >&2
+fi
+find "$dir" -name 'masroof-*.gpg' -mtime +7 -delete
 if [ -r /etc/masroof/backup.env ]; then
   bucket="$(grep -E '^OCI_BACKUP_BUCKET=' /etc/masroof/backup.env | head -n 1 | cut -d= -f2-)"
   if [ -n "$bucket" ] && command -v oci >/dev/null 2>&1; then
-    oci os object put --bucket-name "$bucket" --file "$out" --name "$(basename "$out")" --force >/dev/null \
-      && echo "masroof-backup: copied to Object Storage" || echo "masroof-backup: Object Storage copy failed" >&2
+    for f in "$out" "${mout:-}"; do
+      [ -n "$f" ] && [ -f "$f" ] || continue
+      oci os object put --bucket-name "$bucket" --file "$f" --name "$(basename "$f")" --force >/dev/null \
+        && echo "masroof-backup: copied $(basename "$f") to Object Storage" || echo "masroof-backup: Object Storage copy failed" >&2
+    done
   fi
 fi
 EOF
@@ -173,7 +193,8 @@ chmod 755 /usr/local/sbin/masroof-backup
 
 # ---------- keep-alive ----------
 # Oracle may reclaim Always Free instances whose CPU (95th percentile), network and memory all stay under 20% for 7 days.
-# A 150 s niced CPU burst every 30 minutes (about 8% of the time) keeps the CPU 95th percentile above the threshold
+# A 20-minute niced all-core burst every hour (about 33% average CPU in EVERY hourly sample, so it stays above 20% even at
+# hourly sampling) keeps the CPU 95th percentile above the threshold
 # without touching the app (nice 19) and without leaving the free allowance (no extra billable resource is used).
 cat > /usr/local/sbin/masroof-keepalive <<'EOF'
 #!/usr/bin/env bash
@@ -181,7 +202,7 @@ set -euo pipefail
 n="$(nproc)"
 i=0
 while [ "$i" -lt "$n" ]; do
-  timeout 150 nice -n 19 sh -c 'while :; do :; done' &
+  timeout 1200 nice -n 19 sh -c 'while :; do :; done' &
   i=$((i + 1))
 done
 wait || true
@@ -211,9 +232,9 @@ WantedBy=timers.target
 EOF
 cat > /etc/systemd/system/masroof-keepalive.timer <<'EOF'
 [Unit]
-Description=Masroof keep-alive every 30 minutes
+Description=Masroof keep-alive hourly
 [Timer]
-OnCalendar=*:0/30
+OnCalendar=hourly
 Persistent=false
 [Install]
 WantedBy=timers.target
@@ -222,4 +243,5 @@ systemctl daemon-reload
 systemctl enable --now masroof-backup.timer masroof-keepalive.timer >/dev/null 2>&1
 
 systemctl enable --now docker >/dev/null 2>&1
+echo "bootstrap: SSH host key to pin (PROD_KNOWN_HOSTS, prefix with the server IP): $(cut -d" " -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
 say "done. Next: make deploy-prod HOST=${DEPLOY_USER}@<ip> VERSION=<image tag> (docs/HOSTING.md)"

@@ -9,8 +9,8 @@ Goal: Masroof runs 24/7 at `https://<name>.duckdns.org` for 0 EGP/month. You do 
 2. **The DuckDNS subdomain** you chose (just the name, e.g. `masroof-mo`)
 3. **The DuckDNS token** (a long string shown on the DuckDNS page after you log in)
 
-Also give the orchestrator your **SSH public key** if you did not use the one it generated (step 2). Never paste a
-private key or the token into a GitHub issue or commit. Send them in the chat only.
+**Never send a private key to anyone, in chat or anywhere else.** The orchestrator generates the SSH key pair on its own
+side and gives you only the *public* key to paste into Oracle (step 2). Keep the DuckDNS token out of GitHub issues and commits.
 
 ## Step 1: Oracle Cloud account
 
@@ -27,8 +27,8 @@ private key or the token into a GitHub issue or commit. Send them in the chat on
    set **4 OCPU and 24 GB** memory (this is the whole Always Free allowance; fewer is fine too: 2 OCPU / 12 GB).
    The shape must carry the "Always Free-eligible" label.
 4. Networking: keep the default VCN and public subnet, **Assign a public IPv4 address = yes**.
-5. SSH keys: **Paste public keys** and paste the public key the orchestrator gives you (or choose "Generate a key pair"
-   and download the private key; then send it to the orchestrator in the chat, not through git).
+5. SSH keys: choose **Paste public keys** and paste the **public** key the orchestrator gives you (one line starting with
+   `ssh-ed25519`). Do not use "Generate a key pair": that would create a private key you would then have to hand over.
 6. Boot volume: 100 GB is within the free 200 GB.
 7. Optional but recommended: **Show advanced options -> Management -> Cloud-init script** and paste the contents of
    `infra/oracle/cloud-init.yaml`. It firewalls, patches and installs Docker before anyone logs in. (If you skip it,
@@ -67,8 +67,10 @@ ssh ubuntu@<ip> 'sudo DOMAIN=<name>.duckdns.org DUCKDNS_SUBDOMAIN=<name> bash -s
 # 2. GitHub secrets for tag-driven deploys (values never printed)
 gh secret set PROD_HOST   --body "<ip>"
 gh secret set PROD_DOMAIN --body "<name>.duckdns.org"
-gh secret set PROD_SSH_KEY < deploy_key          # private key of the deploy user
-# (optional) gh variable set PROD_KNOWN_HOSTS --body "$(ssh-keyscan -H <ip>)"
+gh secret set PROD_SSH_KEY < deploy_key          # the orchestrator-side private key, read from a local file, never printed or sent
+# bootstrap.sh prints the server's ssh host key; pin it so CI refuses any other server (release.yml then sets
+# SSH_STRICT_HOSTKEY=yes). Format: "<ip> ssh-ed25519 AAAA..."
+gh variable set PROD_KNOWN_HOSTS --body "<ip> <ssh-ed25519 key printed by bootstrap.sh>"
 
 # 3. images are published to GHCR by main.yml; make them public once (GitHub -> Packages -> masroof-backend / masroof-web
 #    -> Package settings -> Change visibility) or `docker login ghcr.io` on the server with a read-only token.
@@ -77,7 +79,8 @@ gh secret set PROD_SSH_KEY < deploy_key          # private key of the deploy use
 make deploy-prod HOST=<ip> DOMAIN=<name>.duckdns.org VERSION=<image tag>
 ```
 
-If you want to do step 2 yourself instead: GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository
+If you want to set the secrets yourself instead (you only ever type values you own; the SSH private key stays with the
+orchestrator, so for `PROD_SSH_KEY` the orchestrator must run `gh secret set`): GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository
 secret, names exactly `PROD_HOST`, `PROD_DOMAIN`, `PROD_SSH_KEY`. If any of the three is missing the release workflow
 skips the deploy with a visible warning; it never fails because of that.
 
@@ -102,12 +105,12 @@ skips the deploy with a visible warning; it never fails because of that.
 | Security updates (unattended-upgrades) | daily | apt |
 | ssh brute-force bans (fail2ban) | always | 5 failures -> 1 h ban |
 | DuckDNS IP refresh | every 5 min (cron) | `/usr/local/sbin/masroof-duckdns` |
-| Encrypted `pg_dump` | 01:30 UTC nightly (systemd timer) | `/var/backups/masroof/`, 7-day retention |
-| Keep-alive CPU burst | every 30 min, 150 s, niced | `masroof-keepalive.timer` |
+| Encrypted `pg_dump` + MinIO media tar | 01:30 UTC nightly (systemd timer) | `/var/backups/masroof/`, 7-day retention |
+| Keep-alive CPU burst | hourly, 20 min, niced | `masroof-keepalive.timer` |
 
 ### Backups
 
-Dumps are gzip + AES-256 gpg encrypted with `/etc/masroof/backup.pass` (generated on the server). **Copy that passphrase
+Both the database dump (`masroof-<stamp>.sql.gz.gpg`) and the MinIO media (`masroof-media-<stamp>.tar.gz.gpg`) are gzip + AES-256 gpg encrypted with `/etc/masroof/backup.pass` (generated on the server). **Copy that passphrase
 somewhere safe** (a password manager); without it the dumps cannot be read. Restore:
 `gpg --batch --passphrase-file /etc/masroof/backup.pass -d masroof-<stamp>.sql.gz.gpg | gunzip | docker exec -i <postgres container> psql -U masroof masroof`.
 These backups live on the VM disk, so they protect against mistakes, not against losing the VM. For an off-box copy
@@ -118,7 +121,7 @@ create a free Object Storage bucket (Oracle gives 20 GB), install the `oci` CLI 
 ### Idle reclaim
 
 Oracle may reclaim Always Free instances that stay idle (CPU 95th percentile, network and memory all under 20% for
-7 days). The keep-alive timer adds a short low-priority CPU burst so the CPU figure stays above that line; it uses no
+7 days). The keep-alive timer adds a low-priority 20-minute all-core burst every hour (about 33% CPU in each hourly sample) so the CPU figure stays above that line; it uses no
 billable resource. The only fully reliable alternative is upgrading the account to **Pay As You Go**: Always Free
 resources stay free and are not reclaimed, you are only charged if you create paid resources. Your call, not needed to start.
 
