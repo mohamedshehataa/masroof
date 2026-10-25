@@ -209,7 +209,7 @@ class ApiRemoteSource
                     classifyUploadStatus(
                         response.code(),
                         response.isSuccessful,
-                        problemTitle(response.errorBody()?.string()),
+                        parseProblem(response.errorBody()?.string()),
                         response.headers()["Retry-After"]?.trim()?.toLongOrNull(),
                     )
                 }

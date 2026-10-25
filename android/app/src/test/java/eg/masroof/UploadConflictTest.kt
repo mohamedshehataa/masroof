@@ -11,9 +11,10 @@ import eg.masroof.data.DefaultExpenseRepository
 import eg.masroof.data.NewExpense
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.legacyTokenMigration
+import eg.masroof.data.remote.ProblemInfo
 import eg.masroof.data.remote.UploadResult
 import eg.masroof.data.remote.classifyUploadStatus
-import eg.masroof.data.remote.problemTitle
+import eg.masroof.data.remote.parseProblem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,8 +37,18 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 /** The backend's three createExpense 409s (ExpenseService.create), as the app sees them. */
+private const val P = "https://masroof.app/problems/"
+private const val T_PROGRESS = P + "idempotency-in-progress"
+private const val T_REUSED = P + "idempotency-key-reused"
+private const val T_DELETED = P + "idempotency-expense-deleted"
+private const val T_RATE = P + "rate-limited"
 private const val TITLE_CONCURRENT = "Conflict"
 private const val TITLE_REUSED = "Idempotency key reused"
+
+private fun problem(
+    type: String?,
+    title: String? = null,
+) = ProblemInfo(type, title)
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -65,30 +76,64 @@ class UploadConflictTest {
     // ---- classification, one test per 409 cause
 
     @Test
-    fun `REQ-AND-015 409 concurrent request with the same key is retried with a cap`() {
-        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, TITLE_CONCURRENT))
+    fun `REQ-AND-015 type idempotency-in-progress is retried with a cap`() {
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, problem(T_PROGRESS, TITLE_CONCURRENT)))
     }
 
     @Test
-    fun `REQ-AND-015 409 key reused with a different request is permanent`() {
-        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, TITLE_REUSED))
+    fun `REQ-AND-015 type idempotency-key-reused is permanent`() {
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problem(T_REUSED, TITLE_REUSED)))
     }
 
     @Test
-    fun `REQ-AND-015 409 the entry made with that key was deleted is permanent`() {
-        // Same problem title as a reused key; the detail differs but is not parsed (message text is not a contract).
-        val detail = "The expense created with this Idempotency-Key was deleted; use a new key to create it again"
-        val body = """{"type":"about:blank","title":"$TITLE_REUSED","status":409,"detail":"$detail"}"""
-        assertEquals(TITLE_REUSED, problemTitle(body))
-        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problemTitle(body)))
+    fun `REQ-AND-015 type idempotency-expense-deleted is permanent`() {
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problem(T_DELETED, "anything")))
+    }
+
+    @Test
+    fun `REQ-AND-015 type wins over a misleading title`() {
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, problem(T_PROGRESS, TITLE_REUSED)))
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problem(T_REUSED, TITLE_CONCURRENT)))
+    }
+
+    @Test
+    fun `REQ-AND-015 type rate-limited is transient and honours Retry-After`() {
+        assertEquals(UploadResult.Retry, classifyUploadStatus(429, false, problem(T_RATE, "Too Many Requests")))
+        assertEquals(UploadResult.RetryAfter(90), classifyUploadStatus(429, false, problem(T_RATE), retryAfterSeconds = 90))
+    }
+
+    @Test
+    fun `REQ-AND-015 generic conflict type is the ambiguous capped retry`() {
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, problem(P + "conflict", "Conflict")))
+    }
+
+    @Test
+    fun `REQ-AND-015 about blank falls back to the title`() {
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problem("about:blank", TITLE_REUSED)))
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, problem(null, TITLE_REUSED)))
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, problem("about:blank", TITLE_CONCURRENT)))
+    }
+
+    @Test
+    fun `REQ-AND-015 the title is not a fallback once a real type is present`() {
+        // An unknown typed 409 is not treated as permanent just because of its title.
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, problem(P + "something-new", TITLE_REUSED)))
+    }
+
+    @Test
+    fun `REQ-AND-015 only type and title are read from a body`() {
+        val body = """{"type":"$T_DELETED","title":"t","status":409,"detail":"secret detail","traceId":"x"}"""
+        assertEquals(ProblemInfo(T_DELETED, "t"), parseProblem(body))
+        assertEquals(UploadResult.Rejected, classifyUploadStatus(409, false, parseProblem(body)))
     }
 
     @Test
     fun `REQ-AND-015 an unreadable or unknown 409 body is retried with a cap, never forever`() {
         assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, null))
-        assertNull(problemTitle("not json"))
-        assertNull(problemTitle(null))
-        assertNull(problemTitle("""{"status":409}"""))
+        assertNull(parseProblem("not json"))
+        assertNull(parseProblem(null))
+        assertEquals(ProblemInfo(null, null), parseProblem("""{"status":409}"""))
+        assertEquals(UploadResult.RetryLimited, classifyUploadStatus(409, false, parseProblem("""{"status":409}""")))
     }
 
     @Test
@@ -151,7 +196,7 @@ class UploadConflictTest {
     fun `REQ-AND-015 a permanent 409 marks the entry failed at once`() =
         runTest {
             val id = repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(409, false, TITLE_REUSED) }
+            remote.uploadResult = { classifyUploadStatus(409, false, problem(T_REUSED)) }
             val report = repo.syncOutbox()
             assertEquals(1, report.rejected)
             assertEquals(false, report.retry)
@@ -168,7 +213,7 @@ class UploadConflictTest {
     fun `REQ-AND-015 a concurrent 409 is retried up to the cap then marked failed`() =
         runTest {
             val id = repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(409, false, TITLE_CONCURRENT) }
+            remote.uploadResult = { classifyUploadStatus(409, false, problem(T_PROGRESS)) }
             repeat(4) { assertTrue(repo.syncOutbox().retry) }
             val last = repo.syncOutbox()
             assertEquals(false, last.retry)
