@@ -189,6 +189,7 @@ Request body (`application/json`): `ExpenseCreate`
 | 201 | Created. | application/json: `Expense` |
 | 400 | Malformed request or validation failure. | application/problem+json: `Problem` |
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
+| 409 | State conflict (duplicate, already merged, optimistic lock). | application/problem+json: `Problem` |
 | 422 | Semantically invalid (e.g. split shares do not sum to the total). | application/problem+json: `Problem` |
 
 ### `GET /api/expenses/{expenseId}` - Get an expense
@@ -264,6 +265,7 @@ Request body (`application/json`): `MergeRequest`
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
 | 409 | State conflict (duplicate, already merged, optimistic lock). | application/problem+json: `Problem` |
+| 501 | The operation is part of the contract but not built yet. | application/problem+json: `Problem` |
 
 ### `POST /api/expenses/{expenseId}/split` - Split an expense between members
 
@@ -285,6 +287,7 @@ Request body (`application/json`): `SplitRequest`
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
 | 422 | Semantically invalid (e.g. split shares do not sum to the total). | application/problem+json: `Problem` |
+| 501 | The operation is part of the contract but not built yet. | application/problem+json: `Problem` |
 
 ### `POST /api/expenses/{expenseId}/restore` - Restore a soft-deleted expense
 
@@ -301,6 +304,7 @@ Request body (`application/json`): `SplitRequest`
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
 | 409 | State conflict (duplicate, already merged, optimistic lock). | application/problem+json: `Problem` |
+| 501 | The operation is part of the contract but not built yet. | application/problem+json: `Problem` |
 
 ## Review
 
@@ -1642,7 +1646,7 @@ Redacted view of a `raw_message` (no full payload, sender masked).
 | `paidByMemberId` | string (uuid) | no |  |
 | `paymentAccountId` | string (uuid) | no |  |
 | `paymentMethod` | `PaymentMethod` | no |  |
-| `notes` | string | no |  |
+| `notes` | string | no | Free text, at most 500 characters (Unicode code points); must not contain NUL. |
 | `tags` | array of string | no |  |
 | `items` | array of `ExpenseItem` | no |  |
 | `splitMode` | `SplitMode` | no |  |
@@ -1664,7 +1668,7 @@ All fields optional; `null` clears a nullable field.
 | `paymentAccountId` | string or null (uuid) | no |  |
 | `paymentMethod` | `PaymentMethod` | no |  |
 | `status` | `ExpenseStatus` | no |  |
-| `notes` | string or null | no |  |
+| `notes` | string or null | no | Free text, at most 500 characters (Unicode code points); must not contain NUL. |
 | `tags` | array of string | no |  |
 | `isRecurring` | boolean | no |  |
 | `recurringSeriesId` | string or null (uuid) | no |  |
