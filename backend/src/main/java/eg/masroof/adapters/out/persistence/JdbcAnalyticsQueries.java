@@ -25,17 +25,10 @@ class JdbcAnalyticsQueries implements AnalyticsQueries {
   private static final String UNCATEGORISED_EN = "Uncategorised";
   private static final String UNCATEGORISED_AR = "غير مصنف";
 
-  /** Spend rows: base currency, live, counted statuses, EXPENSE/REFUND (+ cash withdrawals). */
-  private static final String SPEND_WHERE =
-      """
-      e.household_id = ? and e.deleted_at is null and e.currency = ?
-        and e.status in ('CONFIRMED', 'PENDING_REVIEW')
-        and (e.type in ('EXPENSE', 'REFUND') or (? and e.type = 'CASH_WITHDRAWAL'))
-        and e.occurred_at >= ? and e.occurred_at < ?
-      """;
-
-  private static final String SIGNED =
-      "case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end";
+  // Spend queries below repeat one filter on purpose (SQL stays literal for semgrep): base
+  // currency, live rows,
+  // CONFIRMED/PENDING_REVIEW, EXPENSE and REFUND (+ CASH_WITHDRAWAL when the flag is bound true);
+  // refunds net off.
 
   private static final String MONTH_START_DAY =
       "select month_start_day from household where id = ?";
@@ -44,13 +37,15 @@ class JdbcAnalyticsQueries implements AnalyticsQueries {
       """
       select (e.occurred_at at time zone 'Africa/Cairo')::date as d,
              extract(hour from e.occurred_at at time zone 'Africa/Cairo')::int as h,
-             sum(%s) as total, count(*) as cnt
+             sum(case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end) as total, count(*) as cnt
       from expense e
-      where %s
+      where e.household_id = ? and e.deleted_at is null and e.currency = ?
+        and e.status in ('CONFIRMED', 'PENDING_REVIEW')
+        and (e.type in ('EXPENSE', 'REFUND') or (? and e.type = 'CASH_WITHDRAWAL'))
+        and e.occurred_at >= ? and e.occurred_at < ?
       group by 1, 2
       order by 1, 2
-      """
-          .formatted(SIGNED, SPEND_WHERE);
+      """;
 
   private static final String CATEGORY_ROLLED =
       """
@@ -59,26 +54,30 @@ class JdbcAnalyticsQueries implements AnalyticsQueries {
              coalesce(p.name_en, c.name_en, ?::text) as name_en,
              coalesce(p.name_ar, c.name_ar, ?::text) as name_ar,
              coalesce(p.color, c.color) as color,
-             sum(%s) as total, count(*) as cnt
+             sum(case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end) as total, count(*) as cnt
       from expense e
       left join category c on c.id = e.category_id
       left join category p on p.id = c.parent_id
-      where %s
+      where e.household_id = ? and e.deleted_at is null and e.currency = ?
+        and e.status in ('CONFIRMED', 'PENDING_REVIEW')
+        and (e.type in ('EXPENSE', 'REFUND') or (? and e.type = 'CASH_WITHDRAWAL'))
+        and e.occurred_at >= ? and e.occurred_at < ?
       group by 1, 2, 3, 4, 5
-      """
-          .formatted(SIGNED, SPEND_WHERE);
+      """;
 
   private static final String CATEGORY_DRILL =
       """
       select (e.occurred_at at time zone 'Africa/Cairo')::date as d,
              c.id as cid, c.name_en as name_en, c.name_ar as name_ar, c.color as color,
-             sum(%s) as total, count(*) as cnt
+             sum(case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end) as total, count(*) as cnt
       from expense e
       join category c on c.id = e.category_id
-      where %s and (c.id = ? or c.parent_id = ?)
+      where e.household_id = ? and e.deleted_at is null and e.currency = ?
+        and e.status in ('CONFIRMED', 'PENDING_REVIEW')
+        and (e.type in ('EXPENSE', 'REFUND') or (? and e.type = 'CASH_WITHDRAWAL'))
+        and e.occurred_at >= ? and e.occurred_at < ? and (c.id = ? or c.parent_id = ?)
       group by 1, 2, 3, 4, 5
-      """
-          .formatted(SIGNED, SPEND_WHERE);
+      """;
 
   private static final String INCOME =
       """
@@ -93,16 +92,20 @@ class JdbcAnalyticsQueries implements AnalyticsQueries {
 
   private static final String MERCHANTS =
       """
-      select min(btrim(e.merchant_raw)) as name, sum(%s) as total, count(*) as visits,
+      select min(btrim(e.merchant_raw)) as name,
+             sum(case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end) as total,
+             count(*) as visits,
              mode() within group (order by e.category_id) as category_id
       from expense e
-      where %s and e.merchant_raw is not null and btrim(e.merchant_raw) <> ''
+      where e.household_id = ? and e.deleted_at is null and e.currency = ?
+        and e.status in ('CONFIRMED', 'PENDING_REVIEW')
+        and (e.type in ('EXPENSE', 'REFUND') or (? and e.type = 'CASH_WITHDRAWAL'))
+        and e.occurred_at >= ? and e.occurred_at < ? and e.merchant_raw is not null and btrim(e.merchant_raw) <> ''
       group by lower(btrim(e.merchant_raw))
-      having sum(%s) > 0
+      having sum(case e.type when 'REFUND' then -e.amount_minor else e.amount_minor end) > 0
       order by total desc, name
       limit ?
-      """
-          .formatted(SIGNED, SPEND_WHERE, SIGNED);
+      """;
 
   private static final String PENDING =
       """
