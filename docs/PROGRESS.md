@@ -67,8 +67,10 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-25 07:30 · P0 · SDLC · done · INFO · retro phase 0: 4 keep, 9 change (6 applied, 3 already fixed), 3 try; 10 files changed, 3 owner proposals in docs/retros/phase-0.md
 2026-10-25 09:30 · P1 · STORY-016 · integrate · GREEN · verify PASS + review APPROVE (live PR run 40142922510 green, make check GREEN, 13/15 mutants killed); web Trivy step gated in main.yml; DONE.
 2026-10-25 08:20 · P1 · SDLC · process · INFO · append-only logs (PROGRESS, DECISIONS, LESSONS) use git's union merge, so parallel branches stop conflicting on them.
+2026-10-25 10:45 · P1 · STORY-006 · tdd · INFO · started (low tier).
 2026-10-25 10:10 · P1 · STORY-007 · verify · RED · loop 2/3 FAIL: semgrep blocks the PR gate on 3 findings in the test-designer's generated.test.ts (spawn shell, 2x non-literal RegExp); impl findings resolved; loop 3 (last) routed to test-designer.
 2026-10-25 10:40 · P1 · STORY-007 · integrate · GREEN · loop 3/3 verify PASS + review APPROVE (CI run 40144396415 all green incl. semgrep + osv); DONE.
+2026-10-24 23:58 · P1 · SDLC · spec · RED · stop-gate: make check-fast MODULE="sdlc" failed 3 times in a row (exit 2). Agent stopped with a red gate. 23:sdlc-lint: 0 error(s), 0 warning(s) 34:test-stop-gate: 40 passed, 0 failed 68:commit-msg-lint tests: 26 passed, 0 failed 
 2026-10-25 00:14 · P1 · SDLC · spec · RED · stop-gate: make check-fast MODULE="sdlc web" failed 3 times in a row (exit 2). Agent stopped with a red gate. Binary file /c/Personal/Masroof/.claude/state/last-check.log matches 
 2026-10-25 11:40 · P1 · SDLC · process · GREEN · check-fast/build-web reinstall web deps when package-lock.json is newer than the last install (stale node_modules after STORY-007 made the stop-gate red in the main checkout); stop-gate escalation resolved.
 2026-10-25 12:00 · P1 · SDLC · process · INFO · owner asked for speed and /usr/bin/bash always-on hosting: speed mode (feature builders, one verifier), Oracle Always Free target, rules-only parsing default.

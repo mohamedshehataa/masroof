@@ -14,7 +14,8 @@
 #   2  usage / environment error
 #
 # Accepting a breaking change requires BOTH:
-#   - env MASROOF_ALLOW_BREAKING=1, and
+#   - env PR_LABELS containing `breaking-change` plus a new docs/adr/NNNN-*.md naming each changed path, or
+#   - env MASROOF_ALLOW_BREAKING=1 and
 #   - an existing ADR path passed as the second argument (docs/adr/NNNN-*.md).
 set -euo pipefail
 
@@ -103,7 +104,35 @@ case "$status" in
     ;;
 esac
 
-# --- breaking changes found: check the override -------------------------------------------
+# --- breaking changes found: check the overrides --------------------------------------------
+# Override A (PR gate): env PR_LABELS contains `breaking-change` AND an ADR added since the base
+# (docs/adr/NNNN-*.md) names every changed path of the breaking-change report.
+labels=",${PR_LABELS:-},"
+labels="${labels// /}"
+if [[ "$labels" == *",breaking-change,"* ]]; then
+  mapfile -t changed_paths < <(grep -oE 'in API [A-Z]+ [^ ]+' "$report_file" | awk '{print $4}' | sort -u)
+  mapfile -t new_adrs < <({ git diff --name-only --diff-filter=A "$base_ref" -- 'docs/adr/*.md'; \
+    git ls-files --others --exclude-standard -- 'docs/adr/*.md'; } | sort -u)
+  if [[ ${#changed_paths[@]} -eq 0 ]]; then
+    log "label breaking-change set, but no changed path could be read from the report"
+    exit 1
+  fi
+  missing=()
+  for p in "${changed_paths[@]}"; do
+    found=0
+    for adr in "${new_adrs[@]}"; do
+      if [[ -n "$adr" && -f "$adr" ]] && grep -qF -- "$p" "$adr"; then found=1; break; fi
+    done
+    [[ $found -eq 1 ]] || missing+=("$p")
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    log "WARNING: breaking changes ACCEPTED by label breaking-change and ADR(s) ${new_adrs[*]}"
+    exit 0
+  fi
+  log "label breaking-change set, but no new docs/adr/NNNN-*.md names: ${missing[*]}"
+  exit 1
+fi
+
 if [[ "${MASROOF_ALLOW_BREAKING:-0}" != "1" ]]; then
   log "set MASROOF_ALLOW_BREAKING=1 AND pass an ADR path to accept them"
   exit 1

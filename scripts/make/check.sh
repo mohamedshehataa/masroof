@@ -14,6 +14,7 @@ run "check-fast [$mods]" bash scripts/make/check-fast.sh $mods
 [ -x backend/gradlew ] && run "backend gate probes (REQ-OPS-023)" bash scripts/quality/tests/backend-gate-probes.sh
 [ -x backend/gradlew ] && run "backend integration + architecture tests" bash scripts/make/backend-integration.sh
 [ -f web/package.json ] && run "web unit coverage" bash -c 'cd web && npm run -s test:coverage'
+[ -f scripts/quality/gen-api-docs.py ] && run "docs/API.md in sync with the contract" bash -c 'make docs-api >/dev/null && git diff --exit-code docs/API.md'
 [ -f contracts/openapi.yaml ] && run "contract diff vs ${BASE:-main}" bash scripts/quality/oasdiff.sh "${BASE:-main}"
 [ -f scripts/quality/coverage-gate.sh ] && run "coverage gates" bash scripts/quality/coverage-gate.sh
 [ -f scripts/quality/traceability.py ] && run "traceability" "$PYTHON" scripts/quality/traceability.py --out docs/TRACEABILITY.md
