@@ -209,7 +209,7 @@ class SmsParserTest {
     }
 
     @Test
-    fun `REQ-SMS-012 the occurred time is Cairo local converted to UTC within 45 days, else the received time`() {
+    fun `REQ-SMS-016 the occurred time is Cairo local converted to UTC within 45 days, else the received time`() {
         val r =
             (
                 MessageParser.parse(
@@ -234,7 +234,7 @@ class SmsParserTest {
     }
 
     @Test
-    fun `REQ-SMS-011 last4 comes only from an explicit card or account marker`() {
+    fun `REQ-SMS-013 last4 comes only from an explicit card or account marker`() {
         val ok = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER card ending 1234")) as ParseOutcome.Record
         assertEquals("1234", ok.record.instrumentLast4)
         val none = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER Ref 98765432")) as ParseOutcome.Record
@@ -245,7 +245,7 @@ class SmsParserTest {
 
 class InstaPaySmsTest {
     @Test
-    fun `REQ-SMS-013 InstaPay SMS and app notifications in Arabic and English parse to structured records`() {
+    fun `REQ-SMS-016 InstaPay SMS and app notifications in Arabic and English parse to structured records`() {
         val rows = fixture("instapay.jsonl")
         assertTrue(rows.size >= 18)
         for (row in rows) {
@@ -269,7 +269,7 @@ class InstaPaySmsTest {
     }
 
     @Test
-    fun `REQ-SMS-013 an InstaPay handle keeps its name, never a phone or account number`() {
+    fun `REQ-SMS-016 an InstaPay handle keeps its name, never a phone or account number`() {
         val handle = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to sara99@instapay was successful"))
         if (handle is ParseOutcome.Record) {
             assertFalse(

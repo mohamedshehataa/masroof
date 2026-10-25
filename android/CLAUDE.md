@@ -22,9 +22,9 @@ app/src/androidTest/  Compose UI tests; maestro/ flows (onboarding, quick add, S
 - `koverVerify` (>= 80% on ingest/filter/outbox/viewmodel), `verifyRoborazziDebug`, `assembleDebug`, `assembleRelease` (signing from env), `cyclonedxBom`.
 
 ## Hard rules
-- Never upload OTPs: `OtpPromoFilter` drops OTP/verification messages on-device (keywords: OTP, رمز, كود التحقق, verification code, لا تشارك); a leaked OTP in tests is a hard failure. Only allowlisted financial senders are read or uploaded; unknown money-like senders go to "Suggested sources".
+- No SMS or notification text ever leaves the phone: `ingest/parse/MessageParser` parses on the device and only a structured record (typed fields + a digit-free merchant label) is uploaded to `/api/ingest/parsed-transactions`. `SecretDetector` keeps OTP/PIN/code messages from becoming records (they go to the local "Needs review" list masked, or are dropped); the app must never call `/api/ingest/sms` or `/api/ingest/notification` (unit-tested). Only allowlisted financial senders are read; unknown money-like senders go to "Suggested sources".
 - Never parse in the BroadcastReceiver; hand off to WorkManager. No constant background services except the system-managed NotificationListenerService.
-- Offline-first: every upload goes through the Room outbox with exponential backoff; idempotent on `(device_id, sms_id)`.
+- Offline-first: every upload goes through the Room outbox with exponential backoff; idempotent on `(device_id, local_id)`.
 - `android:allowBackup="false"`, network security config HTTPS-only with certificate pinning (+ backup pin), no exported components without a permission, biometric lock optional.
 - Strings only in `res/values/strings.xml` + `values-ar/`; RTL mirroring via `supportsRtl`; amounts formatted by `core` with Western/Arabic-Indic digit setting.
 - Tests carry REQ ids in names: fun `REQ-SMS-004 drops otp messages`().

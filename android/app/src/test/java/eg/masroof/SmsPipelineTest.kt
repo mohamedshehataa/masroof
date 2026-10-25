@@ -158,7 +158,7 @@ class SenderSettingsTest {
     }
 
     @Test
-    fun `REQ-NTF-001 notification capture is off by default, monitors InstaPay and accepts only valid package names`() {
+    fun `REQ-NTF-014 notification capture is off by default, monitors InstaPay and accepts only valid package names`() {
         val s = PrefsNotificationSettings(prefs)
         assertFalse(s.enabled())
         assertTrue(s.isMonitored(NotificationApps.INSTAPAY_CANDIDATE))
@@ -209,7 +209,7 @@ class NotificationHandoffTest {
     private val scheduler = FakeSmsScheduler()
 
     @Test
-    fun `REQ-NTF-001 only enabled and monitored packages are handed over, with title and text joined`() {
+    fun `REQ-NTF-010 only enabled and monitored packages are handed over, with title and text joined`() {
         val settings = MemoryNotifications(on = false)
         val handoff = NotificationHandoff(settings, scheduler)
         handoff.handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "You sent EGP 250.00 to Sara", 1_000L)
@@ -223,7 +223,7 @@ class NotificationHandoffTest {
     }
 
     @Test
-    fun `REQ-NTF-001 a notification OTP is dropped before WorkManager`() {
+    fun `REQ-NTF-012 a notification OTP is dropped before WorkManager`() {
         NotificationHandoff(MemoryNotifications(), scheduler)
             .handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "Your OTP is 556677", 1_000L)
         assertTrue(scheduler.intake.isEmpty())
@@ -292,7 +292,7 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-030 secrets never reach the outbox or the wire - the serialized request carries only typed fields`() =
+    fun `REQ-SMS-062 secrets never reach the outbox or the wire - the serialized request carries only typed fields`() =
         runTest {
             val secrets =
                 listOf(
@@ -335,7 +335,7 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-014 an unknown template stays on the phone in the review list and is cleared by dismiss`() =
+    fun `REQ-SMS-063 an unknown template stays on the phone in the review list and is cleared by dismiss`() =
         runTest {
             val text = "Welcome to our bank, your new offer code card activation is ready"
             assertEquals(Disposition.REVIEW, pipeline.accept(sms("Welcome to CIB: statement notice 2026")))
@@ -350,7 +350,7 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-014 old review items are purged after 30 days`() =
+    fun `REQ-SMS-063 old review items are purged after 30 days`() =
         runTest {
             pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))
             val later = Clock.fixed(Instant.parse("2026-12-30T09:00:00Z"), ZoneOffset.UTC)
@@ -359,7 +359,7 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-NTF-002 an allowlisted InstaPay notification becomes a NOTIFICATION record`() =
+    fun `REQ-NTF-013 an allowlisted InstaPay notification becomes a NOTIFICATION record`() =
         runTest {
             val msg =
                 IncomingMessage(
@@ -463,7 +463,7 @@ class SmsStatusClassificationTest {
 
 class NoRawTextUploadTest {
     @Test
-    fun `REQ-SMS-001 the app never calls the raw-text ingest endpoints`() {
+    fun `REQ-SMS-062 the app never calls the raw-text ingest endpoints`() {
         val offenders =
             File("src/main/java")
                 .walkTopDown()
@@ -480,7 +480,7 @@ class NoRawTextUploadTest {
     }
 
     @Test
-    fun `REQ-SMS-001 the wire request type has no free text field except the digit-free merchant label`() {
+    fun `REQ-SMS-062 the wire request type has no free text field except the digit-free merchant label`() {
         val names =
             eg.masroof.api.models.IngestParsedTransactionRequest::class.java.declaredFields
                 .map { it.name }

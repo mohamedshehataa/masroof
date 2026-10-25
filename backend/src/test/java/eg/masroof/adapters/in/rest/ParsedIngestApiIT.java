@@ -168,8 +168,8 @@ class ParsedIngestApiIT {
   }
 
   @Test
-  @Tag("REQ-SMS-001")
-  @DisplayName("REQ-SMS-001 a parsed record becomes a confirmed SMS expense once, with no body")
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 a parsed record becomes a confirmed SMS expense once, with no body")
   void createsOnceWithNoText() throws Exception {
     Map<String, Object> r = record("one");
     JsonNode a = JSON.readTree(send(tokenA, r).getContentAsString());
@@ -194,8 +194,8 @@ class ParsedIngestApiIT {
   }
 
   @Test
-  @Tag("REQ-SMS-001")
-  @DisplayName("REQ-SMS-001 the same device and local id in another household is separate")
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 the same device and local id in another household is separate")
   void householdScoped() throws Exception {
     Map<String, Object> r = record("scoped");
     JsonNode a = JSON.readTree(send(tokenA, r).getContentAsString());
@@ -291,8 +291,8 @@ class ParsedIngestApiIT {
   }
 
   @Test
-  @Tag("REQ-SMS-001")
-  @DisplayName("REQ-SMS-001 an oversized request is answered 413 before it is parsed")
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 an oversized request is answered 413 before it is parsed")
   void oversized() throws Exception {
     Map<String, Object> r = record("big");
     r.put("merchant", "a".repeat(20_000));
