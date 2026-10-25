@@ -1,4 +1,5 @@
 {
+  "app": { "name": "Masroof" },
   "health": {
     "version": "Backend {{version}} ({{sha}})",
     "error": "Can't reach the server.",
@@ -6,6 +7,54 @@
   },
   "common": {
     "retry": "Retry",
+    "reload": "Reload",
     "language": { "en": "English", "ar": "العربية" }
+  },
+  "nav": {
+    "label": "Main navigation",
+    "home": "Home",
+    "transactions": "Transactions",
+    "add": "Add",
+    "insights": "Insights",
+    "more": "More"
+  },
+  "shell": {
+    "offline": "You're offline",
+    "errorTitle": "Something went wrong",
+    "errorBody": "The app hit an unexpected problem. Try again or reload the page."
+  },
+  "pages": {
+    "comingSoon": "This screen arrives in an upcoming release.",
+    "home": "Home",
+    "transactions": "Transactions",
+    "add": "Add expense",
+    "insights": "Insights"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "That page does not exist.",
+    "home": "Go to Home"
+  },
+  "login": {
+    "title": "Sign in",
+    "body": "Sign-in arrives in an upcoming release."
+  },
+  "more": {
+    "title": "More",
+    "languageTitle": "Language",
+    "digitsTitle": "Digits",
+    "digits": {
+      "western": "Western (123)",
+      "arabic-indic": "Arabic-Indic (١٢٣)",
+      "preview": "Preview"
+    },
+    "themeTitle": "Theme",
+    "theme": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "accountTitle": "Account",
+    "signOut": "Sign out"
   }
 }
