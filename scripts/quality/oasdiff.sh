@@ -13,9 +13,11 @@
 #   1  breaking changes found and not accepted
 #   2  usage / environment error
 #
-# Accepting a breaking change requires BOTH:
-#   - env MASROOF_ALLOW_BREAKING=1, and
-#   - an existing ADR path passed as the second argument (docs/adr/NNNN-*.md).
+# Accepting a breaking change (S9 exception, REQ-OPS-051) requires BOTH of:
+#   - env PR_LABELS (comma/space/newline separated label names) containing `breaking-change`, and
+#   - a docs/adr/*.md added since <base-ref> that mentions a path changed incompatibly.
+# Then it exits 0 with a warning. Legacy equivalent: env MASROOF_ALLOW_BREAKING=1 plus an existing ADR path
+# passed as the second argument.
 set -euo pipefail
 
 CONTRACT_PATH="contracts/openapi.yaml"
@@ -104,6 +106,25 @@ case "$status" in
 esac
 
 # --- breaking changes found: check the override -------------------------------------------
+# Paths the report names, from lines such as "in API GET /health".
+breaking_paths="$(sed -n 's/.*in API [A-Z]* \(\/[^ ]*\).*/\1/p' "$report_file" | sort -u)"
+if printf '%s' "${PR_LABELS:-}" | tr ', \t' '\n\n\n' | grep -qx 'breaking-change'; then
+  new_adrs="$(git diff --name-only --diff-filter=A "$base_ref" -- 'docs/adr/*.md')"
+  for adr in $new_adrs; do
+    [[ -s "$adr" ]] || continue
+    while IFS= read -r changed; do
+      [[ -n "$changed" ]] || continue
+      if grep -qF -- "$changed" "$adr"; then
+        log "WARNING: breaking change against $base_ref ACCEPTED: label breaking-change and $adr references $changed"
+        exit 0
+      fi
+    done <<<"$breaking_paths"
+  done
+  log "label breaking-change is set but no new docs/adr/*.md references a changed path"
+else
+  log "add the PR label 'breaking-change' (env PR_LABELS) and a new docs/adr/*.md naming the changed path to accept them"
+fi
+
 if [[ "${MASROOF_ALLOW_BREAKING:-0}" != "1" ]]; then
   log "set MASROOF_ALLOW_BREAKING=1 AND pass an ADR path to accept them"
   exit 1

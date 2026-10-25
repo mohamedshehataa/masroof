@@ -26,6 +26,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
+    id("org.openapi.generator") version "7.26.0"
 }
 
 group = "eg.masroof"
@@ -44,6 +45,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-validation") // generated models carry jakarta.validation constraints
     implementation("org.jspecify:jspecify")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
@@ -68,12 +70,53 @@ springBoot { buildInfo { this.properties { time = buildTime; additional.put("git
 tasks.bootJar { archiveFileName = "masroof-backend.jar" }
 tasks.jar { enabled = false }
 
+// REQ-OPS-050: Spring server interfaces + models generated from the contract at build time, never edited or committed.
+// Generated code lives in eg.masroof.adapters.in.rest.generated.*; contract Money maps to the domain Money, date-time to Instant.
+val openApiOut = layout.buildDirectory.dir("generated/openapi")
+openApiGenerate {
+    generatorName.set("spring")
+    inputSpec.set(layout.projectDirectory.file("../contracts/openapi.yaml").asFile.absolutePath)
+    outputDir.set(openApiOut.get().asFile.absolutePath)
+    apiPackage.set("eg.masroof.adapters.in.rest.generated.api")
+    modelPackage.set("eg.masroof.adapters.in.rest.generated.model")
+    invokerPackage.set("eg.masroof.adapters.in.rest.generated")
+    globalProperties.set(mapOf("apis" to "", "models" to "", "supportingFiles" to "false"))
+    typeMappings.set(mapOf("DateTime" to "Instant", "Money" to "Money"))
+    importMappings.set(mapOf("Instant" to "java.time.Instant", "Money" to "eg.masroof.domain.money.Money"))
+    configOptions.set(mapOf(
+        "interfaceOnly" to "true",
+        "useSpringBoot4" to "true",
+        "useTags" to "true",
+        "skipDefaultInterface" to "true",
+        "useBeanValidation" to "true",
+        "performBeanValidation" to "false",
+        "documentationProvider" to "none",
+        "annotationLibrary" to "none",
+        "openApiNullable" to "false",
+        "hideGenerationTimestamp" to "true",
+        "useResponseEntity" to "true",
+        "useOptional" to "false",
+        "dateLibrary" to "java8",
+    ))
+}
+tasks.openApiGenerate {
+    doFirst { delete(openApiOut) } // regenerated from scratch on every run
+    doLast { // the generator emits Spring's deprecated @Nullable (-Werror); the build swaps it for JSpecify's, as everywhere else
+        fileTree(openApiOut).matching { include("**/*.java") }.forEach { f ->
+            f.writeText(f.readText().replace("import org.springframework.lang.Nullable;", "import org.jspecify.annotations.Nullable;"))
+        }
+    }
+}
+sourceSets.main { java.srcDir(openApiOut.map { it.dir("src/main/java") }) }
+tasks.compileJava { dependsOn(tasks.openApiGenerate) }
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release = 21
     options.compilerArgs.addAll(listOf("-Xlint:all,-processing", "-Werror"))
     options.errorprone {
         disableWarningsInGeneratedCode = true
+        excludedPaths = ".*/build/generated/.*" // openapi output is not ours to lint
         error("NullAway", "RemoveUnusedImports")
         option("NullAway:AnnotatedPackages", "eg.masroof")
     }
@@ -95,6 +138,7 @@ checkstyle {
     maxWarnings = 0
     configProperties["org.checkstyle.google.severity"] = "error" // ERROR-level lines stay visible under -q
 }
+tasks.checkstyleMain { exclude("**/generated/**") }
 tasks.checkstyleTest { enabled = false }
 
 spotbugs { reportLevel = Confidence.HIGH }
@@ -135,7 +179,7 @@ tasks.jacocoTestReport {
     // Merges unit and integration runs; the XML lands in build/reports/jacoco/test/jacocoTestReport.xml.
     executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).include("test.exec", "integrationTest.exec"))
     classDirectories.setFrom(
-        sourceSets.main.get().output.classesDirs.asFileTree.matching { exclude("eg/masroof/MasroofApplication.class") }
+        sourceSets.main.get().output.classesDirs.asFileTree.matching { exclude("eg/masroof/MasroofApplication.class", "eg/masroof/adapters/in/rest/generated/**") }
     )
     reports {
         xml.required = true

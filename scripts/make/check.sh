@@ -15,6 +15,9 @@ run "check-fast [$mods]" bash scripts/make/check-fast.sh $mods
 [ -x backend/gradlew ] && run "backend integration + architecture tests" bash scripts/make/backend-integration.sh
 [ -f web/package.json ] && run "web unit coverage" bash -c 'cd web && npm run -s test:coverage'
 [ -f contracts/openapi.yaml ] && run "contract diff vs ${BASE:-main}" bash scripts/quality/oasdiff.sh "${BASE:-main}"
+if [ -f contracts/openapi.yaml ] && [ -f scripts/quality/docs-api.py ]; then
+  run "docs/API.md is current (make docs-api)" bash -c "\"$PYTHON\" scripts/quality/docs-api.py && git diff --exit-code docs/API.md"
+fi
 [ -f scripts/quality/coverage-gate.sh ] && run "coverage gates" bash scripts/quality/coverage-gate.sh
 [ -f scripts/quality/traceability.py ] && run "traceability" "$PYTHON" scripts/quality/traceability.py --out docs/TRACEABILITY.md
 if [ -f scripts/quality/test-integrity-check.sh ] && git rev-parse --verify -q "${BASE:-main}" >/dev/null 2>&1; then

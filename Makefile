@@ -14,7 +14,7 @@ VERSION ?= dev
 IMAGE_TAG ?= dev
 
 .PHONY: help bootstrap up down logs check-fast check check-full e2e eval eval-fast security mutation perf trace metrics \
-        contract-lint contract-diff hooks-test hooks-unlock hooks-lock test-integrity sbom build-images build-web backend-integration \
+        contract-lint contract-diff docs-api hooks-test hooks-unlock hooks-lock test-integrity sbom build-images build-web backend-integration \
         build-apk build-apk-release deploy-staging deploy-prod smoke rollback backup selftest sdlc-lint status
 
 help: ## List targets
@@ -58,6 +58,8 @@ contract-lint: ## Lint contracts/openapi.yaml (redocly)
 	@$(ENV) bash scripts/make/contract.sh lint
 contract-diff: ## Breaking-change check of contracts/openapi.yaml vs BASE=main (oasdiff)
 	@$(ENV) bash scripts/quality/oasdiff.sh $(BASE)
+docs-api: ## Regenerate docs/API.md from contracts/openapi.yaml (check fails when the committed file is stale)
+	@$(ENV) $$PYTHON scripts/quality/docs-api.py
 
 hooks-test: ## Run the hook test suite (.claude/hooks/tests)
 	@$(ENV) bash .claude/hooks/tests/run.sh
