@@ -194,15 +194,24 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
+private const val CREATE_SMS_OUTBOX = """
+CREATE TABLE IF NOT EXISTS sms_outbox (
+  smsId TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  body TEXT NOT NULL,
+  receivedAtMillis INTEGER NOT NULL,
+  attempts INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(smsId)
+)
+"""
+
 /** v2 -> v3: where an expense came from, and the SMS upload queue. Keeps the manual-entry outbox intact. */
 val MIGRATION_2_3: Migration =
     object : Migration(2, 3) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense ADD COLUMN source TEXT")
-            db.execSQL(
-                "CREATE TABLE IF NOT EXISTS sms_outbox (smsId TEXT NOT NULL, sender TEXT NOT NULL, body TEXT NOT NULL, " +
-                    "receivedAtMillis INTEGER NOT NULL, attempts INTEGER NOT NULL, failed INTEGER NOT NULL, " +
-                    "createdAtMillis INTEGER NOT NULL, PRIMARY KEY(smsId))",
-            )
+            db.execSQL(CREATE_SMS_OUTBOX)
         }
     }
