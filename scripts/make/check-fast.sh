@@ -74,7 +74,8 @@ check_backend() {
 }
 check_web() {
   [ -f web/package.json ] || { echo "skip: web module not present"; return 0; }
-  [ -d web/node_modules ] || run "web: npm ci" bash -c 'cd web && npm ci --no-audit --no-fund'
+  # Reinstall when deps are missing or package-lock.json changed since the last install (npm writes node_modules/.package-lock.json).
+  { [ -f web/node_modules/.package-lock.json ] && [ ! web/package-lock.json -nt web/node_modules/.package-lock.json ]; } || run "web: npm ci" bash -c 'cd web && npm ci --no-audit --no-fund'
   run "web: npm run check-fast" bash -c 'cd web && npm run -s check-fast'
 }
 check_android() {
