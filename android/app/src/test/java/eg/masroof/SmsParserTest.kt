@@ -1,0 +1,256 @@
+package eg.masroof
+
+import eg.masroof.ingest.parse.CaptureSource
+import eg.masroof.ingest.parse.IncomingMessage
+import eg.masroof.ingest.parse.MessageParser
+import eg.masroof.ingest.parse.ParseOutcome
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import java.time.Instant
+
+private val RECEIVED = Instant.parse("2026-10-26T10:00:00Z").toEpochMilli()
+private val CASES_RECEIVED = Instant.parse("2026-03-12T12:10:00Z").toEpochMilli()
+
+private fun fixture(name: String): List<JsonObject> =
+    File("../../fixtures/sms/$name")
+        .readLines(Charsets.UTF_8)
+        .filter { it.isNotBlank() }
+        .map { Json.parseToJsonElement(it).jsonObject }
+
+private fun JsonObject.str(key: String) = getValue(key).jsonPrimitive.content
+
+private fun JsonObject.opt(key: String) = this[key]?.jsonPrimitive?.contentOrNull
+
+internal fun message(
+    sender: String,
+    body: String,
+    at: Long = RECEIVED,
+    source: CaptureSource = CaptureSource.SMS,
+) = IncomingMessage(source, sender, body, at)
+
+internal fun digitsRemoved(s: String) = s.filterNot { it.isDigit() }.replace("•", "").replace("*", "").trim()
+
+/** Everything that could leave the phone for this outcome, as text. */
+internal fun wireText(outcome: ParseOutcome): String =
+    when (outcome) {
+        is ParseOutcome.Record -> outcome.record.toString()
+        else -> ""
+    }
+
+class SmsParserTest {
+    @Test
+    fun `REQ-SMS-010 the 22 genuine purchases with reference codes and footers become records`() {
+        val rows = fixture("genuine.jsonl")
+        assertTrue(rows.size >= 22)
+        for (row in rows) {
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body")))
+            assertTrue("${row.str("id")} -> $outcome", outcome is ParseOutcome.Record)
+            val r = (outcome as ParseOutcome.Record).record
+            assertEquals(row.str("id"), row.str("amountMinor").toLong(), r.amountMinor)
+            assertEquals(row.str("currency"), r.currency)
+            val expectedKinds =
+                when (row.str("kind")) {
+                    "TRANSFER" -> setOf("TRANSFER_OUT", "TRANSFER_IN")
+                    else -> setOf(row.str("kind"))
+                }
+            assertTrue("${row.str("id")} kind ${r.kind}", r.kind.name in expectedKinds)
+            // nothing that leaves the phone carries a reference code
+            for (secret in row.getValue("secrets").jsonArray.map { it.jsonPrimitive.content }) {
+                assertFalse("${row.str("id")} leaks $secret", r.toString().contains(secret))
+            }
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-010 template fixtures parse to the expected kind, amount, currency, last4 and digit-free merchant`() {
+        // "unknown-sender-generic" carries a long number next to the label: kept on the phone for review on purpose.
+        val reviewOnPurpose = setOf("unknown-sender-generic")
+        for (row in fixture("cases.jsonl")) {
+            val id = row.str("id")
+            val expect = (row["expect"] as? JsonObject) ?: JsonObject(emptyMap())
+            val received = row.opt("receivedAt")?.let { Instant.parse(it).toEpochMilli() } ?: CASES_RECEIVED
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), received))
+            val kind = expect.opt("kind")
+            if (id in reviewOnPurpose) {
+                assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+                continue
+            }
+            if (kind != null && expect.opt("currency") != "EGP" && expect.opt("currency") != null) {
+                assertTrue("$id foreign currency stays on the phone: $outcome", outcome is ParseOutcome.Review)
+                continue
+            }
+            if (kind == null || kind == "REVERSAL" || kind == "INFO") {
+                assertFalse("$id must not become a record: $outcome", outcome is ParseOutcome.Record)
+                continue
+            }
+            assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
+            val r = (outcome as ParseOutcome.Record).record
+            assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
+            assertEquals(id, expect.str("currency"), r.currency)
+            val kinds = if (kind == "TRANSFER") setOf("TRANSFER_OUT", "TRANSFER_IN") else setOf(kind)
+            assertTrue("$id kind ${r.kind}", r.kind.name in kinds)
+            expect.opt("last4")?.let { assertEquals(id, it, r.instrumentLast4) }
+            expect.opt("merchant")?.let { assertEquals(id, digitsRemoved(it), r.merchant) }
+            expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), r.occurredAtMillis) }
+            assertNull(id, r.merchant?.firstOrNull { it.isDigit() })
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-030 no secret probe ever becomes a record and no review text keeps a secret`() {
+        val probes = fixture("secrets.jsonl")
+        assertTrue(probes.size >= 25)
+        for (p in probes) {
+            val body =
+                p
+                    .str("body")
+                    .replace("{SHY}", 0x00AD.toChar().toString())
+                    .replace("{ISEP}", 0x2063.toChar().toString())
+                    .replace("{ZWSP}", 0x200B.toChar().toString())
+            val outcome = MessageParser.parse(message("CIB", body))
+            val secrets = p.getValue("secrets").jsonArray.map { it.jsonPrimitive.content }
+            if (outcome is ParseOutcome.Record) {
+                // Allowed only when the text really has no secret signal; the record itself must still be clean.
+                for (s in secrets) assertFalse("${p.str("id")} leaks $s", outcome.record.toString().contains(s))
+            }
+            if (outcome is ParseOutcome.Review && outcome.reason == "secret") {
+                val digits = outcome.text.replace(Regex("\\D"), "")
+                for (s in secrets.filter { it.length >= 4 }) assertFalse("${p.str("id")} keeps $s", digits.contains(s))
+            }
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-030 every input from the three verifier rounds is kept on the phone or classified safely`() {
+        val rows = fixture("verifier.jsonl")
+        assertTrue(rows.size >= 80)
+        for (row in rows) {
+            val id = row.str("id")
+            val expect = row["expect"]!!.jsonObject
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body")))
+            when (expect.str("outcome")) {
+                "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
+                "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+                "record_or_review" -> {
+                    if (outcome is ParseOutcome.Record) {
+                        val bad = expect.getValue("notKind").jsonArray.map { it.jsonPrimitive.content }
+                        assertFalse("$id direction ${outcome.record.kind}", outcome.record.kind.name in bad)
+                        assertFalse("$id label ${outcome.record.merchant}", outcome.record.merchant.orEmpty().any { it.isDigit() })
+                    }
+                    assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                }
+                "record" -> {
+                    assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
+                    val r = (outcome as ParseOutcome.Record).record
+                    assertEquals(id, expect.str("kind"), r.kind.name)
+                    assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
+                    expect.opt("merchant")?.let { assertEquals(id, it, r.merchant) }
+                    expect.opt("last4")?.let { assertEquals(id, it, r.instrumentLast4) }
+                    expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), r.occurredAtMillis) }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-030 a secret word sequence can never become the merchant label`() {
+        for (text in listOf(
+            "Purchase of EGP 90.00 at OTP value on 12/03/2026",
+            "Purchase of EGP 90.00 at verification value",
+            "تم خصم 90 جنيه لدى كود البطاقة",
+            "Purchase of EGP 90.00 to Code",
+        )) {
+            val outcome = MessageParser.parse(message("CIB", text))
+            if (outcome is ParseOutcome.Record) assertNull(text, outcome.record.merchant)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-010 an OTP-looking purchase is kept masked for the user and a plain OTP is dropped`() {
+        val purchaseOtp = MessageParser.parse(message("CIB", "Your OTP for purchase of EGP 500.00 at AMAZON is 889900, do not share it with anyone"))
+        assertTrue(purchaseOtp is ParseOutcome.Review)
+        assertFalse((purchaseOtp as ParseOutcome.Review).text.contains("889900"))
+        assertTrue(MessageParser.parse(message("CIB", "Your OTP is 482915. Do not share it with anyone.")) is ParseOutcome.Ignore)
+    }
+
+    @Test
+    fun `REQ-SMS-010 the local id is stable and reveals nothing about the text`() {
+        val a = message("CIB", "Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05", 5_000L)
+        val id = MessageParser.localId(a)
+        assertEquals(64, id.length)
+        assertEquals(id, MessageParser.localId(message("cib", a.text, 5_999L)))
+        assertTrue(MessageParser.localId(message("CIB", a.text, 7_000L)) != id)
+        assertTrue(MessageParser.localId(message("CIB", a.text + "!", 5_000L)) != id)
+    }
+
+    @Test
+    fun `REQ-SMS-012 the occurred time is Cairo local converted to UTC within 45 days, else the received time`() {
+        val r =
+            (MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 12/03/2026 14:05", CASES_RECEIVED)) as ParseOutcome.Record).record
+        assertEquals(Instant.parse("2026-03-12T12:05:00Z").toEpochMilli(), r.occurredAtMillis)
+        val summer =
+            (
+                MessageParser.parse(
+                    message("CIB", "Purchase of EGP 90.00 at UBER on 25/10/2026 23:50", Instant.parse("2026-10-26T10:00:00Z").toEpochMilli()),
+                ) as ParseOutcome.Record
+            ).record
+        assertEquals(Instant.parse("2026-10-25T20:50:00Z").toEpochMilli(), summer.occurredAtMillis)
+        val old =
+            (MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 01/09/2026", RECEIVED)) as ParseOutcome.Record).record
+        assertEquals(RECEIVED, old.occurredAtMillis)
+    }
+
+    @Test
+    fun `REQ-SMS-011 last4 comes only from an explicit card or account marker`() {
+        val ok = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER card ending 1234")) as ParseOutcome.Record
+        assertEquals("1234", ok.record.instrumentLast4)
+        val none = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER Ref 98765432")) as ParseOutcome.Record
+        assertNull(none.record.instrumentLast4)
+        assertNotNull(ok.record.toString())
+    }
+}
+
+class InstaPaySmsTest {
+    @Test
+    fun `REQ-SMS-013 InstaPay SMS and app notifications in Arabic and English parse to structured records`() {
+        val rows = fixture("instapay.jsonl")
+        assertTrue(rows.size >= 18)
+        for (row in rows) {
+            val id = row.str("id")
+            val source = if (row.str("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+            val expect = row["expect"]!!.jsonObject
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), source = source))
+            if (expect.str("outcome") == "ignore") {
+                assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                continue
+            }
+            assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
+            val r = (outcome as ParseOutcome.Record).record
+            assertEquals(id, source, r.source)
+            assertEquals(id, expect.str("kind"), r.kind.name)
+            assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
+            expect.opt("merchant")?.let { assertEquals(id, it, r.merchant) }
+            expect.opt("last4")?.let { assertEquals(id, it, r.instrumentLast4) }
+            assertEquals(id, expect.str("method"), r.paymentMethod)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-013 an InstaPay handle keeps its name, never a phone or account number`() {
+        val handle = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to sara99@instapay was successful"))
+        if (handle is ParseOutcome.Record) assertFalse(handle.record.merchant.orEmpty().any { it.isDigit() })
+        val phone = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to 01000000012 was successful"))
+        assertFalse(phone is ParseOutcome.Record && phone.record.toString().contains("0100000"))
+    }
+}

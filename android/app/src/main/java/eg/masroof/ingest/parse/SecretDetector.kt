@@ -103,7 +103,7 @@ object SecretDetector {
     fun isSecret(normalized: String): Boolean = reason(normalized) != null
 
     /** Blanks reference numbers, hotline numbers and recognised transaction codes (used for the leftover-digits check). */
-    fun stripReferences(text: String): String = referenceNumber.replace(call.replace(benignCode.replace(text, " "), " "), " ")
+    fun stripReferences(text: String): String = benignCode.replace(call.replace(referenceNumber.replace(text, " "), " "), " ")
 
     private fun withoutFooters(text: String): String =
         footer.replace(text) { m -> if (m.value.any { it.isDigit() }) m.value else " " }

@@ -9,7 +9,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeException
+import java.time.DateTimeException
 import java.util.Locale
 
 /**
@@ -50,7 +50,7 @@ object MessageParser {
     private val amountStopWords =
         setOf(
             "at", "to", "from", "on", "in", "for", "using", "via", "with", "by", "was", "has", "is", "and", "of",
-            "لدى", "لدي", "عند", "من", "الى", "في", "علي", "على", "عبر", "بتاريخ", "لصالح", "و", "ب", "بنجاح", "تم", "هو", "ل", "من",
+            "لدي", "عند", "من", "الي", "في", "علي", "على", "عبر", "بتاريخ", "لصالح", "و", "ب", "بنجاح", "تم", "هو", "ل", "من",
         )
     private val foreignWord = Regex("\\b(?:usd|eur|gbp|sar|aed|kwd|qar|jpy|cad|chf|cny|yen|riyal|dhs)\\b|\\$|€|دولار|يورو|ريال|درهم", ci)
     private val groupedDigits = Regex("^ \\d{3}(?!\\d)")
@@ -93,7 +93,7 @@ object MessageParser {
         )
     private val outAnchor =
         Regex(
-            "\\b(?:debited|debit|deducted|withdrawn|charged|spent|paid|pay|sent|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
+            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
                 "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه",
             ci,
         )
@@ -103,6 +103,7 @@ object MessageParser {
                 "|\\bdeposit(?:ed)?\\b|\\bsalary\\b|\\bincoming\\b|ايداع|تم استلام|استلمت|وارد|راتب|مرتب|تم اضافه|اضافه مبلغ|استلام حواله",
             ci,
         )
+    private val ambiguousReceipt = Regex("استلام (?:تحويلك|حوالتك|التحويل)|received your transfer", ci)
     private val refund = Regex("\\brefund(?:ed)?\\b|استرداد|مرتجع|رد مبلغ", ci)
     private val withdrawal = Regex("\\batm\\b|cash withdrawal|cash advance|\\bwithdraw(?:n|al)?\\b|سحب نقدي|ماكينه الصراف|تم سحب", ci)
     private val fee =
@@ -112,7 +113,7 @@ object MessageParser {
             ci,
         )
     private val transferWords =
-        Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|credited to|تحويل|ارسال|ارسلت|حولت|instapay|انستاباي|\\bipa\\b|انستا باي", ci)
+        Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|credited to (?!your)|تحويل|ارسال|ارسلت|حولت|instapay|انستاباي|\\bipa\\b|انستا باي", ci)
     private val paymentWords =
         Regex("payment|\\bpaid\\b|\\bpay\\b|purchase|spent|\\bbill\\b|merchant|\\bqr\\b|charged|دفع|سداد|شراء|فاتوره|تاجر|مشتريات", ci)
     private val ownAccount = Regex("from your (?:a/c|account|card|wallet)|من حسابك|من بطاقتك|من محفظتك", ci)
@@ -129,7 +130,7 @@ object MessageParser {
     // ---- dates ---------------------------------------------------------------------------------------------------
     private val dateFull = Regex("(?<![\\d/.:-])(\\d{1,2})([/.-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?![\\d/:])")
     private val dateIso = Regex("(?<![\\d/.:-])(\\d{4})-(\\d{1,2})-(\\d{1,2})(?![\\d])")
-    private val dateShort = Regex("(?<![\\d/.:-])(\\d{1,2})/(\\d{1,2})(?![\\d/:.])")
+    private val dateShort = Regex("(?<![\\d/.:-])(\\d{1,2})/(\\d{1,2})(?![\\d/:]|\\.\\d)")
     private val timeAfter = Regex("^ ?(?:at |في |الساعه )?(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?![\\p{L}\\d])", ci)
     private val dateNot = Regex("(?:until|till|valid|due|expiry|expires?|exp|start|starts|from|استحقاق|حتي|صلاحيه|ينتهي|ابتداء|يبدا|تبدا)[^\\d]{0,12}$", ci)
 
@@ -141,7 +142,7 @@ object MessageParser {
             "successful", "successfully", "completed", "approved", "declined", "and", "your", "you", "by", "in", "time", "thank",
             "thanks", "if", "until", "till", "valid", "confirm", "code", "pin", "otp", "expires", "remaining", "limit", "to", "the",
             "has", "been", "transaction", "reference", "paid", "id", "no",
-            "بتاريخ", "بنجاح", "عبر", "من", "في", "علي", "الرصيد", "رصيدك", "رصيد", "المتاح", "بطاقه", "بطاقتك", "البطاقه", "حساب",
+            "بتاريخ", "بنجاح", "عبر", "من", "في", "الرصيد", "رصيدك", "رصيد", "المتاح", "بطاقه", "بطاقتك", "البطاقه", "حساب",
             "حسابك", "رقم", "كود", "رمز", "هو", "تم", "الي", "الى", "و", "ثم", "مع", "قيمه", "بمبلغ", "مبلغ", "الساعه", "وتم", "باستخدام",
             "المنتهيه", "ب",
         )
@@ -162,8 +163,8 @@ object MessageParser {
         "in" to Regex("(?<![\\p{L}\\d])from[ ]+", ci),
     )
     private val arPrep = mapOf(
-        "out" to Regex("(?<![\\p{L}\\d])(?:لدى|لدي|عند|الى|لصالح|ل)[ ]+"),
-        "transfer" to Regex("(?<![\\p{L}\\d])(?:الى|لصالح|للمستفيد|ل)[ ]+"),
+        "out" to Regex("(?<![\\p{L}\\d])(?:لدي|عند|الي|لصالح|ل)[ ]+"),
+        "transfer" to Regex("(?<![\\p{L}\\d])(?:الي|لصالح|للمستفيد|ل)[ ]+"),
         "in" to Regex("(?<![\\p{L}\\d])من[ ]+"),
     )
 
@@ -195,6 +196,7 @@ object MessageParser {
         val review = { reason: String -> ParseOutcome.Review(reason, norm) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
+        if (ambiguousReceipt.containsMatchIn(t)) return review("ambiguous_direction")
         if (!hasOut && !hasIn) {
             return when {
                 statement.containsMatchIn(t) -> ParseOutcome.Ignore("info")
