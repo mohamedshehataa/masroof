@@ -18,7 +18,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
 
   test('REQ-OPS-021 shows the English version line after exactly one GET /health @REQ-OPS-021', async ({ page }) => {
     const calls = await mockHealth(page, ok);
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(EN_VERSION)).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
@@ -30,7 +30,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
     const ctx = await browser.newContext({ locale: 'fr-FR' });
     const page = await ctx.newPage();
     await mockHealth(page, ok);
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(EN_VERSION)).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
@@ -41,7 +41,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
     page,
   }) => {
     const calls = await mockHealth(page, ok);
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(EN_VERSION)).toBeVisible();
     await page.getByRole('button', { name: 'العربية' }).click();
     await expect(page.getByText(AR_VERSION)).toBeVisible();
@@ -64,7 +64,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
       await gate;
       await ok(route);
     });
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByRole('status')).toHaveAttribute('aria-busy', 'true');
     await expect(page.getByText('undefined')).toHaveCount(0);
     release();
@@ -87,7 +87,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
       const errors: Error[] = [];
       page.on('pageerror', (e) => errors.push(e));
       const calls = await mockHealth(page, handler, ok);
-      await page.goto('/');
+      await page.goto('/version');
       await expect(page.getByText(EN_ERROR)).toBeVisible({ timeout: 1000 });
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(calls.count).toBe(1);
@@ -103,7 +103,7 @@ test.describe('REQ-OPS-021 version page (English default)', () => {
     context,
   }) => {
     const calls = await mockHealth(page, problem503, ok);
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(EN_ERROR)).toBeVisible();
     await context.setOffline(true);
     await page.getByRole('button', { name: 'Retry' }).click();
@@ -122,7 +122,7 @@ test.describe('REQ-OPS-021 version page (Arabic locale)', () => {
 
   test('REQ-OPS-021 ar-EG gives lang=ar dir=rtl and only Arabic copy @REQ-OPS-021', async ({ page }) => {
     await mockHealth(page, ok);
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(AR_VERSION)).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -139,7 +139,7 @@ test.describe('REQ-OPS-021 dark theme token', () => {
       const ctx = await browser.newContext({ colorScheme, locale: 'en-US' });
       const page = await ctx.newPage();
       await mockHealth(page, ok);
-      await page.goto('/');
+      await page.goto('/version');
       await expect(page.getByText(EN_VERSION)).toBeVisible();
       const r = await page.evaluate(() => {
         const probe = document.createElement('div');
