@@ -69,6 +69,9 @@ sealed interface AuthResult {
     data object Network : AuthResult
 
     data object Server : AuthResult
+
+    /** The server URL is not a valid http(s) URL (Retrofit rejected it before any request was made). */
+    data object InvalidUrl : AuthResult
 }
 
 sealed interface LoginResult {

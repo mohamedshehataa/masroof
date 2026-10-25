@@ -84,5 +84,54 @@
         <item quantity="one">%1$d unsynced expense will be deleted. Sync first or sign out anyway?</item>
         <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>
     </plurals>
-</resources>
 
+    <string name="nav_insights">Insights</string>
+
+    <string name="insights_title">Insights</string>
+    <string name="insights_period_current">This month</string>
+    <string name="insights_period_previous">Last month</string>
+    <string name="insights_total_current">Spent this month</string>
+    <string name="insights_total_previous">Spent last month</string>
+    <string name="insights_vs_previous">vs %1$s in the previous period</string>
+    <string name="insights_range">%1$s – %2$s</string>
+    <string name="insights_daily_average">Daily average</string>
+    <string name="insights_projected">Projected month-end</string>
+    <string name="insights_days_left">Days left</string>
+    <plurals name="insights_pending_review">
+        <item quantity="one">%1$s expense needs review</item>
+        <item quantity="other">%1$s expenses need review</item>
+    </plurals>
+    <plurals name="insights_expense_count">
+        <item quantity="one">%1$s expense</item>
+        <item quantity="other">%1$s expenses</item>
+    </plurals>
+    <string name="insights_categories_title">Spending by category</string>
+    <string name="insights_donut_desc">Spending by category: %1$s</string>
+    <string name="insights_category_row_desc">%1$s: %2$s, %3$s of spending</string>
+    <string name="insights_trend_title">Last %1$s months</string>
+    <string name="insights_trend_desc">Monthly spending: %1$s</string>
+    <string name="insights_trend_average">Average %1$s per month</string>
+    <string name="insights_calendar_title">Daily spending</string>
+    <string name="insights_calendar_desc">Calendar of daily spending. Busiest day %1$s with %2$s.</string>
+    <string name="insights_calendar_desc_none">Calendar of daily spending. Nothing spent in this period.</string>
+    <string name="insights_calendar_busiest">Busiest day: %1$s, %2$s</string>
+    <string name="insights_weekday_title">By day of the week</string>
+    <string name="insights_weekday_desc">Spending by day of the week: %1$s</string>
+    <string name="insights_empty_title">Not enough data yet</string>
+    <string name="insights_empty_body">Add a few expenses and your charts will appear here.</string>
+    <string name="insights_error_title">Could not load insights</string>
+    <string name="insights_error_body">The server answered with an error. Try again in a moment.</string>
+    <string name="insights_offline_title">Connect once to see insights</string>
+    <string name="insights_offline_body">Your charts are saved on this device after the first successful load.</string>
+    <string name="delta_up_desc">Spending is up %1$s compared with the previous period</string>
+    <string name="delta_down_desc">Spending is down %1$s compared with the previous period</string>
+    <string name="delta_flat_desc">No change compared with the previous period</string>
+
+    <string name="home_vs_last_month">vs last month</string>
+    <string name="home_trend_title">Last 6 months</string>
+    <string name="home_trend_desc">Spending over the last 6 months: %1$s</string>
+
+    <string name="settings_section_server">Server</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_language">Language</string>
+</resources>

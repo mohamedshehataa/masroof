@@ -28,6 +28,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -101,7 +102,12 @@ fun LoginContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.login_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Text(
+                stringResource(R.string.login_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
             TextButton(onClick = onToggleLanguage, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.login_language_switch))
             }

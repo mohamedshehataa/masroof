@@ -1,6 +1,8 @@
 package eg.masroof.ui.add
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -24,12 +28,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
+import eg.masroof.core.Money
+import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
 import eg.masroof.ui.viewmodel.AddUiState
@@ -108,11 +118,17 @@ private fun ColumnScope.AddFields(
     val onDate = actions.onDate
     val onNotes = actions.onNotes
     run {
-        Text(stringResource(R.string.add_title), style = MaterialTheme.typography.headlineSmall)
+        Text(
+            stringResource(R.string.add_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() },
+        )
         OutlinedTextField(
             value = form.amountText,
             onValueChange = onAmount,
             label = { Text(stringResource(R.string.add_amount)) },
+            prefix = { Text(MoneyFormat.symbol(Money.EGP, arabic)) },
+            textStyle = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
             isError = form.amountInvalid,
             supportingText = { if (form.amountInvalid) Text(stringResource(R.string.add_amount_error)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -133,6 +149,7 @@ private fun ColumnScope.AddFields(
             options = state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
             selected = form.categoryId,
             onSelect = onCategory,
+            tinted = true,
         )
         OptionGroup(
             title = stringResource(R.string.add_account),
@@ -146,7 +163,11 @@ private fun ColumnScope.AddFields(
             label = { Text(stringResource(R.string.add_note)) },
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(stringResource(R.string.add_offline_hint), style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.add_offline_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -158,9 +179,10 @@ private fun OptionGroup(
     options: List<Pair<String, String>>,
     selected: String?,
     onSelect: (String?) -> Unit,
+    tinted: Boolean = false,
 ) {
     Column {
-        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 4.dp))
         val all = listOf<Pair<String?, String>>(null to stringResource(R.string.add_none)) + options
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -171,6 +193,19 @@ private fun OptionGroup(
                     selected = selected == id,
                     onClick = { onSelect(id) },
                     label = { Text(label) },
+                    leadingIcon =
+                        if (tinted && id != null) {
+                            {
+                                Box(
+                                    Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(CategoryPalette.colorFor(id)),
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     modifier = Modifier.heightIn(min = 48.dp),
                 )
             }

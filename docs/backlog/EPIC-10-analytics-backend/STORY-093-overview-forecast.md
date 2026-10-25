@@ -3,7 +3,7 @@ id: STORY-093
 epic: EPIC-10
 title: "Overview: daily average, projected month-end (linear + weekday-aware), remaining budget, days left"
 phase: 7
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-025, STORY-092]
@@ -60,3 +60,6 @@ STORY-025, STORY-092
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+
+## Implemented acceptance (speed mode, feat/insights-tab)
+- Given a household with expenses this month, When GET /api/analytics/summary or /forecast is called, Then it returns total, previous total, delta in basis points, daily average, linear and weekday-aware projection and days left, all in Africa/Cairo and honouring month_start_day. Trimmed: remaining budget (no budgets yet).
