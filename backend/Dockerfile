@@ -4,6 +4,7 @@ FROM eclipse-temurin:21.0.12.1_1-jdk-noble@sha256:107215954359f1ab0be058a247d7c6
 ARG GIT_SHA
 RUN echo "${GIT_SHA}" | grep -Eqx '[0-9a-f]{7,40}' || { echo "ERROR: build arg GIT_SHA must match ^[0-9a-f]{7,40}\$ (got '${GIT_SHA}'); pass --build-arg GIT_SHA=\$(git rev-parse HEAD | cut -c1-7)" >&2; exit 1; }
 WORKDIR /src/backend
+COPY contracts/openapi.yaml /src/contracts/openapi.yaml
 COPY backend/ ./
 RUN --mount=type=cache,target=/root/.gradle \
     sh ./gradlew --no-daemon --console=plain -q bootJar -PgitSha="${GIT_SHA}" -PbuildTime="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
