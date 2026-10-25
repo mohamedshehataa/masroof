@@ -15,8 +15,11 @@ sealed interface UploadResult {
         val expense: ExpenseEntity,
     ) : UploadResult
 
-    /** Transient: network down, 5xx, 408/429. Keep in the outbox and back off. */
+    /** Network unreachable. Keep in the outbox and back off, with no attempt cap. */
     data object Retry : UploadResult
+
+    /** The server answered but cannot take it now (409 concurrent key, 408/429, 5xx). Backed off; failed after MAX_ATTEMPTS. */
+    data object RetryLimited : UploadResult
 
     /** 2xx with an unusable body, or an unexpected local error. Retried a few times, then given up on (marked failed). */
     data object Unexpected : UploadResult

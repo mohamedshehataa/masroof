@@ -23,9 +23,9 @@
     <string name="retry">Retry</string>
     <string name="delete">Delete</string>
     <string name="sync_failed">Couldn\'t sync</string>
-    <string name="banner_sign_in">Sign in again - set your access token in Settings</string>
+    <string name="banner_sign_in">Sign in again - your session expired</string>
     <string name="sign_in_title">Sign in again</string>
-    <string name="sign_in_body">The server did not accept your access token. Update it in Settings. Your saved entries are kept.</string>
+    <string name="sign_in_body">The server did not accept your session. Sign in again. Your saved entries are kept.</string>
     <string name="banner_offline">Offline - showing saved data</string>
     <string name="banner_error">Could not refresh - showing saved data</string>
     <string name="pending_sync">Waiting to sync</string>
@@ -48,8 +48,40 @@
     <string name="settings_title">Settings</string>
     <string name="settings_server_url">Server URL</string>
     <string name="settings_server_url_error">Enter a URL starting with http:// or https://</string>
-    <string name="settings_token">Access token</string>
     <string name="settings_digits">Use Arabic-Indic digits (١٢٣)</string>
     <string name="settings_save">Save</string>
     <string name="settings_saved">Saved</string>
+    <string name="settings_logout">Log out</string>
+
+    <string name="login_title">Sign in</string>
+    <string name="login_email">Email</string>
+    <string name="login_email_required">Enter your email</string>
+    <string name="login_password">Password</string>
+    <string name="login_password_required">Enter your password</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_signing_in">Signing in</string>
+    <string name="login_error_credentials">Email or password is incorrect</string>
+    <string name="login_error_rate_limited">Too many attempts. Try again later.</string>
+    <string name="login_error_rate_limited_minutes">Too many attempts. Try again in %1$d min.</string>
+    <string name="login_error_network">Could not reach the server. Check your connection and the server URL.</string>
+    <string name="login_error_server">The server had a problem. Try again.</string>
+    <string name="login_notice_expired">Your session expired. Sign in again; your saved entries are kept.</string>
+    <string name="login_notice_keystore">Your saved sign-in could not be unlocked on this device. Sign in again.</string>
+    <string name="login_offline">You are offline. Connect to sign in.</string>
+    <string name="login_language_switch">العربية</string>
+    <string name="login_switch_confirm">Sign in anyway</string>
+    <string name="login_switch_cancel">Cancel</string>
+    <plurals name="login_switch_warning">
+        <item quantity="one">%1$d unsynced expense from the previous account will be deleted if you sign in as a different member.</item>
+        <item quantity="other">%1$d unsynced expenses from the previous account will be deleted if you sign in as a different member.</item>
+    </plurals>
+    <string name="logout_sync_now">Sync now</string>
+    <string name="logout_anyway">Sign out anyway</string>
+    <plurals name="logout_unsynced_warning">
+        <item quantity="one">%1$d unsynced expense will be deleted. Sync first or sign out anyway?</item>
+        <item quantity="other">%1$d unsynced expenses will be deleted. Sync first or sign out anyway?</item>
+    </plurals>
 </resources>
+

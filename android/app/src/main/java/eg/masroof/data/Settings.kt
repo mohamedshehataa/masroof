@@ -1,6 +1,7 @@
 package eg.masroof.data
 
 import android.content.Context
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -17,7 +18,6 @@ import javax.inject.Singleton
 
 data class AppSettings(
     val serverUrl: String = DEFAULT_SERVER_URL,
-    val accessToken: String = "",
     /** null = follow the UI language (Arabic -> Arabic-Indic digits). */
     val digitStyle: DigitStyle? = null,
 ) {
@@ -35,7 +35,23 @@ interface SettingsRepository {
     suspend fun update(transform: (AppSettings) -> AppSettings)
 }
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+private val legacyTokenKey = stringPreferencesKey("access_token")
+
+/** One-time upgrade step: the pre-login build kept a plaintext access token in this DataStore. Remove it. */
+fun legacyTokenMigration(): DataMigration<Preferences> =
+    object : DataMigration<Preferences> {
+        override suspend fun shouldMigrate(currentData: Preferences) = currentData.contains(legacyTokenKey)
+
+        override suspend fun migrate(currentData: Preferences): Preferences =
+            currentData.toMutablePreferences().apply { remove(legacyTokenKey) }
+
+        override suspend fun cleanUp() = Unit
+    }
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    produceMigrations = { listOf(legacyTokenMigration()) },
+)
 
 @Singleton
 class DataStoreSettings
@@ -44,7 +60,6 @@ class DataStoreSettings
         @ApplicationContext private val context: Context,
     ) : SettingsRepository {
         private val urlKey = stringPreferencesKey("server_url")
-        private val tokenKey = stringPreferencesKey("access_token")
         private val arabicDigitsKey = booleanPreferencesKey("arabic_digits")
         private val digitsSetKey = booleanPreferencesKey("digits_set")
 
@@ -52,7 +67,6 @@ class DataStoreSettings
             context.dataStore.data.map { p ->
                 AppSettings(
                     serverUrl = p[urlKey] ?: AppSettings.DEFAULT_SERVER_URL,
-                    accessToken = p[tokenKey].orEmpty(),
                     digitStyle =
                         if (p[digitsSetKey] == true) {
                             if (p[arabicDigitsKey] == true) DigitStyle.ARABIC_INDIC else DigitStyle.WESTERN
@@ -68,7 +82,6 @@ class DataStoreSettings
             val next = transform(current())
             context.dataStore.edit { p ->
                 p[urlKey] = next.serverUrl
-                p[tokenKey] = next.accessToken
                 if (next.digitStyle == null) {
                     p.remove(digitsSetKey)
                 } else {

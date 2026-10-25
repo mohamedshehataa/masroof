@@ -1,5 +1,5 @@
 import type { CreateClientConfig } from './generated/client.gen';
-import { getAccessToken } from './session';
+import { clearSession, getAccessToken, refreshOnce } from './session';
 
 const HEALTH_PATH = '/health';
 
@@ -31,13 +31,37 @@ export const createClientConfig: CreateClientConfig = (config) => ({
   auth: () => getAccessToken(),
   fetch: async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
-    const response = await globalThis.fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body === null ? null : await request.arrayBuffer(),
-      signal: request.signal,
-      credentials: request.credentials,
-    });
+    const body = request.body === null ? null : await request.arrayBuffer();
+    const send = (headers: Headers) =>
+      globalThis.fetch(request.url, {
+        method: request.method,
+        headers,
+        body,
+        signal: request.signal,
+        credentials: request.credentials,
+      });
+    const response = await retryOnce401(request, await send(request.headers), send);
     return rejectDownHealth(response, request.url);
   },
 });
+
+/**
+ * REQ-UI-011: on 401 refresh once (shared by parallel 401s) and retry the request once with the new token; a
+ * second 401, or a refresh the backend rejects, ends the session so the app shows the login page.
+ */
+export async function retryOnce401(
+  request: Request,
+  response: Response,
+  send: (headers: Headers) => Promise<Response>,
+): Promise<Response> {
+  const used = request.headers.get('Authorization');
+  if (response.status !== 401 || used === null || new URL(request.url).pathname.startsWith('/auth/')) return response;
+  if (used === `Bearer ${getAccessToken() ?? ''}` && (await refreshOnce()) !== 'ok') return response;
+  const next = getAccessToken();
+  if (next === undefined) return response;
+  const headers = new Headers(request.headers);
+  headers.set('Authorization', `Bearer ${next}`);
+  const retried = await send(headers);
+  if (retried.status === 401) clearSession();
+  return retried;
+}

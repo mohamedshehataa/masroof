@@ -20,6 +20,9 @@ e2e/                 Playwright (LTR/RTL x light/dark x mobile/desktop) + axe-co
 - `check-fast` = `tsc --noEmit` + `eslint .` (typescript-eslint strict-type-checked, jsx-a11y, react-hooks, i18n no-literal-strings) + `prettier --check` + `vitest run`.
 - `test:coverage` (>= 85% on hooks/utils/components), `build`, `e2e` (Playwright), `size` (size-limit: initial JS <= 200 KB gzip), `lighthouse` (Performance >= 90, Accessibility = 100, Best Practices >= 95, installable).
 
+## Dev setup with a real backend
+`npm run dev` proxies `/api`, `/auth` and `/health` to `127.0.0.1:8080` (vite.config.ts). Start the backend with `CORS_ALLOWED_ORIGINS=http://127.0.0.1:5173` when the page is opened on that origin directly. Auth is always on: sign in with a seeded member, or run the Playwright specs, which mock `/auth/*`. The refresh token lives in `sessionStorage`, the access token in memory only.
+
 ## Rules
 - Every list has empty, loading (skeleton), error (retry) and offline states; pull-to-refresh on mobile; 48px touch targets; AA contrast; `dir` switches with language; icons that imply direction are mirrored in RTL.
 - Amounts are integers in minor units from the API; formatting happens only in `lib/money.ts` (tabular numerals, Western or Arabic-Indic digits per setting).

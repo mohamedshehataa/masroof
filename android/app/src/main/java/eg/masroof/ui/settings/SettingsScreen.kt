@@ -10,18 +10,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,18 +37,58 @@ import eg.masroof.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsRoute(viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    SettingsContent(state, viewModel::onUrl, viewModel::onToken, viewModel::onDigits, viewModel::save)
+    SettingsContent(
+        state,
+        SettingsActions(
+            viewModel::onUrl,
+            viewModel::onDigits,
+            viewModel::save,
+            viewModel::logout,
+            viewModel::confirmLogout,
+            viewModel::dismissLogout,
+            viewModel::syncNow,
+        ),
+    )
 }
+
+class SettingsActions(
+    val onUrl: (String) -> Unit,
+    val onDigits: (DigitStyle) -> Unit,
+    val onSave: () -> Unit,
+    val onLogout: () -> Unit,
+    val onConfirmLogout: () -> Unit,
+    val onDismissLogout: () -> Unit,
+    val onSyncNow: () -> Unit,
+)
 
 @Composable
 fun SettingsContent(
     state: SettingsUiState,
-    onUrl: (String) -> Unit,
-    onToken: (String) -> Unit,
-    onDigits: (DigitStyle) -> Unit,
-    onSave: () -> Unit,
+    actions: SettingsActions,
     modifier: Modifier = Modifier,
 ) {
+    val onUrl = actions.onUrl
+    val onDigits = actions.onDigits
+    val onSave = actions.onSave
+    val onLogout = actions.onLogout
+    state.confirmLogoutUnsynced?.let { count ->
+        AlertDialog(
+            onDismissRequest = actions.onDismissLogout,
+            text = {
+                Text(pluralStringResource(R.plurals.logout_unsynced_warning, count, count))
+            },
+            confirmButton = {
+                TextButton(onClick = actions.onSyncNow, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.logout_sync_now))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = actions.onConfirmLogout, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.logout_anyway))
+                }
+            },
+        )
+    }
     val effectiveDigits = state.digitStyle ?: LocalMoneyStyle.current.digits
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -59,14 +102,6 @@ fun SettingsContent(
             isError = state.urlInvalid,
             supportingText = { if (state.urlInvalid) Text(stringResource(R.string.settings_server_url_error)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = state.accessToken,
-            onValueChange = onToken,
-            label = { Text(stringResource(R.string.settings_token)) },
-            visualTransformation = PasswordVisualTransformation(),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -85,5 +120,8 @@ fun SettingsContent(
             Text(stringResource(R.string.settings_save))
         }
         if (state.saved) Text(stringResource(R.string.settings_saved), color = MaterialTheme.colorScheme.primary)
+        OutlinedButton(onClick = onLogout, enabled = !state.loggingOut, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text(stringResource(R.string.settings_logout))
+        }
     }
 }
