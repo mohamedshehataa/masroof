@@ -1,0 +1,32 @@
+build:
+  maxIssues: 0
+
+style:
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    maxLineLength: 140
+  ReturnCount:
+    active: false
+  UnusedPrivateMember:
+    active: true
+  WildcardImport:
+    active: false
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+    # Test names carry REQ ids in backticks.
+    excludes: ['**/test/**']
+
+complexity:
+  LongMethod:
+    active: false
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    active: false
+  CyclomaticComplexMethod:
+    threshold: 20
