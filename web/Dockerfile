@@ -1,6 +1,7 @@
 # Web image (STORY-142): Node only in the build stage; runtime is non-root static nginx. Build from web/:
 #   docker build -t masroof/web:dev web
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
+# Build stage on the builder's architecture: the bundle is static, so linux/arm64 only emulates the runtime stage.
+FROM --platform=$BUILDPLATFORM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci

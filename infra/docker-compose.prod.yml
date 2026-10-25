@@ -1,0 +1,44 @@
+# Production overlay (Oracle Always Free Ampere: 4 OCPU / 24 GB, linux/arm64).
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env up -d --no-build
+# Images come from GHCR by tag (never built on the server). Required in .env on the server (bootstrap.sh generates it):
+# DOMAIN, POSTGRES_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY. Required in the shell (deploy.sh exports them):
+# BACKEND_IMAGE_TAG, WEB_IMAGE_TAG; IMAGE_REGISTRY defaults to the project's GHCR namespace.
+# Only 80 and 443 are published; Postgres and MinIO stay on the internal network.
+name: masroof
+services:
+  postgres:
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 4G }
+  minio:
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 1G }
+  backend:
+    image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-backend:${BACKEND_IMAGE_TAG:?set BACKEND_IMAGE_TAG}
+    pull_policy: always
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 6G }
+  web:
+    image: ${IMAGE_REGISTRY:-ghcr.io/mohamedshehataa}/masroof-web:${WEB_IMAGE_TAG:?set WEB_IMAGE_TAG}
+    pull_policy: always
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
+  caddy:
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN (e.g. masroof.duckdns.org)}
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }

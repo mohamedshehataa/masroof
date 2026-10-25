@@ -1,0 +1,23 @@
+# Production edge (docker-compose.prod.yml). DOMAIN is required: Caddy obtains and renews the certificate
+# itself and redirects HTTP -> HTTPS. Same routing as ./Caddyfile plus the security headers of STORY-010.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	@backend path /health /api/*
+	handle @backend {
+		reverse_proxy backend:8080
+	}
+	handle {
+		# CSP only on the web app; the backend sets its own (default-src 'none') on JSON responses.
+		# 'unsafe-inline' for style only: Recharts/Tailwind emit style attributes.
+		header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		reverse_proxy web:8080
+	}
+}

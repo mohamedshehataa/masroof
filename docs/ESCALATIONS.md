@@ -5,7 +5,7 @@ Items only the owner can unblock, and stories that failed the 3-loop limit. Each
 ## Open
 - [ ] **OWNER-001 · Anthropic API key** — needed for real-API eval runs and the parsing engine (Phase 3). Until then evals run with the deterministic reference adapter. Action: put `ANTHROPIC_API_KEY` in `.env`.
 - [ ] **OWNER-003 · WhatsApp Business** — Meta app, dedicated number, access token, app secret, test number (Phase 5).
-- [ ] **OWNER-004 · Server + domain** — VPS and domain for Caddy HTTPS (Phase 10). Also `PROD_HOST` for the production guard.
+- [ ] **OWNER-004 · Server + domain** — zero-cost hosting on Oracle Cloud Always Free (Ampere ARM, Ubuntu 24.04) + a DuckDNS subdomain; everything else is prepared (`infra/oracle/`, `infra/docker-compose.prod.yml`, `make deploy-prod`). Follow `docs/HOSTING.md` (about 30 minutes: Oracle account, VM, VCN ingress 22/80/443, DuckDNS subdomain). **Send back exactly three values: (1) the VM public IP, (2) the DuckDNS subdomain name, (3) the DuckDNS token.** The orchestrator sets `PROD_HOST`, `PROD_DOMAIN`, `PROD_SSH_KEY` with `gh secret set` (or you add them under Settings > Secrets and variables > Actions) and also uses the IP as `PROD_HOST` in `.env` for the production guard. First production deploy is the S16 human checkpoint.
 - [ ] **OWNER-005 · Android signing keystore + FCM project** (Phase 4/10).
 - [ ] **OWNER-006 · Member phone numbers** (E.164) for sender→member mapping (Phase 5).
 - [ ] **OWNER-007 · Speech-to-text key** (OpenAI) or approval to self-host faster-whisper (Phase 5).
