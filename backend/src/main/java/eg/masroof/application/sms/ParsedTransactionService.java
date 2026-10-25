@@ -153,7 +153,6 @@ public class ParsedTransactionService {
     if (!LOCAL_ID.matcher(cmd.localId()).matches()) {
       throw ExpenseException.invalid("localId", "must be 64 lower-case hex characters");
     }
-    ExpenseType type = typeOf(cmd.kind());
     if (cmd.amountMinor() < 1 || cmd.amountMinor() > MAX_AMOUNT_MINOR) {
       throw ExpenseException.invalid("amountMinor", "is outside the accepted range");
     }
@@ -190,7 +189,7 @@ public class ParsedTransactionService {
         throw ExpenseException.invalid("merchant", "is not an acceptable label");
       }
     }
-    return type;
+    return typeOf(cmd.kind());
   }
 
   private static @Nullable String normalizedLabel(@Nullable String merchant) {
