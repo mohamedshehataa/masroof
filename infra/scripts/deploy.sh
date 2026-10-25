@@ -57,6 +57,14 @@ smoke() { SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-180}" bash "$smoke_script" "$url"; }
 tar -cf - -C infra docker-compose.yml docker-compose.prod.yml Caddyfile.prod scripts/rollback.sh scripts/smoke.sh \
   | ssh "${ssh_opts[@]}" -- "$host" 'mkdir -p ~/masroof/infra && tar -xf - -C ~/masroof/infra'
 
+# SHIP_IMAGES=1: copy locally built images over ssh instead of pulling from the registry (private packages,
+# no registry credentials on the server). Build them first: make build-images IMAGE_REGISTRY=<registry> TAG=<version>.
+if [ "${SHIP_IMAGES:-}" = "1" ]; then
+  echo "deploy: shipping $registry/masroof-{backend,web}:$version over ssh"
+  docker image inspect "$registry/masroof-backend:$version" "$registry/masroof-web:$version" >/dev/null     || die_input "SHIP_IMAGES=1 but $registry/masroof-{backend,web}:$version are not built locally"
+  docker save "$registry/masroof-backend:$version" "$registry/masroof-web:$version" | gzip -1     | ssh "${ssh_opts[@]}" -- "$host" 'gunzip | docker load' >/dev/null
+fi
+
 if remote apply "$version" "$version" "$registry" && smoke; then
   remote commit
   echo "deploy: smoke passed, $version is live"
