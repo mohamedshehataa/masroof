@@ -198,8 +198,7 @@ free_mb="$(df -Pm "$dir" | awk 'NR==2 {print $4}')"
 if [ "$free_mb" -lt "$min_free_mb" ]; then
   # make room by dropping everything but the newest dump of each kind, then re-check
   for pat in 'masroof-2*.sql.gz.gpg' 'masroof-media-*.tar.gz.gpg'; do
-    # shellcheck disable=SC2012
-    { ls -1t "$dir"/$pat 2>/dev/null || true; } | tail -n +2 | xargs -r rm -f --
+    find "$dir" -maxdepth 1 -name "$pat" -printf '%T@ %p\n' | sort -rn | tail -n +2 | cut -d' ' -f2- | xargs -r rm -f --
   done
   free_mb="$(df -Pm "$dir" | awk 'NR==2 {print $4}')"
   [ "$free_mb" -ge "$min_free_mb" ] || { echo "masroof-backup: only ${free_mb} MB free on the disk (< ${min_free_mb}); free space first (docs/HOSTING.md)" >&2; exit 1; }
@@ -210,9 +209,13 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 encrypt() { gpg --batch --yes --pinentry-mode loopback --passphrase-file /etc/masroof/backup.pass --symmetric --cipher-algo AES256 -o "$1"; }
 verify() { # verify <file> <min bytes>: size, decrypt, gzip and tar/sql sanity; removes the file on failure
   local f="$1" min="$2"
-  [ "$(stat -c %s "$f")" -ge "$min" ] \
-    && gpg --batch --pinentry-mode loopback --passphrase-file /etc/masroof/backup.pass -d "$f" 2>/dev/null | gzip -t \
-    || { echo "masroof-backup: $(basename "$f") failed verification; removed" >&2; rm -f "$f"; return 1; }
+  if [ "$(stat -c %s "$f")" -ge "$min" ] \
+     && gpg --batch --pinentry-mode loopback --passphrase-file /etc/masroof/backup.pass -d "$f" 2>/dev/null | gzip -t; then
+    return 0
+  fi
+  echo "masroof-backup: $(basename "$f") failed verification; removed" >&2
+  rm -f "$f"
+  return 1
 }
 umask 077
 out="$dir/masroof-$stamp.sql.gz.gpg"

@@ -7,6 +7,10 @@ Goal: Masroof runs 24/7 at `https://<name>.duckdns.org` on one small VM. You do 
 disk and 1 GB of monthly traffic are free; the IPv4 address is not (see "What it costs" below). New Google Cloud
 accounts get a USD 300 trial credit for 90 days that covers it.
 
+**Current instance (created by the owner, 2026-10-26):** e2-micro in `us-central1-c`, Ubuntu 24.04 x86_64, 30 GB standard
+disk, no snapshot schedule, Ops Agent off, HTTP/HTTPS firewall tags on, ephemeral external IP `35.254.195.156`, login user
+`masroof-deploy` with the key `~/.ssh/masroof_deploy`. The owner steps below are the recipe that produced it.
+
 ## What you send back
 
 1. **The VM's external IP** (looks like `34.123.45.67`)
