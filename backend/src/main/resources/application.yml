@@ -8,6 +8,19 @@ spring:
       allow-coercion-of-scalars: false # amountMinor: "20000" or true is a 400, never coerced
   main:
     banner-mode: "off"
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:masroof}
+    username: ${POSTGRES_USER:masroof}
+    hikari:
+      connection-timeout: 2000 # ms; /health answers 503 within 3 s when Postgres is down (REQ-OPS-020)
+      validation-timeout: 1000
+      data-source-properties:
+        connectTimeout: 2 # pgjdbc, seconds
+  flyway:
+    locations: classpath:db/migration
+    validate-migration-naming: true
+    clean-disabled: true
+    baseline-on-migrate: false
 masroof:
   jwt:
     secret: ${MASROOF_JWT_SECRET:} # >= 32 random bytes; required under profile prod (JwtConfiguration)
@@ -22,19 +35,6 @@ server:
     include-message: never
     include-binding-errors: never
     include-exception: false
-  datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:masroof}
-    username: ${POSTGRES_USER:masroof}
-    hikari:
-      connection-timeout: 2000 # ms; /health answers 503 within 3 s when Postgres is down (REQ-OPS-020)
-      validation-timeout: 1000
-      data-source-properties:
-        connectTimeout: 2 # pgjdbc, seconds
-  flyway:
-    locations: classpath:db/migration
-    validate-migration-naming: true
-    clean-disabled: true
-    baseline-on-migrate: false
 ---
 # Local dev and tests only: an empty database password is tolerated when no deployment profile is active.
 spring:

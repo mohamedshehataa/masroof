@@ -107,10 +107,16 @@ if [ ! -f "$envf" ]; then
     printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)"
     printf 'S3_ACCESS_KEY=%s\n' "masroof$(openssl rand -hex 4)"
     printf 'S3_SECRET_KEY=%s\n' "$(openssl rand -hex 24)"
+    printf 'MASROOF_JWT_SECRET=%s\n' "$(openssl rand -base64 48 | tr -d '\n')"
     printf 'DOMAIN=\n'
   } > "$envf"
   chown "$DEPLOY_USER:$DEPLOY_USER" "$envf"; chmod 600 "$envf"
   say "generated $envf"
+fi
+if ! grep -q '^MASROOF_JWT_SECRET=.' "$envf"; then # servers bootstrapped before STORY-009
+  sed -i '/^MASROOF_JWT_SECRET=/d' "$envf"
+  printf 'MASROOF_JWT_SECRET=%s\n' "$(openssl rand -base64 48 | tr -d '\n')" >> "$envf"
+  say "generated MASROOF_JWT_SECRET in $envf"
 fi
 if [ -n "$DOMAIN" ]; then
   if grep -q '^DOMAIN=' "$envf"; then sed -i "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" "$envf"; else printf 'DOMAIN=%s\n' "$DOMAIN" >> "$envf"; fi

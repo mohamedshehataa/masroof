@@ -21,6 +21,7 @@ mkwork() {
   if [ "${1:-}" != noenv ]; then
     sed -e '/^DOMAIN=/d' -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=t022$RANDOM$RANDOM/" "$REPO/.env.example" >"$WORK/.env"
     echo "DOMAIN=" >>"$WORK/.env"
+    sed -i "s|^MASROOF_JWT_SECRET=.*|MASROOF_JWT_SECRET=t022$(openssl rand -hex 24)|" "$WORK/.env"
   fi
   trap cleanup_work EXIT
 }
