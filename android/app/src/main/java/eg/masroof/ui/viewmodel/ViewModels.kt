@@ -90,7 +90,11 @@ abstract class RefreshingViewModel(
         viewModelScope.launch {
             status.value =
                 when (repository.refresh()) {
-                    RefreshOutcome.Ok -> LoadStatus.READY
+                    RefreshOutcome.Ok -> {
+                        // Server reachable and nothing left to push: a stale long-delay retry is no longer needed.
+                        if (!repository.hasRetryable()) scheduler.cancelRetry()
+                        LoadStatus.READY
+                    }
                     RefreshOutcome.Offline -> LoadStatus.OFFLINE
                     RefreshOutcome.Failed -> LoadStatus.ERROR
                     RefreshOutcome.SignIn -> LoadStatus.SIGN_IN
