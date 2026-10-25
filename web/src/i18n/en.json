@@ -6,6 +6,79 @@
   },
   "common": {
     "retry": "Retry",
-    "language": { "en": "English", "ar": "العربية" }
+    "language": { "en": "English", "ar": "العربية" },
+    "unnamed": "Untitled"
+  },
+  "nav": {
+    "label": "Main navigation",
+    "home": "Home",
+    "transactions": "Transactions",
+    "add": "Add",
+    "insights": "Insights",
+    "more": "More"
+  },
+  "offline": { "banner": "You're offline. Showing saved data." },
+  "list": {
+    "error": "Couldn't load this list.",
+    "offline": "You're offline and nothing is saved yet.",
+    "loading": "Loading"
+  },
+  "home": {
+    "title": "Home",
+    "spentThisMonth": "Spent this month",
+    "recent": "Recent expenses",
+    "seeAll": "See all",
+    "empty": "No expenses yet. Tap Add to record your first one.",
+    "summaryError": "Couldn't load this month's total."
+  },
+  "tx": {
+    "title": "Transactions",
+    "search": "Search expenses",
+    "category": "Category",
+    "allCategories": "All categories",
+    "empty": "No expenses match.",
+    "loadMore": "Load more",
+    "loadingMore": "Loading more",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "uncategorized": "Uncategorized"
+  },
+  "add": {
+    "title": "Add expense",
+    "close": "Close",
+    "amount": "Amount",
+    "keypad": "Amount keypad",
+    "backspace": "Delete last digit",
+    "decimal": "Decimal point",
+    "category": "Category",
+    "account": "Payment account",
+    "noAccount": "Cash / no account",
+    "date": "Date",
+    "note": "Note",
+    "notePlaceholder": "Optional note",
+    "save": "Save",
+    "saving": "Saving",
+    "errorAmount": "Enter an amount greater than zero.",
+    "errorValidation": "The server rejected this expense. Check the fields and try again.",
+    "errorSave": "Couldn't save the expense. Try again.",
+    "errorOffline": "You're offline. Connect and try again.",
+    "categoriesError": "Couldn't load categories.",
+    "noCategories": "No categories yet."
+  },
+  "insights": { "title": "Insights", "soon": "Charts are coming soon." },
+  "more": {
+    "title": "More",
+    "language": "Language",
+    "digits": "Arabic-Indic digits",
+    "version": "Server version",
+    "signOut": "Sign out"
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "error": "Wrong email or password.",
+    "errorGeneric": "Couldn't sign in. Try again."
   }
 }

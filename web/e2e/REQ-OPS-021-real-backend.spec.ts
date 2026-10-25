@@ -10,7 +10,7 @@ test.describe('REQ-OPS-021 real backend through the Vite proxy', () => {
     const direct = await request.get('/health');
     expect(direct.ok()).toBe(true);
     const body = (await direct.json()) as { version: string };
-    await page.goto('/');
+    await page.goto('/version');
     await expect(page.getByText(`Backend ${body.version} (${sha})`)).toBeVisible();
   });
 });
