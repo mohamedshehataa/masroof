@@ -1,6 +1,6 @@
 # Every Android dependency version is pinned here (STORY-008). Bump deliberately; log non-obvious choices in docs/DECISIONS.md.
 [versions]
-agp = "8.13.2"
+agp = "9.4.1"
 kotlin = "2.2.21"
 ksp = "2.2.21-2.0.5"
 hilt = "2.57.2"
