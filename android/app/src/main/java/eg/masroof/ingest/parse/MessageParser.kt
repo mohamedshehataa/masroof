@@ -538,7 +538,7 @@ object MessageParser {
                 amountMinor = amount.minor,
                 currency = currency,
                 occurredAtMillis = occurredAt(t, msg.receivedAtMillis),
-                instrumentLast4 = last4(t, norm, kind, direction),
+                instrumentLast4 = last4(t, kind, direction),
                 senderId = uploadSenderId(sender, institution),
                 institution = institution,
                 paymentMethod = paymentMethod(sender, institution, t, kind),
@@ -985,7 +985,6 @@ object MessageParser {
      */
     private fun last4(
         t: String,
-        norm: String,
         kind: TxKind,
         outgoing: Boolean,
     ): String? {
