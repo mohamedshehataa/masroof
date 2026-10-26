@@ -528,7 +528,8 @@ class CardStoreNumberTest {
             assertEquals("4821", r.instrumentLast4)
             assertEquals("HARDEE S ELMERGHANY", LabelNormalizer.normalize(r.merchant.orEmpty()))
         }
-        assertTrue(MessageParser.parse(message("CIB", card("SPINNEYS 3 ZAYED"))) is ParseOutcome.Record)
+        // a number in the middle is not accepted: the store number is the last token only
+        assertFalse(MessageParser.parse(message("CIB", card("SPINNEYS 3 ZAYED"))) is ParseOutcome.Record)
         assertTrue(MessageParser.parse(message("CIB", card("CARREFOUR 7"))) is ParseOutcome.Record)
         // without the number it was already a record
         assertTrue(MessageParser.parse(message("HSBC", card("HARDEE S ELMERGHANY"))) is ParseOutcome.Record)
@@ -577,6 +578,29 @@ class CardStoreNumberTest {
         }
         val one = MessageParser.parse(message("CIB", card("HARDEE 50")))
         assertTrue(one is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 only a number that ends the slot after a real name is a store number`() {
+        val bad =
+            (
+                "SHOP 50 POUNDS|SHOP 50 POUND|SHOP 50 DOLLARS|SHOP 50 EUROS|SHOP 50 OFF|SHOP 50 POINTS|SHOP 50 PERCENT|" +
+                    "SHOP ACCOUNT 999|SHOP TID 123|SHOP REFERENCE 123|SHOP CARD 123|SHOP INVOICE 123|SHOP ORDER 123|" +
+                    "SHOP MID 123|SHOP TERMINAL 123|SHOP POS 123|SHOP POUNDS 50|SHOP ج 50|SPINNEYS 3 ZAYED"
+            ).split("|")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        val ar = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى "
+        for (m in listOf("كارفور 50 جنيهات", "كارفور 50 ج", "كارفور حساب 123", "كارفور فاتورة 123", "كارفور طلب 123")) {
+            val o = MessageParser.parse(message("CIB", ar + m))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        for (m in listOf("CARREFOUR 12", "HARDEE S ELMERGHANY 50")) {
+            assertTrue(m, MessageParser.parse(message("CIB", card(m))) is ParseOutcome.Record)
+        }
+        assertTrue(MessageParser.parse(message("CIB", ar + "كارفور 12")) is ParseOutcome.Record)
     }
 
     @Test

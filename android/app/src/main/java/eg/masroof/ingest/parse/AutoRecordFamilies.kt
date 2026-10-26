@@ -253,7 +253,7 @@ object AutoRecordFamilies {
 
     /**
      * Every token is a name token, except that ONE purely numeric token of 1-3 digits (a branch or store number: "HARDEE S ELMERGHANY
-     * 50", "SPINNEYS 3 ZAYED") is allowed when [allowStoreNumber] and a name token comes before it. A longer digit run is refused
+     * 50") is allowed when [allowStoreNumber] and a name token comes before it. A longer digit run is refused
      * here as well as by the MERCHANT regex; the label sent to the server stays digit-free (LabelNormalizer).
      */
     private fun nameTokens(
@@ -265,12 +265,11 @@ object AutoRecordFamilies {
         val numberOk = numbers == 0 || (allowStoreNumber && numbers == 1 && !isStoreNumber(tokens.first()))
         if (!numberOk) return false
         if (numbers == 1) {
-            // an amount hiding in a numbered slot ("SHOP 500 EGP"); a slot WITHOUT a number is judged exactly as before
-            if (tokens.any(StatusGate::isCurrencyWord)) return false
-            // a number after "ID", "TRX", "REF" ... is a code; and a label with no real name left once the digits go is unusable
-            val at = tokens.indexOfFirst(::isStoreNumber)
-            if (StatusGate.isIdentifierWord(tokens[at - 1])) return false
-            if (tokens.none { !isStoreNumber(it) && it.count(Char::isLetter) >= 2 }) return false
+            // the number is the LAST token and follows a real name token: nothing may come after it ("50 POUNDS", "50 OFF"), and
+            // an amount, code or reference word before it ("SHOP ACCOUNT 999", "SHOP POUNDS 50") makes it something else
+            if (!isStoreNumber(tokens.last()) || tokens.any(StatusGate::isCurrencyWord)) return false
+            val before = tokens[tokens.size - 2]
+            if (StatusGate.isIdentifierWord(before) || before.trim('.', ',', '-', '*').count(Char::isLetter) < 2) return false
         }
         return tokens.all { isStoreNumber(it) || isName(it) }
     }

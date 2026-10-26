@@ -54,3 +54,47 @@ Card wrapper = Your Credit Card ending with 4821 has been used for EGP 130.00 on
 bash scripts/quality/test-integrity-check.sh origin/main -> TEST_INTEGRITY: OK. SmsParserTest.kt asserts 101 -> 111, skips 0 -> 0, tolerance 0 -> 0, no deleted test files. The new tests carry the REQ tags REQ-SMS-070 x2 and REQ-SMS-078 x2 in CardStoreNumberTest, and all 4 ran green.
 
 STATUS: FAIL
+
+---
+
+# Round 2 - 2026-10-27 - head 28d6fa7a738a85e6901bc55999b237aa90229a6a, base origin/main ba4c57c, loop 2 of 3
+
+## Environment
+- Fix commits 411046b and 28d6fa7: nameTokens now refuses, ONLY when the slot holds a number, a currency word, a number right after an identifier word, or a slot with no token of 2+ letters; the suffix clause no longer allows a number; StatusGate gains the currency and identifier word lists.
+- bash scripts/make/check-fast.sh android sdlc -> exit 0, check-fast GREEN [android sdlc] in 96s; quality tests 145/145
+- gradlew testDebugUnitTest at 28d6fa7 -> CardStoreNumberTest 8/8, i.e. 4 REQ-SMS-070/078 tests from round 1 plus 4 new REQ-SMS-078 tests; SmsParserTest 15/15; InstaPaySmsTest 2/2; 0 skipped
+- bash scripts/quality/test-integrity-check.sh origin/main -> SmsParserTest asserts 101 -> 118, skips 0 -> 0, TEST_INTEGRITY: OK
+- python scripts/quality/traceability.py --out tmp -> 403 REQs, 0 unknown, gate PASS
+- gh pr checks 65, head 28d6fa7 -> every check pass except Android check-fast, which is PENDING
+- The PR diff adds no Log, Timber, println or logger code lines; the only match is text in this report.
+- Probe: the throwaway QaProbeTest was re-created, run on head and on origin/main, then deleted. The main run needed gradlew --rerun, because the build cache had replayed the round-1 result without running the probe.
+
+## Criteria
+| Claim | Result | Evidence |
+|---|---|---|
+| 1. MAJOR-1 fixed: amounts with a currency are not records | FAIL, partly fixed | Now review: SHOP 500 EGP, SHOP EGP 500, SHOP 500 LE, SHOP 50 USD, SHOP 50 GBP, SHOP 50 L.E, SHOP 50 L.E., SHOP 50 EGP., SHOP 50 LE., LE 50, HSBC SHOP 500 EGP, and Arabic كارفور 50 جنيه / جنيها / ج.م / جم / دولار. STILL RECORD: كارفور 50 جنيهات and كارفور 50 ج, plus SHOP 50 POUNDS / POUND / EUROS / DOLLARS. See R2-MAJOR-1. |
+| 2. MINORs fixed | PASS | HARDEE 50. X 60 and HARDEE. ELMERGHANY 50 -> review. A number after ID, NO, NO., TRX, TXN, ACC, ACCT, AUTH, NUM, NUMBER or رقم -> review; after CODE -> REVIEW secret. A 50 and ج 50 -> review. SHOP REF 123 and SHOP RRN 123 are RECORD exactly as on main: that is the spec-allowed reference tail. |
+| 3. Slots without a number unchanged | PASS | LE PAIN QUOTIDIEN, LE MERIDIEN, LE MARCHE, YEN SUSHI, SR MARKET, DH FOODS, SHOP EGP and HSBC LE MERIDIEN -> RECORD, same as main. InstaPay to SR AHMED -> RECORD TRANSFER_OUT 10000, same as main. In the exploratory diff, 0 inputs went from RECORD on main to anything else on head. |
+| 4. Owner message still recorded | PASS | HSBC and CIB x tails 0001/9999/7310 x limits EGP 0.00 / 1,234,567.89 / 5: all 18 -> RECORD PURCHASE 13000 EGP l4=tail m=HARDEE S ELMERGHANY. The Arabic-Indic version is recorded too; round20 r20-store-last-hsbc and -cib are RECORD. |
+| 5. Gates and integrity | PASS locally, CI pending | See Environment. |
+| Fixture sweep | PASS | All 1900 pre-existing fixture rows: diff main vs head is empty. round20: 5 positives RECORD, 18 negatives not a record, all as expected. |
+
+## Findings
+| Sev | Where | What | Repro |
+|---|---|---|---|
+| R2-MAJOR-1 | StatusGate.kt currencyWords | The round-1 MAJOR is only partly closed. The common Arabic plural جنيهات and the short form ج are missing from the list, and so are English word forms like POUNDS, POUND, DOLLARS and EUROS. An amount with these currencies after the merchant is still auto-recorded. The money impact stays small because the leading 130.00 is recorded, but claim 1 names the Arabic forms explicitly. | CIB: تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى كارفور 50 جنيهات -> RECORD PURCHASE 13000 m=كارفور; main gives REVIEW. The same happens with كارفور 50 ج. The card wrapper with SHOP 50 POUNDS / SHOP 50 POUND / SHOP 50 DOLLARS / SHOP 50 EUROS also gives RECORD. |
+| R2-MINOR-1 | StatusGate.kt identifierWords | Identifier words outside the list still let a number through, and two of them reach the label. Nothing numeric is uploaded. | Card wrapper with SHOP ACCOUNT 999, SHOP TID 123, SHOP REFERENCE 123, SHOP CARD 123 -> RECORD m=SHOP; SHOP INVOICE 123 -> m=SHOP INVOICE; SHOP ORDER 123 -> m=SHOP ORDER. All were review on main. |
+| R2-NIT-1 | nameTokens | A number with a quantity or discount word is taken as a store number. | SHOP 50 OFF, SHOP 50 POINTS, SHOP 50 PERCENT -> RECORD |
+| NIT-2 | carried from round 1, not this PR | at SHOP 5.00 and at SHOP 50.5 are RECORD on main and on head alike. | card wrapper |
+
+## Exploratory (round 2)
+- All 114 round-1 inputs were re-run, plus 60 new ones, 174 in total.
+- The new inputs were: LE 50; SHOP 50 L.E. / L.E / LE. / EGP. / POUNDS / POUND / EUROS / DOLLARS / GBP / OFF / POINTS / PERCENT; SHOP ACCOUNT / TID / INVOICE / ORDER / REFERENCE / CARD / TXN / RRN / ACCT / AUTH 123; SHOP NO / NO. / NUM / NUMBER 5; AB 50; Ab 50; *TRIP 5; A; SHOP EGP; HARDEE 50. ELMERGHANY; LE PAIN QUOTIDIEN; LE MERIDIEN; LE MERIDIEN 2; LE MARCHE; YEN SUSHI; SR MARKET; DH FOODS; SPINNEYS 3 ZAYED; CARREFOUR 7.
+- They also covered: HSBC SHOP 500 EGP, SHOP ID 12 and LE MERIDIEN; Arabic كارفور 50 جنيه / جنيها / جنيهات / ج / ج.م / جم / دولار, كارفور رقم 123, كارفور فرع 5, كارفور مول 5 and ج 50; the second F1 regex with SHOP 50 EGP; and InstaPay to SR AHMED, to LE MERIDIEN and from DH FOODS.
+- Intended new positives held: SPINNEYS 3 ZAYED -> SPINNEYS, CARREFOUR 7, AB 50, *TRIP 5, HARDEE 50. ELMERGHANY, كارفور فرع 5, كارفور مول 5.
+- Problems: 3 (R2-MAJOR-1, R2-MINOR-1, R2-NIT-1)
+
+## Test integrity (round 2)
+TEST_INTEGRITY: OK, asserts 101 -> 118, no skips, no deleted tests. Expectations of existing fixture rows are unchanged; 11 negative rows were added to round20.
+
+STATUS: FAIL
