@@ -230,6 +230,42 @@ class ParsedIngestApiIT {
   }
 
   @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 the exact JSON the phone sends for a received InstaPay transfer lands")
+  void receivedInstapayTransferFromBothChannelsLands() throws Exception {
+    // Byte-for-byte what the Android serializer produced (CapturedUploadTest) for the bank SMS
+    // and the InstaPay app notification of the same 1.00 EGP transfer.
+    String sms =
+        "{\"deviceId\":\"DEV\",\"localId\":\"c72b77244507513cb47eb49644b2a58e186428c4f709b48821d908e9001a8237\","
+            + "\"source\":\"SMS\",\"kind\":\"INCOME\",\"amountMinor\":100,\"currency\":\"EGP\","
+            + "\"occurredAt\":\"2026-10-26T20:04:00Z\",\"senderId\":\"BDC\",\"instrumentLast4\":\"1094\","
+            + "\"institution\":\"Banque du Caire\",\"paymentMethod\":\"INSTAPAY\","
+            + "\"merchant\":\"MOHAMED MAHMOUD AHMED\"}";
+    String push =
+        "{\"deviceId\":\"DEV\",\"localId\":\"9ad3de7263d0374d0687e0704eb18b4969d4816b6d5d4ed98cf588380e411cd6\","
+            + "\"source\":\"NOTIFICATION\",\"kind\":\"INCOME\",\"amountMinor\":100,\"currency\":\"EGP\","
+            + "\"occurredAt\":\"2026-10-26T21:04:13Z\",\"senderId\":\"InstaPay\",\"institution\":\"InstaPay\","
+            + "\"paymentMethod\":\"INSTAPAY\",\"merchant\":\"mohamed.shehataaaaa@instapay\"}";
+    for (String wire : List.of(sms, push)) {
+      MockHttpServletResponse r =
+          mvc.perform(
+                  post("/api/ingest/parsed-transactions")
+                      .header("Authorization", "Bearer " + tokenA)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(wire.replace("DEV", device.toString())))
+              .andReturn()
+              .getResponse();
+      assertThat(r.getStatus()).as(r.getContentAsString()).isEqualTo(202);
+      Map<String, Object> e =
+          jdbc.queryForMap(
+              "select * from expense where id = ?::uuid",
+              JSON.readTree(r.getContentAsString()).get("expenseId").asString());
+      assertThat(e.get("type")).isEqualTo("INCOME");
+      assertThat(e.get("status")).isEqualTo("PENDING_REVIEW");
+    }
+  }
+
+  @Test
   @Tag("REQ-SMS-030")
   @DisplayName("REQ-SMS-030 secrets, digits and free text are refused by strict validation")
   void strictValidation() throws Exception {

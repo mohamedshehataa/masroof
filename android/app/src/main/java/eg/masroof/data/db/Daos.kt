@@ -20,7 +20,8 @@ interface ExpenseDao {
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND occurredAtMillis >= :from AND occurredAtMillis < :to",
+        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE'
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
@@ -121,6 +122,40 @@ interface ParsedOutboxDao {
     @Query("DELETE FROM parsed_outbox WHERE localId = :localId")
     suspend fun delete(localId: String)
 
+    /**
+     * Takes the row for an upload. One statement, so of two uploaders (or an uploader and a replacement) exactly one gets 1.
+     * A claim older than [staleBefore] belongs to a request that died: it can be taken again.
+     */
+    @Query("SELECT * FROM parsed_outbox WHERE localId = :localId")
+    suspend fun find(localId: String): ParsedOutboxEntity?
+
+    @Query(
+        """UPDATE parsed_outbox SET claimedAtMillis = :now, claims = claims + 1
+            WHERE localId = :localId AND failed = 0 AND claimedAtMillis < :staleBefore""",
+    )
+    suspend fun claim(
+        localId: String,
+        now: Long,
+        staleBefore: Long,
+    ): Int
+
+    /** Gives a claim back, but only the caller's own ([token] is the time it took the claim): a newer holder keeps its claim. */
+    @Query("UPDATE parsed_outbox SET claimedAtMillis = 0 WHERE localId = :localId AND claimedAtMillis = :token")
+    suspend fun release(
+        localId: String,
+        token: Long,
+    )
+
+    /**
+     * Deletes a queued record, but only one that no upload ever started: a row that was claimed once may be on the server (its answer
+     * can be lost), so it keeps its local id and is retried. Returns 1 when deleted, 0 otherwise.
+     */
+    @Query("DELETE FROM parsed_outbox WHERE localId = :localId AND claims = 0 AND claimedAtMillis < :staleBefore")
+    suspend fun deleteIfUnclaimed(
+        localId: String,
+        staleBefore: Long,
+    ): Int
+
     /** Permanently failed rows go after the retention window. */
     @Query("DELETE FROM parsed_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
     suspend fun purgeFailedBefore(olderThanMillis: Long)
@@ -215,6 +250,43 @@ interface CapturedDao {
 
     @Query("SELECT * FROM captured_tx")
     suspend fun all(): List<CapturedTxEntity>
+
+    /**
+     * Records of ANOTHER channel with the same amount and direction received around the same time and not matched yet (one transfer
+     * announced twice), the closest in time first. The phone's receive time is used, not the time written in the message body.
+     */
+    @Query(
+        """SELECT * FROM captured_tx WHERE source != :source AND currency = :currency AND amountMinor = :amountMinor
+            AND paired = 0 AND kind IN (:kinds) AND receivedAtMillis BETWEEN :from AND :to
+            ORDER BY ABS(receivedAtMillis - :at), capturedAtMillis""",
+    )
+    suspend fun otherChannel(
+        source: String,
+        currency: String,
+        amountMinor: Long,
+        kinds: List<String>,
+        at: Long,
+        from: Long,
+        to: Long,
+    ): List<CapturedTxEntity>
+
+    /** Marks a record as matched with [otherId]; 1 for the one caller that did it, 0 when someone else already had. */
+    @Query("UPDATE captured_tx SET paired = 1, pairedLocalId = :otherId WHERE localId = :localId AND paired = 0")
+    suspend fun claimPair(
+        localId: String,
+        otherId: String,
+    ): Int
+
+    /** Has this message (or its dropped / replaced twin) been handled already? */
+    @Query("SELECT COUNT(*) FROM captured_tx WHERE localId = :id OR pairedLocalId = :id")
+    suspend fun knows(id: String): Int
+
+    /** Unmatched records that still wait in the upload outbox, oldest first. */
+    @Query(
+        """SELECT c.* FROM captured_tx c INNER JOIN parsed_outbox p ON p.localId = c.localId
+            WHERE c.paired = 0 AND c.kind IS NOT NULL AND p.failed = 0 ORDER BY c.receivedAtMillis, c.capturedAtMillis""",
+    )
+    suspend fun queuedUnpaired(): List<CapturedTxEntity>
 }
 
 @Database(
@@ -229,7 +301,7 @@ interface CapturedDao {
             LearnedTemplateEntity::class,
             CapturedTxEntity::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -360,6 +432,34 @@ CREATE TABLE IF NOT EXISTS captured_tx (
   PRIMARY KEY(localId)
 )
 """
+
+private const val MIGRATION_8_BACKFILL_KIND =
+    "UPDATE captured_tx SET kind = (SELECT p.kind FROM parsed_outbox p WHERE p.localId = captured_tx.localId)"
+private const val MIGRATION_8_BACKFILL_LAST4 =
+    "UPDATE captured_tx SET instrumentLast4 = (SELECT p.instrumentLast4 FROM parsed_outbox p WHERE p.localId = captured_tx.localId)"
+
+/** v7 -> v8: what a captured record was, so a second channel announcing the same transfer is recognized. */
+val MIGRATION_7_8: Migration =
+    object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN kind TEXT")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN receivedAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN paired INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN instrumentLast4 TEXT")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN pairedLocalId TEXT")
+            db.execSQL("ALTER TABLE parsed_outbox ADD COLUMN claimedAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE parsed_outbox ADD COLUMN claims INTEGER NOT NULL DEFAULT 0")
+            // a row that was already tried may have reached the server: it counts as claimed
+            db.execSQL("UPDATE parsed_outbox SET claims = attempts")
+            // Records still queued from before the update keep matching: kind and tail come from the outbox row, the capture time
+            // stands in for the receive time. Already uploaded ones stay unmatched.
+            db.execSQL(MIGRATION_8_BACKFILL_KIND)
+            db.execSQL(MIGRATION_8_BACKFILL_LAST4)
+            db.execSQL("UPDATE captured_tx SET receivedAtMillis = capturedAtMillis WHERE kind IS NOT NULL")
+            db.execSQL("ALTER TABLE expense ADD COLUMN type TEXT NOT NULL DEFAULT 'EXPENSE'")
+            db.execSQL("ALTER TABLE expense ADD COLUMN status TEXT NOT NULL DEFAULT 'CONFIRMED'")
+        }
+    }
 
 /** v6 -> v7 (round 19): an Undo pressed while the upload was in flight is remembered until the expense id is known. */
 val MIGRATION_6_7: Migration =
