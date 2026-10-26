@@ -179,53 +179,90 @@ class SmsParserTest {
         }
     }
 
-    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
     @Test
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
-        val rows = fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl")
-        assertTrue(rows.size >= 105)
-        for (row in rows) {
-            val id = row.str("id")
-            val expect = row["expect"]!!.jsonObject
-            val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
-            val received = row.opt("receivedAt")?.let { Instant.parse(it).toEpochMilli() } ?: RECEIVED
-            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), received, source))
-            val wire = (outcome as? ParseOutcome.Record)?.record?.toString().orEmpty()
-            expect["noUpload"]?.jsonArray?.forEach { assertFalse("$id uploads $it: $wire", wire.contains(it.jsonPrimitive.content)) }
-            if (outcome is ParseOutcome.Review) {
-                expect["reviewHides"]?.jsonArray?.forEach {
-                    assertFalse(
-                        "$id review shows $it",
-                        outcome.text.contains(it.jsonPrimitive.content),
-                    )
+        val rows =
+            fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
+                fixture("round7.jsonl")
+        assertTrue(rows.size >= 130)
+        checkAll(rows)
+    }
+
+    @Test
+    fun `REQ-SMS-016 regression guard - the whole earlier corpus still parses to what it did`() {
+        // Every probe input of the earlier verification rounds (owner identifiers removed) plus the verifier and round-2 sets:
+        // nothing that was correct may become wrong.
+        val rows = fixture("corpus.jsonl") + fixture("verifier.jsonl") + fixture("round2.jsonl")
+        assertTrue(rows.size >= 330)
+        checkAll(rows)
+    }
+
+    /** Runs every row and reports all failures at once, so one run shows the whole picture. */
+    private fun checkAll(rows: List<JsonObject>) {
+        val failures =
+            rows.mapNotNull { row ->
+                try {
+                    checkFixtureRow(row)
+                    null
+                } catch (e: AssertionError) {
+                    e.message
                 }
             }
-            when (expect.str("outcome")) {
-                "ignore" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
-                "record_or_review" -> {
-                    assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
-                    if (outcome is ParseOutcome.Record) {
-                        expect["merchantNot"]?.jsonArray?.forEach {
-                            assertFalse(
-                                "$id label ${outcome.record.merchant}",
-                                outcome.record.merchant
-                                    .orEmpty()
-                                    .contains(it.jsonPrimitive.content),
-                            )
-                        }
-                    }
+        assertTrue("${failures.size} of ${rows.size} rows fail: " + failures.joinToString(" | "), failures.isEmpty())
+    }
+
+    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
+    private fun checkFixtureRow(row: JsonObject) {
+        val id = row.str("id")
+        val expect = row["expect"]!!.jsonObject
+        val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+        val received = row.opt("receivedAt")?.let { Instant.parse(it).toEpochMilli() } ?: RECEIVED
+        val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), received, source))
+        val wire = (outcome as? ParseOutcome.Record)?.record?.toString().orEmpty()
+        expect["noUpload"]?.jsonArray?.forEach { assertFalse("$id uploads $it: $wire", wire.contains(it.jsonPrimitive.content)) }
+        if (outcome is ParseOutcome.Review) {
+            expect["reviewHides"]?.jsonArray?.forEach {
+                assertFalse(
+                    "$id review shows $it",
+                    outcome.text.contains(it.jsonPrimitive.content),
+                )
+            }
+        }
+        val record = (outcome as? ParseOutcome.Record)?.record
+        val kinds = expect["kinds"]?.jsonArray?.map { it.jsonPrimitive.content } ?: expect.opt("kind")?.let { listOf(it) }
+        if (record != null) {
+            expect["merchantNot"]?.jsonArray?.forEach {
+                assertFalse("$id label ${record.merchant}", record.merchant.orEmpty().contains(it.jsonPrimitive.content))
+            }
+            expect["notKind"]?.jsonArray?.forEach {
+                assertFalse(
+                    "$id direction ${record.kind}",
+                    record.kind.name == it.jsonPrimitive.content,
+                )
+            }
+            if (kinds != null && expect.str("outcome") != "record") assertTrue("$id kind ${record.kind}", record.kind.name in kinds)
+        }
+        when (expect.str("outcome")) {
+            "ignore" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
+            "record_or_review" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
+            "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+            "not_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
+            "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
+            "record" -> {
+                assertTrue("$id -> $outcome", record != null)
+                requireNotNull(record)
+                if (kinds != null) assertTrue("$id kind ${record.kind}", record.kind.name in kinds)
+                expect.opt("amountMinor")?.let { assertEquals(id, it.toLong(), record.amountMinor) }
+                expect.opt("last4")?.let { if (it != "any") assertEquals(id, if (it == "none") null else it, record.instrumentLast4) }
+                expect.opt("merchant")?.let { assertEquals(id, if (it == "none") null else it, record.merchant) }
+                expect.opt("merchantStarts")?.let {
+                    assertTrue("$id label ${record.merchant}", record.merchant.orEmpty().startsWith(it, ignoreCase = true))
                 }
-                "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
-                "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
-                "record" -> {
-                    assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
-                    val r = (outcome as ParseOutcome.Record).record
-                    assertEquals(id, expect.str("kind"), r.kind.name)
-                    assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
-                    expect.opt("last4")?.let { assertEquals(id, if (it == "none") null else it, r.instrumentLast4) }
-                    expect.opt("merchant")?.let { assertEquals(id, if (it == "none") null else it, r.merchant) }
-                    expect.opt("method")?.let { assertEquals(id, it, r.paymentMethod) }
-                    expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), r.occurredAtMillis) }
+                expect.opt("method")?.let { assertEquals(id, it, record.paymentMethod) }
+                expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), record.occurredAtMillis) }
+                expect.opt("dateCairo")?.let {
+                    val day = Instant.ofEpochMilli(record.occurredAtMillis).atZone(java.time.ZoneId.of("Africa/Cairo")).toLocalDate()
+                    assertEquals(id, it, day.toString())
                 }
             }
         }

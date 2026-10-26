@@ -174,12 +174,15 @@ object MessageParser {
             "\\btransaction (?:of|was made|has been made|approved|completed)\\b" +
                 "|\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent" +
                 "|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
-                "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه",
+                "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه|تم استخدام",
             ci,
         )
     private val inAnchor =
         Regex(
             "\\brefund(?:ed)? of\\b|you(?: have)? received|\\breceived (?:egp|le|an?|\\d|usd)" +
+                "|(?:was|is|has been|have been|were) credited\\b(?! to a/c)|\\bcredited by\\b|\\bmoney received\\b" +
+                "|\\b(?:paid|sent|transferred|credited)\\s+to\\s+you\\b|\\bto\\s+you\\s+by\\b|\\b(?:paid|sent|transferred)\\s+you\\b" +
+                "|(?<![\\p{L}\\d])لكم(?![\\p{L}])|\\brefunded\\b|\\breceived\\s+(?:to|into|in)\\s+your\\b" +
                 "|credited with|(?:has|have) been credited to your|were credited" +
                 "|\\bdeposit(?:ed)?\\b|\\bsalary\\b|\\bincoming\\b|ايداع|تم استلام|تم استقبال|استقبال تحويل|تم رد|رد مبلغ|استرداد|مرتجع|استلمت|وارد|راتب|مرتب|تم اضافه|اضافه مبلغ|استلام حواله",
             ci,
@@ -189,8 +192,8 @@ object MessageParser {
     private val withdrawal = Regex("\\batm\\b|cash withdrawal|cash advance|\\bwithdraw(?:n|al)?\\b|سحب نقدي|ماكينه الصراف|تم سحب", ci)
     private val fee =
         Regex(
-            "\\b(?:annual fee|monthly fee|service fee|maintenance fee|card fee|sms fee|fee of|fees of|a fee|commission)\\b" +
-                "|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)",
+            "\\b(?:annual fee|monthly fee|service fee|maintenance fee|card fee|sms fee|fee of|fees of|a fee|fees?|commission)\\b" +
+                "|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)|(?<![\\p{L}])رسوم(?![\\p{L}])",
             ci,
         )
     private val transferWords =
@@ -232,10 +235,14 @@ object MessageParser {
             ),
         )
 
-    /** A card or account named right after "to"/"إلى"/beneficiary is the other party's, never the household's. */
-    private val recipientBefore =
+    /**
+     * A card or account that belongs to the COUNTERPARTY: "to <NAME> account ending 2233", "الى <NAME> حساب رقم ***2233",
+     * "to account ...", "beneficiary ...". "to your account" is the household's own and is not matched.
+     */
+    private val counterpartyPhrase =
         Regex(
-            "(?:\\bto|(?<![\\p{L}\\d])الي|\\bbeneficiary|(?<![\\p{L}\\d])المستفيد)\\s+" +
+            "(?:(?<![\\p{L}])to|(?<![\\p{L}\\d])الي|(?<![\\p{L}])beneficiary|(?<![\\p{L}\\d])المستفيد)\\s+" +
+                "(?:(?!your\\b|حساب(?:ك|كم)|بطاقت(?:ك|كم)|محفظت(?:ك|كم))[\\p{L}.'-]+\\s+){0,3}" +
                 "(?:(?:the\\s+)?(?:a/c|acct|account|card|wallet|حساب|بطاقه|محفظه)(?!\\p{L})\\s*)?" +
                 "(?:(?:no\\.?|number|رقم)\\s*)?$",
             ci,
@@ -324,6 +331,8 @@ object MessageParser {
             "transaction",
             "purchase",
             "requires",
+            "كاش",
+            "كاشباك",
             "rrn",
             "tid",
             "mid",
@@ -399,6 +408,7 @@ object MessageParser {
             "الحساب",
             "حسابكم",
         )
+    private val trailingClause = Regex("^(?:وسيتم|وتم|وسوف|وستتم|ب(?:بطاقت|حساب|محفظت)(?:ك|كم))")
     private val secretLabel =
         Regex(
             "\\b(?:otp|o\\.t\\.p|pin|codes?|password|passcode|cvv|cvc|token|secret|verification|verify|one[- ]?time|3d ?secure|3ds|" +
@@ -482,7 +492,13 @@ object MessageParser {
             // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
             return if (amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
         }
-        val direction = firstDirection(t) ?: return review("no_template")
+        val direction =
+            when (decideDirection(t)) {
+                Dir.IN -> false
+                Dir.OUT -> true
+                Dir.CONFLICT -> return review("direction_conflict")
+                Dir.NONE -> return review("no_template")
+            }
         val amount = chooseAmount(t, amounts) ?: return review("no_amount")
         if (amount.ambiguous || amount.minor == null) return review("ambiguous_amount")
         val currency = amount.currency ?: return review("unsupported_currency")
@@ -517,41 +533,53 @@ object MessageParser {
             ci,
         ).containsMatchIn(t)
 
-    /** The direction is whichever verb comes first: "transfer ... was received" is outgoing, "received ... sent by" incoming. */
+    // ---- direction: a vote of independent signals; a conflict is a review item, never a guess ---------------------------
+    private enum class Dir { IN, OUT, CONFLICT, NONE }
+
+    /** The household's own account/wallet/card as the DESTINATION of a movement (not "for your account" of a service). */
     private val destinationIsOwn =
         Regex(
             "(?<![\\p{L}\\d])(?:ل|الي|في|لصالح)\\s*(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})" +
-                "|\\b(?:to|into|in|for)\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b" +
-                "|\\b(?:transferred|sent|credited|paid)\\s+to\\s+you\\b|\\bto\\s+you\\s+by\\b",
+                "|\\b(?:to|into|in)\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
             ci,
         )
+
+    /** The household's own account/wallet/card as the SOURCE. */
     private val sourceIsOwn =
         Regex(
             "(?<![\\p{L}\\d])من\\s*(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bfrom\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
             ci,
         )
-    private val debitVerbs =
+
+    /** Verbs that mean money left the household by themselves (a plain "transfer" does not). */
+    private val outStrong =
         Regex(
-            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|purchased?|used for)\\b" +
-                "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|سحب",
+            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid(?!\\s+(?:to\\s+)?you)|purchased?|payment|used for|pos)\\b" +
+                "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|سحب|صادر|مدفوعات|تم استخدام",
             ci,
         )
+    private val paymentContext = Regex("payment|\\bbill\\b|\\bpaid\\b|purchase|فاتوره|سداد|دفع|شراء|شحن", ci)
 
-    private fun firstDirection(t: String): Boolean? {
-        // WHOSE account is the destination decides a transfer: "to your account" is incoming even though the sentence
-        // starts with a transfer verb; "from your account" is outgoing. A debit verb ("debited ... cashback will be
-        // credited to your account") keeps the plain verb order.
-        val toOwn = destinationIsOwn.containsMatchIn(t)
-        val fromOwn = sourceIsOwn.containsMatchIn(t)
-        if (toOwn && !fromOwn && !debitVerbs.containsMatchIn(t)) return false
-        if (fromOwn && !toOwn) return true
-        val out = outAnchor.find(t)?.range?.first
-        val inn = inAnchor.find(t)?.range?.first
+    private val futureClause = Regex("(?<![\\p{L}])(?:وسيتم|سيتم|وسوف|سوف|will(?: be)?)(?![\\p{L}])[^.!?؟\\n]*", ci)
+
+    private fun decideDirection(t: String): Dir {
+        val debit = outStrong.containsMatchIn(t)
+        // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not an incoming signal
+        val now = futureClause.replace(t, " ")
+        val inOwnDestination = destinationIsOwn.containsMatchIn(now) && !debit && !paymentContext.containsMatchIn(now)
+        val inWord = inAnchor.containsMatchIn(now)
+        val ownSource = sourceIsOwn.containsMatchIn(t)
+        val anyIn = inWord || inOwnDestination
+        val anyOut = outAnchor.containsMatchIn(t) || ownSource
         return when {
-            out == null && inn == null -> null
-            out == null -> false
-            inn == null -> true
-            else -> out < inn
+            !anyIn && !anyOut -> Dir.NONE
+            anyIn && !anyOut -> Dir.IN
+            !anyIn -> Dir.OUT
+            // only the generic word "transfer/تحويل" says OUT: the incoming signal wins
+            !debit && !ownSource -> Dir.IN
+            // own account on both ends: a movement out of the household's account into another of its own
+            ownSource && inOwnDestination && !inWord -> Dir.OUT
+            else -> Dir.CONFLICT
         }
     }
 
@@ -687,7 +715,9 @@ object MessageParser {
         dateShort.findAll(t).forEach { blank(it.range) }
         Regex("(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])").findAll(t).forEach { blank(it.range) }
         val trusted = ownAccountTrusted(t)
-        last4Patterns.forEach { p -> if (!p.own || trusted) p.regex.findAll(t).forEach { blank(it.groups[1]!!.range) } }
+        last4Patterns.forEach { p ->
+            p.regex.findAll(t).forEach { m -> if (!p.own || bareAccepted(t, m.range.first)) blank(m.groups[1]!!.range) }
+        }
         dateCompact.findAll(t).forEach { blankDate(it, 3) }
         dateMonthFirst.findAll(t).forEach { blankDate(it, 3) }
         // The other party's mobile number after to/from/إلى رقم is an explained counterparty, never a code.
@@ -716,23 +746,54 @@ object MessageParser {
     /** A bare number after "your account" is trusted only when nothing in the message hints at a secret or a security footer. */
     private fun ownAccountTrusted(t: String): Boolean = !SecretDetector.hasHintWord(t) && !SecretDetector.hasSecurityFooter(t)
 
+    /** The bare own-account number is accepted only in the instant-transfer shape: a transfer word comes before it. */
+    private fun bareAccepted(
+        t: String,
+        start: Int,
+    ): Boolean = ownAccountTrusted(t) && transferVerbs.containsMatchIn(t.substring(0, start))
+
+    private class Last4Candidate(
+        val start: Int,
+        val digits: String,
+        val bare: Boolean,
+        val ownText: Boolean,
+    )
+
+    /**
+     * The household's instrument, decided by ROLE: a candidate counts only if it sits in an own noun phrase (your card,
+     * حسابكم, the subject "Your card ending ...") and not inside a counterparty phrase ("to NAME account ending ...").
+     * Two own candidates that disagree give no last four at all.
+     */
     private fun last4(t: String): String? {
         val candidates =
-            last4Patterns
-                .flatMap { p ->
-                    p.regex
-                        .findAll(t)
-                        .map { m -> Triple(m.range.first, m.groupValues[1], p.own || ownText.containsMatchIn(m.value)) }
-                        .toList()
-                }.sortedBy { it.first }
-        val trusted = ownAccountTrusted(t)
-        for ((start, digits, own) in candidates) {
-            if (own && !trusted) continue
-            if (!own && recipientBefore.containsMatchIn(t.substring(maxOf(0, start - LAST4_LOOKBACK), start))) continue
-            return digits
-        }
-        return null
+            last4Patterns.flatMap { p ->
+                p.regex
+                    .findAll(t)
+                    .map { m -> Last4Candidate(m.range.first, m.groupValues[1], p.own, ownText.containsMatchIn(m.value)) }
+                    .toList()
+            }
+        val accepted =
+            candidates
+                .filter { c ->
+                    when {
+                        c.bare -> bareAccepted(t, c.start)
+                        c.ownText -> true
+                        else -> !counterpartyPhrase.containsMatchIn(t.substring(maxOf(0, c.start - LAST4_LOOKBACK), c.start))
+                    }
+                }
+        val distinct = accepted.map { it.digits }.distinct()
+        if (distinct.size <= 1) return distinct.singleOrNull()
+        // Several own candidates (an own-account to own-account transfer): the SOURCE is the instrument that paid.
+        val fromOwn = accepted.filter { fromOwnBefore.containsMatchIn(t.substring(maxOf(0, it.start - LAST4_LOOKBACK), it.start)) }
+        return fromOwn.map { it.digits }.distinct().singleOrNull()
     }
+
+    private val fromOwnBefore =
+        Regex(
+            "(?:\\bfrom\\s+your\\s+(?:(?:account|a/c|acct|card|wallet)\\s*(?:(?:no\\.?|number)\\s*)?)?" +
+                "|(?<![\\p{L}\\d])من\\s*(?:حساب|بطاقت|محفظت)(?:ك|كم)\\s*(?:رقم\\s*)?)$",
+            ci,
+        )
 
     private class DateCandidate(
         val start: Int,
@@ -942,6 +1003,8 @@ object MessageParser {
             if (clean.isEmpty()) continue
             val core = SecretDetector.fold(clean).trim(*PUNCT)
             if (core.isEmpty() || core in stopWords || SecretDetector.hasHintWord(clean)) break
+            // "... لدى امازون وسيتم إضافة ...", "... ببطاقتكم ...": the label ends where the sentence moves on
+            if (trailingClause.containsMatchIn(core)) break
             if (core.any { Character.isDigit(it) }) break
             if (tokens.isEmpty() && core in badFirst) return null
             tokens += clean.trim(*PUNCT)
