@@ -481,7 +481,8 @@ object MessageParser {
         )
 
     /** Clause borders that survive only in the raw text: new lines, the Arabic comma and semicolon, " - " between sentences. */
-    private val rawBorder = Regex("[\\r\\n]+|\\s*(?:(?<!\\d)[،؛]|[،؛](?!\\d))\\s*|\\s+[-–—]\\s+")
+    private val rawBorder =
+        Regex("[\\r\\n]+|\\s*(?:(?<![0-9\u0660-\u0669\u06F0-\u06F9])[،؛]|[،؛](?![0-9\u0660-\u0669\u06F0-\u06F9]))\\s*|\\s+[-–—]\\s+")
 
     /** A clause whose head is a fee noun ("Transfer fee EGP 5.00", "رسوم تحويل 1.00 جنيه", "Cash advance fee of EGP 60.00 applies"). */
     private val feeHead =
@@ -595,7 +596,9 @@ object MessageParser {
             // An OTP that reads like a purchase is kept (masked) for the user; a plain OTP is dropped without a trace.
             // a promo code in a discount offer ("use code VF50") is not a transaction either: dropped, nothing kept
             if (isOffer(t)) return ParseOutcome.Ignore("promo")
-            return if (moneyLike) ParseOutcome.Review("secret", SecretDetector.mask(full)) else ParseOutcome.Ignore("otp")
+            // a completed top-up or transfer that merely carries a promo code in its footer is kept (masked), never dropped
+            val completed = hasCompletedClause(t)
+            return if (moneyLike || completed) ParseOutcome.Review("secret", SecretDetector.mask(full)) else ParseOutcome.Ignore("otp")
         }
         return classify(msg, norm, t, amounts, hasOut, hasIn)
     }
@@ -641,6 +644,7 @@ object MessageParser {
             // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
             // (an offer's "get EGP 50 cashback credited to your account" is a promise, not an own-account movement)
             val ownRef = hasOwnRef(t)
+            if (hasCompletedClause(t)) return review("promo_with_transaction")
             // A discount offer's own words (خصم, دفع, شراء) are not a completed transaction; only a credit or a transfer verb is
             // and neither is the offer's condition: "your first InstaPay transfer", "when you transfer EGP 1,000"
             val offer = offerCondition.replace(t, " ")
@@ -699,10 +703,24 @@ object MessageParser {
         !offerPromise.containsMatchIn(t) &&
             (sourceIsOwn.containsMatchIn(t) || destinationIsOwn.containsMatchIn(t) || ownSubjectCredited.containsMatchIn(t))
 
+    private val completedVerb =
+        Regex(
+            "تم\\s+(?:شحن|تحويل|ايداع|استلام|استقبال|اضافه|سحب|دفع|سداد|شراء|خصم)|" +
+                "\\b(?:was|has\\s+been|have\\s+been)\\s+(?:credited|debited|charged|sent|transferred|topped\\s+up|paid)\\b",
+            ci,
+        )
+
+    /** A completed transaction in a clause of its own that carries no offer word: a top-up with a promo footer is still a top-up. */
+    private fun hasCompletedClause(t: String): Boolean =
+        t.split(Regex("(?<=\\.)\\s+")).any { c ->
+            !promoWords.containsMatchIn(c) && completedVerb.containsMatchIn(c) && c.any { it.isDigit() }
+        }
+
     /** A discount or cashback offer: an offer word, no completed transaction verb and no own-account reference. */
     private fun isOffer(t: String): Boolean =
         promoWords.containsMatchIn(t) &&
             !strongTransaction(t) &&
+            !hasCompletedClause(t) &&
             !hasOwnRef(t) &&
             !(explicitIn.containsMatchIn(offerCondition.replace(t, " ")) || transferVerbs.containsMatchIn(offerCondition.replace(t, " ")))
 

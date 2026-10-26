@@ -29,7 +29,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.Money
-import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.components.AmountText
@@ -159,8 +158,8 @@ fun ReviewAddRoute(
     LaunchedEffect(id) { review.prefill(id)?.let { add.prefill(it.amountText, it.notes) } }
     AddExpenseRoute(
         onDone = {
-            // learn the format of this message with the amount the user actually saved, then drop the item
-            review.confirmEdited(id, MoneyFormat.parseMinor(add.state.value.form.amountText))
+            // a hand-edited save never teaches a format; the item is dropped
+            review.confirmEdited(id)
             onDone()
         },
         viewModel = add,

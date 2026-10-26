@@ -92,22 +92,14 @@ class ReviewViewModel
         }
 
         /** The user saved the expense by hand from this item (maybe with another amount): learn its format, then drop it. */
-        fun confirmEdited(
-            id: String,
-            amountMinor: Long?,
-        ) {
-            viewModelScope.launch { confirmEditedNow(id, amountMinor) }
+        fun confirmEdited(id: String) {
+            viewModelScope.launch { confirmEditedNow(id) }
         }
 
-        internal suspend fun confirmEditedNow(
-            id: String,
-            amountMinor: Long?,
-        ) {
-            withContext(io) {
-                val item = db.reviews().find(id)
-                if (item != null) TemplateLearning.learn(db, item, clock.millis(), amountMinor = amountMinor)
-                db.reviews().delete(id)
-            }
+        internal suspend fun confirmEditedNow(id: String) {
+            // Only the one-tap Save of an UNCHANGED suggestion teaches a format: an edit means the engine read the message wrongly,
+            // and what the user typed is not a format. The item (and its slots) is dropped either way.
+            withContext(io) { db.reviews().delete(id) }
         }
 
         fun dismiss(id: String) {

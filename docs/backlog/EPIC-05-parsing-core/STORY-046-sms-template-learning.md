@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: M
 modules: [backend, android]
 depends_on: [STORY-044, STORY-045]
-reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075]
+reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077]
 implements: [PROMPT.md §4.3 (parsing strategy 3), PROMPT.md S12 (feature flags for template learning)]
 owner_agent: ai-parsing-engineer
 ---
@@ -44,6 +44,12 @@ Given any message, when its shape is stored, then every number, date, time, mask
 
 ### REQ-SMS-074 — Learned formats are wiped on logout and can be cleared in Settings
 Given learned formats, when the user logs out or taps Clear, then none remain and the next message of that format goes to review again.
+
+### REQ-SMS-076 — A non-completion status anywhere blocks every automatic record and every learning
+Given a message that says the operation failed, was declined, cancelled, reversed, returned, is pending, on hold, scheduled or requested (English or Arabic), when it arrives, then it is never recorded by a family or a learned template and never learned; given a learned format, a Dr/Cr or +/- difference, a status word next to a name, or a template whose direction disagrees with the engine's reading all go to review.
+
+### REQ-SMS-077 — Review slots never keep a code, and only an unchanged one-tap Save teaches
+Given a secret-looking or code-like review item, when it is stored, then no slots are kept (a code-like run is masked) and they are dropped when the item is saved or dismissed; given a hand-edited save, then nothing is learned.
 
 ### REQ-SMS-075 — A proven family is recorded without confirmation and is never learned from
 Given a card-purchase message of family F1, when it arrives, then it is queued directly and no review item or template is created.

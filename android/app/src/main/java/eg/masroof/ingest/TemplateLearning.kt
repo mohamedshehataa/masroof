@@ -32,8 +32,15 @@ object TemplateLearning {
             .digest("$sender\n$shape".toByteArray())
             .joinToString("") { "%02x".format(it) }
 
-    /** The slots of a review item as stored: the raw number tokens, in order. */
-    fun encodeSlots(numbers: List<String>): String = numbers.joinToString(SLOT_SEPARATOR)
+    private fun isIncoming(kind: TxKind) = kind == TxKind.INCOME || kind == TxKind.TRANSFER_IN || kind == TxKind.REFUND
+
+    private const val CODE_LIKE_DIGITS = 5
+
+    /** The slots of a review item as stored: the number tokens in order; a code-like run (5+ plain digits) is never kept. */
+    fun encodeSlots(numbers: List<String>): String =
+        numbers.joinToString(SLOT_SEPARATOR) { n ->
+            if (n.all { it.isDigit() } && n.length >= CODE_LIKE_DIGITS) "#" else n
+        }
 
     private fun decodeSlots(slots: String?): List<String> = slots?.split(SLOT_SEPARATOR)?.filter { it.isNotEmpty() }.orEmpty()
 
@@ -47,7 +54,10 @@ object TemplateLearning {
         val suggestion = review.suggestion ?: return outcome
         val shape = TemplateShape.of(message.text) ?: return outcome
         val template = db.learnedTemplates().find(message.sender.take(MAX_SENDER), shape.signature) ?: return outcome
-        var record = suggestion.copy(kind = TxKind.valueOf(template.kind))
+        val kind = TxKind.valueOf(template.kind)
+        // the engine's direction is never overridden: a template that disagrees with it (a credit through a debit template) is a review
+        if (isIncoming(kind) != isIncoming(suggestion.kind)) return outcome
+        var record = suggestion.copy(kind = kind)
         shape.numbers.getOrNull(template.amountSlot)?.let { raw ->
             MessageParser.minorOf(raw)?.takeIf { it in 1..MAX_AMOUNT_MINOR }?.let { record = record.copy(amountMinor = it) }
         }
@@ -78,6 +88,9 @@ object TemplateLearning {
                 NO_SLOT
             }
         val last4Slot = if (last4 != null && last4 != item.sugLast4) slots.indexOfFirst { it == last4 } else NO_SLOT
+        // a value the user changed that matches no number in the message is not a format we understand: learn nothing
+        if (amountMinor != null && amountMinor != item.sugAmountMinor && amountSlot < 0) return
+        if (last4 != null && last4 != item.sugLast4 && last4Slot < 0) return
         val sender = item.sender.take(MAX_SENDER)
         db.learnedTemplates().upsert(
             LearnedTemplateEntity(

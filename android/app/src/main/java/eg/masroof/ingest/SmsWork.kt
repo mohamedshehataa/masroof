@@ -164,7 +164,10 @@ class SmsPipeline
                             reason = outcome.reason,
                             receivedAtMillis = message.receivedAtMillis,
                             createdAtMillis = now,
-                        ).withSuggestion(outcome.suggestion, TemplateShape.of(message.text)),
+                        ).withSuggestion(
+                            outcome.suggestion,
+                            outcome.reason.takeIf { it == "unconfirmed" }?.let { TemplateShape.of(message.text) },
+                        ),
                     )
                     Disposition.REVIEW
                 }
