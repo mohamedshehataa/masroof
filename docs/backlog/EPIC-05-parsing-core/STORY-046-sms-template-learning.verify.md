@@ -98,3 +98,48 @@ STATUS: FAIL
 TEST_INTEGRITY: OK, asserts 101 -> 118, no skips, no deleted tests. Expectations of existing fixture rows are unchanged; 11 negative rows were added to round20.
 
 STATUS: FAIL
+
+---
+
+# Round 3 - 2026-10-27 - head 5a7c9adef2658323cfbbaead2b00c24ee766815d, base origin/main ba4c57c, loop 3 of 3
+
+## Environment
+- Fix commit 5a7c9ad: the store number must be the LAST token of a card or HSBC slot. The token before it needs 2+ letters, must not be an identifier word (the set was extended with account, tid, mid, terminal, reference, card, invoice, order, bill, receipt, pos, transaction, حساب, فاتورة, طلب, بطاقة) and must not be a currency word. The currency set gained جنيهات, ج, pound(s), dollar(s), euro(s).
+- bash scripts/make/check-fast.sh android sdlc -> exit 0, check-fast GREEN [android sdlc] in 97s; quality tests 145/145
+- gradlew testDebugUnitTest --rerun at 5a7c9ad -> CardStoreNumberTest 9/9, SmsParserTest 15/15, InstaPaySmsTest 2/2, 0 skipped
+- bash scripts/quality/test-integrity-check.sh origin/main -> SmsParserTest asserts 101 -> 122, skips 0 -> 0, TEST_INTEGRITY: OK
+- python scripts/quality/traceability.py --out tmp -> 403 REQs, 0 unknown, gate PASS
+- gh pr checks 65, head 5a7c9ad -> all pass except Android check-fast and Build artifacts, which are PENDING
+- Probe: the throwaway QaProbeTest was re-created and run with gradlew --rerun on head and on origin/main, over all 1900 fixture rows plus 251 exploratory inputs (the 174 from rounds 1-2 plus 77 new). A second head run checked 13 amount-word variants. The probe is deleted.
+
+## Criteria
+| Claim | Result | Evidence |
+|---|---|---|
+| 1. Every round 1-2 repro is not a record | PASS | Not records on head: SHOP 500 EGP / EGP 500 / 500 LE / 50 USD / 50 POUNDS / POUND / DOLLARS / EUROS / OFF / POINTS / PERCENT; SHOP ACCOUNT 999, TID / REFERENCE / CARD / INVOICE / ORDER / MID / TERMINAL / POS 123; SHOP POUNDS 50; كارفور 50 جنيهات, كارفور 50 ج, كارفور ج 50; HARDEE 50. X 60; A 50. round20 holds 30 not_record rows and all of them are not records. |
+| 1b. Before-side gap hunt | FAIL | A non-identifier word before the number passes. Most of these only give an odd label with the right amount. BUT on the second F1 template the amount is wrong: see R3-MAJOR-1. |
+| 2. Owner message, CARREFOUR 12, كارفور 12 recorded with numeral-free labels | PASS | HSBC and CIB x tails 0001/9999/7310 x 3 limits: 18/18 RECORD PURCHASE 13000 m=HARDEE S ELMERGHANY. CARREFOUR 12 -> m=CARREFOUR. كارفور 12 and كارفور ١٢ -> m=كارفور. CARREFOUR 7, AB 50 and *TRIP 5 -> RECORD. |
+| 3. Slots without a number identical to main | PASS | 1900/1900 pre-existing fixture rows give the same outcomes (diff empty). In the exploratory diff, 0 records on main stopped being records. LE PAIN QUOTIDIEN, LE MERIDIEN, YEN SUSHI, SR MARKET, DH FOODS and InstaPay to SR AHMED are unchanged. |
+| 4. Gates and integrity | PASS locally, CI pending | See Environment. SPINNEYS judgement: r20-store-middle and its assertTrue were added by this same PR and never existed on main. Flipping them to not_record / assertFalse narrows the PR own new behaviour and does not weaken any base test. The flip is recorded in DECISIONS, and the integrity tool reports OK. Accepted. |
+
+## Findings
+| Sev | Where | What | Repro |
+|---|---|---|---|
+| R3-MAJOR-1 | AutoRecordFamilies.kt card() / amountAgrees + second cardPurchaseEn regex | A WRONG AMOUNT is uploaded without a human. In the template used at MERCHANT for AMT, an amount-like word before the store number (AMOUNT, VALUE) makes the engine read the slot number as the amount. amountAgrees accepts ANY number in the clause instead of the AMT capture, so the family gate agrees, and the new store-number rule lets the slot pass. On main this is a review item, so a human sees it. | CIB: Your card ending 4821 was used at SHOP AMOUNT 500 for EGP 130.00 -> RECORD PURCHASE 50000 (main: REVIEW, suggestion 50000). The same with SHOP VALUE 500 -> 50000. Your card ending 4821 was used at SHOP AMOUNT 999 for EGP 1.00 -> RECORD PURCHASE 99900. The first template is fine: SHOP AMOUNT 500 there -> 13000. |
+| R3-MINOR-1 | nameTokens before-side | Amount, balance, tax and quantity words before a trailing number pass. The recorded amount stays correct (13000) and nothing numeric is uploaded; only the label is odd. | Card wrapper with SHOP TOTAL 500 / AMOUNT 500 / AMT 500 / BALANCE 500 / BAL 500 / LIMIT 500 / VAT 14 / TAX 14 / TIP 50 / DISCOUNT 50 / INSTALLMENT 3 / MONTHS 12 / PTS 50 / QTY 3 / PHONE 123 / TEL 123 / CALL 123 / EXT 123 -> RECORD; HSBC SHOP TOTAL 500 -> RECORD; Arabic كارفور مبلغ 500 / رصيد 500 / قيمة 500 / اجمالي 500 / خصم 50 / بمبلغ 500 -> RECORD 13000. All were review on main. |
+| R3-NIT-1 | pre-existing, not this PR | A status glued into one word is not seen by the status gate: SHOP ONHOLD records with or without a number. | card wrapper with SHOP ONHOLD; used at SHOP ONHOLD for EGP 130.00 |
+| NIT-2 | pre-existing | at SHOP 5.00 and at SHOP 50.5 are RECORD on main and on head alike. | card wrapper |
+| info | design | SPINNEYS 3 ZAYED and LE MERIDIEN 2 / SR MARKET 5 are review by design. Status words before the number stay blocked: PENDING, HOLD, VOID, VOIDED, REFUNDED, CANCEL, DECLINED, FAILED, RETURN, REVERSAL, مرتجع, معلقة plus a number -> not records. | |
+
+## Exploratory (round 3)
+- The 174 inputs from rounds 1-2 were re-run, plus 77 new card, HSBC and Arabic inputs, plus 13 amount-word variants: 264 in total.
+- The new inputs were: CARREFOUR 12; SHOP POUNDS 50; SHOP BRANCH 50 / STORE 12 / TABLE 5 / QTY 3 / X 50 / TOTAL 500 / AMOUNT 500 / AMT 500 / BALANCE 500 / BAL 500 / LIMIT 500 / FEE 50 / FEES 50 / VAT 14 / TAX 14 / TIP 50 / DISCOUNT 50 / CASHBACK 50 / INSTALLMENT 3 / MONTHS 12 / PTS 50 / HOLD 50 / ONHOLD 50 / PENDING 50 / RETURN 50 / REFUNDED 50 / CANCEL 50 / VOID 50 / VOIDED 50 / DECLINED 50 / FAILED 50 / RETRY 3 / ATTEMPT 3 / REVERSAL 50; SHOP MID / TERMINAL / POS / BILL / RECEIPT / TRANSACTION / CVC / CVV2 / EXT / PHONE / TEL / CALL 123; SHOP OTP; SR MARKET 5; SHOP EGYPT 50; MCDONALDS 12; SHOP ATM / USER / AHMED / MOBILE 12; SHOP KM 5 / LTR 50 / KG 5.
+- They also covered: HSBC SHOP TOTAL 500 and SHOP BRANCH 5; Arabic كارفور ج 50 / مبلغ 500 / رصيد 500 / خصم 50 / قيمة 500 / اجمالي 500 / حساب 123 / فاتورة 123 / طلب 123 / مرتجع 50 / معلقة 50 / جنيهات 50 / كود 123, and the mirrored forms مبلغ / قيمة / بمبلغ 500.
+- On the second F1 template: used at SHOP TOTAL / AMOUNT / AMT / VALUE / SUM / PRICE 500 for EGP 130.00, used at SHOP AMOUNT 999 for EGP 1.00, and charged EGP 130.00 at SHOP TOTAL / AMOUNT 500.
+- Problems: 2 new (R3-MAJOR-1, R3-MINOR-1) plus 1 pre-existing NIT
+
+## Test integrity (round 3)
+TEST_INTEGRITY: OK, asserts 101 -> 122, no skips, no deleted tests. The SPINNEYS flip is inside rows and assertions this PR itself added (see criterion 4), so it is not a weakening against base.
+
+Loop 3 of 3 reached with an open MAJOR.
+
+STATUS: FAIL

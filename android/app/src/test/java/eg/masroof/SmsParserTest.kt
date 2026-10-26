@@ -604,6 +604,59 @@ class CardStoreNumberTest {
     }
 
     @Test
+    fun `REQ-SMS-078 a number inside the merchant slot never decides the recorded amount`() {
+        val en = "Your card ending 4821 was used at "
+        val bodies =
+            listOf(
+                en + "SHOP AMOUNT 500 for EGP 130.00",
+                en + "SHOP VALUE 500 for EGP 130.00",
+                en + "SHOP AMOUNT 999 for EGP 1.00",
+                en + "SHOP 500 for EGP 130.00",
+            )
+        for (b in bodies) {
+            val o = MessageParser.parse(message("CIB", b))
+            assertFalse("$b -> $o", o is ParseOutcome.Record && o.record.amountMinor in listOf(50000L, 99900L))
+        }
+        for (w in "TOTAL AMOUNT AMT VALUE BALANCE BAL VAT TAX DISCOUNT QTY QUANTITY PHONE MOBILE TEL".split(" ")) {
+            val o = MessageParser.parse(message("CIB", card("SHOP $w 500")))
+            assertFalse("$w -> $o", o is ParseOutcome.Record)
+        }
+        val hsbc = "From HSBC: 24OCT26 SHOP TOTAL 500 Purchase from 012-345***-678 EGP 130.00- Your available balance EGP 1,000.00"
+        assertFalse(MessageParser.parse(message("HSBC", hsbc)) is ParseOutcome.Record)
+        val ar = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى "
+        for (w in listOf("مبلغ", "رصيد", "قيمة", "ضريبة", "خصم", "كمية", "هاتف", "موبايل")) {
+            val o = MessageParser.parse(message("CIB", ar + "كارفور $w 500"))
+            assertFalse("$w -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 every auto-recorded fixture amount is the amount next to a currency marker`() {
+        val num = "(\\d[\\d,،]*(?:\\.\\d{1,2})?)"
+        val cur = "(?:egp|le|جنيه|جم)"
+        val after = Regex("$cur\\s*$num", RegexOption.IGNORE_CASE)
+        val before = Regex("$num\\s*$cur", RegexOption.IGNORE_CASE)
+        val files = "round3 round4 round5 round10 round15 round16 round17 round19 round20 verifier round2 corpus".split(" ")
+        val recorded =
+            files
+                .flatMap { fixture("$it.jsonl") }
+                .filter { it.opt("body") != null }
+                .mapNotNull { row ->
+                    val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+                    val o = MessageParser.parse(message(row.opt("sender") ?: "CIB", row.str("body"), source = source))
+                    (o as? ParseOutcome.Record)?.let { row to it.record.amountMinor }
+                }
+        for ((row, minor) in recorded) {
+            val body = row.str("body")
+            val seen = (after.findAll(body) + before.findAll(body)).map { it.groupValues[1].replace(",", "").replace("،", "") }.toList()
+            val ok = seen.any { v -> v.toBigDecimal().movePointRight(2).toLong() == minor }
+            // a body with no ASCII amount (Arabic-Indic digits) is covered by the fixture's own expected amount
+            assertTrue("${row.opt("id")} recorded $minor from $seen", ok || seen.isEmpty())
+        }
+        assertTrue(recorded.size > 50)
+    }
+
+    @Test
     fun `REQ-SMS-078 a currency-like word in a name without a number is still a name`() {
         val en = "Your card ending 4821 was charged EGP 85.00 at "
         for (m in listOf("LE PAIN QUOTIDIEN", "LE MERIDIEN", "LE MARCHE", "YEN SUSHI", "SR MARKET")) {

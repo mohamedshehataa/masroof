@@ -18,7 +18,9 @@ object AutoRecordFamilies {
 
     private const val NUM = "\\d[\\d,]*(?:\\.\\d{1,2})?"
     private const val CUR = "(?:egp|le|l\\.e|جنيه|جم|ج\\.م)"
-    private const val AMT = "(?:$CUR\\s*$NUM|$NUM\\s*$CUR)"
+
+    /** An amount with the number captured (a1 after the currency, a2 before it): a family's OWN capture of the amount. */
+    private const val AMTG = "(?:$CUR\\s*(?<a1>$NUM)|(?<a2>$NUM)\\s*$CUR)"
     private const val DATE = "(?:\\d{1,2}[/.-](?:\\d{1,2}|[a-z]{3})[/.-]\\d{2,4}|\\d{1,2}\\s+[a-z]{3}\\s+\\d{4})"
     private const val TIME = "\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s*[ap]m)?"
 
@@ -51,12 +53,12 @@ object AutoRecordFamilies {
         listOf(
             Regex(
                 "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+(?:used\\s+for|charged|debited)" +
-                    "(?:\\s+(?:with|by|for))?\\s+(?:a\\s+purchase\\s+of\\s+)?$AMT" +
+                    "(?:\\s+(?:with|by|for))?\\s+(?:a\\s+purchase\\s+of\\s+)?$AMTG" +
                     "$DATE_TAIL\\s+at\\s+(?<m>$MERCHANT)$OK_TAIL$",
                 ci,
             ),
             Regex(
-                "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+used\\s+at\\s+(?<m>$MERCHANT)\\s+for\\s+$AMT$OK_TAIL$",
+                "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+used\\s+at\\s+(?<m>$MERCHANT)\\s+for\\s+$AMTG$OK_TAIL$",
                 ci,
             ),
         )
@@ -71,14 +73,14 @@ object AutoRecordFamilies {
     private val cardPurchaseAr =
         listOf(
             Regex(
-                "^$PREFIX" + "تم\\s+(?:اجراء\\s+)?(?:خصم|شراء|سحب|عمليه(?:\\s+ناجحه)?)\\s+(?:(?:بمبلغ|بقيمه|مبلغ)\\s*)?$AMT\\s*" +
+                "^$PREFIX" + "تم\\s+(?:اجراء\\s+)?(?:خصم|شراء|سحب|عمليه(?:\\s+ناجحه)?)\\s+(?:(?:بمبلغ|بقيمه|مبلغ)\\s*)?$AMTG\\s*" +
                     "$CARD_AR\\s+لدي\\s+(?<m>$MERCHANT)$OK_TAIL$REWARD_TAIL$",
                 ci,
             ),
             // the mirrored order: the merchant before the card
             Regex(
                 "^$PREFIX" +
-                    "تم\\s+(?:خصم|شراء)\\s+(?:(?:بمبلغ|مبلغ)\\s*)?$AMT\\s+(?:لدي|من)\\s+(?<m>$MERCHANT)\\s+$CARD_AR" +
+                    "تم\\s+(?:خصم|شراء)\\s+(?:(?:بمبلغ|مبلغ)\\s*)?$AMTG\\s+(?:لدي|من)\\s+(?<m>$MERCHANT)\\s+$CARD_AR" +
                     "$OK_TAIL$",
                 ci,
             ),
@@ -100,29 +102,29 @@ object AutoRecordFamilies {
 
     private val instantOut =
         Regex(
-            "^$PREFIX" + "تم\\s+تنفيذ\\s+تحويل\\s+لحظي\\s+من\\s+حسابكم\\s+(?:رقم\\s+)?[*•x]*(?<l4>\\d{4})\\s+بمبلغ\\s+$AMT$TAIL3$",
+            "^$PREFIX" + "تم\\s+تنفيذ\\s+تحويل\\s+لحظي\\s+من\\s+حسابكم\\s+(?:رقم\\s+)?[*•x]*(?<l4>\\d{4})\\s+بمبلغ\\s+$AMTG$TAIL3$",
             ci,
         )
     private val instantIn =
         Regex(
             "^$PREFIX" +
                 "تم\\s+استقبال\\s+تحويل\\s+لحظي\\s+الي\\s+حسابكم\\s+(?:رقم\\s+)?[*•x]*(?<l4>\\d{4})" +
-                "\\s+بمبلغ\\s+$AMT\\s+من\\s+(?<m>$NAME)$TAIL3$",
+                "\\s+بمبلغ\\s+$AMTG\\s+من\\s+(?<m>$NAME)$TAIL3$",
             ci,
         )
 
     private val instapayHeader = Regex("^(?:instapay|انستاباي|تم\\s+التحويل\\s+بنجاح|تم\\s+الدفع\\s+بنجاح)$", ci)
     private val instapayOut =
         listOf(
-            Regex("^you\\s+(?:have\\s+)?sent\\s+$AMT\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
-            Regex("^(?:instapay\\s+)?payment\\s+of\\s+$AMT\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
-            Regex("^تم\\s+تحويل\\s+$AMT\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
-            Regex("^تم\\s+دفع\\s+$AMT\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^you\\s+(?:have\\s+)?sent\\s+$AMTG\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^(?:instapay\\s+)?payment\\s+of\\s+$AMTG\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+تحويل\\s+$AMTG\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+دفع\\s+$AMTG\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
         )
     private val instapayIn =
         listOf(
-            Regex("^you\\s+(?:have\\s+)?received\\s+$AMT\\s+from\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
-            Regex("^تم\\s+استلام\\s+$AMT\\s+من\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^you\\s+(?:have\\s+)?received\\s+$AMTG\\s+from\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+استلام\\s+$AMTG\\s+من\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
         )
 
     /**
@@ -178,8 +180,6 @@ object AutoRecordFamilies {
         )
 
     private fun isNoise(clause: String): Boolean = clause.isBlank() || noiseClauses.any { it.matches(clause.trim()) }
-
-    private val numbers = Regex(NUM)
 
     /**
      * The matching family ("F1".."F4") or null when the message must be confirmed by the user first. [norm] is the same text as
@@ -238,10 +238,14 @@ object AutoRecordFamilies {
             .map { it.trim().trimEnd('.').trim() }
             .filter { it.isNotEmpty() }
 
-    private fun amountAgrees(
-        text: String,
+    /** The amount the family's OWN regex captured must be the amount the engine extracted: no stray number can decide it. */
+    private fun amountMatches(
+        m: MatchResult,
         record: ParsedRecord,
-    ): Boolean = numbers.findAll(text).any { MessageParser.minorOf(it.value) == record.amountMinor }
+    ): Boolean {
+        val raw = (m.groups["a1"] ?: m.groups["a2"])?.value ?: return false
+        return MessageParser.minorOf(raw) == record.amountMinor
+    }
 
     private val arabicLetter = '؀'..'ۿ'
     private const val MAX_LATIN_TOKENS = 6
@@ -328,7 +332,7 @@ object AutoRecordFamilies {
     ): Boolean {
         if (record.kind != TxKind.PURCHASE) return false
         val m = cardMatch(clause) ?: return false
-        val proven = m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record)
+        val proven = m.groups["l4"]?.value == record.instrumentLast4 && amountMatches(m, record)
         return proven && slotLooksLikeName(original, m, allowStoreNumber = true)
     }
 
@@ -359,7 +363,7 @@ object AutoRecordFamilies {
             } else {
                 record.kind == TxKind.INCOME || record.kind == TxKind.TRANSFER_IN
             }
-        return kindOk && m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record) && slotLooksLikeName(original, m)
+        return kindOk && m.groups["l4"]?.value == record.instrumentLast4 && amountMatches(m, record) && slotLooksLikeName(original, m)
     }
 
     private fun instapayNotification(
@@ -375,10 +379,10 @@ object AutoRecordFamilies {
         val original = originals[bodyIndexes.single()]
         val outOk =
             (record.kind == TxKind.TRANSFER_OUT || record.kind == TxKind.PURCHASE) &&
-                instapayOut.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) } == true }
+                instapayOut.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) && amountMatches(it, record) } == true }
         val inOk =
             (record.kind == TxKind.INCOME || record.kind == TxKind.TRANSFER_IN) &&
-                instapayIn.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) } == true }
-        return if ((outOk || inOk) && amountAgrees(clause, record)) "F4" else null
+                instapayIn.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) && amountMatches(it, record) } == true }
+        return if (outOk || inOk) "F4" else null
     }
 }

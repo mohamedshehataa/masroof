@@ -109,7 +109,9 @@ object StatusGate {
     private val identifierWords =
         (
             "id no num number trx txn ref rrn acc acct auth code account tid mid terminal reference card invoice order bill " +
-                "receipt pos transaction رقم حساب فاتورة فاتوره طلب بطاقة بطاقه"
+                "receipt pos transaction رقم حساب فاتورة فاتوره طلب بطاقة بطاقه " +
+                "total amount amt value balance bal vat tax discount qty quantity phone mobile tel " +
+                "مبلغ قيمة قيمه رصيد ضريبة ضريبه خصم كمية كميه هاتف موبايل"
         ).split(" ").toSet()
 
     /** A currency code, word or abbreviation: it marks an amount, so it is never part of a merchant name. */
