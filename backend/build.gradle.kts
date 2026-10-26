@@ -81,8 +81,8 @@ dependencies {
 val openApiOut = layout.buildDirectory.dir("generated/openapi")
 openApiGenerate {
     generatorName = "spring"
-    inputSpec = rootProject.file("../contracts/openapi.yaml").toURI().toString()
-    outputDir = openApiOut.map { it.asFile.absolutePath }
+    inputSpec.set(layout.projectDirectory.file("../contracts/openapi.yaml"))
+    outputDir.set(openApiOut)
     apiPackage = "eg.masroof.adapters.in.rest.generated.api"
     modelPackage = "eg.masroof.adapters.in.rest.generated.model"
     invokerPackage = "eg.masroof.adapters.in.rest.generated"
