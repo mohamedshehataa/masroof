@@ -181,8 +181,8 @@ class SmsParserTest {
 
     @Test
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
-        val rows = fixture("round3.jsonl")
-        assertTrue(rows.size >= 35)
+        val rows = fixture("round3.jsonl") + fixture("round4.jsonl")
+        assertTrue(rows.size >= 55)
         for (row in rows) {
             val id = row.str("id")
             val expect = row["expect"]!!.jsonObject

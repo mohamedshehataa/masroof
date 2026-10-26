@@ -34,7 +34,7 @@ object MessageParser {
     private const val NOON_HOURS = 12
     private const val LOOKBACK = 30
     private const val DATE_LOOKBACK = 25
-    private const val TIME_WINDOW = 12
+    private const val TIME_WINDOW = 24
     private const val TIME_BEFORE_WINDOW = 24
     private const val LAST4_LOOKBACK = 40
 
@@ -219,7 +219,15 @@ object MessageParser {
             ),
             Last4Pattern(Regex("(?:المنتهيه|المنتهي|تنتهي|منتهيه)\\s*ب\\s*(\\d{4})(?!\\d)", ci), false),
             // "your account": possessive, so it is the household's instrument even after "to"/"إلى"
-            Last4Pattern(Regex("حساب(?:ك|كم)\\s*(?:رقم\\s*)?[x*•]*\\s*(\\d{4})(?!\\d)"), true),
+            Last4Pattern(
+                Regex(
+                    "(?<![\\p{L}\\d])(?:من|الي|from|to)\\s+(?:your\\s+)?(?:حساب(?:ك|كم)|account)\\s+(?:رقم\\s*)?(\\d{4})(?!\\d)" +
+                        "(?=\\s*(?:بمبلغ|بقيمه|مبلغ|ب\\s*\\d|by\\b|with\\b|for\\b|(?:egp|le|جم|جنيه|ج\\.م)\\s*\\d" +
+                        "|\\d[\\d.,]*\\s*(?:egp|le|جم|جنيه|ج\\.م)))",
+                    ci,
+                ),
+                true,
+            ),
         )
 
     /** A card or account named right after "to"/"إلى"/beneficiary is the other party's, never the household's. */
@@ -232,7 +240,8 @@ object MessageParser {
         )
 
     private val phoneNumber = Regex("(?<![\\d])(?:\\+?20)?01[0125]\\d{8}(?!\\d)")
-    private val counterpartyBefore = Regex("(?:(?<![\\p{L}\\d])الي|(?<![\\p{L}\\d])من|\\bto|\\bfrom)\\s*(?:رقم|no\\.?|number)?\\s*$", ci)
+    private val counterpartyBefore =
+        Regex("(?:(?<![\\p{L}\\d])الي|(?<![\\p{L}\\d])من|(?<![\\p{L}\\d])ل?رقم|\\bto|\\bfrom)\\s*(?:رقم|no\\.?|number)?\\s*$", ci)
 
     // ---- dates ---------------------------------------------------------------------------------------------------
     private val dateFull = Regex("(?<![\\d/.:-])(\\d{1,2})([/.-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?![\\d/:])")
@@ -245,7 +254,7 @@ object MessageParser {
         Regex("(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?: ?(?:يوم|on|at|في|بتاريخ))* ?$", ci)
     private val timeAfter = Regex("^ ?(?:at |في |الساعه )?(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?![\\p{L}\\d])", ci)
     private val dateNot =
-        Regex("(?:until|till|valid|due|expiry|expires?|exp|start|starts|from|استحقاق|حتي|صلاحيه|ينتهي|ابتداء|يبدا|تبدا)[^\\d]{0,12}$", ci)
+        Regex("(?:until|till|valid|due|expiry|expires?|exp|statement|استحقاق|حتي|صالح|صلاحيه|ينتهي)[^\\d]{0,12}$", ci)
 
     // ---- merchant label -----------------------------------------------------------------------------------------
     private val stopWords =
@@ -437,7 +446,8 @@ object MessageParser {
         hasIn: Boolean,
     ): ParseOutcome {
         // A review item that merely looks code-like keeps its amounts but never a bare 4+ digit run.
-        val shown = if (SecretDetector.hasCodeLikeToken(norm)) SecretDetector.maskCodes(norm) else norm
+        val codeMasked = if (SecretDetector.hasCodeLikeToken(norm)) SecretDetector.maskCodes(norm) else norm
+        val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts))
         val review = { reason: String -> ParseOutcome.Review(reason, shown) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
@@ -498,6 +508,15 @@ object MessageParser {
         }
     }
 
+    /** Fee wording decides only when it comes first: "تحويل ... رسوم الخدمة 1 جنيه" is a transfer that mentions its fee. */
+    private val transferVerbs = Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|تحويل|ارسال|ارسلت|حولت", ci)
+
+    private fun feeIsTheTransaction(t: String): Boolean {
+        val feeAt = fee.find(t)?.range?.first ?: return false
+        val other = listOfNotNull(transferVerbs.find(t)?.range?.first, paymentWords.find(t)?.range?.first)
+        return other.none { it < feeAt }
+    }
+
     private fun kindOf(
         t: String,
         outgoing: Boolean,
@@ -505,7 +524,7 @@ object MessageParser {
         when {
             refund.containsMatchIn(t) -> TxKind.REFUND
             withdrawal.containsMatchIn(t) && outgoing -> TxKind.CASH_WITHDRAWAL
-            fee.containsMatchIn(t) && outgoing -> TxKind.FEE
+            outgoing && feeIsTheTransaction(t) -> TxKind.FEE
             !outgoing -> if (ownAccount.containsMatchIn(t)) TxKind.TRANSFER_IN else TxKind.INCOME
             transferWords.containsMatchIn(t) && !paymentWords.containsMatchIn(t) -> TxKind.TRANSFER_OUT
             else -> TxKind.PURCHASE
@@ -593,7 +612,13 @@ object MessageParser {
     private fun hasUnexplainedNumber(
         t: String,
         amounts: List<Amount>,
-    ): Boolean {
+    ): Boolean = unexplainedRanges(t, amounts).isNotEmpty()
+
+    /** Positions (in the folded text, which lines up with the original) of every 4+ digit run nothing explains. */
+    private fun unexplainedRanges(
+        t: String,
+        amounts: List<Amount>,
+    ): List<IntRange> {
         val chars = t.toCharArray()
 
         fun blank(range: IntRange) {
@@ -608,9 +633,18 @@ object MessageParser {
         phoneNumber.findAll(t).forEach { m ->
             if (counterpartyBefore.containsMatchIn(t.substring(maxOf(0, m.range.first - LAST4_LOOKBACK), m.range.first))) blank(m.range)
         }
-        var rest = String(chars)
-        rest = SecretDetector.stripReferences(rest)
-        return Regex("(?<![\\d])\\d{4,}(?![\\d])").containsMatchIn(rest)
+        val rest = SecretDetector.stripReferences(String(chars))
+        return Regex("(?<![\\d])\\d{4,}(?![\\d])").findAll(rest).map { it.range }.toList()
+    }
+
+    /** Every digit of the given ranges becomes a bullet: a review item never shows a number nothing explains. */
+    private fun maskRanges(
+        text: String,
+        ranges: List<IntRange>,
+    ): String {
+        val chars = text.toCharArray()
+        for (r in ranges) for (i in r) if (i < chars.size && chars[i].isDigit()) chars[i] = '•'
+        return String(chars)
     }
 
     // ---- last four / date / ids -------------------------------------------------------------------------------------
@@ -828,6 +862,7 @@ object MessageParser {
             val raw = norm.substring(i, j)
             val clean = LabelNormalizer.normalize(raw)
             i = j
+            if (raw.any { Character.isDigit(it) }) break
             // A token of symbols only ("|", "®") carries no name: skip it instead of ending the label.
             if (clean.isEmpty()) continue
             val core = SecretDetector.fold(clean).trim(*PUNCT)

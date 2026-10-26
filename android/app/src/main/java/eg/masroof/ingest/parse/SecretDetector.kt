@@ -19,7 +19,7 @@ object SecretDetector {
 
     private val strong =
         Regex(
-            "(?<![a-z])[o0][ ._/|-]{0,2}t[ ._/|-]{0,2}ps?(?![a-z])|(?<![a-z])p[ ._/|-]{0,2}i[ ._/|-]{0,2}ns?(?![a-z])" +
+            "\\bsecret\\b|(?<![a-z])[o0][ ._/|-]{0,2}t[ ._/|-]{0,2}ps?(?![a-z])|(?<![a-z])p[ ._/|-]{0,2}i[ ._/|-]{0,2}ns?(?![a-z])" +
                 "|\\brequires? (?:your )?approval|\\bapproval (?:is )?(?:required|needed|pending)|\\bneeds? approval" +
                 "|\\bapproval\\s*[:#-]\\s*\\d" +
                 "|one[ _-]?time|\\bonetime\\b" +
@@ -85,7 +85,7 @@ object SecretDetector {
     private val referenceNumber =
         Regex(
             "\\b(?:ref(?:erence)?|trx|txn|trans(?:action)?|operation|approval|authori[sz]ation|auth|invoice" +
-                "|rrn|tid|mid|terminal(?: id| no\\.?| number)?|id|no\\.?|number)[ :#.-]*(?=[a-z0-9]*\\d)[a-z0-9]{4,16}" +
+                "|rrn|tid|mid|terminal(?: id| no\\.?| number)?)[ :#.-]*(?=[a-z0-9]*\\d)[a-z0-9]{4,16}" +
                 "|(?:رقم|الرقم) (?:ال)?(?:مرجع|المرجعي|مرجعي|عمليه|العمليه|معامله|المعامله|فاتوره|طلب)[^\\da-z]{0,12}(?=[a-z0-9]*\\d)[a-z0-9]{4,16}",
             ci,
         )
@@ -129,7 +129,14 @@ object SecretDetector {
     fun isSecret(normalized: String): Boolean = reason(normalized) != null
 
     /** Blanks reference numbers, hotline numbers and recognised transaction codes (used for the leftover-digits check). */
-    fun stripReferences(text: String): String = benignCode.replace(call.replace(referenceNumber.replace(text, " "), " "), " ")
+    fun stripReferences(text: String): String {
+        fun blank(
+            regex: Regex,
+            s: String,
+        ) = regex.replace(s) { " ".repeat(it.value.length) }
+        // length-preserving, so positions in the result line up with the original text
+        return blank(benignCode, blank(call, blank(referenceNumber, text)))
+    }
 
     private fun withoutFooters(text: String): String =
         footer.replace(text) { m -> if (m.value.any { it.isDigit() }) m.value else " " }
