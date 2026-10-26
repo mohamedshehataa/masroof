@@ -46,7 +46,8 @@ esac
 missing=""
 while IFS= read -r s; do
   [ -z "$s" ] && continue
-  printf '%s\n' "$body" | grep -Eq "^[[:space:]]*(#+[[:space:]]*)?(\*\*)?$s(\*\*)?[[:space:]]*:" || missing="${missing:+$missing, }$s"
+  # here-string, not a pipe: grep -q exits on the first match and the pipe writer then dies of SIGPIPE
+  grep -Eq "^[[:space:]]*(#+[[:space:]]*)?(\*\*)?$s(\*\*)?[[:space:]]*:" <<< "$body" || missing="${missing:+$missing, }$s"
 done <<< "$sections"
 [ -n "$missing" ] && block "final message is missing required section(s): $missing. $contract_help"
 
@@ -55,7 +56,7 @@ done <<< "$sections"
 # last line inside it is code, not the contract (STORY-001 loop 3, F-12)
 last_line="$(printf '%s\n' "$msg" | grep -vE '^[[:space:]]*$' | tail -1)"
 last_body="$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*$' | tail -1)"
-printf '%s' "$last_line" | grep -Eq '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' \
+grep -Eq '^[[:space:]]*(\*\*)?STATUS(\*\*)?[[:space:]]*:' <<< "$last_line" \
   || block "the 'STATUS:' line must be the LAST line of your final message (found other text after it). $contract_help"
 [ "$last_line" = "$last_body" ] \
   || block "the last line is inside an unclosed code fence; close the fence and end with the 'STATUS:' line outside it. $contract_help"
