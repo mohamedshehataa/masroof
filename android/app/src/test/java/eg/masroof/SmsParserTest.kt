@@ -179,6 +179,7 @@ class SmsParserTest {
         }
     }
 
+    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
     @Test
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
         val rows = fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl")

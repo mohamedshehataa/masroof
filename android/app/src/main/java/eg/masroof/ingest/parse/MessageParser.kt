@@ -461,7 +461,7 @@ object MessageParser {
         val malformed =
             amounts.filter { it.ambiguous }.map { a ->
                 var end = a.end
-                while (end < t.length && (t[end].isDigit() || t[end] == '.' || t[end] == ',')) end++
+                while (end < t.length && t[end] in "0123456789.,") end++
                 a.start until end
             }
         val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts) + ownDigits + malformed)
