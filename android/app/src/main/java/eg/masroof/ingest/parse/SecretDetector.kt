@@ -98,9 +98,9 @@ object SecretDetector {
         return null
     }
 
-    private val leetRun = Regex("[a-z0-9@$]{2,12}")
-    private val leetMap = mapOf('0' to 'o', '1' to 'i', '3' to 'e', '4' to 'a', '5' to 's', '7' to 't', '@' to 'a', '$' to 's')
-    private val singleLetterGap = Regex("(?<=\\b\\p{L})[ ._/|\\\\-]+(?=\\p{L}\\b)")
+    private val leetRun = Regex("[a-z0-9@$!]{2,12}")
+    private val leetMap = mapOf('0' to 'o', '1' to 'i', '3' to 'e', '4' to 'a', '5' to 's', '7' to 't', '@' to 'a', '$' to 's', '!' to 'i')
+    private val singleLetterGap = Regex("(?<=\\b\\p{L})[\\s\\p{P}\\p{S}]+(?=\\p{L}\\b)")
 
     /** "P1N", "c0de", "0TP": digits and symbols standing in for letters inside a word (detection only). */
     private fun leet(text: String): String =
@@ -127,6 +127,16 @@ object SecretDetector {
     }
 
     fun isSecret(normalized: String): Boolean = reason(normalized) != null
+
+    /** True when a "do not share" style footer appears anywhere (digits or not): a number nearby may be a secret. */
+    fun hasSecurityFooter(text: String): Boolean = shareFooter.containsMatchIn(fold(text))
+
+    /** Only the "never share it" kind of footer, not a hotline line ("call 19555"), which is harmless. */
+    private val shareFooter =
+        Regex(
+            "(?:never|do not|don't|dont|not)\\s+(?:to\\s+)?share|will never ask|beware|لا\\s*تشارك|لا\\s*تقم\\s*بمشاركه|لا\\s*تفصح|لا\\s*تعطي",
+            ci,
+        )
 
     /** Blanks reference numbers, hotline numbers and recognised transaction codes (used for the leftover-digits check). */
     fun stripReferences(text: String): String {

@@ -85,6 +85,7 @@ object MessageParser {
             "من",
         )
     private val foreignWord = Regex("\\b(?:usd|eur|gbp|sar|aed|kwd|qar|jpy|cad|chf|cny|yen|riyal|dhs)\\b|\\$|€|دولار|يورو|ريال|درهم", ci)
+    private val continuesWithSeparator = Regex("^[.,]\\d")
     private val groupedDigits = Regex("^ \\d{3}(?!\\d)")
 
     private val currencyOf =
@@ -245,10 +246,12 @@ object MessageParser {
 
     // ---- dates ---------------------------------------------------------------------------------------------------
     private val dateFull = Regex("(?<![\\d/.:-])(\\d{1,2})([/.-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?![\\d/:])")
-    private val dateIso = Regex("(?<![\\d/.:-])(\\d{4})-(\\d{1,2})-(\\d{1,2})(?![\\d])")
+    private val dateIso = Regex("(?<![\\d/.:-])(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?![\\d])")
     private val dateShort = Regex("(?<![\\d/.:-])(\\d{1,2})/(\\d{1,2})(?![\\d/:]|\\.\\d)")
     private val dateCompact =
-        Regex("(?<![\\d/.:-])(\\d{1,2})(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(\\d{4}|\\d{2})(?![\\d])", ci)
+        Regex("(?<![\\d/.:-])(\\d{1,2})[ -]?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[ ,-]*(\\d{4}|\\d{2})(?![\\d])", ci)
+    private val dateMonthFirst =
+        Regex("(?<![a-z])(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.? (\\d{1,2}),? (\\d{4})(?![\\d])", ci)
     private val monthNames = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
     private val timeBefore =
         Regex("(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?: ?(?:يوم|on|at|في|بتاريخ))* ?$", ci)
@@ -447,7 +450,14 @@ object MessageParser {
     ): ParseOutcome {
         // A review item that merely looks code-like keeps its amounts but never a bare 4+ digit run.
         val codeMasked = if (SecretDetector.hasCodeLikeToken(norm)) SecretDetector.maskCodes(norm) else norm
-        val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts))
+        val ownDigits =
+            last4Patterns.filter { it.own }.flatMap { p ->
+                p.regex
+                    .findAll(t)
+                    .map { it.groups[1]!!.range }
+                    .toList()
+            }
+        val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts) + ownDigits)
         val review = { reason: String -> ParseOutcome.Review(reason, shown) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
@@ -497,7 +507,31 @@ object MessageParser {
         ).containsMatchIn(t)
 
     /** The direction is whichever verb comes first: "transfer ... was received" is outgoing, "received ... sent by" incoming. */
+    private val destinationIsOwn =
+        Regex(
+            "(?<![\\p{L}\\d])الي\\s+(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bto\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
+            ci,
+        )
+    private val sourceIsOwn =
+        Regex(
+            "(?<![\\p{L}\\d])من\\s+(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bfrom\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
+            ci,
+        )
+    private val debitVerbs =
+        Regex(
+            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|purchased?|used for)\\b" +
+                "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|سحب",
+            ci,
+        )
+
     private fun firstDirection(t: String): Boolean? {
+        // WHOSE account is the destination decides a transfer: "to your account" is incoming even though the sentence
+        // starts with a transfer verb; "from your account" is outgoing. A debit verb ("debited ... cashback will be
+        // credited to your account") keeps the plain verb order.
+        val toOwn = destinationIsOwn.containsMatchIn(t)
+        val fromOwn = sourceIsOwn.containsMatchIn(t)
+        if (toOwn && !fromOwn && !debitVerbs.containsMatchIn(t)) return false
+        if (fromOwn && !toOwn) return true
         val out = outAnchor.find(t)?.range?.first
         val inn = inAnchor.find(t)?.range?.first
         return when {
@@ -554,7 +588,7 @@ object MessageParser {
                     currency,
                     balanceBefore.containsMatchIn(before),
                     bare,
-                    minor == null || groupedDigits.containsMatchIn(after),
+                    minor == null || groupedDigits.containsMatchIn(after) || continuesWithSeparator.containsMatchIn(after),
                 )
         }
         for (m in currencyThenNumber.findAll(t)) add(m.groups[2]!!.range, m.range, m.groupValues[2], currencyOf[m.groupValues[1]], false)
@@ -627,8 +661,10 @@ object MessageParser {
         amounts.forEach { blank(it.start until it.end) }
         for (p in listOf(dateFull, dateIso, dateShort)) p.findAll(t).forEach { blank(it.range) }
         Regex("(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])").findAll(t).forEach { blank(it.range) }
-        last4Patterns.forEach { p -> p.regex.findAll(t).forEach { blank(it.groups[1]!!.range) } }
+        val trusted = ownAccountTrusted(t)
+        last4Patterns.forEach { p -> if (!p.own || trusted) p.regex.findAll(t).forEach { blank(it.groups[1]!!.range) } }
         dateCompact.findAll(t).forEach { blank(it.range) }
+        dateMonthFirst.findAll(t).forEach { blank(it.range) }
         // The other party's mobile number after to/from/إلى رقم is an explained counterparty, never a code.
         phoneNumber.findAll(t).forEach { m ->
             if (counterpartyBefore.containsMatchIn(t.substring(maxOf(0, m.range.first - LAST4_LOOKBACK), m.range.first))) blank(m.range)
@@ -648,16 +684,25 @@ object MessageParser {
     }
 
     // ---- last four / date / ids -------------------------------------------------------------------------------------
+
+    /** A match that itself starts with "your account/card/wallet" (حسابك, بطاقتك, محفظتك) is the household's own. */
+    private val ownText = Regex("^(?:حساب(?:ك|كم)|بطاقت(?:ك|كم)|محفظت(?:ك|كم)|your\\s)", ci)
+
+    /** A bare number after "your account" is trusted only when nothing in the message hints at a secret or a security footer. */
+    private fun ownAccountTrusted(t: String): Boolean = !SecretDetector.hasCodeLikeToken(t) && !SecretDetector.hasSecurityFooter(t)
+
     private fun last4(t: String): String? {
         val candidates =
             last4Patterns
                 .flatMap { p ->
                     p.regex
                         .findAll(t)
-                        .map { m -> Triple(m.range.first, m.groupValues[1], p.own) }
+                        .map { m -> Triple(m.range.first, m.groupValues[1], p.own || ownText.containsMatchIn(m.value)) }
                         .toList()
                 }.sortedBy { it.first }
+        val trusted = ownAccountTrusted(t)
         for ((start, digits, own) in candidates) {
+            if (own && !trusted) continue
             if (!own && recipientBefore.containsMatchIn(t.substring(maxOf(0, start - LAST4_LOOKBACK), start))) continue
             return digits
         }
@@ -707,6 +752,11 @@ object MessageParser {
             val y = if (yearText.length == 2) TWO_DIGIT_YEAR_BASE + yearText.toInt() else yearText.toInt()
             val month = monthNames.indexOf(m.groupValues[2].lowercase(Locale.ROOT)) + 1
             found += DateCandidate(m.range.first, m.range, listOfNotNull(safeDate(y, month, m.groupValues[1].toInt())))
+        }
+        dateMonthFirst.findAll(t).forEach { m ->
+            val month = monthNames.indexOf(m.groupValues[1].lowercase(Locale.ROOT)) + 1
+            found +=
+                DateCandidate(m.range.first, m.range, listOfNotNull(safeDate(m.groupValues[3].toInt(), month, m.groupValues[2].toInt())))
         }
         dateShort.findAll(t).forEach { m ->
             val d = m.groupValues[1].toInt()
