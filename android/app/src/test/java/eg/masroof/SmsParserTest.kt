@@ -183,8 +183,8 @@ class SmsParserTest {
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
         val rows =
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
-                fixture("round7.jsonl")
-        assertTrue(rows.size >= 130)
+                fixture("round7.jsonl") + fixture("round8.jsonl")
+        assertTrue(rows.size >= 160)
         checkAll(rows)
     }
 
@@ -193,7 +193,7 @@ class SmsParserTest {
         // Every probe input of the earlier verification rounds (owner identifiers removed) plus the verifier and round-2 sets:
         // nothing that was correct may become wrong.
         val rows = fixture("corpus.jsonl") + fixture("verifier.jsonl") + fixture("round2.jsonl")
-        assertTrue(rows.size >= 330)
+        assertTrue(rows.size >= 390)
         checkAll(rows)
     }
 
