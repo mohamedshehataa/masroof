@@ -181,7 +181,7 @@ object MessageParser {
     private val inAnchor =
         Regex(
             "\\brefund(?:ed)? of\\b|you(?: have)? received|\\breceived (?:egp|le|an?|\\d|usd)" +
-                "|(?:was|is|has been|have been|were) credited\\b(?! to a/c)|\\bcredited by\\b|\\bmoney received\\b" +
+                "|(?:was|is|has been|have been|were) credited\\b(?! to a/c)|\\bcredited by\\b|\\bcredited\\s+to\\b|\\bmoney received\\b" +
                 "|\\b(?:paid|sent|transferred|credited)\\s+to\\s+you\\b|\\bto\\s+you\\s+by\\b|\\b(?:paid|sent|transferred)\\s+you\\b" +
                 "|(?<![\\p{L}\\d])لكم(?![\\p{L}])|\\brefunded\\b|\\breceived\\s+(?:to|into|in)\\s+your\\b" +
                 "|credited with|(?:has|have) been credited to your|were credited" +
@@ -194,7 +194,8 @@ object MessageParser {
     private val fee =
         Regex(
             "\\b(?:annual fee|monthly fee|service fee|maintenance fee|card fee|sms fee|fee of|fees of|a fee|fees?|commission)\\b" +
-                "|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)|(?<![\\p{L}])رسوم(?![\\p{L}])",
+                "|\\b(?:transfer|sms|card|service|annual|monthly|maintenance|instapay)\\s+(?:fees?|charges?)\\b" +
+                "|(?<![\\p{L}])مصاريف(?![\\p{L}])|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)|(?<![\\p{L}])رسوم(?![\\p{L}])",
             ci,
         )
     private val transferWords =
@@ -566,7 +567,10 @@ object MessageParser {
     /** "Your account ... was credited": the household's account is the one that received the money. */
     private val ownSubjectCredited =
         Regex(
-            "$OWN_EN\\b(?:(?!\\b(?:to|from)\\b)[^.()]){0,30}?\\b(?:(?:was|has been|have been|is|were)\\s+credited|received\\s+(?:an?\\b|egp\\b|\\d))",
+            "$OWN_EN\\b(?:(?!\\b(?:to|from)\\b)[^.()]){0,30}?" +
+                "\\b(?:(?:was|has been|have been|is|were)\\s+credited|received\\s+(?:an?\\b|egp\\b|\\d))" +
+                // a masked account number as the subject ("A/C ***7781 credited with ..."): banks mask only their customer's own
+                "|\\b(?:account|a/c|acct)\\s*(?:no\\.?|number)?\\s*[*xX•]+\\s?\\d{4}\\s+(?:(?:was|has been|have been)\\s+)?credited\\b",
             ci,
         )
 
@@ -607,6 +611,35 @@ object MessageParser {
     private val weakIn = Regex("\\bcredited\\b|\\bdeposit(?:ed)?\\b|ايداع|تم اضافه|اضافه مبلغ", ci)
     private val minusSign = Regex("\\d(?:[.,]\\d+)?-(?=\\s|$)")
 
+    /**
+     * "to account ***7781", "الى حساب رقم ***7781": banks mask only the customer's own number, so an account word right
+     * after the preposition, with no person's name in between, is the household's own account.
+     */
+    private val maskedAccountDest =
+        Regex(
+            "(?:\\b(?:to|into)\\s+(?:the\\s+)?(?:account|a/c|acct)\\s*(?:no\\.?|number)?\\s*" +
+                "|(?<![\\p{L}\\d])(?:الي|في|ل)\\s*حساب\\s*(?:رقم\\s*)?)" +
+                "(?:[*xX•]+|ending(?:\\s+with)?)\\s*\\d{4}(?!\\d)",
+            ci,
+        )
+
+    /** Someone else as the SOURCE: "from AHMED ALI", "بتحويل من AHMED ALI" (not "from account ...", not "من حسابك"). */
+    private val thirdPartySource =
+        Regex(
+            "\\bfrom\\s+(?!your\\b|account\\b|a/c\\b|acct\\b|card\\b|wallet\\b)[\\p{L}@]" +
+                "|(?<![\\p{L}\\d])من\\s+(?!حساب|محفظت|بطاقت|رقم|ماكينه|\\d)[\\p{L}]",
+            ci,
+        )
+    private val youDid = Regex("\\byou(?:\\s+have)?\\s+(?:transferred|sent|paid)\\b", ci)
+
+    /** An incoming transfer to a masked, unnamed account from a named source (or credited/إضافة/إيداع wording). */
+    private fun maskedInbound(now: String): Boolean {
+        if (!maskedAccountDest.containsMatchIn(now)) return false
+        if (!(thirdPartySource.containsMatchIn(now) || weakIn.containsMatchIn(now))) return false
+        if (sourceIsOwn.containsMatchIn(now) || outStrong.containsMatchIn(now) || youDid.containsMatchIn(now)) return false
+        return !thirdPartyDestination.containsMatchIn(maskedAccountDest.replace(now, " "))
+    }
+
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
@@ -616,7 +649,8 @@ object MessageParser {
                 ourPayment.containsMatchIn(now)
         val transfer = transferVerbs.containsMatchIn(now)
         val ownSource = sourceIsOwn.containsMatchIn(now)
-        val third = thirdPartyDestination.containsMatchIn(now)
+        val maskedIn = maskedInbound(now)
+        val third = thirdPartyDestination.containsMatchIn(if (maskedIn) maskedAccountDest.replace(now, " ") else now)
         val hardDebit = outStrong.containsMatchIn(now)
         val ownDest =
             destinationIsOwn.containsMatchIn(now) && !hardDebit && !paymentContext.containsMatchIn(now) && !ourPayment.containsMatchIn(now)
@@ -624,9 +658,9 @@ object MessageParser {
             explicitIn.containsMatchIn(now) ||
                 ownSubjectCredited.containsMatchIn(now) ||
                 (paymentReceived.containsMatchIn(now) && !ourPayment.containsMatchIn(now))
-        val weakCredit = weakIn.containsMatchIn(now) && !transfer && !third && !debit && !ownSource
+        val weakCredit = (weakIn.containsMatchIn(now) && !transfer && !third && !debit && !ownSource) || maskedIn
         val anyIn = strongIn || ownDest || weakCredit
-        val anyOut = debit || ownSource || (transfer && third) || minusSign.containsMatchIn(now)
+        val anyOut = debit || ownSource || (transfer && third) || minusSign.containsMatchIn(now) || youDid.containsMatchIn(now)
         return when {
             anyIn && anyOut -> if (isOwnToOwn(ownSource, ownDest, strongIn, debit)) Dir.OUT else Dir.CONFLICT
             anyIn -> Dir.IN
@@ -650,11 +684,32 @@ object MessageParser {
     /** Fee wording decides only when it comes first: "تحويل ... رسوم الخدمة 1 جنيه" is a transfer that mentions its fee. */
     private val transferVerbs = Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|تحويل|ارسال|ارسلت|حولت", ci)
 
+    private val feeNoun =
+        Regex(
+            "\\b(?:instapay transfer|transfer|instapay|sms|card|service|annual|monthly|maintenance)\\s+(?:fees?|charges?|commission)\\b" +
+                "|\\b(?:fees?|commission)\\b" +
+                "|(?<![\\p{L}])(?:مصاريف|رسوم|عموله)(?:\\s+(?:تحويل(?:\\s+لحظي)?|الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه))?(?![\\p{L}])",
+            ci,
+        )
+
     private fun feeIsTheTransaction(t: String): Boolean {
         val feeAt = fee.find(t)?.range?.first ?: return false
         val other = listOfNotNull(transferVerbs.find(t)?.range?.first, paymentWords.find(t)?.range?.first)
-        return other.none { it < feeAt }
+        if (other.none { it < feeAt }) return true
+        // "InstaPay transfer fee deducted", "مصاريف تحويل لحظي": take the fee noun phrase out; if no separate transfer or
+        // payment is left, the fee itself is the transaction
+        val rest = feeNoun.replace(t, " ")
+        return !transferVerbs.containsMatchIn(rest) && !paymentWords.containsMatchIn(rest)
     }
+
+    /** Paying the household's own credit card is a movement between its own accounts (PROMPT 4.3), not new spending. */
+    private val cardRepayment =
+        Regex(
+            "credit\\s*card\\s+(?:payment|bill|repayment)" +
+                "|payment\\s+(?:of\\s+[^;!?]{0,30}?)?(?:to|for|towards)\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?credit\\s*card" +
+                "|سداد\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان|دفع\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان",
+            ci,
+        )
 
     private fun kindOf(
         t: String,
@@ -664,6 +719,7 @@ object MessageParser {
             refund.containsMatchIn(t) -> TxKind.REFUND
             withdrawal.containsMatchIn(t) && outgoing -> TxKind.CASH_WITHDRAWAL
             outgoing && feeIsTheTransaction(t) -> TxKind.FEE
+            outgoing && cardRepayment.containsMatchIn(t) -> TxKind.TRANSFER_OUT
             !outgoing -> if (ownAccount.containsMatchIn(t)) TxKind.TRANSFER_IN else TxKind.INCOME
             transferWords.containsMatchIn(t) && !paymentWords.containsMatchIn(t) -> TxKind.TRANSFER_OUT
             else -> TxKind.PURCHASE
@@ -812,6 +868,12 @@ object MessageParser {
         start: Int,
     ): Boolean = ownAccountTrusted(t) && transferVerbs.containsMatchIn(t.substring(0, start))
 
+    private val maskedDestPrefix =
+        Regex(
+            "(?:\\b(?:to|into)\\s+(?:the\\s+)?|(?<![\\p{L}\\d])(?:الي|في|ل)\\s*)(?:(?:account|a/c|acct|حساب)\\s*(?:(?:no\\.?|number|رقم)\\s*)?)?$",
+            ci,
+        )
+
     private enum class Role { SOURCE, DESTINATION, SUBJECT }
 
     private class Last4Candidate(
@@ -852,6 +914,7 @@ object MessageParser {
         outgoing: Boolean,
     ): String? {
         val transferKind = kind == TxKind.TRANSFER_OUT || kind == TxKind.TRANSFER_IN || kind == TxKind.INCOME
+        val inboundMasked = !outgoing && maskedInbound(futureClause.replace(t, " "))
         val candidates =
             last4Patterns.flatMap { p ->
                 p.regex
@@ -873,6 +936,7 @@ object MessageParser {
                 when {
                     c.bare -> bareAccepted(t, c.start)
                     c.own -> true
+                    inboundMasked && maskedDestPrefix.containsMatchIn(t.substring(maxOf(0, c.start - ROLE_LOOKBACK), c.start)) -> true
                     else -> !transferKind
                 }
             }
