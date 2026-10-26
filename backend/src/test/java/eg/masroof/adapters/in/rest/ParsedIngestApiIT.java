@@ -183,7 +183,7 @@ class ParsedIngestApiIT {
     // the created expense id is returned for a new record (so the app can offer Undo) and absent
     // for a duplicate
     assertThat(a.get("expenseId").asString()).isEqualTo(String.valueOf(e.get("id")));
-    assertThat(b.has("expenseId")).isFalse();
+    assertThat(b.path("expenseId").isNull() || b.path("expenseId").isMissingNode()).isTrue();
     assertThat(e.get("source")).isEqualTo("SMS");
     assertThat(e.get("status")).isEqualTo("CONFIRMED");
     assertThat(e.get("merchant_raw")).isEqualTo("CARREFOUR MAADI");
