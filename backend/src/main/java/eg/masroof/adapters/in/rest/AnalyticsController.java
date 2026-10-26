@@ -20,6 +20,7 @@ import eg.masroof.application.analytics.AnalyticsReports;
 import eg.masroof.application.analytics.AnalyticsReports.CategoryLine;
 import eg.masroof.application.analytics.AnalyticsService;
 import eg.masroof.application.analytics.AnalyticsService.InvalidAnalyticsRequestException;
+import eg.masroof.application.budget.BudgetService;
 import eg.masroof.domain.analytics.AnalyticsPeriod;
 import java.util.List;
 import java.util.UUID;
@@ -34,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 class AnalyticsController implements AnalyticsApi {
 
   private final AnalyticsService service;
+  private final BudgetService budgets;
 
-  AnalyticsController(AnalyticsService service) {
+  AnalyticsController(AnalyticsService service, BudgetService budgets) {
     this.service = service;
+    this.budgets = budgets;
   }
 
   private static <T> T guarded(Supplier<T> call) {
@@ -147,7 +150,7 @@ class AnalyticsController implements AnalyticsApi {
 
   @Override
   public ResponseEntity<BudgetStatusList> getAnalyticsBudgets(String period) {
-    throw ApiProblemException.notImplemented();
+    return ResponseEntity.ok(BudgetsController.dto(budgets.status(period)));
   }
 
   @Override
