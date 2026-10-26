@@ -174,10 +174,21 @@ final class ExpenseMapper {
             new RawMessageSummary()
                 .id(s.rawMessageId())
                 .source(convert(s.source(), MessageSource.class))
-                .senderMasked(s.sender())
+                .senderMasked(maskSender(s.sender()))
                 .memberId(s.memberId())
                 .receivedAt(s.receivedAt())
                 .processingStatus(status));
+  }
+
+  /**
+   * A sender id stays readable ("CIB"); anything with four or more digits shows only its last four.
+   */
+  static @Nullable String maskSender(@Nullable String sender) {
+    if (sender == null) {
+      return null;
+    }
+    String digits = sender.replaceAll("\\D", "");
+    return digits.length() >= 4 ? "••" + digits.substring(digits.length() - 4) : sender;
   }
 
   static @Nullable ExpenseSource source(@Nullable Enum<?> source) {

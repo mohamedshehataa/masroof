@@ -37,11 +37,24 @@ public class ParsedTransactionService {
   static final Duration MAX_FUTURE = Duration.ofDays(1);
   private static final Pattern LOCAL_ID = Pattern.compile("^[0-9a-f]{64}$");
   private static final Pattern LAST4 = Pattern.compile("^[0-9]{4}$");
-  private static final Pattern SENDER = Pattern.compile("^[A-Za-z][A-Za-z0-9._&-]{0,19}$");
+  private static final Pattern SENDER = Pattern.compile("^[A-Za-z][A-Za-z._&-]{0,19}$");
+
+  /** Above this a record waits for the user (a spoofed sender id must not book a large amount). */
+  static final long REVIEW_CEILING_MINOR = 5_000_000L;
+
   private static final Pattern CURRENCY = Pattern.compile("^[A-Z]{3}$");
   private static final Pattern INSTITUTION = Pattern.compile("^[\\p{L} .&-]{1,40}$");
-  // Letters, spaces and the punctuation of names and handles ("ahmed.ali@instapay", "B.TECH").
-  private static final Pattern LABEL = Pattern.compile("^[\\p{L}\\p{M} .&'@_/*(),+-]{1,40}$");
+  // The ONE label spec; the phone applies the same normalization (LabelNormalizer.kt): letters,
+  // marks, spaces
+  // and the punctuation of names and handles ("ahmed.ali@instapay", "B.TECH"). Curly quotes become
+  // an
+  // apostrophe, the registered/trademark/copyright signs are dropped, any other character becomes a
+  // space,
+  // and spaces collapse.
+  private static final Pattern DISALLOWED_LABEL_CHAR =
+      Pattern.compile("[^\\p{L}\\p{M} .&'@_/*(),+-]");
+  private static final Pattern QUOTES = Pattern.compile("[‘’ʼ`´]");
+  private static final Pattern MARKS = Pattern.compile("[®™©]");
   // A label that reads like a secret message fragment is refused even though it has no digit.
   private static final Pattern SECRET_WORDS =
       Pattern.compile(
@@ -96,6 +109,16 @@ public class ParsedTransactionService {
     this.clock = clock;
   }
 
+  /**
+   * Incoming money and unusually large amounts wait for the user: the sender id is only a claim, so
+   * a spoofed sender must not be able to book income or a large expense on its own.
+   */
+  private static boolean needsReview(String kind, long amountMinor) {
+    return "INCOME".equals(kind)
+        || "TRANSFER_IN".equals(kind)
+        || amountMinor > REVIEW_CEILING_MINOR;
+  }
+
   /** Validates and records one parsed transaction, once per (device, local id). */
   @Transactional
   public Accepted ingest(Command cmd) {
@@ -136,7 +159,9 @@ public class ParsedTransactionService {
             normalizedLabel(cmd.merchant()),
             note(cmd),
             List.of(),
-            ExpenseStatus.CONFIRMED,
+            needsReview(cmd.kind(), cmd.amountMinor())
+                ? ExpenseStatus.PENDING_REVIEW
+                : ExpenseStatus.CONFIRMED,
             cmd.source(),
             null,
             now,
@@ -183,8 +208,8 @@ public class ParsedTransactionService {
       if (label.codePoints().anyMatch(Character::isDigit)) {
         throw ExpenseException.invalid("merchant", "must not contain digits");
       }
-      String stripped = label.strip();
-      if (!LABEL.matcher(stripped).matches()
+      String stripped = normalizeLabel(label);
+      if (stripped.length() > MAX_LABEL
           || SECRET_WORDS.matcher(stripped.toLowerCase(Locale.ROOT)).find()) {
         throw ExpenseException.invalid("merchant", "is not an acceptable label");
       }
@@ -192,8 +217,22 @@ public class ParsedTransactionService {
     return typeOf(cmd.kind());
   }
 
+  /**
+   * The shared label spec: curly quotes to an apostrophe, drop (R)(TM)(C), other disallowed chars
+   * to a space.
+   */
+  static String normalizeLabel(String label) {
+    String s = MARKS.matcher(QUOTES.matcher(label).replaceAll("'")).replaceAll("");
+    s = DISALLOWED_LABEL_CHAR.matcher(s).replaceAll(" ");
+    return s.replaceAll("\\s+", " ").strip();
+  }
+
   private static @Nullable String normalizedLabel(@Nullable String merchant) {
-    return merchant == null || merchant.isBlank() ? null : merchant.strip();
+    if (merchant == null || merchant.isBlank()) {
+      return null;
+    }
+    String label = normalizeLabel(merchant);
+    return label.isEmpty() ? null : label;
   }
 
   private static ExpenseType typeOf(String kind) {

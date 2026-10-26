@@ -2948,7 +2948,7 @@ components:
         localId:
           type: string
           pattern: '^[0-9a-f]{64}$'
-          description: SHA-256 (hex) of sender, received time and message text, computed on the device. Idempotency key with `deviceId`; reveals nothing about the text.
+          description: HMAC-SHA256 (hex) of sender, received time and message text, keyed with a random per-installation secret that never leaves the phone (Android Keystore). Idempotency key with `deviceId`; reveals nothing about the text and cannot be brute-forced from it.
         source:
           type: string
           enum: [SMS, NOTIFICATION]
@@ -2972,7 +2972,7 @@ components:
           description: Card or account last four, only when the message named it explicitly.
         senderId:
           type: string
-          pattern: '^[A-Za-z][A-Za-z0-9._&-]{0,19}$'
+          pattern: '^[A-Za-z][A-Za-z._&-]{0,19}$'
           description: Allowlisted sender id (SMS) or Android package name (notification, truncated to its institution token).
         institution:
           type: [string, 'null']

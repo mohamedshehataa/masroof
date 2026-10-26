@@ -217,7 +217,6 @@ class ParsedIngestApiIT {
             "Code ****4821",
             "SHOP 4821",
             "ahmed 01000000000",
-            "<script>",
             "رمز التحقق",
             "x".repeat(41));
     int n = 0;
@@ -240,9 +239,13 @@ class ParsedIngestApiIT {
     assertThat(send(tokenA, bad).getStatus()).isEqualTo(422);
     bad = record("extra");
     bad.put("body", "Your OTP is 889900");
-    // An unknown property is ignored, never stored: the secret is nowhere in the database
-    // afterwards.
-    assertThat(send(tokenA, bad).getStatus()).isEqualTo(202);
+    // additionalProperties:false: an unknown property is refused (422) and never stored.
+    assertThat(send(tokenA, bad).getStatus()).isEqualTo(422);
+    for (String extra : List.of("text", "rawText", "message")) {
+      bad = record("extra-" + extra);
+      bad.put(extra, "Your OTP is 889900");
+      assertThat(send(tokenA, bad).getStatus()).as(extra).isEqualTo(422);
+    }
     assertThat(
             jdbc.queryForObject(
                 "select count(*) from raw_message r, expense e where r::text like '%889900%'"
@@ -297,5 +300,127 @@ class ParsedIngestApiIT {
     Map<String, Object> r = record("big");
     r.put("merchant", "a".repeat(20_000));
     assertThat(send(tokenA, r).getStatus()).isEqualTo(413);
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 the raw-text ingest endpoints stay off (501) until STORY-122")
+  void rawTextEndpointsAreOff() throws Exception {
+    MockHttpServletResponse sms =
+        mvc.perform(
+                post("/api/ingest/sms")
+                    .header("Authorization", "Bearer " + tokenA)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        JSON.writeValueAsString(
+                            Map.of(
+                                "sender", "CIB",
+                                "body", "Verification value 889900",
+                                "receivedAt", Instant.now().toString(),
+                                "deviceId", device.toString(),
+                                "smsId", "x1"))))
+            .andReturn()
+            .getResponse();
+    assertThat(sms.getStatus()).isEqualTo(501);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from raw_message where body like '%889900%'", Integer.class))
+        .isZero();
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName(
+      "REQ-SMS-003 the label spec: curly quotes, symbols and punctuation never lose a record")
+  void labelNormalization() throws Exception {
+    Map<String, String> cases =
+        Map.of(
+            "McDonald’s Maadi", "McDonald's Maadi",
+            "Spinneys®", "Spinneys",
+            "CAFE #A", "CAFE A",
+            "Zooba | Zamalek", "Zooba Zamalek",
+            "Yalla!Go", "Yalla Go");
+    int n = 0;
+    for (Map.Entry<String, String> c : cases.entrySet()) {
+      Map<String, Object> r = record("label-spec-" + n++);
+      r.put("merchant", c.getKey());
+      JsonNode a = JSON.readTree(send(tokenA, r).getContentAsString());
+      assertThat(a.get("outcome").asString()).as(c.getKey()).isEqualTo("ACCEPTED");
+      assertThat(expenseOf(a.get("rawMessageId").asString()).get("merchant_raw"))
+          .isEqualTo(c.getValue());
+    }
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 income, incoming transfers and large amounts wait for the user")
+  void pendingReview() throws Exception {
+    Map<String, Object> income = record("pr-income");
+    income.put("kind", "INCOME");
+    JsonNode a = JSON.readTree(send(tokenA, income).getContentAsString());
+    assertThat(expenseOf(a.get("rawMessageId").asString()).get("status"))
+        .isEqualTo("PENDING_REVIEW");
+    Map<String, Object> big = record("pr-big");
+    big.put("amountMinor", 5_000_001L);
+    JsonNode b = JSON.readTree(send(tokenA, big).getContentAsString());
+    assertThat(expenseOf(b.get("rawMessageId").asString()).get("status"))
+        .isEqualTo("PENDING_REVIEW");
+    Map<String, Object> normal = record("pr-normal");
+    JsonNode c = JSON.readTree(send(tokenA, normal).getContentAsString());
+    assertThat(expenseOf(c.get("rawMessageId").asString()).get("status")).isEqualTo("CONFIRMED");
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName(
+      "REQ-SMS-003 a sender id with digits is refused and a sender with digits is masked to last four")
+  void senderIds() throws Exception {
+    Map<String, Object> r = record("sender-digits");
+    r.put("senderId", "CIB1234");
+    assertThat(send(tokenA, r).getStatus()).isEqualTo(400);
+    assertThat(ExpenseMapper.maskSender("CIB")).isEqualTo("CIB");
+    assertThat(ExpenseMapper.maskSender("+201000000012")).isEqualTo("••0012");
+    assertThat(ExpenseMapper.maskSender(null)).isNull();
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName(
+      "REQ-SMS-003 429 after 100 requests a minute, and path variants cannot skip the guard")
+  void rateLimitAndPathVariants() throws Exception {
+    String email = "c-" + UUID.randomUUID() + "@example.com";
+    user(householdA, UUID.randomUUID(), email);
+    String token = login(email);
+    for (int i = 0; i < 100; i++) {
+      assertThat(send(token, record("rl-" + i)).getStatus()).isEqualTo(202);
+    }
+    MockHttpServletResponse limited = send(token, record("rl-over"));
+    assertThat(limited.getStatus()).isEqualTo(429);
+    assertThat(limited.getHeader("Retry-After")).isNotNull();
+    for (String path :
+        List.of("/api/ingest/parsed-transactions;x=1", "/api/ingest/%70arsed-transactions")) {
+      MockHttpServletResponse r =
+          mvc.perform(
+                  post(path)
+                      .header("Authorization", "Bearer " + token)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(JSON.writeValueAsString(record("rl-variant"))))
+              .andReturn()
+              .getResponse();
+      // routed variants are limited; an unroutable one (404) cannot reach the controller at all
+      assertThat(r.getStatus()).as(path).isIn(429, 404);
+      assertThat(r.getStatus() == 404 && path.contains(";")).isFalse();
+    }
+    Map<String, Object> big = record("rl-big");
+    big.put("merchant", "a".repeat(20_000));
+    MockHttpServletResponse tooBig =
+        mvc.perform(
+                post("/api/ingest/parsed-transactions;x=1")
+                    .header("Authorization", "Bearer " + tokenB)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.writeValueAsString(big)))
+            .andReturn()
+            .getResponse();
+    assertThat(tooBig.getStatus()).isEqualTo(413);
   }
 }

@@ -1761,7 +1761,7 @@ free text is `merchant`, a label with every digit removed.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `deviceId` | string (uuid) | yes |  |
-| `localId` | string | yes | SHA-256 (hex) of sender, received time and message text, computed on the device. Idempotency key with `deviceId`; reveals nothing about the text. |
+| `localId` | string | yes | HMAC-SHA256 (hex) of sender, received time and message text, keyed with a random per-installation secret that never leaves the phone (Android Keystore). Idempotency key with `deviceId`; reveals nothing about the text and cannot be brute-forced from it. |
 | `source` | enum(SMS, NOTIFICATION) | yes |  |
 | `kind` | enum(PURCHASE, TRANSFER_OUT, TRANSFER_IN, INCOME, REFUND, CASH_WITHDRAWAL, FEE) | yes |  |
 | `amountMinor` | integer (int64) | yes |  |

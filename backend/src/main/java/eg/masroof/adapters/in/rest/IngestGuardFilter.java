@@ -17,6 +17,8 @@ import java.time.Instant;
 import java.util.Optional;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Guards {@code POST /api/ingest/sms} and {@code POST /api/ingest/parsed-transactions}
@@ -29,7 +31,23 @@ final class IngestGuardFilter extends OncePerRequestFilter {
   static final int MAX_BODY_BYTES = 16 * 1024;
   static final int LIMIT = 100;
   private static final java.util.Set<String> PATHS =
-      java.util.Set.of("/api/ingest/sms", "/api/ingest/parsed-transactions");
+      java.util.Set.of("/api/ingest/parsed-transactions");
+
+  private static final JsonMapper JSON = JsonMapper.builder().build();
+  private static final java.util.Set<String> ALLOWED =
+      java.util.Set.of(
+          "deviceId",
+          "localId",
+          "source",
+          "kind",
+          "amountMinor",
+          "currency",
+          "occurredAt",
+          "instrumentLast4",
+          "senderId",
+          "institution",
+          "paymentMethod",
+          "merchant");
 
   private final FailureWindowLimiter limiter =
       new FailureWindowLimiter(LIMIT, Duration.ofSeconds(60), 10_000);
@@ -70,7 +88,33 @@ final class IngestGuardFilter extends OncePerRequestFilter {
       ProblemResponses.payloadTooLarge(request, response);
       return;
     }
+    if (hasUnknownProperty(body)) {
+      ProblemResponses.unprocessable(
+          request, response, "The request contains a property this endpoint does not accept");
+      return;
+    }
     chain.doFilter(new BufferedRequest(request, body), response);
+  }
+
+  /**
+   * The contract says additionalProperties:false: a record that carries a {@code body}, {@code
+   * text} or any other extra property is refused instead of silently ignored.
+   */
+  private static boolean hasUnknownProperty(byte[] body) {
+    try {
+      JsonNode root = JSON.readTree(body);
+      if (root == null || !root.isObject()) {
+        return false;
+      }
+      for (String name : root.propertyNames()) {
+        if (!ALLOWED.contains(name)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (RuntimeException e) {
+      return false; // not JSON: the controller answers 400
+    }
   }
 
   /** The already-read body, replayable for the controller. */
