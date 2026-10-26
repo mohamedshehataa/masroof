@@ -57,10 +57,15 @@ sealed interface ParseOutcome {
         val record: ParsedRecord,
     ) : ParseOutcome
 
-    /** Not understood, or looks secret: it stays on the phone, in the local "Needs review" list. [text] is shown locally. */
+    /**
+     * Not understood, not a proven family, or looks secret: it stays on the phone, in the local "Needs review" list. [text] is
+     * shown locally. [suggestion] is what the generic engine extracted (kind, amount, last4, label, date); the review screen
+     * pre-fills a one-tap "Save" with it, and only that tap uploads it. It never leaves the phone by itself.
+     */
     data class Review(
         val reason: String,
         val text: String,
+        val suggestion: ParsedRecord? = null,
     ) : ParseOutcome {
         override fun toString() = "Review(reason=$reason)"
     }

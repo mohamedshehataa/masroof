@@ -87,9 +87,39 @@ data class ReviewItemEntity(
     val reason: String,
     val receivedAtMillis: Long,
     val createdAtMillis: Long,
+    // The engine's SUGGESTION (round 15): pre-fills the one-tap "Save". Typed fields only, no text; null when nothing was extracted.
+    val sugKind: String? = null,
+    val sugAmountMinor: Long? = null,
+    val sugCurrency: String? = null,
+    val sugOccurredAtMillis: Long? = null,
+    val sugLast4: String? = null,
+    val sugSenderId: String? = null,
+    val sugInstitution: String? = null,
+    val sugPaymentMethod: String? = null,
+    val sugMerchant: String? = null,
+    // Template learning: the digit-free shape of the message and its number slots, used only if the user confirms the item.
+    val shape: String? = null,
+    val slots: String? = null,
 ) {
     override fun toString() = "ReviewItemEntity(id=$id, reason=$reason)"
 }
+
+/**
+ * A message format the user confirmed on this phone (round 15). [shape] holds typed slots and plain banking words only: no
+ * digit, no name. A later message of the same [sender] with exactly this shape is recorded without asking, with the confirmed
+ * [kind]; [amountSlot] / [last4Slot] (-1 = the engine's own pick) remember which number slot the user said held the amount or
+ * the last four. Never uploaded; cleared on logout.
+ */
+@Entity(tableName = "learned_template")
+data class LearnedTemplateEntity(
+    @PrimaryKey val id: String,
+    val sender: String,
+    val shape: String,
+    val kind: String,
+    val amountSlot: Int,
+    val last4Slot: Int,
+    val createdAtMillis: Long,
+)
 
 const val REVIEW_RETENTION_DAYS = 30L
 

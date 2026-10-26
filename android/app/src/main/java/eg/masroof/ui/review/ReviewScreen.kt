@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
+import eg.masroof.core.Money
+import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
 import eg.masroof.ui.viewmodel.ReviewViewModel
 
@@ -39,7 +43,7 @@ fun ReviewRoute(
     viewModel: ReviewViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
-    ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss)
+    ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss, onSave = viewModel::save)
 }
 
 @Composable
@@ -48,6 +52,7 @@ fun ReviewContent(
     onCreate: (String) -> Unit,
     onDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onSave: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -61,7 +66,7 @@ fun ReviewContent(
             items.isEmpty() -> Text(stringResource(R.string.review_empty), style = MaterialTheme.typography.bodyMedium)
             else ->
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(items, key = { it.id }) { item -> ReviewCard(item, onCreate, onDismiss) }
+                    items(items, key = { it.id }) { item -> ReviewCard(item, onCreate, onDismiss, onSave) }
                 }
         }
     }
@@ -72,19 +77,27 @@ private fun ReviewCard(
     item: ReviewItemEntity,
     onCreate: (String) -> Unit,
     onDismiss: (String) -> Unit,
+    onSave: (String) -> Unit,
 ) {
+    val suggested = item.sugKind != null && item.sugAmountMinor != null
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(item.sender, style = MaterialTheme.typography.titleSmall)
             Text(item.text, style = MaterialTheme.typography.bodyMedium)
+            if (suggested) Suggestion(item)
             Text(reasonLabel(item.reason), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (suggested) {
+                    Button(onClick = { onSave(item.id) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.review_save))
+                    }
+                }
                 OutlinedButton(onClick = { onCreate(item.id) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.review_create))
+                    Text(stringResource(if (suggested) R.string.review_edit else R.string.review_create))
                 }
                 TextButton(onClick = { onDismiss(item.id) }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.review_dismiss))
@@ -94,6 +107,34 @@ private fun ReviewCard(
     }
 }
 
+/** What the engine read from the message: kind, amount, card or account, label. Saving uploads exactly these typed fields. */
+@Composable
+private fun Suggestion(item: ReviewItemEntity) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(stringResource(R.string.review_suggestion_title), style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(kindLabel(item.sugKind.orEmpty()), style = MaterialTheme.typography.bodyMedium)
+            AmountText(Money(item.sugAmountMinor ?: 0L, item.sugCurrency ?: Money.EGP))
+        }
+        val detail = listOfNotNull(item.sugMerchant, item.sugLast4?.let { "**$it" }).joinToString(" - ")
+        if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun kindLabel(kind: String): String =
+    stringResource(
+        when (kind) {
+            "PURCHASE" -> R.string.review_kind_purchase
+            "TRANSFER_OUT" -> R.string.review_kind_transfer_out
+            "TRANSFER_IN" -> R.string.review_kind_transfer_in
+            "INCOME" -> R.string.review_kind_income
+            "REFUND" -> R.string.review_kind_refund
+            "CASH_WITHDRAWAL" -> R.string.review_kind_cash
+            else -> R.string.review_kind_fee
+        },
+    )
+
 @Composable
 private fun reasonLabel(reason: String): String =
     stringResource(
@@ -101,6 +142,7 @@ private fun reasonLabel(reason: String): String =
             "secret" -> R.string.review_reason_secret
             "unsupported_currency" -> R.string.review_reason_unsupported_currency
             "unexplained_number" -> R.string.review_reason_unexplained_number
+            "unconfirmed" -> R.string.review_reason_unconfirmed
             "rejected" -> R.string.review_reason_rejected
             else -> R.string.review_reason_other
         },
@@ -117,7 +159,8 @@ fun ReviewAddRoute(
     LaunchedEffect(id) { review.prefill(id)?.let { add.prefill(it.amountText, it.notes) } }
     AddExpenseRoute(
         onDone = {
-            review.dismiss(id)
+            // learn the format of this message with the amount the user actually saved, then drop the item
+            review.confirmEdited(id, MoneyFormat.parseMinor(add.state.value.form.amountText))
             onDone()
         },
         viewModel = add,

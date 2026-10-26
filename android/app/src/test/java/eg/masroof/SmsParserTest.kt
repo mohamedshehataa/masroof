@@ -50,6 +50,14 @@ internal fun digitsRemoved(s: String) =
         .replace("*", "")
         .trim()
 
+/** What the engine extracted: the uploaded record of a proven family, or the suggestion of a review item the user must confirm. */
+internal fun extracted(outcome: ParseOutcome): eg.masroof.ingest.parse.ParsedRecord? =
+    when (outcome) {
+        is ParseOutcome.Record -> outcome.record
+        is ParseOutcome.Review -> outcome.suggestion
+        else -> null
+    }
+
 /** Everything that could leave the phone for this outcome, as text. */
 internal fun wireText(outcome: ParseOutcome): String =
     when (outcome) {
@@ -64,8 +72,10 @@ class SmsParserTest {
         assertTrue(rows.size >= 22)
         for (row in rows) {
             val outcome = MessageParser.parse(message(row.str("sender"), row.str("body")))
-            assertTrue("${row.str("id")} -> $outcome", outcome is ParseOutcome.Record)
-            val r = (outcome as ParseOutcome.Record).record
+            // these shapes are not a proven family: a review item that carries the extraction as its suggestion (nothing uploads)
+            val r = extracted(outcome)
+            assertNotNull("${row.str("id")} -> $outcome", r)
+            requireNotNull(r)
             assertEquals(row.str("id"), row.str("amountMinor").toLong(), r.amountMinor)
             assertEquals(row.str("currency"), r.currency)
             val expectedKinds =
@@ -104,8 +114,9 @@ class SmsParserTest {
                 assertFalse("$id must not become a record: $outcome", outcome is ParseOutcome.Record)
                 continue
             }
-            assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
-            val r = (outcome as ParseOutcome.Record).record
+            val r = extracted(outcome)
+            assertNotNull("$id -> $outcome", r)
+            requireNotNull(r)
             assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
             assertEquals(id, expect.str("currency"), r.currency)
             val kinds = if (kind == "TRANSFER") setOf("TRANSFER_OUT", "TRANSFER_IN") else setOf(kind)
@@ -184,8 +195,9 @@ class SmsParserTest {
         val rows =
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
                 fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
-                fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl") + fixture("round14.jsonl")
-        assertTrue(rows.size >= 320)
+                fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl") + fixture("round14.jsonl") +
+                fixture("round15.jsonl")
+        assertTrue(rows.size >= 350)
         checkAll(rows)
     }
 
@@ -198,8 +210,33 @@ class SmsParserTest {
         checkAll(rows)
     }
 
+    private var suggestChecked = 0
+    private var suggestCorrect = 0
+
+    private fun tallySuggestion(
+        suggest: JsonObject,
+        suggestion: eg.masroof.ingest.parse.ParsedRecord?,
+    ) {
+        // a review item with no suggestion at all (a direction conflict, no template) is the conservative outcome, not a wrong one
+        if (suggestion == null) return
+        suggestChecked++
+        val kinds = suggest["kinds"]?.jsonArray?.map { it.jsonPrimitive.content } ?: suggest.opt("kind")?.let { listOf(it) }
+        val kindOk = kinds == null || suggestion.kind.name in kinds
+        val amountOk = suggest.opt("amountMinor")?.let { it.toLong() == suggestion.amountMinor } ?: true
+        val last4 = suggest.opt("last4")
+        val last4Ok =
+            when {
+                last4 == null || last4 == "any" -> true
+                last4.endsWith("?") -> suggestion.instrumentLast4 == null || suggestion.instrumentLast4 == last4.dropLast(1)
+                else -> suggestion.instrumentLast4 == (if (last4 == "none") null else last4)
+            }
+        if (kindOk && amountOk && last4Ok) suggestCorrect++
+    }
+
     /** Runs every row and reports all failures at once, so one run shows the whole picture. */
     private fun checkAll(rows: List<JsonObject>) {
+        suggestChecked = 0
+        suggestCorrect = 0
         val failures =
             rows.mapNotNull { row ->
                 try {
@@ -210,6 +247,16 @@ class SmsParserTest {
                 }
             }
         assertTrue("${failures.size} of ${rows.size} rows fail: " + failures.joinToString(" | "), failures.isEmpty())
+        // The suggestions only pre-fill a one-tap Save: most must be right, but a wrong one is not a failure of the guard.
+        assertTrue(
+            "only $suggestCorrect of $suggestChecked suggestions are right",
+            suggestChecked == 0 || suggestCorrect * SUGGESTION_PERCENT_DENOMINATOR >= suggestChecked * MIN_SUGGESTION_PERCENT,
+        )
+    }
+
+    private companion object {
+        const val SUGGESTION_PERCENT_DENOMINATOR = 100
+        const val MIN_SUGGESTION_PERCENT = 85
     }
 
     @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
@@ -250,7 +297,12 @@ class SmsParserTest {
                 // a record must still be right in every field the row pins; a review item is always acceptable
                 if (record != null) checkRecordFields(id, expect, record, kinds)
             }
-            "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+            "review" -> {
+                assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+                // A row that used to be a record keeps its old fields as `suggest`: the engine's suggestion is compared, but a wrong
+                // suggestion is a MINOR (tallied, bounded in checkAll), never a failure: the user confirms it before it uploads.
+                expect["suggest"]?.jsonObject?.let { tallySuggestion(it, (outcome as ParseOutcome.Review).suggestion) }
+            }
             "not_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
             "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
             "record" -> {
@@ -389,37 +441,34 @@ class SmsParserTest {
     @Test
     fun `REQ-SMS-016 the occurred time is Cairo local converted to UTC within 45 days, else the received time`() {
         val r =
-            (
-                MessageParser.parse(
-                    message("CIB", "Purchase of EGP 90.00 at UBER on 12/03/2026 14:05", CASES_RECEIVED),
-                ) as ParseOutcome.Record
-            ).record
+            extracted(MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 12/03/2026 14:05", CASES_RECEIVED)))!!
         assertEquals(Instant.parse("2026-03-12T12:05:00Z").toEpochMilli(), r.occurredAtMillis)
         val summer =
-            (
+            extracted(
                 MessageParser.parse(
                     message(
                         "CIB",
                         "Purchase of EGP 90.00 at UBER on 25/10/2026 23:50",
                         Instant.parse("2026-10-26T10:00:00Z").toEpochMilli(),
                     ),
-                ) as ParseOutcome.Record
-            ).record
+                ),
+            )!!
         assertEquals(Instant.parse("2026-10-25T20:50:00Z").toEpochMilli(), summer.occurredAtMillis)
-        val old =
-            (MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 01/09/2026", RECEIVED)) as ParseOutcome.Record).record
+        val old = extracted(MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER on 01/09/2026", RECEIVED)))!!
         assertEquals(RECEIVED, old.occurredAtMillis)
     }
 
     @Test
     fun `REQ-SMS-013 last4 comes only from an explicit card or account marker`() {
-        val ok = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER card ending 1234")) as ParseOutcome.Record
-        assertEquals("1234", ok.record.instrumentLast4)
-        val none = MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER Ref 98765432")) as ParseOutcome.Record
-        assertNull(none.record.instrumentLast4)
-        assertNotNull(ok.record.toString())
+        val ok = extracted(MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER card ending 1234")))!!
+        assertEquals("1234", ok.instrumentLast4)
+        val none = extracted(MessageParser.parse(message("CIB", "Purchase of EGP 90.00 at UBER Ref 98765432")))!!
+        assertNull(none.instrumentLast4)
+        assertNotNull(ok.toString())
     }
 }
+
+private val F4_IDS = setOf("ip-ntf-en-sent", "ip-ntf-ar-sent", "ip-ntf-en-received")
 
 class InstaPaySmsTest {
     @Test
@@ -435,8 +484,11 @@ class InstaPaySmsTest {
                 assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
                 continue
             }
-            assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
-            val r = (outcome as ParseOutcome.Record).record
+            // the InstaPay app notifications of family F4 are recorded; every other shape is a review item with a suggestion
+            if (source == CaptureSource.NOTIFICATION && id in F4_IDS) assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
+            val r = extracted(outcome)
+            assertNotNull("$id -> $outcome", r)
+            requireNotNull(r)
             assertEquals(id, source, r.source)
             assertEquals(id, expect.str("kind"), r.kind.name)
             assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)

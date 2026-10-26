@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.reviewCutoff
+import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.SenderSettings
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 private const val STOP_TIMEOUT = 5_000L
@@ -23,6 +27,7 @@ class SmsCaptureViewModel
         private val notifications: NotificationSettings,
         db: AppDatabase,
         clock: java.time.Clock,
+        @IoDispatcher private val io: CoroutineDispatcher,
     ) : ViewModel() {
         private val mutableSuggestions = MutableStateFlow(senders.suggestions())
         val suggestions: StateFlow<List<String>> = mutableSuggestions
@@ -39,6 +44,16 @@ class SmsCaptureViewModel
                 SharingStarted.WhileSubscribed(STOP_TIMEOUT),
                 0,
             )
+
+        val learnedCount: StateFlow<Int> =
+            db.learnedTemplates().observeCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), 0)
+
+        private val templates = db.learnedTemplates()
+
+        /** Forget every message format the user confirmed; later messages go back to the review list first. */
+        fun clearLearned() {
+            viewModelScope.launch { withContext(io) { templates.clear() } }
+        }
 
         fun refresh() {
             mutableSuggestions.value = senders.suggestions()

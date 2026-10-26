@@ -159,6 +159,27 @@ interface ReviewDao {
     suspend fun all(): List<ReviewItemEntity>
 }
 
+@Dao
+interface LearnedTemplateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: LearnedTemplateEntity)
+
+    @Query("SELECT * FROM learned_template WHERE sender = :sender AND shape = :shape LIMIT 1")
+    suspend fun find(
+        sender: String,
+        shape: String,
+    ): LearnedTemplateEntity?
+
+    @Query("SELECT COUNT(*) FROM learned_template")
+    fun observeCount(): Flow<Int>
+
+    @Query("DELETE FROM learned_template")
+    suspend fun clear()
+
+    @Query("SELECT * FROM learned_template")
+    suspend fun all(): List<LearnedTemplateEntity>
+}
+
 @Database(
     entities =
         [
@@ -168,8 +189,9 @@ interface ReviewDao {
             OutboxEntity::class,
             ParsedOutboxEntity::class,
             ReviewItemEntity::class,
+            LearnedTemplateEntity::class,
         ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -182,6 +204,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun parsedOutbox(): ParsedOutboxDao
 
     abstract fun reviews(): ReviewDao
+
+    abstract fun learnedTemplates(): LearnedTemplateDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction
@@ -269,6 +293,30 @@ CREATE TABLE IF NOT EXISTS review_item (
   PRIMARY KEY(id)
 )
 """
+
+/**
+ * v4 -> v5 (round 15): a review item carries the engine's typed suggestion plus its digit-free shape, and the user's confirmed
+ * message formats are stored on the phone as `learned_template` rows.
+ */
+val MIGRATION_4_5: Migration =
+    object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            for (column in listOf("sugKind TEXT", "sugAmountMinor INTEGER", "sugCurrency TEXT", "sugOccurredAtMillis INTEGER")) {
+                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
+            }
+            for (column in listOf("sugLast4 TEXT", "sugSenderId TEXT", "sugInstitution TEXT", "sugPaymentMethod TEXT")) {
+                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
+            }
+            for (column in listOf("sugMerchant TEXT", "shape TEXT", "slots TEXT")) {
+                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
+            }
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS learned_template (id TEXT NOT NULL, sender TEXT NOT NULL, shape TEXT NOT NULL, " +
+                    "kind TEXT NOT NULL, amountSlot INTEGER NOT NULL, last4Slot INTEGER NOT NULL, createdAtMillis INTEGER NOT NULL, " +
+                    "PRIMARY KEY(id))",
+            )
+        }
+    }
 
 /**
  * v3 -> v4: SMS text no longer leaves or lingers on the phone. The v3 `sms_outbox` (which held redacted text) is dropped

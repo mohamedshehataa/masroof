@@ -481,7 +481,7 @@ object MessageParser {
         )
 
     /** Clause borders that survive only in the raw text: new lines, the Arabic comma and semicolon, " - " between sentences. */
-    private val rawBorder = Regex("[\\r\\n]+|\\s*[،؛]\\s*|\\s+[-–—]\\s+")
+    private val rawBorder = Regex("[\\r\\n]+|\\s*(?:(?<!\\d)[،؛]|[،؛](?!\\d))\\s*|\\s+[-–—]\\s+")
 
     /** A clause whose head is a fee noun ("Transfer fee EGP 5.00", "رسوم تحويل 1.00 جنيه", "Cash advance fee of EGP 60.00 applies"). */
     private val feeHead =
@@ -678,7 +678,9 @@ object MessageParser {
                 paymentMethod = paymentMethod(sender, institution, t, kind),
                 merchant = merchant(norm, t, kind),
             )
-        return ParseOutcome.Record(record)
+        // Confidence gate: only a proven family is uploaded without a human; the rest is a review item with this as its suggestion
+        if (AutoRecordFamilies.family(msg, t, record) != null) return ParseOutcome.Record(record)
+        return ParseOutcome.Review("unconfirmed", shown, record)
     }
 
     /** The condition of an offer: "your first InstaPay transfer", "when you transfer", "عند الدفع". Not a completed transaction. */
@@ -989,6 +991,8 @@ object MessageParser {
             .minByOrNull { a -> a.start - anchorEnds.filter { it <= a.start }.max() }
             ?: usable.first()
     }
+
+    internal fun minorOf(raw: String): Long? = toMinor(raw)
 
     private fun toMinor(raw: String): Long? {
         val s =

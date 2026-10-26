@@ -13,8 +13,10 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import eg.masroof.data.auth.AuthResult
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.LearnedTemplateEntity
 import eg.masroof.data.db.MIGRATION_2_3
 import eg.masroof.data.db.MIGRATION_3_4
+import eg.masroof.data.db.MIGRATION_4_5
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.insights.InsightsCache
@@ -88,7 +90,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration24.db")
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -125,7 +127,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration34.db")
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -147,6 +149,35 @@ class RoomMigrationTest {
                     ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2),
                 )
                 assertEquals(1, db.parsedOutbox().all().size)
+            } finally {
+                db.close()
+            }
+        }
+
+    @Test
+    fun `REQ-SMS-061 migration 4 to 5 keeps review items and adds the suggestion columns and the learned templates`() =
+        runTest {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val raw = createFromSchema(context, "migration45.db", 4)
+            raw.execSQL(
+                "INSERT INTO review_item (id, source, sender, text, reason, receivedAtMillis, createdAtMillis) " +
+                    "VALUES ('r1', 'SMS', 'CIB', 'unparsed', 'no_template', 1, 2)",
+            )
+            raw.version = 4
+            raw.close()
+            val db =
+                Room
+                    .databaseBuilder(context, AppDatabase::class.java, "migration45.db")
+                    .addMigrations(MIGRATION_4_5)
+                    .allowMainThreadQueries()
+                    .build()
+            try {
+                val item = db.reviews().all().single()
+                assertEquals("r1", item.id)
+                assertNull("an old item has no suggestion", item.sugKind)
+                assertNull(item.shape)
+                db.learnedTemplates().upsert(LearnedTemplateEntity("t1", "CIB", "<N> egp", "PURCHASE", -1, -1, 3))
+                assertEquals(1, db.learnedTemplates().all().size)
             } finally {
                 db.close()
             }

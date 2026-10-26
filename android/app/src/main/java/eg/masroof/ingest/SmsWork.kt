@@ -24,6 +24,8 @@ import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ingest.parse.MessageParser
 import eg.masroof.ingest.parse.ParseOutcome
+import eg.masroof.ingest.parse.ParsedRecord
+import eg.masroof.ingest.parse.TemplateShape
 import eg.masroof.work.OutboxBackoff
 import java.time.Clock
 import java.util.concurrent.TimeUnit
@@ -116,7 +118,8 @@ class SmsPipeline
                 idKey.wipe()
                 return Disposition.DROPPED
             }
-            val outcome = MessageParser.parse(message)
+            // A message in a format the user confirmed on this phone is recorded like a proven family
+            val outcome = TemplateLearning.apply(db, message, MessageParser.parse(message))
             // The gate is checked once more inside the transaction, right before anything is written, so an intake
             // that was in flight during logout cannot insert after the wipe.
             return db.withTransaction { if (gate.isOpen()) store(message, id, outcome) else Disposition.DROPPED }
@@ -161,12 +164,30 @@ class SmsPipeline
                             reason = outcome.reason,
                             receivedAtMillis = message.receivedAtMillis,
                             createdAtMillis = now,
-                        ),
+                        ).withSuggestion(outcome.suggestion, TemplateShape.of(message.text)),
                     )
                     Disposition.REVIEW
                 }
                 is ParseOutcome.Ignore -> Disposition.DROPPED
             }
+
+        private fun ReviewItemEntity.withSuggestion(
+            suggestion: ParsedRecord?,
+            shape: TemplateShape.Shape?,
+        ): ReviewItemEntity =
+            copy(
+                sugKind = suggestion?.kind?.name,
+                sugAmountMinor = suggestion?.amountMinor,
+                sugCurrency = suggestion?.currency,
+                sugOccurredAtMillis = suggestion?.occurredAtMillis,
+                sugLast4 = suggestion?.instrumentLast4,
+                sugSenderId = suggestion?.senderId,
+                sugInstitution = suggestion?.institution,
+                sugPaymentMethod = suggestion?.paymentMethod,
+                sugMerchant = suggestion?.merchant,
+                shape = shape?.signature,
+                slots = shape?.let { TemplateLearning.encodeSlots(it.numbers) },
+            )
 
         private fun isAllowed(message: IncomingMessage): Boolean =
             when (message.source) {

@@ -84,6 +84,18 @@ fun SmsCaptureSection(
             }
         }
         NotificationCaptureSection(viewModel)
+        val learned by viewModel.learnedCount.collectAsStateWithLifecycle()
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.learned_formats, learned), modifier = Modifier.weight(1f))
+            TextButton(onClick = viewModel::clearLearned, enabled = learned > 0, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.learned_clear))
+            }
+        }
+        Text(stringResource(R.string.learned_explainer), style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = onOpenReview, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(R.string.review_open, reviewCount))
         }

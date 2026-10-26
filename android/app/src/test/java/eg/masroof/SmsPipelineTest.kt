@@ -315,7 +315,7 @@ class SmsOutboxTest {
         at: Long = 1_000L,
     ) = IncomingMessage(CaptureSource.SMS, sender, body, at)
 
-    private val purchase = "Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05"
+    private val purchase = "Your card ending 4512 was charged EGP 99.00 at PHARMACY on 12/03/2026 14:05"
 
     @Test
     fun `REQ-SMS-060 a parsed SMS is queued once as a typed record and uploading removes it`() =
@@ -346,7 +346,7 @@ class SmsOutboxTest {
                 )
             for (s in secrets) pipeline.accept(sms(s))
             // genuine messages that carry codes upload structured records without the codes
-            pipeline.accept(sms("Purchase of EGP 250.00 at CARREFOUR on 12/03/2026 14:05 card ending 1234. Auth code 123456"))
+            pipeline.accept(sms("Your card ending 1234 was charged EGP 250.00 at CARREFOUR on 12/03/2026 14:05. Auth code 123456"))
             uploader.uploadPending()
             assertTrue(db.parsedOutbox().all().isEmpty())
             val wire = remote.sent.map { apiJson.encodeToString(parsedRequest(device.get(), it)) }
@@ -456,7 +456,7 @@ class SmsOutboxTest {
             assertTrue("described from typed fields only", item.text.contains("PURCHASE 99.00 EGP"))
             assertFalse(item.text.contains("12/03/2026"))
 
-            pipeline.accept(sms("Purchase of EGP 10.00 at KIOSK", at = 2_000L))
+            pipeline.accept(sms("Your card ending 4512 was charged EGP 10.00 at KIOSK", at = 2_000L))
             remote.next = SmsUploadResult.RetryLimited
             repeat(5) { uploader.uploadPending() }
             assertEquals("an ambiguous answer ends in review after five tries", 2, db.reviews().all().size)

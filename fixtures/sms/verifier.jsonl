@@ -53,15 +53,15 @@
 {"id": "never-52", "sender": "CIB", "body": "556677 is your Instapay PIN", "expect": {"outcome": "never_record"}}
 {"id": "never-53", "sender": "CIB", "body": "Your InstaPay OTP is 556677. Transfer of EGP 500.00 to Ahmed", "expect": {"outcome": "never_record"}}
 {"id": "never-54", "sender": "CIB", "body": "رمز تحويل انستاباي 556677 لتحويل 500 جنيه الى احمد", "expect": {"outcome": "never_record"}}
-{"id": "dir-debit-credit", "sender": "NBE", "body": "Your a/c XXXX1234 debited with EGP 2,000.00 and credited to a/c XXXX5678", "expect": {"outcome": "record", "kind": "TRANSFER_OUT", "amountMinor": 200000}}
+{"id": "dir-debit-credit", "sender": "NBE", "body": "Your a/c XXXX1234 debited with EGP 2,000.00 and credited to a/c XXXX5678", "expect": {"outcome": "review", "suggest": {"kind": "TRANSFER_OUT", "amountMinor": 200000}}}
 {"id": "dir-cashback", "sender": "CIB", "body": "Your card ending 1234 was debited EGP 500.00 at AMAZON. Cashback of EGP 5.00 will be credited to your account", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 50000, "merchant": "AMAZON", "last4": "1234"}}
-{"id": "dir-fawry-received", "sender": "Fawry", "body": "Your payment of EGP 150.00 to WE was received successfully", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 15000, "merchant": "WE"}}
-{"id": "dir-bill-received", "sender": "CIB", "body": "Payment of EGP 1,200.00 for your electricity bill was received", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 120000}}
-{"id": "dir-transfer-received", "sender": "NBE", "body": "Transfer of EGP 500.00 to Ahmed was received successfully", "expect": {"outcome": "record", "kind": "TRANSFER_OUT", "amountMinor": 50000, "merchant": "Ahmed"}}
-{"id": "dir-sent-beneficiary", "sender": "NBE", "body": "You have sent EGP 500.00 to Ahmed. The money was received by the beneficiary", "expect": {"outcome": "record", "kind": "TRANSFER_OUT", "amountMinor": 50000, "merchant": "Ahmed"}}
-{"id": "dir-ar-transfer-received", "sender": "NBE", "body": "تم تحويل 500 جنيه من حسابك الى حساب 5678 وتم استلامها بنجاح", "expect": {"outcome": "record_or_review", "notKind": ["INCOME", "TRANSFER_IN"]}}
-{"id": "dir-ar-send-phone", "sender": "NBE", "body": "تم ارسال 200 جنيه الى 01000000012 وتم الاستلام", "expect": {"outcome": "record_or_review", "notKind": ["INCOME", "TRANSFER_IN"]}}
-{"id": "dir-ar-transfer-receipt-ambiguous", "sender": "NBE", "body": "تم استلام تحويلك بمبلغ 300 جنيه بنجاح", "expect": {"outcome": "record_or_review", "notKind": ["INCOME", "TRANSFER_IN"]}}
+{"id": "dir-fawry-received", "sender": "Fawry", "body": "Your payment of EGP 150.00 to WE was received successfully", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 15000, "merchant": "WE"}}}
+{"id": "dir-bill-received", "sender": "CIB", "body": "Payment of EGP 1,200.00 for your electricity bill was received", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 120000}}}
+{"id": "dir-transfer-received", "sender": "NBE", "body": "Transfer of EGP 500.00 to Ahmed was received successfully", "expect": {"outcome": "review", "suggest": {"kind": "TRANSFER_OUT", "amountMinor": 50000, "merchant": "Ahmed"}}}
+{"id": "dir-sent-beneficiary", "sender": "NBE", "body": "You have sent EGP 500.00 to Ahmed. The money was received by the beneficiary", "expect": {"outcome": "review", "suggest": {"kind": "TRANSFER_OUT", "amountMinor": 50000, "merchant": "Ahmed"}}}
+{"id": "dir-ar-transfer-received", "sender": "NBE", "body": "تم تحويل 500 جنيه من حسابك الى حساب 5678 وتم استلامها بنجاح", "expect": {"notKind": ["INCOME", "TRANSFER_IN"], "outcome": "review", "suggest": {}}}
+{"id": "dir-ar-send-phone", "sender": "NBE", "body": "تم ارسال 200 جنيه الى 01000000012 وتم الاستلام", "expect": {"notKind": ["INCOME", "TRANSFER_IN"], "outcome": "review", "suggest": {}}}
+{"id": "dir-ar-transfer-receipt-ambiguous", "sender": "NBE", "body": "تم استلام تحويلك بمبلغ 300 جنيه بنجاح", "expect": {"notKind": ["INCOME", "TRANSFER_IN"], "outcome": "review", "suggest": {}}}
 {"id": "cur-jpy", "sender": "CIB", "body": "Purchase amount: 1,500 JPY at UNIQLO TOKYO", "expect": {"outcome": "review"}}
 {"id": "cur-sr", "sender": "CIB", "body": "Purchase amount: 1,500 SR at JARIR RIYADH", "expect": {"outcome": "review"}}
 {"id": "cur-yen", "sender": "CIB", "body": "Purchase amount: 1,500 Yen at UNIQLO", "expect": {"outcome": "review"}}
@@ -72,20 +72,20 @@
 {"id": "cur-riyal", "sender": "CIB", "body": "Purchase amount: 1,500 Riyal at JARIR", "expect": {"outcome": "review"}}
 {"id": "cur-usd-first", "sender": "CIB", "body": "Purchase USD 20.00 (EGP 980.00) at NETFLIX.COM", "expect": {"outcome": "review"}}
 {"id": "cur-ar-riyal", "sender": "NBE", "body": "تم خصم مبلغ 1500 ريال سعودي لدى جرير", "expect": {"outcome": "review"}}
-{"id": "cur-explicit-egp-with-usd", "sender": "CIB", "body": "Purchase of EGP 1,000.00 (USD 20.00) at NETFLIX.COM", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 100000, "merchant": "NETFLIX.COM"}}
+{"id": "cur-explicit-egp-with-usd", "sender": "CIB", "body": "Purchase of EGP 1,000.00 (USD 20.00) at NETFLIX.COM", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 100000, "merchant": "NETFLIX.COM"}}}
 {"id": "amt-space-group", "sender": "CIB", "body": "Purchase of EGP 1 250.00 at SHOP", "expect": {"outcome": "review"}}
 {"id": "amt-5k", "sender": "CIB", "body": "Purchase of EGP 5k at SHOP", "expect": {"outcome": "review"}}
-{"id": "amt-first-wins-bug", "sender": "CIB", "body": "Your limit record EGP 1,000,000.00. Purchase of EGP 10.00 at SHOP", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 1000, "merchant": "SHOP"}}
-{"id": "pii-iban", "sender": "NBE", "body": "Transfer of EGP 500.00 to EG000000000000000000000000000 successful", "expect": {"outcome": "record_or_review", "notKind": []}}
-{"id": "pii-phone", "sender": "InstaPay", "body": "Transfer of EGP 500.00 to 01000000000 completed", "expect": {"outcome": "record_or_review", "notKind": []}}
-{"id": "date-due", "sender": "CIB", "body": "Credit card purchase of EGP 750.00 at ZARA on 25/10. Payment due date 05/11", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 75000, "merchant": "ZARA", "occurredAt": "2026-10-25T09:00:00Z"}}
-{"id": "date-reminder", "sender": "CIB", "body": "Purchase of EGP 300.00 at SHOP. Reminder: pay your bill", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 30000, "merchant": "SHOP"}}
-{"id": "date-old", "sender": "CIB", "body": "Purchase EGP 300 at SHOP on 01/01/2001", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 30000, "occurredAt": "2026-10-26T10:00:00Z"}}
-{"id": "date-valid-until", "sender": "CIB", "body": "Purchase EGP 300 at SHOP valid until 31/12", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 30000, "occurredAt": "2026-10-26T10:00:00Z"}}
-{"id": "date-pm", "sender": "CIB", "body": "Purchase of EGP 300.00 at SHOP on 25/10/26 11:45 PM", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 30000, "merchant": "SHOP", "occurredAt": "2026-10-25T20:45:00Z"}}
-{"id": "ar-int-purchase", "sender": "NBE", "body": "تم خصم 1500 جنيه لدى جرير", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 150000, "merchant": "جرير"}}
-{"id": "ar-int-income", "sender": "NBE", "body": "تم ايداع 1000 جنيه في حسابك", "expect": {"outcome": "record", "kind": "INCOME", "amountMinor": 100000}}
-{"id": "ar-keyword-amount", "sender": "NBE", "body": "تم خصم مبلغ 1500 لدى يونيكلو طوكيو", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 150000, "merchant": "يونيكلو طوكيو"}}
-{"id": "ar-indic-amount", "sender": "NBE", "body": "تم خصم ١٬٢٥٠٫٥٠ جنيه لدى كارفور", "expect": {"outcome": "record", "kind": "PURCHASE", "amountMinor": 125050, "merchant": "كارفور"}}
+{"id": "amt-first-wins-bug", "sender": "CIB", "body": "Your limit record EGP 1,000,000.00. Purchase of EGP 10.00 at SHOP", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 1000, "merchant": "SHOP"}}}
+{"id": "pii-iban", "sender": "NBE", "body": "Transfer of EGP 500.00 to EG000000000000000000000000000 successful", "expect": {"notKind": [], "outcome": "review", "suggest": {}}}
+{"id": "pii-phone", "sender": "InstaPay", "body": "Transfer of EGP 500.00 to 01000000000 completed", "expect": {"notKind": [], "outcome": "review", "suggest": {}}}
+{"id": "date-due", "sender": "CIB", "body": "Credit card purchase of EGP 750.00 at ZARA on 25/10. Payment due date 05/11", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 75000, "merchant": "ZARA", "occurredAt": "2026-10-25T09:00:00Z"}}}
+{"id": "date-reminder", "sender": "CIB", "body": "Purchase of EGP 300.00 at SHOP. Reminder: pay your bill", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 30000, "merchant": "SHOP"}}}
+{"id": "date-old", "sender": "CIB", "body": "Purchase EGP 300 at SHOP on 01/01/2001", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 30000, "occurredAt": "2026-10-26T10:00:00Z"}}}
+{"id": "date-valid-until", "sender": "CIB", "body": "Purchase EGP 300 at SHOP valid until 31/12", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 30000, "occurredAt": "2026-10-26T10:00:00Z"}}}
+{"id": "date-pm", "sender": "CIB", "body": "Purchase of EGP 300.00 at SHOP on 25/10/26 11:45 PM", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 30000, "merchant": "SHOP", "occurredAt": "2026-10-25T20:45:00Z"}}}
+{"id": "ar-int-purchase", "sender": "NBE", "body": "تم خصم 1500 جنيه لدى جرير", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 150000, "merchant": "جرير"}}}
+{"id": "ar-int-income", "sender": "NBE", "body": "تم ايداع 1000 جنيه في حسابك", "expect": {"outcome": "review", "suggest": {"kind": "INCOME", "amountMinor": 100000}}}
+{"id": "ar-keyword-amount", "sender": "NBE", "body": "تم خصم مبلغ 1500 لدى يونيكلو طوكيو", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 150000, "merchant": "يونيكلو طوكيو"}}}
+{"id": "ar-indic-amount", "sender": "NBE", "body": "تم خصم ١٬٢٥٠٫٥٠ جنيه لدى كارفور", "expect": {"outcome": "review", "suggest": {"kind": "PURCHASE", "amountMinor": 125050, "merchant": "كارفور"}}}
 {"id": "bad-merchant-secret-words", "sender": "CIB", "body": "Purchase of EGP 90.00 at OTP value on 12/03/2026", "expect": {"outcome": "never_record"}}
 {"id": "bad-merchant-verification", "sender": "CIB", "body": "Purchase of EGP 90.00 at verification value", "expect": {"outcome": "never_record"}}

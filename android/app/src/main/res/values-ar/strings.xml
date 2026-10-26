@@ -123,6 +123,20 @@
     <string name="review_reason_unsupported_currency">عملة أجنبية</string>
     <string name="review_reason_unexplained_number">فيها رقم مصروف مش عارفه</string>
     <string name="review_reason_other">مش مفهومة</string>
+    <string name="review_reason_unconfirmed">شكل رسالة جديد. راجعها مرة واحدة وهتفتكره.</string>
+    <string name="review_suggestion_title">مصروف فهمها كده</string>
+    <string name="review_save">حفظ</string>
+    <string name="review_edit">تعديل</string>
+    <string name="review_kind_purchase">شراء</string>
+    <string name="review_kind_transfer_out">تحويل مرسل</string>
+    <string name="review_kind_transfer_in">تحويل مستلم</string>
+    <string name="review_kind_income">دخل</string>
+    <string name="review_kind_refund">استرداد</string>
+    <string name="review_kind_cash">سحب نقدي</string>
+    <string name="review_kind_fee">رسوم بنك</string>
+    <string name="learned_formats">أشكال الرسائل المحفوظة (%1$d)</string>
+    <string name="learned_clear">مسح</string>
+    <string name="learned_explainer">بعد ما تحفظ رسالة مرة، الرسالة اللي بنفس الشكل بتتسجل لوحدها. الأشكال بتفضل على الموبايل ده ومفيهاش أرقام ولا أسماء.</string>
     <string name="review_reason_rejected">السيرفر مقدرش يقبل العملية دي. أضفها بإيدك لو حقيقية.</string>
 
     <string name="nav_insights">التحليلات</string>
