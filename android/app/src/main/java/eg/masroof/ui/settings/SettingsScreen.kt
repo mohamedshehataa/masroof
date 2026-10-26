@@ -57,11 +57,10 @@ fun SettingsRoute(
             viewModel::syncNow,
             onToggleLanguage,
         ),
-<<<<<<< HEAD
-        members = { MembersRoute() },
-=======
-        extra = { SmsCaptureSection(onOpenReview = onOpenReview) },
->>>>>>> origin/main
+        extra = {
+            SmsCaptureSection(onOpenReview = onOpenReview)
+            MembersRoute()
+        },
     )
 }
 
@@ -81,11 +80,7 @@ fun SettingsContent(
     state: SettingsUiState,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
-<<<<<<< HEAD
-    members: @Composable () -> Unit = {},
-=======
     extra: @Composable () -> Unit = {},
->>>>>>> origin/main
 ) {
     val onUrl = actions.onUrl
     val onDigits = actions.onDigits
@@ -160,7 +155,6 @@ fun SettingsContent(
                 }
             }
         }
-        members()
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(stringResource(R.string.settings_save))
         }

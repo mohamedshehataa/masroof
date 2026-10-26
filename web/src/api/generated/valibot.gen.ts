@@ -429,6 +429,44 @@ export const vIngestSmsRequest = v.object({
     smsId: v.pipe(v.string(), v.maxLength(64))
 });
 
+/**
+ * A transaction parsed on the phone. There is deliberately no field for message text: the only
+ * free text is `merchant`, a label with every digit removed.
+ *
+ */
+export const vIngestParsedTransactionRequest = v.strictObject({
+    deviceId: v.pipe(v.string(), v.uuid()),
+    localId: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/)),
+    source: v.picklist(['SMS', 'NOTIFICATION']),
+    kind: v.picklist([
+        'PURCHASE',
+        'TRANSFER_OUT',
+        'TRANSFER_IN',
+        'INCOME',
+        'REFUND',
+        'CASH_WITHDRAWAL',
+        'FEE'
+    ]),
+    amountMinor: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(1)), v.maxValue(BigInt(10000000000000))),
+    currency: v.pipe(v.string(), v.regex(/^[A-Z]{3}$/)),
+    occurredAt: v.pipe(v.string(), v.isoTimestamp()),
+    instrumentLast4: v.nullish(v.pipe(v.string(), v.regex(/^[0-9]{4}$/))),
+    senderId: v.pipe(v.string(), v.regex(/^[A-Za-z][A-Za-z._&-]{0,19}$/)),
+    institution: v.nullish(v.pipe(v.string(), v.maxLength(40), v.regex(/^[^0-9]*$/))),
+    paymentMethod: v.nullish(v.picklist([
+        'CARD',
+        'WALLET',
+        'INSTAPAY',
+        'BANK_TRANSFER',
+        'UNKNOWN'
+    ])),
+    merchant: v.nullish(v.pipe(v.string(), v.maxLength(40), v.regex(/^[^0-9]*$/)))
+});
+
 export const vIngestNotificationRequest = v.object({
     packageName: v.pipe(v.string(), v.maxLength(200)),
     title: v.optional(v.pipe(v.string(), v.maxLength(200))),
@@ -460,7 +498,8 @@ export const vIngestAccepted = v.object({
         'DUPLICATE',
         'REJECTED_OTP',
         'REJECTED_UNKNOWN_SENDER'
-    ])
+    ]),
+    expenseId: v.optional(v.pipe(v.string(), v.uuid()))
 });
 
 export const vParseRequest = v.object({
@@ -1361,6 +1400,13 @@ export const vIngestSmsBody = vIngestSmsRequest;
  * Raw message persisted; parsing continues asynchronously.
  */
 export const vIngestSmsResponse = vIngestAccepted;
+
+export const vIngestParsedTransactionBody = vIngestParsedTransactionRequest;
+
+/**
+ * Raw message persisted; parsing continues asynchronously.
+ */
+export const vIngestParsedTransactionResponse = vIngestAccepted;
 
 export const vIngestNotificationBody = vIngestNotificationRequest;
 
