@@ -49,6 +49,8 @@ object MessageParser {
     private val numberThenCurrency = Regex("(?<![\\d.,*-])($NUM) ?($CUR)(?![a-z])", ci)
     private val keywordAmount = Regex("(?:amount(?: of)?|value|مبلغ|بمبلغ|بقيمه|قيمه)[ :]*($NUM)(?![\\d])", ci)
     private val tokenAfter = Regex("^ ?([^ \\d.,;:!?()]+)")
+    private val lastFourMarker =
+        Regex("(?:\\bending(?:\\s+(?:with|in|by))?|\\bends(?:\\s+(?:with|in))?|(?:المنتهيه|المنتهي)\\s*ب)[ :*•x#.]*$", ci)
     private val balanceBefore =
         Regex("(?:balance|\\bbal\\b|avl|avail\\w*|limit|(?:amt|amount) due|رصيد\\w*|الرصيد|المتاح|remaining)[^\\d]{0,18}$", ci)
     private val amountStopWords =
@@ -168,7 +170,8 @@ object MessageParser {
         Regex(
             "% off|خصم\\s*\\d+\\s*%|\\d+\\s*%\\s*خصم|%\\s*\\d+\\s*خصم|احصل\\s+علي\\s+خصم|" +
                 // fixed-amount offers: "خصم 100 جنيه على ...", "وفر 50 جنيه", "get EGP 50 off", "EGP 100 cashback on ..."
-                "خصم\\s*[\\d.,]+\\s*(?:جنيه|جم|egp|le)?\\s+علي|وفر\\s*[\\d.,]+|\\b(?:egp|le)\\s*[\\d.,]+\\s+off\\b" +
+                "خصم\\s*[\\d.,]+\\s*(?:جنيه|جم|egp|le)?\\s+علي|وفر\\s*[\\d.,]+" +
+                "|\\b(?:egp|le)\\s*[\\d.,]+\\s+off\\b|[\\d.,]+\\s*(?:egp|le)\\s+off\\b" +
                 "|[\\d.,]+\\s*(?:egp|le|جنيه)\\s+cashback|" +
                 "\\boffers?\\b|cashback|\\bpoints\\b|rewards|subscribe|t&c|terms apply|congratulations|\\bpromo|coupon|discount|" +
                 "installments up to|https?:|www\\.|عرض|عروض|نقاط|اشترك|الشروط والاحكام|مبروك|اربح|كوبون|خصم يصل|تقسيط",
@@ -442,7 +445,7 @@ object MessageParser {
         )
     private val enPrep =
         mapOf(
-            "out" to Regex("(?<![\\p{L}\\d])(?:at|to)[ ]+", ci),
+            "out" to Regex("(?<![\\p{L}\\d])(?:at|to)[ ]+|(?<![\\p{L}\\d])merchant\\s*:\\s*", ci),
             "transfer" to Regex("(?<![\\p{L}\\d])to[ ]+", ci),
             "in" to Regex("(?<![\\p{L}\\d])from[ ]+", ci),
         )
@@ -464,50 +467,98 @@ object MessageParser {
             ci,
         )
 
-    /** Clause borders (principal clause vs fee note): sentence punctuation, new lines, the Arabic comma, and "... وتم خصم رسوم" inside one sentence. */
-    private val clauseBorder = Regex("(?<=[.;؛])\\s+|\\s*[،\\n]\\s*|\\s+(?=و?تم\\s+(?:خصم|تحصيل)\\s+(?:رسوم|مصاريف|عموله))", ci)
+    /**
+     * Clause borders (principal clause vs fee note): sentence punctuation, the "... وتم خصم رسوم" form and an inline fee joined
+     * by and / plus / with / including / و / شامل ("... from your account and a service fee of EGP 3.20 was charged").
+     */
+    private val clauseBorder =
+        Regex(
+            "(?<=[.;؛])\\s+|\\s+(?=و?تم\\s+(?:خصم|تحصيل)\\s+(?:رسوم|مصاريف|عموله))" +
+                "|\\s+(?=(?:and|plus|with|including|incl\\.?|شامل)\\s+(?:(?:a|an|the|additional)\\s+)?" +
+                "(?:[\\p{L}\\-]+\\s+){0,2}?(?:fees?|charges?|commission|رسوم|مصاريف|عموله)(?![\\p{L}]))" +
+                "|\\s+(?=و(?:رسوم|مصاريف|عموله)(?![\\p{L}]))",
+            ci,
+        )
+
+    /** Clause borders that survive only in the raw text: new lines, the Arabic comma and semicolon, " - " between sentences. */
+    private val rawBorder = Regex("[\\r\\n]+|\\s*[،؛]\\s*|\\s+[-–—]\\s+")
 
     /** A clause whose head is a fee noun ("Transfer fee EGP 5.00", "رسوم تحويل 1.00 جنيه", "Cash advance fee of EGP 60.00 applies"). */
     private val feeHead =
         Regex(
-            "^\\s*(?:(?:و?تم\\s+(?:خصم|تحصيل)|and|plus|a|the|additional|incl|including)\\s+)?" +
+            "^\\s*(?:(?:و?تم\\s+(?:خصم|تحصيل)|and|plus|with|including|incl|شامل|و)\\s*)?(?:(?:a|an|the|additional)\\s+)?" +
                 "(?:[\\p{L}\\-]+\\s+){0,3}?(?:fees?|charges?|commission|رسوم|مصاريف|عموله)(?![\\p{L}])",
             ci,
         )
 
+    /** A parenthetical that names a fee: "(EGP 1,000.00 transfer + EGP 5.00 fees)". */
+    private val feeParenthetical = Regex("\\((?=[^)]*(?:fees?|charges?|رسوم|مصاريف|عموله))[^)]*\\)", ci)
+
+    /** A long digit run that is not an amount ("Charges 482105 EGP"): never dropped silently with a fee note. */
+    private val longDigitRun = Regex("(?<![\\d.,])\\d{5,}(?![\\d]|[.,]\\d)")
+
+    private val strongVerb =
+        Regex("\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|withdraw|\\batm\\b|purchase|\\bpaid\\b|payment|تحويل|سحب|شراء|دفع|سداد", ci)
+
     /**
-     * The PRINCIPAL clause is the first one with a transaction verb and an amount; a LATER clause headed by a fee noun is a fee
-     * note. Its amount is dropped (no second record) and it never changes the kind. A message whose own first clause is the fee
-     * ("Transfer fee of EGP 10.00 has been charged ...") stays a fee message.
+     * The PRINCIPAL clause is the first one with a transaction verb and an amount (account and card numbers are not amounts); a
+     * clause headed by a fee noun is a fee note. Its amount is dropped (no second record) and it never changes the kind. A fee
+     * clause BEFORE the principal is dropped only when the principal is a transfer, withdrawal, payment or purchase. A message
+     * with no such principal ("Transfer fee of EGP 10.00 has been charged ...") stays a fee message.
      */
-    private fun dropFeeNotes(norm: String): String {
+    private fun dropFeeNotes(input: String): FeeSplit {
+        // "(EGP 1,000.00 transfer + EGP 5.00 fees)": the fee amounts go, the word "transfer" stays
+        val norm =
+            feeParenthetical
+                .replace(
+                    input,
+                ) { if (transferVerbs.containsMatchIn(SecretDetector.fold(it.value))) " transfer " else " " }
+                .trim()
         val borders = clauseBorder.findAll(norm).toList()
-        if (borders.isEmpty()) return norm
-        val out = StringBuilder()
-        var start = 0
-        var principal = false
+        if (borders.isEmpty()) return FeeSplit(norm, false)
         val ends = borders.map { it.range.first to it.range.last + 1 } + (norm.length to norm.length)
-        var separator = ""
+        val clauses = mutableListOf<String>()
+        val separators = mutableListOf<String>()
+        var start = 0
         for ((end, next) in ends) {
-            val clause = norm.substring(start, end)
-            val folded = SecretDetector.fold(clause)
-            val isFeeNote = principal && feeHead.containsMatchIn(folded)
-            if (isFeeNote) {
+            clauses += norm.substring(start, end)
+            separators += norm.substring(end, next)
+            start = next
+        }
+        val folded = clauses.map { SecretDetector.fold(it) }
+        val principal =
+            folded.indices.firstOrNull { i ->
+                !feeHead.containsMatchIn(folded[i]) && hasTransactionVerb(folded[i]) && findAmounts(folded[i]).any { !it.balance }
+            } ?: return FeeSplit(norm, false)
+        val out = StringBuilder()
+        var pendingSeparator = ""
+        var suspicious = false
+        for (i in clauses.indices) {
+            val droppable =
+                feeHead.containsMatchIn(folded[i]) &&
+                    !boughtFee.containsMatchIn(folded[i]) &&
+                    (i > principal || strongVerb.containsMatchIn(folded[principal]))
+            if (droppable) {
+                if (longDigitRun.containsMatchIn(clauses[i])) suspicious = true
                 // "... at ZOOBA incl. service charge": the connector belongs to the fee note
                 val trimmed = connector.replace(out.toString(), "")
                 out.setLength(0)
                 out.append(trimmed)
             } else {
-                out.append(separator).append(clause)
-                if (!feeHead.containsMatchIn(folded) && clause.any { it.isDigit() } && hasTransactionVerb(folded)) principal = true
+                out.append(pendingSeparator).append(clauses[i])
             }
-            separator = norm.substring(end, next)
-            start = next
+            pendingSeparator = if (droppable && out.isNotEmpty() && !out.endsWith(".")) ". " else separators[i]
         }
-        return out.toString()
+        return FeeSplit(out.toString(), suspicious)
     }
 
-    private val connector = Regex("[\\s.,]*(?<![\\p{L}\\d])(?:(?:incl|including|plus|and|و)[\\s.]*)?$", ci)
+    /** [suspicious]: a dropped fee note held a long digit run that is no amount; the message goes to review. */
+    private class FeeSplit(
+        val text: String,
+        val suspicious: Boolean,
+    )
+
+    private val connector = Regex("[\\s.,]*(?<![\\p{L}\\d])(?:(?:incl|including|plus|and|with|و|شامل)[\\s.]*)?$", ci)
 
     private fun hasTransactionVerb(t: String) =
         outStrong.containsMatchIn(t) || transferVerbs.containsMatchIn(t) || withdrawal.containsMatchIn(t) || paymentWords.containsMatchIn(t)
@@ -522,16 +573,28 @@ object MessageParser {
     fun parse(msg: IncomingMessage): ParseOutcome {
         // Secrets are looked for in the WHOLE text: a code cue inside a boilerplate trailer or URL still makes it a secret
         val full = TextNormalizer.normalizeText(msg.text).trim()
-        val norm = dropFeeNotes(trailer.replace(full, " ").trim()).trim()
+        // New lines, the Arabic comma and " - " are clause borders; normalization would turn them into plain spaces or commas, so the
+        // raw text is split first and the normalized clauses are joined with a sentence border
+        val clauses =
+            msg.text
+                .split(rawBorder)
+                .map { TextNormalizer.normalizeText(it).trim().trimEnd('.', ';') }
+                .filter { it.isNotBlank() }
+        val joined = if (clauses.size > 1) clauses.joinToString(". ") else full
+        val split = dropFeeNotes(trailer.replace(joined, " ").trim())
+        val norm = split.text.trim()
         if (norm.isBlank()) return ParseOutcome.Ignore("empty")
         val t = SecretDetector.fold(norm)
         val secret = SecretDetector.reason(full)
+        if (split.suspicious && secret == null) return ParseOutcome.Review("unexplained_number", SecretDetector.mask(full))
         val amounts = findAmounts(t)
         val hasOut = outAnchor.containsMatchIn(t)
         val hasIn = inAnchor.containsMatchIn(t)
         val moneyLike = amounts.any { !it.balance } && (hasOut || hasIn)
         if (secret != null) {
             // An OTP that reads like a purchase is kept (masked) for the user; a plain OTP is dropped without a trace.
+            // a promo code in a discount offer ("use code VF50") is not a transaction either: dropped, nothing kept
+            if (isOffer(t)) return ParseOutcome.Ignore("promo")
             return if (moneyLike) ParseOutcome.Review("secret", SecretDetector.mask(full)) else ParseOutcome.Ignore("otp")
         }
         return classify(msg, norm, t, amounts, hasOut, hasIn)
@@ -576,9 +639,12 @@ object MessageParser {
         }
         if (promoWords.containsMatchIn(t) && !strongTransaction(t)) {
             // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
-            val ownRef = sourceIsOwn.containsMatchIn(t) || destinationIsOwn.containsMatchIn(t) || ownSubjectCredited.containsMatchIn(t)
+            // (an offer's "get EGP 50 cashback credited to your account" is a promise, not an own-account movement)
+            val ownRef = hasOwnRef(t)
             // A discount offer's own words (خصم, دفع, شراء) are not a completed transaction; only a credit or a transfer verb is
-            val verb = explicitIn.containsMatchIn(t) || transferVerbs.containsMatchIn(t)
+            // and neither is the offer's condition: "your first InstaPay transfer", "when you transfer EGP 1,000"
+            val offer = offerCondition.replace(t, " ")
+            val verb = explicitIn.containsMatchIn(offer) || transferVerbs.containsMatchIn(offer)
             return if ((verb || ownRef) && amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
         }
         val direction =
@@ -615,13 +681,40 @@ object MessageParser {
         return ParseOutcome.Record(record)
     }
 
+    /** The condition of an offer: "your first InstaPay transfer", "when you transfer", "عند الدفع". Not a completed transaction. */
+    private val offerCondition =
+        Regex(
+            "\\b(?:first|next|any|every|each)\\s+(?:[\\p{L}]+\\s+){0,2}?(?:transfers?|payments?|purchases?|orders?)\\b" +
+                "|\\b(?:when|if|once)\\s+you\\s+\\p{L}+|عند\\s+(?:ال)?(?:تحويل|دفع|شراء)|(?:اول|اي|كل)\\s+(?:عمليه\\s+)?(?:تحويل|دفع|شراء)",
+            ci,
+        )
+
+    /** "You will get EGP 50 cashback credited to your account": a promise in the future, not an own-account movement. */
+    private val offerPromise =
+        Regex("\\bwill\\s+(?:get|receive)\\b|\\bget\\s+(?:egp\\s*)?[\\d.,]+\\s*(?:egp\\s*)?(?:cashback|off)\\b|احصل\\s+علي", ci)
+
+    private fun hasOwnRef(t: String): Boolean =
+        !offerPromise.containsMatchIn(t) &&
+            (sourceIsOwn.containsMatchIn(t) || destinationIsOwn.containsMatchIn(t) || ownSubjectCredited.containsMatchIn(t))
+
+    /** A discount or cashback offer: an offer word, no completed transaction verb and no own-account reference. */
+    private fun isOffer(t: String): Boolean =
+        promoWords.containsMatchIn(t) &&
+            !strongTransaction(t) &&
+            !hasOwnRef(t) &&
+            !(explicitIn.containsMatchIn(offerCondition.replace(t, " ")) || transferVerbs.containsMatchIn(offerCondition.replace(t, " ")))
+
     /** "your next purchase", "first payment": an offer's future condition, not a completed transaction. */
     private val futurePurchase = Regex("\\b(?:next|first|any|every|each|future)\\s+(?:online\\s+)?(?:purchases?|payments?)\\b", ci)
 
     private fun strongTransaction(text: String): Boolean {
         val t = futurePurchase.replace(text, " ")
-        return strongTransactionWords(t)
+        // "Cashback of EGP 25.00 has been credited to your account" is a completed credit; "get EGP 100 cashback credited" is an offer
+        return strongTransactionWords(t) || (completedCredit.containsMatchIn(t) && !offerLead.containsMatchIn(t))
     }
+
+    private val completedCredit = Regex("\\b(?:was|has been|have been)\\s+credited\\b|\\bcredited\\s+(?:to|in|into)\\s+your\\b", ci)
+    private val offerLead = Regex("\\b(?:get|earn|win|spend|when|if|offer|enjoy)\\b|\\bwill\\s+(?:get|receive)\\b|احصل|اربح|عرض", ci)
 
     private fun strongTransactionWords(t: String) =
         Regex(
@@ -715,6 +808,8 @@ object MessageParser {
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
+        // the household's own credit card is the beneficiary of a payment: money leaving the account, never income
+        if (cardRepayment.containsMatchIn(now)) return Dir.OUT
         val debit =
             outStrong.containsMatchIn(now) ||
                 (paymentWord.containsMatchIn(now) && !paymentReceived.containsMatchIn(now)) ||
@@ -810,7 +905,11 @@ object MessageParser {
                 "|سداد\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان|دفع\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان" +
                 // the card is the OBJECT of the repayment (ل / الى before it); "باستخدام / ب + بطاقة الائتمان" is the instrument
                 "|(?:سداد|تسديد|دفع)\\s+(?:مستحقات\\s+)?بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان" +
-                "|(?:سداد|تسديد|دفع)\\s[^;!?]{0,40}?(?:(?<![\\p{L}\\d])ل|(?<![\\p{L}])الي\\s+)\\s*بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان",
+                "|(?:سداد|تسديد|دفع)\\s[^;!?]{0,40}?(?:(?<![\\p{L}\\d])(?:لل|ل(?:ال)?)|(?<![\\p{L}])الي\\s+(?:ال)?)" +
+                "\\s*بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان" +
+                // the card is the BENEFICIARY of the payment: "payment received for your credit card", "credit card payment received"
+                "|payment\\s+(?:was\\s+|has\\s+been\\s+)?received\\s+(?:for|to|towards)\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?credit\\s*card" +
+                "|received\\s+your\\s+payment\\s+(?:of\\s+[^;!?]{0,30}?)?(?:for|to|towards)\\s+(?:your\\s+)?(?:[\\p{L}]+\\s+){0,2}?credit\\s*card",
             ci,
         )
 
@@ -848,6 +947,8 @@ object MessageParser {
         ) {
             if (!taken.add(numRange.first)) return
             val before = t.substring(maxOf(0, span.first - LOOKBACK), span.first)
+            // the digits of "card ending 4512" are an instrument number, never an amount, even when a currency follows
+            if (lastFourMarker.containsMatchIn(before)) return
             val after = t.substring(minOf(t.length, span.last + 1))
             val minor = toMinor(number)
             out +=
@@ -1017,6 +1118,7 @@ object MessageParser {
         outgoing: Boolean,
     ): String? {
         val transferKind = kind == TxKind.TRANSFER_OUT || kind == TxKind.TRANSFER_IN || kind == TxKind.INCOME
+        val repayment = kind == TxKind.TRANSFER_OUT && cardRepayment.containsMatchIn(t)
         val candidates =
             last4Patterns.flatMap { p ->
                 p.regex
@@ -1039,7 +1141,11 @@ object MessageParser {
                     c.bare -> bareAccepted(t, c.start)
                     c.own -> true
                     // an explicitly incoming transfer "to account ***7781" with no other account in the text: that is ours
-                    else -> !transferKind || (!outgoing && c.role == Role.DESTINATION && candidates.size == 1)
+                    // repaying the household's own credit card: "credit card ending 4512" is the household's instrument
+                    else ->
+                        !transferKind ||
+                            repayment ||
+                            (!outgoing && c.role == Role.DESTINATION && candidates.size == 1)
                 }
             }
         val distinct = accepted.map { it.digits }.distinct()
