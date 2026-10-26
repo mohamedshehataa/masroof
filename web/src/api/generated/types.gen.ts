@@ -184,8 +184,22 @@ export type Invite = {
     expiresAt: string;
 };
 
+export type InviteSummary = {
+    id: string;
+    displayName: string;
+    email?: string | null;
+    phoneE164?: string | null;
+    status: 'PENDING' | 'ACCEPTED' | 'REVOKED';
+    expiresAt: string;
+    createdAt: string;
+};
+
 export type InviteAcceptRequest = {
     code: string;
+    /**
+     * Optional; overrides the name the admin gave the invite.
+     */
+    displayName?: string;
     email: string;
     password: string;
 };
@@ -1408,9 +1422,17 @@ export type AcceptInviteErrors = {
      */
     404: Problem;
     /**
+     * State conflict (duplicate, already merged, optimistic lock).
+     */
+    409: Problem;
+    /**
      * Invite expired or already used.
      */
     410: Problem;
+    /**
+     * Rate limited.
+     */
+    429: Problem;
 };
 
 export type AcceptInviteError = AcceptInviteErrors[keyof AcceptInviteErrors];
@@ -1423,6 +1445,95 @@ export type AcceptInviteResponses = {
 };
 
 export type AcceptInviteResponse = AcceptInviteResponses[keyof AcceptInviteResponses];
+
+export type ListInvitesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/invites';
+};
+
+export type ListInvitesErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Authenticated but not allowed (wrong role or household).
+     */
+    403: Problem;
+};
+
+export type ListInvitesError = ListInvitesErrors[keyof ListInvitesErrors];
+
+export type ListInvitesResponses = {
+    /**
+     * Active invites.
+     */
+    200: Array<InviteSummary>;
+};
+
+export type ListInvitesResponse = ListInvitesResponses[keyof ListInvitesResponses];
+
+export type RevokeInviteData = {
+    body?: never;
+    path: {
+        inviteId: string;
+    };
+    query?: never;
+    url: '/auth/invites/{inviteId}';
+};
+
+export type RevokeInviteErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Authenticated but not allowed (wrong role or household).
+     */
+    403: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+};
+
+export type RevokeInviteError = RevokeInviteErrors[keyof RevokeInviteErrors];
+
+export type RevokeInviteResponses = {
+    /**
+     * Revoked.
+     */
+    204: void;
+};
+
+export type RevokeInviteResponse = RevokeInviteResponses[keyof RevokeInviteResponses];
+
+export type ListMembersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members';
+};
+
+export type ListMembersErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+};
+
+export type ListMembersError = ListMembersErrors[keyof ListMembersErrors];
+
+export type ListMembersResponses = {
+    /**
+     * Members of the caller's household.
+     */
+    200: Array<Member>;
+};
+
+export type ListMembersResponse = ListMembersResponses[keyof ListMembersResponses];
 
 export type ListExpensesData = {
     body?: never;

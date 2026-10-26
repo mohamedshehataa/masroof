@@ -225,8 +225,23 @@ export const vInvite = v.object({
     expiresAt: v.pipe(v.string(), v.isoTimestamp())
 });
 
+export const vInviteSummary = v.object({
+    id: v.pipe(v.string(), v.uuid()),
+    displayName: v.string(),
+    email: v.nullish(v.string()),
+    phoneE164: v.nullish(v.string()),
+    status: v.picklist([
+        'PENDING',
+        'ACCEPTED',
+        'REVOKED'
+    ]),
+    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+    createdAt: v.pipe(v.string(), v.isoTimestamp())
+});
+
 export const vInviteAcceptRequest = v.object({
-    code: v.string(),
+    code: v.pipe(v.string(), v.maxLength(128)),
+    displayName: v.optional(v.pipe(v.string(), v.maxLength(80))),
     email: v.pipe(v.string(), v.email()),
     password: v.pipe(v.string(), v.minLength(8), v.maxLength(256))
 });
@@ -1188,6 +1203,25 @@ export const vAcceptInviteBody = vInviteAcceptRequest;
  * Account created; tokens returned.
  */
 export const vAcceptInviteResponse = vTokenPair;
+
+/**
+ * Active invites.
+ */
+export const vListInvitesResponse = v.array(vInviteSummary);
+
+export const vRevokeInvitePath = v.object({
+    inviteId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * Revoked.
+ */
+export const vRevokeInviteResponse = v.void();
+
+/**
+ * Members of the caller's household.
+ */
+export const vListMembersResponse = v.array(vMember);
 
 export const vListExpensesQuery = v.object({
     from: v.optional(v.pipe(v.string(), v.isoDate())),
