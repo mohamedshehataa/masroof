@@ -5,6 +5,7 @@ import App from '../App';
 import { getSessionStatus, initCrossTab, isPersistFailed, restoreSession, subscribeSession } from '../api/session';
 import { BottomNav } from '../components/BottomNav';
 import { OfflineBanner, SkeletonRows } from '../components/common';
+import { AcceptInviteScreen } from '../features/auth/AcceptInviteScreen';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { AddScreen } from '../features/add/AddScreen';
 import { HomeScreen } from '../features/home/HomeScreen';
@@ -35,6 +36,7 @@ const Shell: FC = () => {
   const queryClient = useQueryClient();
   const volatile = useSyncExternalStore(subscribeSession, isPersistFailed);
   const { t } = useTranslation();
+  const { path } = useRouter();
   useEffect(() => {
     initCrossTab();
     void restoreSession();
@@ -43,6 +45,8 @@ const Shell: FC = () => {
     // Signed out (logout, rejected refresh, reuse of a rotated token): drop every cached household query.
     if (status === 'out') queryClient.clear();
   }, [status, queryClient]);
+  // The invite link is public (the code is in the URL fragment); it works signed out and replaces any session.
+  if (path === '/invite') return <AcceptInviteScreen />;
   if (status === 'restoring')
     return (
       <main className="page">

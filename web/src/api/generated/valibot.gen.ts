@@ -215,7 +215,7 @@ export const vInviteRequest = v.object({
     displayName: v.pipe(v.string(), v.maxLength(80)),
     email: v.optional(v.pipe(v.string(), v.email())),
     phoneE164: v.optional(v.pipe(v.string(), v.regex(/^\+[1-9]\d{6,14}$/))),
-    role: v.optional(vMemberRole)
+    role: v.optional(v.picklist(['MEMBER']), 'MEMBER')
 });
 
 export const vInvite = v.object({
@@ -225,10 +225,25 @@ export const vInvite = v.object({
     expiresAt: v.pipe(v.string(), v.isoTimestamp())
 });
 
+export const vInviteSummary = v.object({
+    id: v.pipe(v.string(), v.uuid()),
+    displayName: v.string(),
+    email: v.nullish(v.string()),
+    phoneE164: v.nullish(v.string()),
+    status: v.picklist([
+        'PENDING',
+        'ACCEPTED',
+        'REVOKED'
+    ]),
+    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+    createdAt: v.pipe(v.string(), v.isoTimestamp())
+});
+
 export const vInviteAcceptRequest = v.object({
-    code: v.string(),
+    code: v.pipe(v.string(), v.maxLength(128)),
+    displayName: v.optional(v.pipe(v.string(), v.maxLength(80))),
     email: v.pipe(v.string(), v.email()),
-    password: v.pipe(v.string(), v.minLength(8), v.maxLength(256))
+    password: v.pipe(v.string(), v.minLength(12), v.maxLength(72))
 });
 
 export const vMember = v.object({
@@ -414,6 +429,44 @@ export const vIngestSmsRequest = v.object({
     smsId: v.pipe(v.string(), v.maxLength(64))
 });
 
+/**
+ * A transaction parsed on the phone. There is deliberately no field for message text: the only
+ * free text is `merchant`, a label with every digit removed.
+ *
+ */
+export const vIngestParsedTransactionRequest = v.strictObject({
+    deviceId: v.pipe(v.string(), v.uuid()),
+    localId: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/)),
+    source: v.picklist(['SMS', 'NOTIFICATION']),
+    kind: v.picklist([
+        'PURCHASE',
+        'TRANSFER_OUT',
+        'TRANSFER_IN',
+        'INCOME',
+        'REFUND',
+        'CASH_WITHDRAWAL',
+        'FEE'
+    ]),
+    amountMinor: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(1)), v.maxValue(BigInt(10000000000000))),
+    currency: v.pipe(v.string(), v.regex(/^[A-Z]{3}$/)),
+    occurredAt: v.pipe(v.string(), v.isoTimestamp()),
+    instrumentLast4: v.nullish(v.pipe(v.string(), v.regex(/^[0-9]{4}$/))),
+    senderId: v.pipe(v.string(), v.regex(/^[A-Za-z][A-Za-z._&-]{0,19}$/)),
+    institution: v.nullish(v.pipe(v.string(), v.maxLength(40), v.regex(/^[^0-9]*$/))),
+    paymentMethod: v.nullish(v.picklist([
+        'CARD',
+        'WALLET',
+        'INSTAPAY',
+        'BANK_TRANSFER',
+        'UNKNOWN'
+    ])),
+    merchant: v.nullish(v.pipe(v.string(), v.maxLength(40), v.regex(/^[^0-9]*$/)))
+});
+
 export const vIngestNotificationRequest = v.object({
     packageName: v.pipe(v.string(), v.maxLength(200)),
     title: v.optional(v.pipe(v.string(), v.maxLength(200))),
@@ -445,7 +498,8 @@ export const vIngestAccepted = v.object({
         'DUPLICATE',
         'REJECTED_OTP',
         'REJECTED_UNKNOWN_SENDER'
-    ])
+    ]),
+    expenseId: v.optional(v.pipe(v.string(), v.uuid()))
 });
 
 export const vParseRequest = v.object({
@@ -944,7 +998,9 @@ export const vBudgetStatus = v.object({
     rolledOver: v.optional(vMoney),
     progressBps: v.pipe(v.number(), v.integer()),
     alertsFired: v.array(v.pipe(v.number(), v.integer())),
-    onTrack: v.boolean()
+    onTrack: v.boolean(),
+    daysLeft: v.optional(v.pipe(v.number(), v.integer())),
+    periodRange: v.optional(vPeriodRange)
 });
 
 export const vBudgetStatusList = v.object({
@@ -1189,6 +1245,25 @@ export const vAcceptInviteBody = vInviteAcceptRequest;
  */
 export const vAcceptInviteResponse = vTokenPair;
 
+/**
+ * Active invites.
+ */
+export const vListInvitesResponse = v.array(vInviteSummary);
+
+export const vRevokeInvitePath = v.object({
+    inviteId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * Revoked.
+ */
+export const vRevokeInviteResponse = v.void();
+
+/**
+ * Members of the caller's household.
+ */
+export const vListMembersResponse = v.array(vMember);
+
 export const vListExpensesQuery = v.object({
     from: v.optional(v.pipe(v.string(), v.isoDate())),
     to: v.optional(v.pipe(v.string(), v.isoDate())),
@@ -1327,6 +1402,13 @@ export const vIngestSmsBody = vIngestSmsRequest;
  * Raw message persisted; parsing continues asynchronously.
  */
 export const vIngestSmsResponse = vIngestAccepted;
+
+export const vIngestParsedTransactionBody = vIngestParsedTransactionRequest;
+
+/**
+ * Raw message persisted; parsing continues asynchronously.
+ */
+export const vIngestParsedTransactionResponse = vIngestAccepted;
 
 export const vIngestNotificationBody = vIngestNotificationRequest;
 

@@ -171,7 +171,10 @@ export type InviteRequest = {
      * The member's WhatsApp number, so their messages map to them.
      */
     phoneE164?: string;
-    role?: MemberRole;
+    /**
+     * Only MEMBER invites exist; admins are never created through an invite.
+     */
+    role?: 'MEMBER';
 };
 
 export type Invite = {
@@ -184,9 +187,26 @@ export type Invite = {
     expiresAt: string;
 };
 
+export type InviteSummary = {
+    id: string;
+    displayName: string;
+    email?: string | null;
+    phoneE164?: string | null;
+    status: 'PENDING' | 'ACCEPTED' | 'REVOKED';
+    expiresAt: string;
+    createdAt: string;
+};
+
 export type InviteAcceptRequest = {
     code: string;
+    /**
+     * Optional; overrides the name the admin gave the invite.
+     */
+    displayName?: string;
     email: string;
+    /**
+     * At least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit, enforced by the server with 400 on field `password`), and not one of the 10,000 most common passwords.
+     */
     password: string;
 };
 
@@ -416,6 +436,38 @@ export type IngestSmsRequest = {
     smsId: string;
 };
 
+/**
+ * A transaction parsed on the phone. There is deliberately no field for message text: the only
+ * free text is `merchant`, a label with every digit removed.
+ *
+ */
+export type IngestParsedTransactionRequest = {
+    deviceId: string;
+    /**
+     * HMAC-SHA256 (hex) of sender, received time and message text, keyed with a random per-installation secret that never leaves the phone (Android Keystore). Idempotency key with `deviceId`; reveals nothing about the text and cannot be brute-forced from it.
+     */
+    localId: string;
+    source: 'SMS' | 'NOTIFICATION';
+    kind: 'PURCHASE' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'INCOME' | 'REFUND' | 'CASH_WITHDRAWAL' | 'FEE';
+    amountMinor: number;
+    currency: string;
+    occurredAt: string;
+    /**
+     * Card or account last four, only when the message named it explicitly.
+     */
+    instrumentLast4?: string | null;
+    /**
+     * Allowlisted sender id (SMS) or Android package name (notification, truncated to its institution token).
+     */
+    senderId: string;
+    institution?: string | null;
+    paymentMethod?: 'CARD' | 'WALLET' | 'INSTAPAY' | 'BANK_TRANSFER' | 'UNKNOWN' | null;
+    /**
+     * Merchant or counterparty label. Every digit removed on the device; the server rejects a label with a digit.
+     */
+    merchant?: string | null;
+};
+
 export type IngestNotificationRequest = {
     packageName: string;
     title?: string;
@@ -458,6 +510,12 @@ export type IngestAccepted = {
      * `DUPLICATE` means the same external id or image hash was already ingested; the original id is returned.
      */
     outcome: 'ACCEPTED' | 'DUPLICATE' | 'REJECTED_OTP' | 'REJECTED_UNKNOWN_SENDER';
+    /**
+     * Only for `POST /api/ingest/parsed-transactions` with outcome `ACCEPTED`: the expense that was just created, so the
+     * app can offer an Undo (`DELETE /api/expenses/{expenseId}`). Absent for a duplicate and for the raw-text endpoints.
+     *
+     */
+    expenseId?: string;
 };
 
 export type ParseRequest = {
@@ -1023,6 +1081,11 @@ export type BudgetStatus = {
     progressBps: number;
     alertsFired: Array<number>;
     onTrack: boolean;
+    /**
+     * Days after today until this budget's period ends; 0 once it is over.
+     */
+    daysLeft?: number;
+    periodRange?: PeriodRange;
 };
 
 export type BudgetStatusList = {
@@ -1408,9 +1471,17 @@ export type AcceptInviteErrors = {
      */
     404: Problem;
     /**
-     * Invite expired or already used.
+     * State conflict (duplicate, already merged, optimistic lock).
+     */
+    409: Problem;
+    /**
+     * Reserved and not returned today. Unknown, expired, used, revoked or e-mail-mismatched codes all answer 404 so a code's state is never revealed.
      */
     410: Problem;
+    /**
+     * Rate limited.
+     */
+    429: Problem;
 };
 
 export type AcceptInviteError = AcceptInviteErrors[keyof AcceptInviteErrors];
@@ -1423,6 +1494,99 @@ export type AcceptInviteResponses = {
 };
 
 export type AcceptInviteResponse = AcceptInviteResponses[keyof AcceptInviteResponses];
+
+export type ListInvitesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/invites';
+};
+
+export type ListInvitesErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Authenticated but not allowed (wrong role or household).
+     */
+    403: Problem;
+};
+
+export type ListInvitesError = ListInvitesErrors[keyof ListInvitesErrors];
+
+export type ListInvitesResponses = {
+    /**
+     * Active invites.
+     */
+    200: Array<InviteSummary>;
+};
+
+export type ListInvitesResponse = ListInvitesResponses[keyof ListInvitesResponses];
+
+export type RevokeInviteData = {
+    body?: never;
+    path: {
+        inviteId: string;
+    };
+    query?: never;
+    url: '/auth/invites/{inviteId}';
+};
+
+export type RevokeInviteErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Authenticated but not allowed (wrong role or household).
+     */
+    403: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+    /**
+     * The invite was already accepted and can no longer be revoked.
+     */
+    409: Problem;
+};
+
+export type RevokeInviteError = RevokeInviteErrors[keyof RevokeInviteErrors];
+
+export type RevokeInviteResponses = {
+    /**
+     * Revoked.
+     */
+    204: void;
+};
+
+export type RevokeInviteResponse = RevokeInviteResponses[keyof RevokeInviteResponses];
+
+export type ListMembersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members';
+};
+
+export type ListMembersErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+};
+
+export type ListMembersError = ListMembersErrors[keyof ListMembersErrors];
+
+export type ListMembersResponses = {
+    /**
+     * Members of the caller's household.
+     */
+    200: Array<Member>;
+};
+
+export type ListMembersResponse = ListMembersResponses[keyof ListMembersResponses];
 
 export type ListExpensesData = {
     body?: never;
@@ -1880,6 +2044,47 @@ export type IngestSmsResponses = {
 };
 
 export type IngestSmsResponse = IngestSmsResponses[keyof IngestSmsResponses];
+
+export type IngestParsedTransactionData = {
+    body: IngestParsedTransactionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/ingest/parsed-transactions';
+};
+
+export type IngestParsedTransactionErrors = {
+    /**
+     * Malformed request or validation failure.
+     */
+    400: Problem;
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Body exceeds the configured size limit.
+     */
+    413: Problem;
+    /**
+     * Semantically invalid (e.g. split shares do not sum to the total).
+     */
+    422: Problem;
+    /**
+     * Rate limited.
+     */
+    429: Problem;
+};
+
+export type IngestParsedTransactionError = IngestParsedTransactionErrors[keyof IngestParsedTransactionErrors];
+
+export type IngestParsedTransactionResponses = {
+    /**
+     * Raw message persisted; parsing continues asynchronously.
+     */
+    202: IngestAccepted;
+};
+
+export type IngestParsedTransactionResponse = IngestParsedTransactionResponses[keyof IngestParsedTransactionResponses];
 
 export type IngestNotificationData = {
     body: IngestNotificationRequest;

@@ -57,7 +57,10 @@ fun SettingsRoute(
             viewModel::syncNow,
             onToggleLanguage,
         ),
-        extra = { SmsCaptureSection(onOpenReview = onOpenReview) },
+        extra = {
+            SmsCaptureSection(onOpenReview = onOpenReview)
+            MembersRoute()
+        },
     )
 }
 

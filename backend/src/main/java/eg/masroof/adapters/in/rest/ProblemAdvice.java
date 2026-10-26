@@ -2,6 +2,7 @@ package eg.masroof.adapters.in.rest;
 
 import eg.masroof.adapters.in.rest.ApiProblemException.FieldProblem;
 import eg.masroof.application.auth.AuthException;
+import eg.masroof.application.auth.InviteException;
 import eg.masroof.application.expense.ExpenseException;
 import eg.masroof.application.household.HouseholdNotConfiguredException;
 import eg.masroof.application.household.UnauthenticatedException;
@@ -107,6 +108,26 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
       response.header(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
     }
     return response.body(problem);
+  }
+
+  @ExceptionHandler(InviteException.class)
+  ResponseEntity<Object> handleInvite(InviteException e, HttpServletRequest request) {
+    HttpStatus status =
+        switch (e.kind()) {
+          case FORBIDDEN -> HttpStatus.FORBIDDEN;
+          case NOT_FOUND -> HttpStatus.NOT_FOUND;
+          case CONFLICT -> HttpStatus.CONFLICT;
+          case INVALID_FIELD -> HttpStatus.BAD_REQUEST;
+        };
+    String field = e.field();
+    List<FieldProblem> errors =
+        field == null
+            ? List.of()
+            : List.of(new FieldProblem(field, String.valueOf(e.getMessage())));
+    return handleApi(
+        new ApiProblemException(
+            status, field == null ? String.valueOf(e.getMessage()) : "Validation failed", errors),
+        request);
   }
 
   @ExceptionHandler(HouseholdNotConfiguredException.class)

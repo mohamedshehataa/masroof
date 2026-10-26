@@ -43,6 +43,8 @@ tags:
     description: Sideloaded Android app distribution metadata.
   - name: Auth
     description: Email + password login, rotating refresh tokens, household invites.
+  - name: Members
+    description: Household members.
   - name: Expenses
     description: The expense ledger (expenses, income, refunds, transfers, cash withdrawals).
   - name: Review
@@ -208,7 +210,7 @@ paths:
       summary: Invite a member to the household
       description: Admin only. Creates a single-use invite code delivered out of band (WhatsApp or e-mail).
       operationId: createInvite
-      x-req: [REQ-SEC-002]
+      x-req: [REQ-SEC-060]
       requestBody:
         required: true
         content:
@@ -237,7 +239,7 @@ paths:
       summary: Accept an invite and create the member account
       operationId: acceptInvite
       security: []
-      x-req: [REQ-SEC-002]
+      x-req: [REQ-SEC-061, REQ-SEC-062]
       requestBody:
         required: true
         content:
@@ -255,12 +257,85 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '410':
-          description: Invite expired or already used.
+          description: Reserved and not returned today. Unknown, expired, used, revoked or e-mail-mismatched codes all answer 404 so a code's state is never revealed.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/invites:
+    get:
+      tags: [Auth]
+      summary: List the household's active invites
+      description: Admin only. Pending, unexpired invites of the caller's household; the codes are never returned again.
+      operationId: listInvites
+      x-req: [REQ-SEC-060]
+      responses:
+        '200':
+          description: Active invites.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InviteSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /auth/invites/{inviteId}:
+    delete:
+      tags: [Auth]
+      summary: Revoke a pending invite
+      description: Admin only. Idempotent for pending or already revoked invites; accepted → 409; other household → 404.
+      operationId: revokeInvite
+      x-req: [REQ-SEC-060]
+      parameters:
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The invite was already accepted and can no longer be revoked.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/members:
+    get:
+      tags: [Members]
+      summary: List the household's members
+      operationId: listMembers
+      x-req: [REQ-SEC-060]
+      responses:
+        '200':
+          description: Members of the caller's household.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Member'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # ---------------------------------------------------------------- Expenses
   /api/expenses:
@@ -2469,7 +2544,10 @@ components:
           pattern: '^\+[1-9]\d{6,14}$'
           description: The member's WhatsApp number, so their messages map to them.
         role:
-          $ref: '#/components/schemas/MemberRole'
+          type: string
+          enum: [MEMBER]
+          default: MEMBER
+          description: Only MEMBER invites exist; admins are never created through an invite.
 
     Invite:
       type: object
@@ -2487,20 +2565,49 @@ components:
           type: string
           format: date-time
 
+    InviteSummary:
+      type: object
+      required: [id, displayName, status, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        email:
+          type: [string, 'null']
+        phoneE164:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, REVOKED]
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
     InviteAcceptRequest:
       type: object
       required: [code, email, password]
       properties:
         code:
           type: string
+          maxLength: 128
+        displayName:
+          type: string
+          maxLength: 80
+          description: Optional; overrides the name the admin gave the invite.
         email:
           type: string
           format: email
         password:
           type: string
           format: password
-          minLength: 8
-          maxLength: 256
+          minLength: 12
+          maxLength: 72
+          description: At least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit, enforced by the server with 400 on field `password`), and not one of the 10,000 most common passwords.
 
     Member:
       type: object

@@ -12,6 +12,11 @@ public interface AccountStore {
   /** Lookup by app_user id. */
   Optional<Account> findByUserId(UUID userId);
 
+  /** Whether any login exists yet. */
+  default boolean hasAnyLogin() {
+    return false;
+  }
+
   /**
    * Creates an ADMIN member in the oldest household (creating one when none exists) with a login,
    * unless a login already exists. Returns whether it created one.

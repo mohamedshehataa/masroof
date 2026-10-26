@@ -1,6 +1,8 @@
 package eg.masroof.adapters.out.security;
 
 import eg.masroof.application.auth.PasswordHasher;
+import eg.masroof.domain.auth.PasswordPolicy;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder.BCryptVersion;
@@ -20,8 +22,10 @@ final class BcryptPasswordHasher implements PasswordHasher {
 
   @Override
   public boolean matches(String password, String hash) {
-    // BCrypt only reads the first 72 bytes; the contract caps passwords at 256 characters.
-    return encoder.matches(password, hash);
+    // BCrypt reads at most 72 bytes and Spring's encoder throws beyond that; no stored password is
+    // longer (PasswordPolicy), so a longer attempt simply does not match instead of causing a 500.
+    return password.getBytes(StandardCharsets.UTF_8).length <= PasswordPolicy.MAX_BYTES
+        && encoder.matches(password, hash);
   }
 
   @Override
