@@ -46,8 +46,8 @@ android {
         applicationId = "eg.masroof"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Only the two shipped locales; keeps the APK small and lint's MissingTranslation honest.
         resourceConfigurations += listOf("en", "ar")

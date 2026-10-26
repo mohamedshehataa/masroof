@@ -143,3 +143,44 @@ TEST_INTEGRITY: OK, asserts 101 -> 122, no skips, no deleted tests. The SPINNEYS
 Loop 3 of 3 reached with an open MAJOR.
 
 STATUS: FAIL
+
+---
+
+# Round 4 - 2026-10-27 - head 09e062cec16694f5cd73917e215713ad32bf3c4c, base origin/main ba4c57c
+
+## Environment
+- Fix commit 09e062c: every family regex now captures its own amount (AMTG with groups a1/a2; HSBC keeps amt). amountMatches requires that captured amount to equal the engine amount, and amountAgrees (any number in the clause) is deleted. InstaPay now checks the amount per regex match. The identifier set gained total, amount, amt, value, balance, bal, vat, tax, discount, qty, quantity, phone, mobile, tel and the Arabic مبلغ, قيمة, رصيد, ضريبة, خصم, كمية, هاتف, موبايل.
+- bash scripts/make/check-fast.sh android sdlc -> exit 0, check-fast GREEN [android sdlc] in 98s; quality tests 145/145
+- gradlew testDebugUnitTest --rerun at 09e062c -> CardStoreNumberTest 11/11, SmsParserTest 15/15, InstaPaySmsTest 2/2, 0 skipped
+- bash scripts/quality/test-integrity-check.sh origin/main -> SmsParserTest asserts 101 -> 128, skips 0 -> 0, no deleted files, TEST_INTEGRITY: OK. amountAgrees was a private helper and no test referenced it.
+- python scripts/quality/traceability.py --out tmp -> 403 REQs, 0 unknown, gate PASS
+- gh pr checks 65, head 09e062c -> all checks pass, including Build artifacts; Android check-fast is PENDING
+- Probe: the throwaway QaProbeTest was run with gradlew --rerun on head and on origin/main, over all 1900 fixture rows plus 305 exploratory inputs: the 264 from rounds 1-3 with the amount-word variants, plus 41 new amount and transfer inputs. The probe is deleted.
+
+## Criteria
+| Claim | Result | Evidence |
+|---|---|---|
+| 1. No auto-record with an amount other than the captured one | PASS | used at SHOP AMOUNT 500 / VALUE 500 for EGP 130.00 and used at SHOP AMOUNT 999 for EGP 1.00 -> REVIEW, where round 3 gave RECORD 50000 / 99900. used at SHOP 500 for EGP 130.00 -> RECORD 13000, correct. Two amounts (charged EGP 130.00 EGP 500.00 at SHOP; at SHOP for EGP 500.00; a second clause Amount EGP 500.00) -> review. Currency inside the slot (at SHOP 500 EGP) -> review. Arabic 130 جنيه 500 جنيه -> ambiguous_amount; Arabic لدي كارفور 500 من بطاقتك -> RECORD 13000, correct. InstaPay You sent EGP 10 to AHMED 500 and to AHMED ALI EGP 500 -> review. Instant out with a second number -> ambiguous_amount; instant in from احمد علي 500 -> RECORD 10000 on head and on main alike. Every head record in the exploratory set carries the amount its template captured: 13000, 10000, 125050, 125000, 150075 or 50000. |
+| 2. Round-3 MINOR words are not records | PASS | Card wrapper with SHOP TOTAL / AMOUNT / AMT / VALUE / BALANCE / BAL 500, VAT / TAX 14, DISCOUNT 50, QTY 3, QUANTITY 3, PHONE / TEL 123, MOBILE 12; HSBC SHOP TOTAL 500 and SHOP AMOUNT 500; Arabic كارفور مبلغ 500 / رصيد 500 / قيمة 500 / خصم 50 -> all not records. |
+| 3. No regression from the tightened amount check | PASS | 1900/1900 pre-existing fixture rows give identical outcomes (diff empty). round20: exactly the 4 intended positives RECORD (store-last-hsbc, store-last-cib, store-one-digit, store-ar), 31 not records. In the exploratory set, 0 records on main were lost or changed in kind, amount, label or last-4: the main-RECORD side of the diff is empty. |
+| 4. Owner message, CARREFOUR 12, كارفور 12; numberless slots unchanged | PASS | HSBC and CIB x tails 0001/9999/7310 x 3 limits: 18/18 RECORD PURCHASE 13000 m=HARDEE S ELMERGHANY; the Arabic-Indic version is recorded too. CARREFOUR 12 -> 13000 m=CARREFOUR. كارفور 12 and كارفور ١٢ -> 13000 m=كارفور. LE PAIN QUOTIDIEN, LE MERIDIEN, LE MARCHE, YEN SUSHI, SR MARKET, DH FOODS, InstaPay to SR AHMED, Payment to LE MERIDIEN and from DH FOODS all match main. |
+| 5. Gates | PASS locally, CI Android pending | See Environment. |
+
+## Findings
+| Sev | Where | What | Repro |
+|---|---|---|---|
+| R4-MINOR-1 | StatusGate identifierWords, before-side | Some words before a trailing number still pass. The amount is always the captured one and correct, and no numerals are uploaded; only the label is odd. | Card wrapper with SHOP LIMIT 500, TIP 50, INSTALLMENT 3, MONTHS 12, PTS 50, SUM 500, PRICE 500, COST 500, PAID 500, EXT 123, CALL 123, ATTEMPT 3, KM 5, LTR 50, KG 5 -> RECORD 13000. Arabic كارفور اجمالي 500 and كارفور بمبلغ 500 -> RECORD 13000. used at SHOP SUM / PRICE / COST 500 for EGP 130.00 -> RECORD 13000. |
+| NIT (pre-existing) | StatusGate | A status glued into one word is missed: SHOP ONHOLD records on main and on head, with or without a number. This PR does not introduce it. | used at SHOP ONHOLD for EGP 130.00 -> RECORD on both |
+| NIT (pre-existing) | slot | at SHOP 5.00 and at SHOP 50.5 are RECORD on main and on head alike. | card wrapper |
+
+## Exploratory (round 4)
+- 305 inputs: the 264 from rounds 1-3 with the amount-word variants, plus 41 new.
+- New card inputs: SHOP QUANTITY 3, VALUE / SUM / PRICE / COST / CHARGE / PAID 500 in the card wrapper; used at SHOP 500 / COST 500 / CHARGE 500 for EGP 130.00; charged EGP 130.00 at SHOP 500 EGP; charged EGP 130.00 at SHOP for EGP 500.00; charged EGP 130.00 EGP 500.00 at SHOP; charged 130 EGP / EGP 1,250.50 / EGP1,250.50 / LE 130 at CARREFOUR 12; a second clause Amount EGP 500.00; used at CARREFOUR 12 for EGP 1,250.50 and for 130.00 EGP; HSBC SHOP AMOUNT 500.
+- New Arabic inputs: 130 جنيه 500 جنيه, the mirrored forms with كارفور 12 and كارفور 500, مبلغ 1,250.50, all-Arabic-Indic numerals ١٢٥٠ / ٤٨٢١ / ١٢, the currency-first جنيه 130, and كارفور 500 / بمبلغ 500.
+- New transfer inputs: instant in with 500 after the name and with 1,500.75; instant out with a second number, with 1,500.75 and with Arabic-Indic numerals; InstaPay to AHMED 500, 1,250.50, 500 EGP, to AHMED ALI EGP 500, تحويل 1,250, استلام 100, received successfully.
+- Problems: 1 MINOR. No wrong amount, no hidden status introduced by this PR, no lost auto-record.
+
+## Test integrity (round 4)
+TEST_INTEGRITY: OK, asserts 101 -> 128, no skips, no deleted tests. The removed amountAgrees had no direct test, and no assertion was lost.
+
+STATUS: PASS
