@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: S
 modules: [android]
 depends_on: [STORY-038, STORY-056, STORY-054]
-reqs: [REQ-SMS-060, REQ-SMS-061, REQ-SMS-062, REQ-SMS-063]
+reqs: [REQ-SMS-060, REQ-SMS-061, REQ-SMS-062, REQ-SMS-063, REQ-SMS-090, REQ-SMS-091]
 implements: ["PROMPT.md §4.1 (Upload… idempotent; offline → Room outbox, retry with backoff)"]
 owner_agent: android-engineer
 ---
@@ -32,6 +32,12 @@ Given any message, secret or not, when the app uploads, then the serialized requ
 
 ### REQ-SMS-063 — Messages not turned into a record stay in a local "Needs review" list
 Given an unknown template, a foreign currency, a secret-looking purchase or an unexplained number, when it arrives, then it is kept only in Room (digits of a secret one masked) where the user can open it, create a prefilled expense, or dismiss it; it is purged after 30 days and cleared on logout.
+
+### REQ-SMS-090 — One transfer announced by two channels is one record
+Given a bank SMS and an InstaPay app notification for the same transfer (same direction, amount and currency, at most 5 minutes apart, in either order), when both are captured, then one record is uploaded and one notice is shown: when the notification came first, the richer bank SMS replaces it and the first notice is withdrawn; when the first record was already uploaded, the second is dropped. Given two equal transfers more than 5 minutes apart, a different amount, or two equal messages from the same channel, then each is its own record.
+
+### REQ-SMS-091 — The capture notice says what happened
+Given a captured record, when its notice is shown, then the wording follows the direction: money in reads "Received", money out reads "Sent", and a card purchase reads "Recorded", each with the amount and the merchant or source label.
 
 ## UX states (UI stories only)
 N/A (no UI).
