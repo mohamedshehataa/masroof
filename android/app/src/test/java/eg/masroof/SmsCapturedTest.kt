@@ -352,7 +352,7 @@ class SmsCapturedTest {
                 }
             SmsUploader(db, remote, device, clock, MemoryGate(), deleter, locks).uploadPending()
             assertTrue(undoDuringUpload!!.removed)
-            assertTrue("remembered, not half applied", undoDuringUpload!!.deferred)
+            assertTrue("remembered, not half applied", undoDuringUpload.deferred)
             assertEquals(1, serverReceived)
             assertEquals("the expense the server made is deleted", listOf("3f2b1c64-1111-4222-8333-000000000005"), deleter.deleted)
             assertTrue(db.captured().all().isEmpty())
