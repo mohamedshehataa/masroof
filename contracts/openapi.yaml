@@ -43,6 +43,8 @@ tags:
     description: Sideloaded Android app distribution metadata.
   - name: Auth
     description: Email + password login, rotating refresh tokens, household invites.
+  - name: Members
+    description: Household members.
   - name: Expenses
     description: The expense ledger (expenses, income, refunds, transfers, cash withdrawals).
   - name: Review
@@ -255,12 +257,79 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '410':
           description: Invite expired or already used.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/invites:
+    get:
+      tags: [Auth]
+      summary: List the household's active invites
+      description: Admin only. Pending, unexpired invites of the caller's household; the codes are never returned again.
+      operationId: listInvites
+      x-req: [REQ-SEC-002]
+      responses:
+        '200':
+          description: Active invites.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InviteSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /auth/invites/{inviteId}:
+    delete:
+      tags: [Auth]
+      summary: Revoke a pending invite
+      description: Admin only. Idempotent for the household's own invites; another household's invite is 404.
+      operationId: revokeInvite
+      x-req: [REQ-SEC-002]
+      parameters:
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/members:
+    get:
+      tags: [Members]
+      summary: List the household's members
+      operationId: listMembers
+      x-req: [REQ-SEC-002]
+      responses:
+        '200':
+          description: Members of the caller's household.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Member'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # ---------------------------------------------------------------- Expenses
   /api/expenses:
@@ -2452,12 +2521,40 @@ components:
           type: string
           format: date-time
 
+    InviteSummary:
+      type: object
+      required: [id, displayName, status, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        email:
+          type: [string, 'null']
+        phoneE164:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, REVOKED]
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
     InviteAcceptRequest:
       type: object
       required: [code, email, password]
       properties:
         code:
           type: string
+          maxLength: 128
+        displayName:
+          type: string
+          maxLength: 80
+          description: Optional; overrides the name the admin gave the invite.
         email:
           type: string
           format: email

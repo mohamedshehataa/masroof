@@ -4,6 +4,7 @@ import eg.masroof.adapters.in.rest.generated.api.AuthApi;
 import eg.masroof.adapters.in.rest.generated.model.Invite;
 import eg.masroof.adapters.in.rest.generated.model.InviteAcceptRequest;
 import eg.masroof.adapters.in.rest.generated.model.InviteRequest;
+import eg.masroof.adapters.in.rest.generated.model.InviteSummary;
 import eg.masroof.adapters.in.rest.generated.model.LoginRequest;
 import eg.masroof.adapters.in.rest.generated.model.LogoutRequest;
 import eg.masroof.adapters.in.rest.generated.model.Member;
@@ -13,9 +14,15 @@ import eg.masroof.adapters.in.rest.generated.model.TokenPair;
 import eg.masroof.adapters.in.rest.generated.model.TokenPair.TokenTypeEnum;
 import eg.masroof.application.auth.AuthService;
 import eg.masroof.application.auth.Caller;
+import eg.masroof.application.auth.InviteService;
 import eg.masroof.application.auth.Session;
+import eg.masroof.application.household.UnauthenticatedException;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,10 +31,13 @@ import org.springframework.web.bind.annotation.RestController;
 class AuthController implements AuthApi {
 
   private final AuthService service;
+  private final InviteService invites;
   private final HttpServletRequest request;
   private final ClientIp clientIp;
 
-  AuthController(AuthService service, HttpServletRequest request, ClientIp clientIp) {
+  AuthController(
+      AuthService service, InviteService invites, HttpServletRequest request, ClientIp clientIp) {
+    this.invites = invites;
     this.clientIp = clientIp;
     this.service = service;
     this.request = request;
@@ -54,15 +64,69 @@ class AuthController implements AuthApi {
     return ResponseEntity.noContent().build();
   }
 
-  // Declared in the contract, built later.
   @Override
-  public ResponseEntity<Invite> createInvite(InviteRequest inviteRequest) {
-    throw ApiProblemException.notImplemented();
+  public ResponseEntity<Invite> createInvite(InviteRequest body) {
+    InviteService.Created created =
+        invites.create(
+            requireCaller(),
+            body.getDisplayName(),
+            body.getEmail(),
+            body.getPhoneE164(),
+            body.getRole() == null ? null : body.getRole().name(),
+            clientIp.of(request));
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(
+            new Invite()
+                .id(created.id())
+                .code(created.code())
+                .displayName(created.displayName())
+                .expiresAt(created.expiresAt()));
   }
 
   @Override
-  public ResponseEntity<TokenPair> acceptInvite(InviteAcceptRequest inviteAcceptRequest) {
-    throw ApiProblemException.notImplemented();
+  public ResponseEntity<TokenPair> acceptInvite(InviteAcceptRequest body) {
+    Session session =
+        invites.accept(
+            body.getCode(),
+            body.getEmail(),
+            body.getPassword(),
+            body.getDisplayName(),
+            clientIp.of(request));
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(toPair(session));
+  }
+
+  @Override
+  public ResponseEntity<List<InviteSummary>> listInvites() {
+    return ResponseEntity.ok(
+        invites.list(requireCaller()).stream()
+            .map(
+                v ->
+                    new InviteSummary()
+                        .id(v.id())
+                        .displayName(v.displayName())
+                        .email(v.email())
+                        .phoneE164(v.phoneE164())
+                        .status(InviteSummary.StatusEnum.valueOf(v.status()))
+                        .createdAt(v.createdAt())
+                        .expiresAt(v.expiresAt()))
+            .toList());
+  }
+
+  @Override
+  public ResponseEntity<Void> revokeInvite(UUID inviteId) {
+    invites.revoke(requireCaller(), inviteId, clientIp.of(request));
+    return ResponseEntity.noContent().build();
+  }
+
+  private static Caller requireCaller() {
+    Caller caller = CallerHousehold.CallerContext.current();
+    if (caller == null) {
+      throw new UnauthenticatedException();
+    }
+    return caller;
   }
 
   private static TokenPair toPair(Session s) {
