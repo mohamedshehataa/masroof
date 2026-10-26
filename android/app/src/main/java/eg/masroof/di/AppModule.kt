@@ -24,6 +24,10 @@ import eg.masroof.data.auth.LocalDataWiper
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.auth.SessionStore
 import eg.masroof.data.auth.TinkKeystore
+import eg.masroof.data.budgets.ApiBudgetsRemote
+import eg.masroof.data.budgets.BudgetsRemote
+import eg.masroof.data.budgets.BudgetsRepository
+import eg.masroof.data.budgets.DefaultBudgetsRepository
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.insights.ApiInsightsRemote
 import eg.masroof.data.insights.DefaultInsightsRepository
@@ -68,6 +72,10 @@ abstract class BindingsModule {
     @Binds abstract fun insights(impl: DefaultInsightsRepository): InsightsRepository
 
     @Binds abstract fun insightsRemote(impl: ApiInsightsRemote): InsightsRemote
+
+    @Binds abstract fun budgets(impl: DefaultBudgetsRepository): BudgetsRepository
+
+    @Binds abstract fun budgetsRemote(impl: ApiBudgetsRemote): BudgetsRemote
 }
 
 @Module
