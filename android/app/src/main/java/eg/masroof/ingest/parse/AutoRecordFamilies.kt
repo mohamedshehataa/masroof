@@ -225,7 +225,7 @@ object AutoRecordFamilies {
                 !isNoise(head) &&
                 !StatusGate.blocks(head) &&
                 tokens.none { StatusGate.isNonName(it) } &&
-                tokens.all { latinNameToken(it) || it.all { c -> c in arabicLetter } }
+                nameTokens(tokens, allowStoreNumber = true) { latinNameToken(it) || it.all { c -> c in arabicLetter } }
         val tail = if (isSuffix) rest.drop(1) else rest
         return tail.all(::isNoise)
     }
@@ -247,10 +247,35 @@ object AutoRecordFamilies {
     private const val MAX_LATIN_TOKENS = 6
     private const val MAX_ARABIC_TOKENS = 4
 
-    /** A merchant or counterparty slot must look like a name: nothing else may hide in it (closed world). */
+    private const val MAX_STORE_NUMBER_DIGITS = 3
+
+    private fun isStoreNumber(token: String) = token.length in 1..MAX_STORE_NUMBER_DIGITS && token.all { it in '0'..'9' }
+
+    /**
+     * Every token is a name token, except that ONE purely numeric token of 1-3 digits (a branch or store number: "HARDEE S ELMERGHANY
+     * 50", "SPINNEYS 3 ZAYED") is allowed when [allowStoreNumber] and a name token comes before it. A longer digit run is refused
+     * here as well as by the MERCHANT regex; the label sent to the server stays digit-free (LabelNormalizer).
+     */
+    private fun nameTokens(
+        tokens: List<String>,
+        allowStoreNumber: Boolean,
+        isName: (String) -> Boolean,
+    ): Boolean {
+        val numbers = tokens.count(::isStoreNumber)
+        val numberOk = numbers == 0 || (allowStoreNumber && numbers == 1 && !isStoreNumber(tokens.first()))
+        if (!numberOk) return false
+        return tokens.all { isStoreNumber(it) || isName(it) }
+    }
+
+    /**
+     * A merchant or counterparty slot must look like a name: nothing else may hide in it (closed world). [allowStoreNumber] is set
+     * only for the card and HSBC merchant slots: a counterparty (InstaPay, instant transfer) is a person or handle, where a bare
+     * number would be a phone or account fragment, so those slots stay strict.
+     */
     private fun slotLooksLikeName(
         original: String,
         match: MatchResult,
+        allowStoreNumber: Boolean = false,
     ): Boolean {
         // a family with no merchant or counterparty slot (the ATM line, the outgoing instant transfer) has no group "m"
         val group = runCatching { match.groups["m"] }.getOrNull()
@@ -265,8 +290,8 @@ object AutoRecordFamilies {
         val statusFree = tokens.none { StatusGate.isNonName(it) || StatusGate.isStatusWord(it.lowercase()) }
         return when {
             !plain || !statusFree || (hasLatin && hasArabic) -> false
-            hasArabic -> tokens.size <= MAX_ARABIC_TOKENS && tokens.all { tok -> tok.all { it in arabicLetter } }
-            else -> tokens.size <= MAX_LATIN_TOKENS && tokens.all { latinNameToken(it) }
+            hasArabic -> tokens.size <= MAX_ARABIC_TOKENS && nameTokens(tokens, allowStoreNumber) { tok -> tok.all { it in arabicLetter } }
+            else -> tokens.size <= MAX_LATIN_TOKENS && nameTokens(tokens, allowStoreNumber, ::latinNameToken)
         }
     }
 
@@ -294,7 +319,8 @@ object AutoRecordFamilies {
         if (record.kind != TxKind.PURCHASE) return false
         val regexes = cardPurchaseEn + cardPurchaseAr
         val m = regexes.firstNotNullOfOrNull { it.find(clause) } ?: return false
-        return m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record) && slotLooksLikeName(original, m)
+        val proven = m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record)
+        return proven && slotLooksLikeName(original, m, allowStoreNumber = true)
     }
 
     private fun hsbc(
@@ -306,7 +332,8 @@ object AutoRecordFamilies {
         val atm = hsbcAtm.find(clause)
         val m = purchase ?: atm ?: return false
         val kindOk = if (purchase != null) record.kind == TxKind.PURCHASE else record.kind == TxKind.CASH_WITHDRAWAL
-        return kindOk && MessageParser.minorOf(m.groups["amt"]!!.value) == record.amountMinor && slotLooksLikeName(original, m)
+        val proven = kindOk && MessageParser.minorOf(m.groups["amt"]!!.value) == record.amountMinor
+        return proven && slotLooksLikeName(original, m, allowStoreNumber = true)
     }
 
     private fun instant(

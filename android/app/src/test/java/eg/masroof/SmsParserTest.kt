@@ -196,7 +196,8 @@ class SmsParserTest {
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
                 fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
                 fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl") + fixture("round14.jsonl") +
-                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl") + fixture("round19.jsonl")
+                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl") + fixture("round19.jsonl") +
+                fixture("round20.jsonl")
         assertTrue(rows.size >= 415)
         checkAll(rows)
     }
@@ -510,5 +511,48 @@ class InstaPaySmsTest {
         }
         val phone = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to 01000000012 was successful"))
         assertFalse(phone is ParseOutcome.Record && phone.record.toString().contains("0100000"))
+    }
+}
+
+class CardStoreNumberTest {
+    private fun card(merchant: String) =
+        "Your Credit Card ending with 4821 has been used for EGP 130.00 on 26/10/2026 at $merchant. Your available limit is EGP 41000.10"
+
+    @Test
+    fun `REQ-SMS-070 a store number after a card merchant is recorded with a digit-free label`() {
+        for (sender in listOf("HSBC", "CIB")) {
+            val o = MessageParser.parse(message(sender, card("HARDEE S ELMERGHANY 50")))
+            assertTrue("$sender -> $o", o is ParseOutcome.Record)
+            val r = (o as ParseOutcome.Record).record
+            assertEquals(13000L, r.amountMinor)
+            assertEquals("4821", r.instrumentLast4)
+            assertEquals("HARDEE S ELMERGHANY", LabelNormalizer.normalize(r.merchant.orEmpty()))
+        }
+        assertTrue(MessageParser.parse(message("CIB", card("SPINNEYS 3 ZAYED"))) is ParseOutcome.Record)
+        assertTrue(MessageParser.parse(message("CIB", card("CARREFOUR 7"))) is ParseOutcome.Record)
+        // without the number it was already a record
+        assertTrue(MessageParser.parse(message("HSBC", card("HARDEE S ELMERGHANY"))) is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-070 the Arabic card family accepts a store number too`() {
+        val body = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى كارفور 12"
+        assertTrue(MessageParser.parse(message("CIB", body)) is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 a store number never opens the closed world`() {
+        val bad =
+            listOf("50", "50 SHOP", "SHOP 1234", "SHOP 50 60", "SHOP 50 declined", "SHOP 50 failed", "SHOP 123456", "SHOP 50 OTP")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 the counterparty slots of InstaPay and instant transfers stay strict`() {
+        val o = MessageParser.parse(message("CIB", "You sent EGP 100.00 to AHMED 50"))
+        assertFalse(o.toString(), o is ParseOutcome.Record)
     }
 }
