@@ -261,11 +261,12 @@ object AutoRecordFamilies {
         allowStoreNumber: Boolean,
         isName: (String) -> Boolean,
     ): Boolean {
-        if (tokens.any(StatusGate::isCurrencyWord)) return false
         val numbers = tokens.count(::isStoreNumber)
         val numberOk = numbers == 0 || (allowStoreNumber && numbers == 1 && !isStoreNumber(tokens.first()))
         if (!numberOk) return false
         if (numbers == 1) {
+            // an amount hiding in a numbered slot ("SHOP 500 EGP"); a slot WITHOUT a number is judged exactly as before
+            if (tokens.any(StatusGate::isCurrencyWord)) return false
             // a number after "ID", "TRX", "REF" ... is a code; and a label with no real name left once the digits go is unusable
             val at = tokens.indexOfFirst(::isStoreNumber)
             if (StatusGate.isIdentifierWord(tokens[at - 1])) return false

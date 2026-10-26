@@ -580,6 +580,27 @@ class CardStoreNumberTest {
     }
 
     @Test
+    fun `REQ-SMS-078 a currency-like word in a name without a number is still a name`() {
+        val en = "Your card ending 4821 was charged EGP 85.00 at "
+        for (m in listOf("LE PAIN QUOTIDIEN", "LE MERIDIEN", "LE MARCHE", "YEN SUSHI", "SR MARKET")) {
+            val o = MessageParser.parse(message("CIB", en + m))
+            assertTrue("$m -> $o", o is ParseOutcome.Record)
+        }
+        // with a number, any currency word in the slot sends it to review (a deliberate trade-off)
+        for (m in listOf("LE MERIDIEN 2", "LE 50")) {
+            val o = MessageParser.parse(message("CIB", en + m))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 an InstaPay counterparty with a currency-like word is judged as before`() {
+        val body = "You sent EGP 100.00 to SR AHMED"
+        val sr = MessageParser.parse(message(NotificationApps.INSTAPAY_CANDIDATE, body, source = CaptureSource.NOTIFICATION))
+        assertTrue(sr.toString(), sr is ParseOutcome.Record)
+    }
+
+    @Test
     fun `REQ-SMS-078 the counterparty slots of InstaPay and instant transfers stay strict`() {
         val o = MessageParser.parse(message("CIB", "You sent EGP 100.00 to AHMED 50"))
         assertFalse(o.toString(), o is ParseOutcome.Record)
