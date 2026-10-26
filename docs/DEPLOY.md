@@ -95,3 +95,5 @@ prod-deployed v0.1.0 2026-10-26 backend=0.1.0 web=0.1.0 host=GCP e2-micro us-cen
 prod-deployed v0.1.1 2026-10-26 backend=0.1.1 web=0.1.1 gitSha=b3ce076 host=GCP e2-micro (owner: deploy now, Oracle later); version string in /health still 0.1.0 (bump skipped)
 prod-deployed v0.1.2 2026-10-26 backend=0.1.2 web=0.1.2 gitSha=2caf85d host=GCP e2-micro; adds on-device SMS + InstaPay capture (PR #44); /health version string still 0.1.0 (bump pending)
 prod-deployed v0.1.3 2026-10-26 backend=0.1.3 web=0.1.3 gitSha=748f30c host=GCP e2-micro; adds budgets (PR #59), member invite (PR #61), Android dependency updates (PR #56); Flyway V9 budget + V10 invite applied
+prod-deployed v0.1.4 2026-10-27 backend=0.1.4 web=0.1.4 gitSha=ba4c57c host=GCP e2-micro; backup taken first (verified); /health now reports 0.1.4 (PR #64 bump); Android 0.1.4 (code 5) adds captured-record upload + one record per transfer (PR #63)
+app-released v0.1.5 2026-10-27 Android only (code 6): card purchases with a trailing store number auto-record (PR #65); server unchanged at 0.1.4

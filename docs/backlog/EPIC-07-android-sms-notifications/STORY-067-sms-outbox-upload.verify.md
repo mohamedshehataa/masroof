@@ -1,3 +1,81 @@
+# Verify report: PR #63 fix/captured-upload (STORY-067, REQ-SMS-003, REQ-SMS-090..093), round 3
+
+- Verifier: qa-verifier (fresh context)
+- Date: 2026-10-27
+- Base: 15557fa2ca11d9c015135edbc85e697d71d8b20c (origin/main)
+- Head: 5cb258d01ab514a0dd0067ce5a55e823a7d54fdb
+- Loop: 3 of 3 (rounds 1 and 2 kept below for history; their findings are tracked here as RESOLVED or open)
+
+## Environment
+- JAVA_HOME Temurin 21.0.12. bash scripts/make/check-fast.sh android sdlc: check-fast GREEN [android sdlc] in 216s (gradlew checkFast OK, sdlc-lint 0 errors, hook tests 624/624, quality tests 145/145, contract lint OK).
+- gradlew :app:testDebugUnitTest for CapturedPairingTest 12/12, CapturedRaceTest 10/10, CapturedDedupTest 8/8, CapturedUploadTest 1/1, RoomMigrationTest 5/5; 0 skipped, 0 failures.
+- bash scripts/quality/test-integrity-check.sh origin/main: TEST_INTEGRITY: OK, assertions 96 (base) to 207, 0 in deleted files.
+- python scripts/quality/traceability.py --out (scratchpad): 403 REQs, 125 covered, 0 unknown, gate PASS.
+- gh pr checks 63: 14/14 pass on run 40406669395; gh run view gives headSha 5cb258d (incl. Security gitleaks/semgrep, Backend integration, Test integrity, PR gate).
+- Throwaway Robolectric probe QaR3ProbeTest (8 tests; real SmsPipeline + SmsUploader + CapturedActions; in-memory Room or a real v7 DB built from schemas/7.json and migrated with MIGRATION_7_8; a fake server idempotent on local id that can store before answering; a mutable clock). Run with gradlew :app:testDebugUnitTest --tests eg.masroof.QaR3ProbeTest, then deleted; git status clean.
+
+## Criteria
+| # | Claim / REQ | Result | Evidence |
+|---|---|---|---|
+| 1 | A row ever claimed is never replaced; the newcomer is dropped (REQ-SMS-090) | PASS | q02 (push upload stored on the server, answer lost as Retry, SMS 30 s later, retry): server 1, captured NOTIFICATION with expense e1. q06 with the request in flight 150 / 299 / 301 / 400 s while the SMS arrives: server 1 each. CapturedPairingTest lost-answer and outlives-claim tests green |
+| 2 | Same message again after skip / after replace makes no record | PASS | q03 SMS, push, push: outbox [SMS], captured 1. q04 push, SMS, push: outbox [SMS], captured 1. q04b the same after the SMS upload: server 1, outbox 0 |
+| 3 | Queued twins paired at pass start | PASS | q09 real v7 DB (s1 SMS last4 1094, n1 push, 1 EGP INCOME, 3 s apart) migrated, uploadPending: attempts 0/0 gives requests [s1]; 3/0 gives [s1]; 0/3 gives [n1] (the tried one stays); 3/3 gives [s1, n1] by design. v8 queued unclaimed push next to an uploaded unpaired SMS twin: push dropped, server 1. Three queued v7 rows (s1, n1, n2 +60 s): server [s1, n2], correct |
+| 4 | Live claim schedules a retry; release only own claim; callTimeout 90 s below 5 min | PASS | q05: claim 10 s old gives retry true, retryAfterSeconds 291, then sent after the claim runs out (CapturedPairingTest too); release with token 123 leaves claimedAtMillis unchanged; release with own token gives 0 (claims 1). ApiRemoteSource callTimeout 90 s vs UPLOAD_CLAIM_TTL_MILLIS 5 min (code read). Two concurrent passes: outer sent 1, inner retry at 301 s, server 1, no further retry |
+| 5 | Undo paths | PASS | u1 Undo during the request: deferred, the server expense deleted, captured 0, outbox 0. u2 Undo of a row claimed but not yet in the lock set: deferred, row kept, after upload the server expense deleted. CapturedPairingTest: never-sent Undo forgets the row (removed, not deferred, outbox and captured empty); tried-row Undo goes through the deleter |
+| 6 | TRANSFER fetched and mapped; failed refresh keeps cache; totals only EXPENSE (REQ-SMS-092) | PASS | CapturedPairingTest REQ-SMS-092: the real ApiRemoteSource asks EXPENSE, INCOME, TRANSFER and keeps type TRANSFER; a failing TRANSFER call gives RefreshOutcome.Offline with the cached row intact. CapturedRaceTest totals 5000 with TRANSFER and INCOME listed |
+| 7 | Round-2 passes still pass | PASS | CapturedRaceTest 10/10 (order independence, pairing at most once, receive-time pairing, REQ-SMS-093 labels, 7 to 8 migration), CapturedDedupTest 8/8 (REQ-SMS-091 wording), RoomMigrationTest 5/5 (chains to 8). Probe cc: a 7 EGP push uploading while the 1 EGP push and SMS arrive gives server 2 |
+| 8 | No assertion weakened | PASS | test-integrity OK (96 to 207). CapturedRaceTest a claim is atomic: the old final assertion (deletable after release) encoded exactly the round-2 F1 bug; it is replaced by a stricter sequence: wrong-token release is a no-op, own-token release frees the row for a new claim, a once-claimed row is never deletable. The unclaimed-row replacement premise is still asserted by a queued record that nobody is uploading is still replaced by the richer twin. Legitimate premise change, not a weakening |
+| 9 | Gates | PASS | check-fast android sdlc GREEN; traceability 0 unknown; gh pr checks 63 14/14 at 5cb258d |
+| REQ-SMS-003 | Captured record lands on the server | PASS | CapturedUploadTest 1/1 |
+| REQ-SMS-091 | Notice wording | PASS | CapturedDedupTest REQ-SMS-091 green |
+
+## Findings
+| Sev | Where | What | Reproduce |
+|---|---|---|---|
+| MINOR (R3-1) | ChannelPairing + SmsPipeline.storeRecord knows() + CapturedActions.undo | The pair memory (pairedLocalId) lives only on the winner captured row; Undo deletes that row, so the dropped or replaced twin message accepted again afterwards is stored as a new transfer. After an uploaded winner is undone the server gets a NEW record under a new local id; after an unsent winner is undone the transfer comes back. Needs the same message to be accepted again after the Undo (intake job re-run, re-posted notification in the same post second). | q04c: push, SMS replaces it, upload, Undo SMS (server expense deleted), the same push again, upload: server 2 distinct records, captured [NOTIFICATION]. u5: push, SMS, Undo SMS (never sent, forgotten), the same push again, upload: server 1 record although the user undid the transfer |
+| MINOR (R3-2) | MIGRATION_7_8 claims backfill, one-time residuals | Pre-v8 pairs that cannot be paired safely still upload twice: both rows tried (3/3, by design); a v7 upload killed mid-request (attempts 0 but on the server: the poorer row is dropped and the other one sent); a v7 pair where one record was already uploaded (uploaded v7 rows get no kind, so they never match). | q09 3/3: requests [s1, n1]. q09_kill (server already holds n1, both attempts 0): server [n1, s1]. q09_up (s1 uploaded in v7, n1 queued): server [s1, n1] |
+| MINOR (R3-3) | SmsUploader.heldStep + ParsedOutboxDao.claim | A claim left by a killed upload lies in the future when the phone clock is then moved back; the row is not sent until the clock passes it again. Retries keep coming (backoff ceiling 6 h) but cannot claim. Not an endless loop, but a stuck row for as long as the clock jump. | q05: claim at now, kill, clock minus 1 day: retry true, retryAfterSeconds 86701, 0 requests; clock plus 1 day 301 s: sent 1 |
+| NIT (R3-4) | SmsUploader.moveToReview | A tried row the user undid (deferred Undo) that the server then rejects for good shows up in the local Needs review list. | u3: Retry, Undo deferred, Rejected: reviews 1 |
+| NIT (R3-5) | SmsUploader.recordSent | Undo of a tried row whose upload then answers Sent without an expense id stays requested forever and the server expense is never deleted. Pre-existing; the server returns an id for created and duplicate records. | u4: captured [undoRequested true, expenseId null], deleter never called |
+| NIT | values-ar notice | The Arabic notice still mixes the English institution name (open since round 1). | round-1 p12 |
+| RESOLVED | round-2 F1 lost answer | q02 server 1 | probe q02, CapturedPairingTest |
+| RESOLVED | round-2 F2 same message again | q03 / q04 outbox [SMS] | probes q03, q04 |
+| RESOLVED | round-2 F3 queued v7 pair | q09 0/0 gives 1 | probe q09, CapturedPairingTest |
+| RESOLVED | round-2 F4 held row not retried | retry 291 s | probe q05, CapturedPairingTest |
+| RESOLVED | round-2 F5 / F6 TTL vs call timeout, release of a foreign claim | 5 min TTL above the 90 s callTimeout; release is token-checked; q06 up to 400 s in flight gives 1 | probes q05, q06 |
+| RESOLVED | round-2 F7 TRANSFER fetch untested | CapturedPairingTest REQ-SMS-092 refresh tests | gradlew run above |
+| RESOLVED | round-2 NIT Undo ignores the claim column | removeUnsent uses deleteIfUnclaimed | probe u2 |
+
+## Exploratory
+Inputs: SMS from BDC: تم إستقبال تحويل لحظي إلى حسابكم 1094 بمبلغ 1.00 جم من MOHAMED MAHMOUD AHMED في 23:04 يوم 10/26/26 رقم المعاملة bda86be1 للمزيد أتصل ب 16990. Push from com.egyptianbanks.instapay: InstaPay, newline, You have received  1.00 EGP from mohamed.shehataaaaa AT instapay. Receive time 2026-10-26T20:04:10Z, push +3 s, clock 21:05:00Z.
+1. q02 lost answer then SMS: 1, OK
+2. q06 in flight 150 / 299 / 301 / 400 s: 1 each, OK
+3. q03 SMS, push, push: 1, OK
+4. q04 push, SMS, push, before and after upload: 1, OK
+5. q04c Undo of the uploaded winner, then the replaced push again: 2 server records, R3-1
+6. u5 Undo of the unsent winner, then the replaced push again: the transfer comes back, R3-1
+7. q09 v7 pair attempts 0/0, 3/0, 0/3: 1 each, the tried one kept, OK
+8. q09 v7 pair attempts 3/3: 2, R3-2 by design
+9. q09 v7 killed mid-request, n1 already on the server: 2, R3-2
+10. q09 v7 SMS uploaded, push queued: 2, R3-2
+11. q09 three queued v7 rows s1, n1, n2 +60 s: 2, OK
+12. v8 queued unclaimed push next to an uploaded unpaired SMS: push dropped, 1, OK
+13. q05 claim 10 s old / wrong-token release / own-token release: retry 291 s / no-op / freed, OK
+14. q05 clock moved back 1 day after a killed upload: stuck about 1 day, R3-3
+15. u1 Undo during the request: expense deleted, OK
+16. u2 Undo between claim and lock: deferred, expense deleted, OK
+17. u3 Undo then Rejected: review item appears, R3-4
+18. u4 Undo then Sent without id: never deleted, R3-5 pre-existing
+19. two concurrent passes: 1 record, the second pass schedules one retry at 301 s, no loop, OK
+20. a 7 EGP push uploading while the 1 EGP push and SMS arrive: 2, OK
+
+20 cases, 8 problems across 5 findings (R3-1 x2, R3-2 x3, R3-3, R3-4, R3-5); none BLOCKER or MAJOR.
+
+## Test integrity
+bash scripts/quality/test-integrity-check.sh origin/main: TEST_INTEGRITY: OK; assertions 96 to 207, none in deleted files, no new skip; SmsLifecycleTest 36 to 36, ParsedIngestApiIT 60 to 63. The CapturedRaceTest assertion change is a premise change required by the round-2 F1 fix and is replaced by stricter assertions (criterion 8). The script did not write .claude/state/test-integrity.log in this worktree; its stdout was used.
+
+## Round 1 and round 2 (history)
+
 # Verify report: PR #63 fix/captured-upload (STORY-065 / STORY-067, REQ-SMS-003/090/091)
 
 - Verifier: qa-verifier (fresh context)
