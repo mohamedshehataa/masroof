@@ -42,7 +42,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
-    id("org.openapi.generator") version "7.14.0"
+    id("org.openapi.generator") version "7.26.0"
 }
 
 group = "eg.masroof"
