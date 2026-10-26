@@ -25,8 +25,12 @@ object BudgetsFixtures {
             CategoryEntity(CAR, "Car", "سيارة", 2),
         )
 
-    private fun money(minor: Long) = """{"amountMinor":$minor,"currency":"EGP"}"""
+    private fun money(
+        minor: Long,
+        currency: String = "EGP",
+    ) = """{"amountMinor":$minor,"currency":"$currency"}"""
 
+    @Suppress("LongParameterList")
     private fun item(
         id: String,
         category: String?,
@@ -35,9 +39,13 @@ object BudgetsFixtures {
         bps: Int,
         fired: String,
         daysLeft: Int = 6,
+        period: String = "MONTHLY",
+        rolledOver: Long? = null,
+        currency: String = "EGP",
     ) = """{"budget":{"id":"$id","householdId":"99999999-9999-4999-8999-999999999999",
-        "categoryId":${category?.let { "\"$it\"" } ?: "null"},"period":"MONTHLY","amount":${money(limit)},
-        "rollover":false,"alertThresholds":[50,80,100]},"spent":${money(spent)},"remaining":${money(limit - spent)},
+        "categoryId":${category?.let { "\"$it\"" } ?: "null"},"period":"$period","amount":${money(limit, currency)},
+        "rollover":${rolledOver != null},"alertThresholds":[50,80,100]},"spent":${money(spent, currency)},
+        "remaining":${money(limit + (rolledOver ?: 0) - spent, currency)},
         "progressBps":$bps,"alertsFired":$fired,"onTrack":${bps < 10_000},"daysLeft":$daysLeft,
         "periodRange":{"label":"2026-10","from":"2026-10-01","to":"2026-10-31"}}"""
 
@@ -48,6 +56,33 @@ object BudgetsFixtures {
             item(ID_TOTAL, null, 400_000, 330_000, 8_250, "[50,80]") + "," +
             item(ID_CAR, CAR, 50_000, 60_000, 12_000, "[50,80,100]") +
             """]},"fetchedAtMillis":1000}"""
+
+    private fun wrap(items: String) =
+        """{"status":{"period":{"label":"2026-10","from":"2026-10-01","to":"2026-10-31"},"items":[$items]},"fetchedAtMillis":1000}"""
+
+    const val ID_WEEKLY = "44444444-4444-4444-8444-444444444444"
+
+    /** A weekly USD budget of 1,000 with 200 rolled over (effective 1,200), 500 spent. */
+    fun weeklyRollover(): BudgetsSnapshot =
+        apiJson.decodeFromString(
+            BudgetsSnapshot.serializer(),
+            wrap(item(ID_WEEKLY, GROCERIES, 100_000, 50_000, 4_167, "[]", period = "WEEKLY", rolledOver = 20_000, currency = "USD")),
+        )
+
+    /** Rollover used the whole limit: server reports full progress with nothing spent. */
+    fun exhausted(): BudgetsSnapshot =
+        apiJson.decodeFromString(
+            BudgetsSnapshot.serializer(),
+            wrap(item(ID_CAR, CAR, 100_000, 0, 10_000, "[50,80,100]", rolledOver = -100_000)),
+        )
+
+    fun five(): BudgetsSnapshot {
+        val ids = (1..5).map { "5555555$it-5555-4555-8555-555555555555" }
+        return apiJson.decodeFromString(
+            BudgetsSnapshot.serializer(),
+            wrap(ids.mapIndexed { i, id -> item(id, null, 100_000, 10_000L * (i + 1), 1_000 * (i + 1), "[]") }.joinToString(",")),
+        )
+    }
 
     fun snapshot(): BudgetsSnapshot = apiJson.decodeFromString(BudgetsSnapshot.serializer(), json())
 }

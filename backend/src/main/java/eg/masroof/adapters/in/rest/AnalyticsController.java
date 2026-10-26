@@ -69,6 +69,7 @@ class AnalyticsController implements AnalyticsApi {
             .daysLeft(s.daysLeft())
             .pendingReviewCount(s.pendingReviewCount());
     s.deltaBps().ifPresent(dto::setDeltaPercentBps);
+    budgets.totalRemaining(s.period()).ifPresent(dto::setRemainingBudget);
     dto.setTopCategories(s.topCategories().stream().map(AnalyticsController::category).toList());
     return ResponseEntity.ok(dto);
   }

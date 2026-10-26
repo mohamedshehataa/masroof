@@ -183,7 +183,7 @@ private fun BudgetCard(
     val style = LocalMoneyStyle.current
     val name = budgetName(row)
     val spent = MoneyFormat.format(row.spent, style.arabic, style.digits)
-    val limit = MoneyFormat.format(row.limit, style.arabic, style.digits)
+    val limit = MoneyFormat.format(row.effectiveLimit, style.arabic, style.digits)
     val percent = PercentFormat.format(row.progressBps, style.arabic, style.digits)
     val label = levelLabel(row.level)
     val description = stringResource(R.string.budgets_row_desc, name, spent, limit, percent, label)
@@ -366,7 +366,7 @@ internal fun plainAmount(money: Money): String {
 
 private const val MINOR_PER_MAJOR = 100L
 
-/** Home summary: the three budgets closest to their limit, or a prompt to set the first one. */
+/** Home summary: the four budgets closest to their limit, or a prompt to set the first one. */
 @Composable
 fun HomeBudgetsCard(
     rows: List<BudgetRowUi>,

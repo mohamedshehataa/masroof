@@ -1,5 +1,6 @@
 package eg.masroof.data.budgets
 
+import eg.masroof.api.models.BudgetPeriod
 import eg.masroof.api.models.BudgetStatusList
 import kotlinx.serialization.Serializable
 
@@ -16,6 +17,8 @@ data class BudgetDraft(
     val amountMinor: Long,
     val currency: String,
     val rollover: Boolean,
+    /** Sent as-is: editing a weekly budget must not turn it monthly. */
+    val period: BudgetPeriod = BudgetPeriod.MONTHLY,
 )
 
 /** Result of a create, update or delete. Only [Ok] changed anything. */

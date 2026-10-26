@@ -49,10 +49,21 @@ class BudgetProgressTest {
     assertThat(BudgetProgress.of(0, 10_000, DEFAULT).progressBps()).isZero();
     assertThat(BudgetProgress.of(-500, 10_000, DEFAULT).progressBps()).isZero();
     assertThat(BudgetProgress.of(-500, 10_000, DEFAULT).alertsFired()).isEmpty();
-    assertThat(BudgetProgress.of(100, 0, DEFAULT).progressBps()).isEqualTo(10_000);
-    assertThat(BudgetProgress.of(100, -50, DEFAULT).thresholdReached()).isEqualTo(100);
-    assertThat(BudgetProgress.of(0, 0, DEFAULT).progressBps()).isZero();
     assertThat(BudgetProgress.of(1_000_000_000_000L, 1, DEFAULT).progressBps())
         .isEqualTo(BudgetProgress.MAX_BPS);
+  }
+
+  @Test
+  @DisplayName("REQ-AN-051 a limit eaten by rollover is over budget, never 0 percent")
+  void exhaustedLimit() {
+    BudgetProgress none = BudgetProgress.of(0, 0, DEFAULT);
+    assertThat(none.progressBps()).isEqualTo(10_000);
+    assertThat(none.alertsFired()).containsExactly(50, 80, 100);
+    BudgetProgress negative = BudgetProgress.of(0, -5_000, List.of(100, 150));
+    assertThat(negative.progressBps()).isEqualTo(10_000);
+    assertThat(negative.alertsFired()).containsExactly(100);
+    BudgetProgress spent = BudgetProgress.of(100, -50, List.of(100, 150, 200));
+    assertThat(spent.progressBps()).isEqualTo(BudgetProgress.MAX_BPS);
+    assertThat(spent.alertsFired()).containsExactly(100, 150, 200);
   }
 }

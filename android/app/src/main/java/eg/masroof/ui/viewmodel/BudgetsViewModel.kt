@@ -3,6 +3,7 @@ package eg.masroof.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import eg.masroof.api.models.BudgetPeriod
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.ExpenseRepository
@@ -21,7 +22,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val STOP_TIMEOUT_MS = 5_000L
-private const val HOME_BUDGETS = 3
+private const val HOME_BUDGETS = 4
+
+/** The household's currency as the server last reported it; EGP before any budget exists (the only supported base). */
+internal fun householdCurrency(rows: List<BudgetRowUi>): String = rows.firstOrNull()?.limit?.currency ?: Money.EGP
 
 /** Why a save or delete did not go through; shown in the form. */
 enum class BudgetError { INVALID_AMOUNT, INVALID, DUPLICATE, OFFLINE, SIGN_IN, FAILED }
@@ -93,7 +97,9 @@ class BudgetsViewModel
             }
             form.value = Form(saving = true)
             viewModelScope.launch {
-                val draft = BudgetDraft(categoryId, minor, Money.EGP, rollover)
+                val rows = state.value.rows
+                val period = rows.firstOrNull { it.id == editingId }?.period ?: BudgetPeriod.MONTHLY
+                val draft = BudgetDraft(categoryId, minor, householdCurrency(rows), rollover, period)
                 val outcome = if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
                 form.value = Form(error = outcome.toError())
                 if (outcome == MutationOutcome.Ok) onSaved()

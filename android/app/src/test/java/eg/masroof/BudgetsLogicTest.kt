@@ -1,9 +1,12 @@
 package eg.masroof
 
+import eg.masroof.api.models.BudgetPeriod
 import eg.masroof.core.Money
 import eg.masroof.data.RefreshOutcome
+import eg.masroof.data.budgets.BudgetDraft
 import eg.masroof.data.budgets.DefaultBudgetsRepository
 import eg.masroof.data.budgets.MutationOutcome
+import eg.masroof.data.budgets.toInput
 import eg.masroof.data.remote.HttpFailure
 import eg.masroof.ui.budgets.BudgetLevel
 import eg.masroof.ui.budgets.levelOf
@@ -65,6 +68,50 @@ class BudgetsLogicTest {
         assertNull(rows[1].nameEn)
         assertEquals(6, rows[2].daysLeft)
     }
+
+    @Test
+    fun `REQ-AND-073 spent-of uses the effective limit including rollover`() {
+        val row = BudgetsFixtures.weeklyRollover().toRows(BudgetsFixtures.categories).single()
+        assertEquals(Money(100_000, "USD"), row.limit)
+        assertEquals(Money(120_000, "USD"), row.effectiveLimit)
+        assertEquals(Money(70_000, "USD"), row.remaining)
+        assertEquals(BudgetPeriod.WEEKLY, row.period)
+    }
+
+    @Test
+    fun `REQ-AN-051 a limit used up by rollover reads as over budget`() {
+        val row = BudgetsFixtures.exhausted().toRows(BudgetsFixtures.categories).single()
+        assertEquals(Money(0, "EGP"), row.effectiveLimit)
+        assertEquals(BudgetLevel.OVER, row.level)
+        assertEquals(10_000, row.barBps)
+    }
+
+    @Test
+    fun `REQ-AND-073 editing a weekly budget keeps it weekly and uses the household currency`() {
+        assertEquals(BudgetPeriod.WEEKLY, BudgetDraft(null, 100, "USD", false, BudgetPeriod.WEEKLY).toInput().period)
+        assertEquals(BudgetPeriod.MONTHLY, BudgetDraft(null, 100, "EGP", false).toInput().period)
+        runTest {
+            val repo = FakeBudgetsRepository().apply { snapshot.value = BudgetsFixtures.weeklyRollover() }
+            val vm = BudgetsViewModel(repo, FakeRepository().apply { categories.value = BudgetsFixtures.categories })
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            vm.save(BudgetsFixtures.ID_WEEKLY, null, "800", false) {}
+            runCurrent()
+            val draft = repo.updated.single().second
+            assertEquals(BudgetPeriod.WEEKLY, draft.period)
+            assertEquals("USD", draft.currency)
+        }
+    }
+
+    @Test
+    fun `REQ-AND-074 home shows the four budgets closest to the limit`() =
+        runTest {
+            val repo = FakeBudgetsRepository().apply { snapshot.value = BudgetsFixtures.five() }
+            val vm = HomeBudgetsViewModel(repo, FakeRepository())
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            assertEquals(listOf(5_000, 4_000, 3_000, 2_000), vm.state.value.map { it.progressBps })
+        }
 
     @Test
     fun `REQ-AND-073 plain amounts keep minor units without float math`() {

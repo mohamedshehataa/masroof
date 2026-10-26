@@ -14,11 +14,13 @@ import eg.masroof.domain.analytics.Projections;
 import eg.masroof.domain.budget.BudgetPeriodKind;
 import eg.masroof.domain.budget.BudgetProgress;
 import eg.masroof.domain.expense.BusinessCalendar;
+import eg.masroof.domain.money.Money;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -246,8 +248,24 @@ public class BudgetService {
         Math.subtractExact(limit, spent),
         rolled,
         progress,
-        projected <= limit,
+        limit > 0 && spent <= limit && projected <= limit,
         period.daysLeft(today));
+  }
+
+  /** Remaining amount of the monthly household-total budget for a month period, if one exists. */
+  @Transactional(readOnly = true)
+  public Optional<Money> totalRemaining(AnalyticsPeriod period) {
+    if (period.week()) {
+      return Optional.empty();
+    }
+    Household h = currentHousehold.get();
+    int startDay = queries.monthStartDay(h.id());
+    LocalDate today = BusinessCalendar.dateOf(clock.instant());
+    return repository.list(h.id()).stream()
+        .filter(b -> b.categoryId() == null && b.period() == BudgetPeriodKind.MONTHLY)
+        .findFirst()
+        .map(b -> statusOf(b, period, startDay, today, h))
+        .map(s -> Money.of(s.remaining(), s.budget().currency()));
   }
 
   static AnalyticsPeriod periodFor(

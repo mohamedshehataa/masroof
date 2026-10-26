@@ -1,7 +1,6 @@
 package eg.masroof.data.budgets
 
 import eg.masroof.api.models.BudgetInput
-import eg.masroof.api.models.BudgetPeriod
 import eg.masroof.api.models.Money
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.HttpFailure
@@ -42,13 +41,13 @@ class ApiBudgetsRemote
         override suspend fun delete(id: String) {
             source.budgetsApi().deleteBudget(UUID.fromString(id)).checked()
         }
-
-        // On update the category is fixed server-side, so it is not sent (null is omitted from the JSON).
-        private fun BudgetDraft.toInput() =
-            BudgetInput(
-                categoryId = categoryId?.let(UUID::fromString),
-                period = BudgetPeriod.MONTHLY,
-                amount = Money(amountMinor, currency),
-                rollover = rollover,
-            )
     }
+
+/** The request body: the budget's own period, and the category (fixed server-side on update, so harmless there). */
+internal fun BudgetDraft.toInput() =
+    BudgetInput(
+        categoryId = categoryId?.let(UUID::fromString),
+        period = period,
+        amount = Money(amountMinor, currency),
+        rollover = rollover,
+    )

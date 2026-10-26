@@ -316,4 +316,16 @@ class BudgetsApiIT {
     assertThat(minor(s.get("remaining"))).isEqualTo(29_000);
     assertThat(s).containsEntry("progressBps", 2_750);
   }
+
+  @Test
+  @DisplayName("REQ-AN-008 the summary reports the remaining total budget")
+  void summaryRemainingBudget() throws Exception {
+    clear();
+    Reply none = send(get("/api/analytics/summary?period=2026-03"));
+    assertThat(none.body().get("remainingBudget")).isNull();
+    create(input(null, 20_000, ""));
+    Reply r = send(get("/api/analytics/summary?period=2026-03"));
+    // 20,000 limit - 15,500 spent in March.
+    assertThat(minor(r.body().get("remainingBudget"))).isEqualTo(4_500);
+  }
 }

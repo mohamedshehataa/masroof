@@ -235,6 +235,44 @@ class BudgetServiceTest {
   }
 
   @Test
+  @Tag("REQ-AN-051")
+  @DisplayName("REQ-AN-051 rollover that uses up the limit reads as over and off track")
+  void rolloverExhaustsLimit() {
+    seed(null, BudgetPeriodKind.MONTHLY, 10_000, true);
+    dayRows.add(new DayHour(LocalDate.of(2026, 9, 10), 9, 20_000, 1));
+
+    Status s = service.status("current").items().get(0);
+
+    assertThat(s.rolledOver()).isEqualTo(-10_000);
+    assertThat(s.progress().progressBps()).isEqualTo(10_000);
+    assertThat(s.progress().thresholdReached()).isEqualTo(100);
+    assertThat(s.onTrack()).isFalse();
+  }
+
+  @Test
+  @DisplayName("REQ-AN-008 already over the limit is never on track")
+  void overIsOffTrack() {
+    seed(null, BudgetPeriodKind.MONTHLY, 10_000, false);
+    dayRows.add(new DayHour(LocalDate.of(2026, 10, 25), 9, 10_001, 1));
+    assertThat(service.status("current").items().get(0).onTrack()).isFalse();
+  }
+
+  @Test
+  @DisplayName(
+      "REQ-AN-008 total remaining for the month summary; none for weeks or without a total")
+  void totalRemaining() {
+    AnalyticsPeriod oct = AnalyticsPeriod.parse("2026-10", LocalDate.of(2026, 10, 25), 1);
+    assertThat(service.totalRemaining(oct)).isEmpty();
+    seed(FOOD, BudgetPeriodKind.MONTHLY, 5_000, false);
+    assertThat(service.totalRemaining(oct)).isEmpty();
+    seed(null, BudgetPeriodKind.MONTHLY, 10_000, false);
+    dayRows.add(new DayHour(LocalDate.of(2026, 10, 5), 9, 4_000, 1));
+    assertThat(service.totalRemaining(oct))
+        .contains(eg.masroof.domain.money.Money.of(6_000, "EGP"));
+    assertThat(service.totalRemaining(AnalyticsPeriod.week(LocalDate.of(2026, 10, 19)))).isEmpty();
+  }
+
+  @Test
   @DisplayName("REQ-AN-008 a budget created this month does not roll over")
   void noRolloverForNewBudget() {
     Budget b = seed(null, BudgetPeriodKind.MONTHLY, 10_000, true);
