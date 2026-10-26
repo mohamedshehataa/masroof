@@ -551,6 +551,35 @@ class CardStoreNumberTest {
     }
 
     @Test
+    fun `REQ-SMS-078 an amount, an identifier or an unlabeled number after the merchant is never a store number`() {
+        val bad =
+            (
+                "SHOP 500 EGP|SHOP 500 LE|SHOP 50 USD|SHOP 50 L.E|SHOP 50 EUR|SHOP 50 GBP|SHOP 50 SAR|SHOP 50 AED|SHOP 50 KWD|" +
+                    "SHOP EGP 500|SHOP ID 123|SHOP TRX 123|SHOP ACC 999|SHOP NO 123|SHOP AUTH 123|SHOP CODE 12|A 50"
+            ).split("|")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        for (m in listOf("كارفور 50 جنيه", "كارفور 50 جم", "كارفور 50 ج.م", "كارفور رقم 123")) {
+            val o = MessageParser.parse(message("CIB", "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى $m"))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 one store number in total - a suffix clause never carries a second one`() {
+        val head = "Your Credit Card ending with 4821 has been used for EGP 130.00 on 26/10/2026 at "
+        val limit = ". Your available limit is EGP 41000.10"
+        for (m in listOf("HARDEE 50. X 60", "HARDEE. ELMERGHANY 50", "HARDEE 50. ELMERGHANY 60")) {
+            val o = MessageParser.parse(message("CIB", head + m + limit))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        val one = MessageParser.parse(message("CIB", card("HARDEE 50")))
+        assertTrue(one is ParseOutcome.Record)
+    }
+
+    @Test
     fun `REQ-SMS-078 the counterparty slots of InstaPay and instant transfers stay strict`() {
         val o = MessageParser.parse(message("CIB", "You sent EGP 100.00 to AHMED 50"))
         assertFalse(o.toString(), o is ParseOutcome.Record)

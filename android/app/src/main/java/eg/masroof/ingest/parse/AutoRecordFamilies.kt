@@ -225,7 +225,7 @@ object AutoRecordFamilies {
                 !isNoise(head) &&
                 !StatusGate.blocks(head) &&
                 tokens.none { StatusGate.isNonName(it) } &&
-                nameTokens(tokens, allowStoreNumber = true) { latinNameToken(it) || it.all { c -> c in arabicLetter } }
+                nameTokens(tokens, allowStoreNumber = false) { latinNameToken(it) || it.all { c -> c in arabicLetter } }
         val tail = if (isSuffix) rest.drop(1) else rest
         return tail.all(::isNoise)
     }
@@ -261,9 +261,16 @@ object AutoRecordFamilies {
         allowStoreNumber: Boolean,
         isName: (String) -> Boolean,
     ): Boolean {
+        if (tokens.any(StatusGate::isCurrencyWord)) return false
         val numbers = tokens.count(::isStoreNumber)
         val numberOk = numbers == 0 || (allowStoreNumber && numbers == 1 && !isStoreNumber(tokens.first()))
         if (!numberOk) return false
+        if (numbers == 1) {
+            // a number after "ID", "TRX", "REF" ... is a code; and a label with no real name left once the digits go is unusable
+            val at = tokens.indexOfFirst(::isStoreNumber)
+            if (StatusGate.isIdentifierWord(tokens[at - 1])) return false
+            if (tokens.none { !isStoreNumber(it) && it.count(Char::isLetter) >= 2 }) return false
+        }
         return tokens.all { isStoreNumber(it) || isName(it) }
     }
 
@@ -290,7 +297,8 @@ object AutoRecordFamilies {
         val statusFree = tokens.none { StatusGate.isNonName(it) || StatusGate.isStatusWord(it.lowercase()) }
         return when {
             !plain || !statusFree || (hasLatin && hasArabic) -> false
-            hasArabic -> tokens.size <= MAX_ARABIC_TOKENS && nameTokens(tokens, allowStoreNumber) { tok -> tok.all { it in arabicLetter } }
+            hasArabic ->
+                tokens.size <= MAX_ARABIC_TOKENS && nameTokens(tokens, allowStoreNumber) { tok -> tok.all { it in arabicLetter } }
             else -> tokens.size <= MAX_LATIN_TOKENS && nameTokens(tokens, allowStoreNumber, ::latinNameToken)
         }
     }
@@ -311,14 +319,15 @@ object AutoRecordFamilies {
         return startsRight && token.any { it.isLetter() }
     }
 
+    private fun cardMatch(clause: String): MatchResult? = (cardPurchaseEn + cardPurchaseAr).firstNotNullOfOrNull { it.find(clause) }
+
     private fun card(
         clause: String,
         original: String,
         record: ParsedRecord,
     ): Boolean {
         if (record.kind != TxKind.PURCHASE) return false
-        val regexes = cardPurchaseEn + cardPurchaseAr
-        val m = regexes.firstNotNullOfOrNull { it.find(clause) } ?: return false
+        val m = cardMatch(clause) ?: return false
         val proven = m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record)
         return proven && slotLooksLikeName(original, m, allowStoreNumber = true)
     }
