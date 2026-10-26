@@ -20,8 +20,8 @@ interface ExpenseDao {
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE' " +
-            "AND occurredAtMillis >= :from AND occurredAtMillis < :to",
+        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE'
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
@@ -219,8 +219,8 @@ interface CapturedDao {
 
     /** Records of ANOTHER channel with the same amount and direction around the same time (one transfer announced twice). */
     @Query(
-        "SELECT * FROM captured_tx WHERE source != :source AND currency = :currency AND amountMinor = :amountMinor " +
-            "AND kind IN (:kinds) AND occurredAtMillis BETWEEN :from AND :to ORDER BY capturedAtMillis",
+        """SELECT * FROM captured_tx WHERE source != :source AND currency = :currency AND amountMinor = :amountMinor
+            AND kind IN (:kinds) AND occurredAtMillis BETWEEN :from AND :to ORDER BY capturedAtMillis""",
     )
     suspend fun otherChannel(
         source: String,
