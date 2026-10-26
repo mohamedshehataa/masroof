@@ -19,6 +19,10 @@ data class ExpenseEntity(
     val failed: Boolean = false,
     /** Channel that produced the entry ("SMS", "MANUAL" ...); null for rows cached before sources existed. */
     val source: String? = null,
+    /** "EXPENSE" or "INCOME" (received money is listed, never added to spending). */
+    @ColumnInfo(defaultValue = "'EXPENSE'") val type: String = "EXPENSE",
+    /** The server's review state: "PENDING_REVIEW" for received money that waits for the household's OK. */
+    @ColumnInfo(defaultValue = "'CONFIRMED'") val status: String = "CONFIRMED",
 )
 
 @Entity(tableName = "category")
@@ -145,6 +149,11 @@ data class CapturedTxEntity(
     val capturedAtMillis: Long,
     // The user pressed Undo while the upload was (or may have been) in flight: the expense is deleted as soon as its id is known.
     @ColumnInfo(defaultValue = "0") val undoRequested: Boolean = false,
+    // What the record was (a TxKind name), when it happened and the account tail: lets the pipeline see that a second channel
+    // (bank SMS + app notification) announced the same transfer. Null / 0 on rows made before version 8: they never match.
+    val kind: String? = null,
+    @ColumnInfo(defaultValue = "0") val occurredAtMillis: Long = 0L,
+    val instrumentLast4: String? = null,
 ) {
     override fun toString() = "CapturedTxEntity(localId=$localId)"
 }

@@ -20,7 +20,8 @@ interface ExpenseDao {
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND occurredAtMillis >= :from AND occurredAtMillis < :to",
+        "SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE' " +
+            "AND occurredAtMillis >= :from AND occurredAtMillis < :to",
     )
     fun observeTotal(
         from: Long,
@@ -215,6 +216,20 @@ interface CapturedDao {
 
     @Query("SELECT * FROM captured_tx")
     suspend fun all(): List<CapturedTxEntity>
+
+    /** Records of ANOTHER channel with the same amount and direction around the same time (one transfer announced twice). */
+    @Query(
+        "SELECT * FROM captured_tx WHERE source != :source AND currency = :currency AND amountMinor = :amountMinor " +
+            "AND kind IN (:kinds) AND occurredAtMillis BETWEEN :from AND :to ORDER BY capturedAtMillis",
+    )
+    suspend fun otherChannel(
+        source: String,
+        currency: String,
+        amountMinor: Long,
+        kinds: List<String>,
+        from: Long,
+        to: Long,
+    ): List<CapturedTxEntity>
 }
 
 @Database(
@@ -229,7 +244,7 @@ interface CapturedDao {
             LearnedTemplateEntity::class,
             CapturedTxEntity::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -360,6 +375,18 @@ CREATE TABLE IF NOT EXISTS captured_tx (
   PRIMARY KEY(localId)
 )
 """
+
+/** v7 -> v8: what a captured record was, so a second channel announcing the same transfer is recognized. */
+val MIGRATION_7_8: Migration =
+    object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN kind TEXT")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN occurredAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN instrumentLast4 TEXT")
+            db.execSQL("ALTER TABLE expense ADD COLUMN type TEXT NOT NULL DEFAULT 'EXPENSE'")
+            db.execSQL("ALTER TABLE expense ADD COLUMN status TEXT NOT NULL DEFAULT 'CONFIRMED'")
+        }
+    }
 
 /** v6 -> v7 (round 19): an Undo pressed while the upload was in flight is remembered until the expense id is known. */
 val MIGRATION_6_7: Migration =

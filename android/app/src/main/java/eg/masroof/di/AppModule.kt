@@ -35,6 +35,7 @@ import eg.masroof.data.db.MIGRATION_3_4
 import eg.masroof.data.db.MIGRATION_4_5
 import eg.masroof.data.db.MIGRATION_5_6
 import eg.masroof.data.db.MIGRATION_6_7
+import eg.masroof.data.db.MIGRATION_7_8
 import eg.masroof.data.insights.ApiInsightsRemote
 import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.FileInsightsCache
@@ -130,7 +131,7 @@ object ProvidersModule {
         Room
             .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
             // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigrationFrom(true, 1)
             .build()
 

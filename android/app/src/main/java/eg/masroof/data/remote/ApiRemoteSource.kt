@@ -231,12 +231,11 @@ class ApiRemoteSource
         }
 
         override suspend fun fetchExpenses(): List<ExpenseEntity> {
-            val page =
-                retrofit()
-                    .create(ExpensesApi::class.java)
-                    .listExpenses(type = TransactionType.EXPENSE, limit = PAGE_LIMIT)
-                    .bodyOrThrow()
-            return page.items.map { it.toEntity() }
+            val api = retrofit().create(ExpensesApi::class.java)
+            // Spending and received money; transfers between own accounts, refunds and cash are not shown in this list.
+            val spent = api.listExpenses(type = TransactionType.EXPENSE, limit = PAGE_LIMIT).bodyOrThrow()
+            val received = api.listExpenses(type = TransactionType.INCOME, limit = PAGE_LIMIT).bodyOrThrow()
+            return (spent.items + received.items).map { it.toEntity() }
         }
 
         override suspend fun fetchCategories(): List<CategoryEntity> =
@@ -347,6 +346,8 @@ class ApiRemoteSource
                         ?.rawMessage
                         ?.source
                         ?.value,
+                type = type.value,
+                status = status.value,
             )
 
         private fun PaymentAccount.toEntity(): AccountEntity {

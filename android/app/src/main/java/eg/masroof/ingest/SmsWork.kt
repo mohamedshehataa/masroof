@@ -173,6 +173,11 @@ class SmsPipeline
                 scheduler.scheduleUpload()
                 return Disposition.QUEUED
             }
+            // the same transfer announced by the other channel (bank SMS + app notification): one record, one notice
+            if (!supersedeOrSkipDuplicate(r, id)) {
+                scheduler.scheduleUpload()
+                return Disposition.QUEUED
+            }
             val inserted =
                 db.parsedOutbox().insert(
                     ParsedOutboxEntity(
@@ -203,12 +208,55 @@ class SmsPipeline
                         source = r.source.name,
                         templateId = templateId,
                         capturedAtMillis = clock.millis(),
+                        kind = r.kind.name,
+                        occurredAtMillis = r.occurredAtMillis,
+                        instrumentLast4 = r.instrumentLast4,
                     )
                 db.captured().insert(item)
                 notifier.captured(item)
             }
             return Disposition.QUEUED
         }
+
+        /**
+         * Is [r] the same transfer as a record the OTHER channel already made (same direction, amount and currency, within
+         * [DUPLICATE_WINDOW_MILLIS])? Returns true when [r] should be stored; false when it is a duplicate to skip. If the first one
+         * is still waiting in the outbox and [r] knows more (the account tail), the first is dropped (and its notice withdrawn)
+         * so the richer record replaces it. Two equal transfers further apart than the window are two transfers.
+         */
+        private suspend fun supersedeOrSkipDuplicate(
+            r: ParsedRecord,
+            id: String,
+        ): Boolean {
+            val kinds = directionKinds(r.kind) ?: return true
+            val twin =
+                db
+                    .captured()
+                    .otherChannel(
+                        r.source.name,
+                        r.currency,
+                        r.amountMinor,
+                        kinds,
+                        r.occurredAtMillis - DUPLICATE_WINDOW_MILLIS,
+                        r.occurredAtMillis + DUPLICATE_WINDOW_MILLIS,
+                    ).firstOrNull() ?: return true
+            val stillQueued = db.parsedOutbox().all().any { it.localId == twin.localId }
+            val richer = twin.instrumentLast4 == null && r.instrumentLast4 != null && id != twin.localId
+            if (stillQueued && richer) {
+                db.parsedOutbox().delete(twin.localId)
+                db.captured().delete(twin.localId)
+                notifier.cancel(twin.localId)
+                return true
+            }
+            return false
+        }
+
+        private fun directionKinds(kind: TxKind): List<String>? =
+            when (kind) {
+                TxKind.INCOME, TxKind.TRANSFER_IN -> INCOMING_KINDS.toList()
+                TxKind.TRANSFER_OUT -> listOf(TxKind.TRANSFER_OUT.name)
+                else -> null
+            }
 
         private fun ReviewItemEntity.withSuggestion(
             suggestion: ParsedRecord?,
@@ -243,6 +291,7 @@ class SmsPipeline
 
         private companion object {
             const val NOT_INSERTED = -1L
+            const val DUPLICATE_WINDOW_MILLIS = 5L * 60 * 1000
             const val MAX_SENDER = 60
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
@@ -402,12 +451,20 @@ class SmsIntakeWorker
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         private val pipeline: SmsPipeline,
+        private val uploader: SmsUploader,
+        private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
-            pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
+            val disposition = pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
+            // This job is already running, so the phone is awake: send the record now instead of hoping that a second job
+            // (some vendors hold those back for apps that are not in the foreground) runs soon. A failure schedules the retry.
+            if (disposition == Disposition.QUEUED) {
+                val report = uploader.uploadPending()
+                if (report.retry) scheduler.scheduleUploadRetry(OutboxBackoff.delaySeconds(0, report.retryAfterSeconds), 1)
+            }
             return Result.success()
         }
     }

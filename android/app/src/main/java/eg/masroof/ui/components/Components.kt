@@ -223,6 +223,13 @@ fun ExpenseListItem(
                         color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
+                if (row.income || row.reviewPending) {
+                    Text(
+                        stringResource(if (row.reviewPending) R.string.income_pending_review else R.string.income_received),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 if (capturedLocalId != null) {
                     // recorded by the phone itself in the last 7 days: say so, and let the user take it back
                     Row(verticalAlignment = Alignment.CenterVertically) {

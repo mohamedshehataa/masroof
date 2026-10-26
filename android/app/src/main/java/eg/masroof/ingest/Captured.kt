@@ -27,6 +27,7 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.capturedCutoff
 import eg.masroof.data.remote.ExpenseDeleter
+import eg.masroof.ingest.parse.TxKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +70,9 @@ class AndroidNotificationPermission(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
+
+/** Money coming in: the notification says "Received", and a second channel announcing the same amount is the same transfer. */
+val INCOMING_KINDS: Set<String> = setOf(TxKind.INCOME.name, TxKind.TRANSFER_IN.name)
 
 /** What the pipeline calls right after it recorded an expense on its own (a proven family or a learned format). */
 interface CapturedNotifier {
@@ -117,9 +121,7 @@ class AndroidCapturedNotifier
                 context.resources.configuration.locales[0]
                     .language == "ar"
             val amount = MoneyFormat.format(Money(item.amountMinor, item.currency), arabic, eg.masroof.core.DigitStyle.WESTERN)
-            val title =
-                item.label?.let { context.getString(R.string.captured_title_at, amount, it) }
-                    ?: context.getString(R.string.captured_title, amount)
+            val title = title(item, amount)
             val undo = receiverIntent(ACTION_UNDO_CAPTURED, item.localId, null, requestCode = item.localId.hashCode())
             val notification =
                 NotificationCompat
@@ -135,6 +137,25 @@ class AndroidCapturedNotifier
                     .addAction(0, context.getString(R.string.captured_undo), undo)
                     .build()
             manager.notify(item.localId.hashCode(), notification)
+        }
+
+        /** "Received 1 EGP via Banque du Caire", "Sent ...", "Recorded 500 EGP at AMAZON": by what the record was. */
+        private fun title(
+            item: CapturedTxEntity,
+            amount: String,
+        ): String {
+            val label = item.label
+            return when (item.kind) {
+                in INCOMING_KINDS ->
+                    label?.let { context.getString(R.string.captured_received_via, amount, it) }
+                        ?: context.getString(R.string.captured_received, amount)
+                TxKind.TRANSFER_OUT.name ->
+                    label?.let { context.getString(R.string.captured_sent_via, amount, it) }
+                        ?: context.getString(R.string.captured_sent, amount)
+                else ->
+                    label?.let { context.getString(R.string.captured_title_at, amount, it) }
+                        ?: context.getString(R.string.captured_title, amount)
+            }
         }
 
         /** After an Undo of a record that a learned format made: "Stop learning this format?". */
