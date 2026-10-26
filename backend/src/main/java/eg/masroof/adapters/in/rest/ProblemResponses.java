@@ -50,6 +50,12 @@ final class ProblemResponses {
     write(response, 422, "Unprocessable Content", detail, request.getRequestURI());
   }
 
+  /** 415 for a body in a charset the endpoint does not read. */
+  static void unsupportedMediaType(
+      HttpServletRequest request, HttpServletResponse response, String detail) throws IOException {
+    write(response, 415, "Unsupported Media Type", detail, request.getRequestURI());
+  }
+
   private static void write(
       HttpServletResponse response, int status, String title, String detail, String instance)
       throws IOException {

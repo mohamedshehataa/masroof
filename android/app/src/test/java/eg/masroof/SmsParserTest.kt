@@ -220,6 +220,26 @@ class SmsParserTest {
     }
 
     @Test
+    fun `REQ-SMS-003 every sender id and institution the phone can upload matches the server's charset`() {
+        val serverSender = Regex("^[A-Za-z][A-Za-z._&-]{0,19}$")
+        val serverInstitution = Regex("^[\\p{L} .&-]{1,40}$")
+        assertEquals("QNB", MessageParser.uploadSenderId("QNB1", "QNB"))
+        assertEquals("BANK", MessageParser.uploadSenderId("19019", null))
+        assertTrue(serverSender.matches(MessageParser.uploadSenderId("Vodafone Cash", "Vodafone Cash")))
+        for (sender in eg.masroof.ingest.DefaultSenders.all) {
+            assertTrue(sender.name, serverInstitution.matches(sender.name))
+        }
+        for (row in fixture("verifier.jsonl") + fixture("round2.jsonl") + fixture("instapay.jsonl") + fixture("genuine.jsonl")) {
+            val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), source = source))
+            if (outcome is ParseOutcome.Record) {
+                assertTrue(row.str("id"), serverSender.matches(outcome.record.senderId))
+                outcome.record.institution?.let { assertTrue(row.str("id"), serverInstitution.matches(it)) }
+            }
+        }
+    }
+
+    @Test
     fun `REQ-SMS-016 the label spec is shared - the phone and the server normalize the same way`() {
         for (row in fixture("labels.jsonl")) {
             assertEquals(row.str("input"), row.str("expected"), LabelNormalizer.normalize(row.str("input")))

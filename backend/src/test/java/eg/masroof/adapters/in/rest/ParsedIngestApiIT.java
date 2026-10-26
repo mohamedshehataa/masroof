@@ -372,6 +372,44 @@ class ParsedIngestApiIT {
 
   @Test
   @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 a non-UTF-8 body is 415 and a repeated JSON key is 422")
+  void charsetAndDuplicateKeys() throws Exception {
+    String withBody =
+        JSON.writeValueAsString(record("cs-1")).replace("}", ",\"body\":\"Your OTP is 889900\"}");
+    MockHttpServletResponse latin1 =
+        mvc.perform(
+                post("/api/ingest/parsed-transactions")
+                    .header("Authorization", "Bearer " + tokenA)
+                    .contentType("application/json;charset=ISO-8859-1")
+                    .content(withBody.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)))
+            .andReturn()
+            .getResponse();
+    assertThat(latin1.getStatus()).isEqualTo(415);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from raw_message r, expense e where r::text like '%889900%'"
+                    + " or e::text like '%889900%'",
+                Integer.class))
+        .isZero();
+    String duplicate =
+        JSON.writeValueAsString(record("dup-1")).replace("}", ",\"merchant\":\"SECOND\"}");
+    MockHttpServletResponse dup =
+        mvc.perform(
+                post("/api/ingest/parsed-transactions")
+                    .header("Authorization", "Bearer " + tokenA)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(duplicate))
+            .andReturn()
+            .getResponse();
+    assertThat(dup.getStatus()).isEqualTo(422);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from expense where merchant_raw = 'SECOND'", Integer.class))
+        .isZero();
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
   @DisplayName(
       "REQ-SMS-003 a sender id with digits is refused and a sender with digits is masked to last four")
   void senderIds() throws Exception {

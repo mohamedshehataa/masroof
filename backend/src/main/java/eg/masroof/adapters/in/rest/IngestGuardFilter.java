@@ -15,8 +15,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
+import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -34,6 +36,8 @@ final class IngestGuardFilter extends OncePerRequestFilter {
       java.util.Set.of("/api/ingest/parsed-transactions");
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
+  private static final JsonMapper STRICT_JSON =
+      JsonMapper.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
   private static final java.util.Set<String> ALLOWED =
       java.util.Set.of(
           "deviceId",
@@ -79,6 +83,14 @@ final class IngestGuardFilter extends OncePerRequestFilter {
       return;
     }
     limiter.recordFailure(key, now); // counts requests, not failures
+    // Read the declared charset from the header itself: a servlet encoding filter may already have
+    // rewritten
+    // getCharacterEncoding() to UTF-8.
+    if (!isUtf8OrUndeclared(request.getContentType())) {
+      // The property check below reads UTF-8; a body in another charset could hide a field from it.
+      ProblemResponses.unsupportedMediaType(request, response, "Only UTF-8 JSON is accepted");
+      return;
+    }
     if (request.getContentLengthLong() > MAX_BODY_BYTES) {
       ProblemResponses.payloadTooLarge(request, response);
       return;
@@ -88,9 +100,11 @@ final class IngestGuardFilter extends OncePerRequestFilter {
       ProblemResponses.payloadTooLarge(request, response);
       return;
     }
-    if (hasUnknownProperty(body)) {
+    if (hasUnknownProperty(body) || hasDuplicateKey(body)) {
       ProblemResponses.unprocessable(
-          request, response, "The request contains a property this endpoint does not accept");
+          request,
+          response,
+          "The request contains a property this endpoint does not accept, or a repeated one");
       return;
     }
     chain.doFilter(new BufferedRequest(request, body), response);
@@ -114,6 +128,34 @@ final class IngestGuardFilter extends OncePerRequestFilter {
       return false;
     } catch (RuntimeException e) {
       return false; // not JSON: the controller answers 400
+    }
+  }
+
+  private static boolean isUtf8OrUndeclared(@Nullable String contentType) {
+    if (contentType == null) {
+      return true;
+    }
+    try {
+      java.nio.charset.Charset declared =
+          org.springframework.http.MediaType.parseMediaType(contentType).getCharset();
+      return declared == null || declared.equals(java.nio.charset.StandardCharsets.UTF_8);
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  /** Last-wins duplicate keys could smuggle a value past the property check: refuse them. */
+  private static boolean hasDuplicateKey(byte[] body) {
+    try {
+      JSON.readTree(body);
+    } catch (RuntimeException e) {
+      return false; // not JSON: the controller answers 400
+    }
+    try {
+      STRICT_JSON.readTree(body);
+      return false;
+    } catch (RuntimeException e) {
+      return true;
     }
   }
 

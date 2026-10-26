@@ -1,5 +1,6 @@
 package eg.masroof.data.auth
 
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
 import eg.masroof.data.db.AppDatabase
@@ -39,9 +40,28 @@ class RoomDataWiper
             workManager.cancelUniqueWork(SMS_UPLOAD_WORK).await()
             workManager.cancelUniqueWork(SMS_UPLOAD_RETRY_WORK).await()
             workManager.cancelAllWorkByTag(SMS_INTAKE_TAG).await()
+            withContext(io) { awaitIdle() }
             workManager.pruneWork()
             withContext(io) { capture.clear() }
             withContext(io) { db.clearAllTables() }
             withContext(io) { insights.clear() }
+        }
+
+        /** Cancellation is cooperative: wait (bounded) until no capture job is still RUNNING before anything is cleared. */
+        private fun awaitIdle() {
+            val deadline = System.nanoTime() + IDLE_TIMEOUT_NANOS
+            while (System.nanoTime() < deadline && running()) Thread.sleep(IDLE_POLL_MILLIS)
+        }
+
+        private fun running(): Boolean =
+            listOf(
+                workManager.getWorkInfosByTag(SMS_INTAKE_TAG),
+                workManager.getWorkInfosForUniqueWork(SMS_UPLOAD_WORK),
+                workManager.getWorkInfosForUniqueWork(SMS_UPLOAD_RETRY_WORK),
+            ).any { f -> f.get().any { it.state == WorkInfo.State.RUNNING } }
+
+        private companion object {
+            const val IDLE_TIMEOUT_NANOS = 5_000_000_000L
+            const val IDLE_POLL_MILLIS = 50L
         }
     }

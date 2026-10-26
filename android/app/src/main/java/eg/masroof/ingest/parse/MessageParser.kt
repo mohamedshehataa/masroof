@@ -643,16 +643,16 @@ object MessageParser {
     // ---- sender -------------------------------------------------------------------------------------------------
     fun institutionOf(sender: String): String? = NotificationApps.institutionOf(sender) ?: DefaultSenders.match(senderKey(sender))?.name
 
-    private val senderIdPattern = Regex("^[A-Za-z][A-Za-z0-9._&-]{0,19}$")
+    private val senderIdPattern = Regex("^[A-Za-z][A-Za-z._&-]{0,19}$")
 
     /** A sender id the server accepts: the sender itself when it is clean, otherwise the institution, otherwise a constant. */
     fun uploadSenderId(
         sender: String,
         institution: String?,
     ): String {
-        val key = sender.trim().replace(Regex("[^A-Za-z0-9._&-]"), "").take(20)
+        val key = sender.trim().replace(Regex("[^A-Za-z._&-]"), "").take(20)
         if (senderIdPattern.matches(key)) return key
-        val inst = (institution ?: "").replace(Regex("[^A-Za-z0-9._&-]"), "").take(20)
+        val inst = (institution ?: "").replace(Regex("[^A-Za-z._&-]"), "").take(20)
         return if (senderIdPattern.matches(inst)) inst else "BANK"
     }
 
@@ -763,6 +763,9 @@ object NotificationApps {
             "com.google.android.apps.dynamite",
             "com.viber",
             "org.signal",
+            "org.thoughtcrime.securesms",
+            "jp.naver.line",
+            "com.imo.android",
             "com.discord",
             "com.twitter",
             "com.skype",

@@ -2,6 +2,7 @@ package eg.masroof.ingest
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
+import androidx.room.withTransaction
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -110,7 +111,23 @@ class SmsPipeline
             // No session (logged out, between two accounts): nothing is read, queued or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
             val id = LocalIdHasher.id(idKey.get(), message)
-            return when (val outcome = MessageParser.parse(message)) {
+            if (!gate.isOpen()) {
+                // A wipe raced us and the key may have been recreated after it: forget it again.
+                idKey.wipe()
+                return Disposition.DROPPED
+            }
+            val outcome = MessageParser.parse(message)
+            // The gate is checked once more inside the transaction, right before anything is written, so an intake
+            // that was in flight during logout cannot insert after the wipe.
+            return db.withTransaction { if (gate.isOpen()) store(message, id, outcome) else Disposition.DROPPED }
+        }
+
+        private suspend fun store(
+            message: IncomingMessage,
+            id: String,
+            outcome: ParseOutcome,
+        ): Disposition =
+            when (outcome) {
                 is ParseOutcome.Record -> {
                     val r = outcome.record
                     db.parsedOutbox().insert(
@@ -150,7 +167,6 @@ class SmsPipeline
                 }
                 is ParseOutcome.Ignore -> Disposition.DROPPED
             }
-        }
 
         private fun isAllowed(message: IncomingMessage): Boolean =
             when (message.source) {

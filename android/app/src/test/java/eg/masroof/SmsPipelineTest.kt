@@ -488,6 +488,51 @@ class SmsOutboxTest {
         }
 
     @Test
+    fun `REQ-SMS-062 an intake in flight during logout cannot insert after the wipe and forgets the key`() =
+        runTest {
+            // open for the first two checks (start, after the key), closed by the time of the write
+            var calls = 0
+            val racing =
+                object : CaptureGate {
+                    override fun isOpen() = ++calls <= 2
+
+                    override fun open() = Unit
+
+                    override fun close() = Unit
+                }
+            var wiped = 0
+            val key =
+                object : LocalIdKey {
+                    override fun get() = ByteArray(32)
+
+                    override fun wipe() {
+                        wiped++
+                    }
+                }
+            val racingPipeline = SmsPipeline(db, settings, notifications, scheduler, clock, racing, key)
+            assertEquals(Disposition.DROPPED, racingPipeline.accept(sms(purchase)))
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            assertTrue(db.reviews().all().isEmpty())
+            // and when the gate closes right after the key was fetched, the key is wiped again
+            calls = 1
+            val lateGate =
+                object : CaptureGate {
+                    var n = 0
+
+                    override fun isOpen() = ++n <= 1
+
+                    override fun open() = Unit
+
+                    override fun close() = Unit
+                }
+            assertEquals(
+                Disposition.DROPPED,
+                SmsPipeline(db, settings, notifications, scheduler, clock, lateGate, key).accept(sms(purchase)),
+            )
+            assertEquals(1, wiped)
+        }
+
+    @Test
     fun `REQ-SMS-063 expired review items are neither shown nor kept`() =
         runTest {
             pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))

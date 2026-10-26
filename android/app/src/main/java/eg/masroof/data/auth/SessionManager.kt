@@ -106,6 +106,7 @@ class SessionManager
                     pendingSwitch = base to session
                     return LoginResult.AccountSwitch(unsynced)
                 }
+                capture.close()
                 wiper.wipe()
             }
             finishSignIn(base, session)
@@ -118,6 +119,7 @@ class SessionManager
         suspend fun confirmAccountSwitch() {
             val (base, session) = pendingSwitch ?: return
             pendingSwitch = null
+            capture.close()
             wiper.wipe()
             finishSignIn(base, session)
         }
@@ -189,6 +191,7 @@ class SessionManager
 
         /** The server no longer accepts this session. Queued entries are kept; they upload after the next sign-in. */
         private suspend fun expire() {
+            capture.close()
             withContext(io) { runCatchingStore { store.clear() } }
             current = null
             _state.value = SessionState.SignedOut(SignedOutNotice.SESSION_EXPIRED)
