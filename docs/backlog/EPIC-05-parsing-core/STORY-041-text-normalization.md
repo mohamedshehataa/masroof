@@ -3,7 +3,7 @@ id: STORY-041
 epic: EPIC-05
 title: "Text normalization: Unicode, Arabic-Indic digits, separators, multipliers, currency words"
 phase: 3
-status: BLOCKED
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-005]
@@ -21,16 +21,16 @@ Every incoming text is normalized deterministically before classification so `ب
 
 ## Requirements and acceptance criteria
 ### REQ-PARSE-010 — Unicode normalization and Arabic-Indic digits to Western (original kept)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a body with Arabic-Indic or Persian digits, RTL marks, tatweel or harakat, when it is normalized, then digits are Western, marks are gone, the result is idempotent, bounded to 4,000 characters and never throws.
 
 ### REQ-PARSE-011 — Thousands/decimal separators unified ('1,250' / '1.250,00' / '١٬٢٥٠')
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given `1,250`, `1.250,00`, `١٬٢٥٠` or `12,5`, when parsed, then the minor units are exact; given an ambiguous or malformed number (`1,2,3`, `0.500`), then it is rejected, never guessed.
 
 ### REQ-PARSE-012 — Multipliers expanded (k, الف, ألف, مية; '5k rent', '2.5 الف موبيليا')
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an amount and `k`/`ك`/`الف`/`آلاف`, when the multiplier is applied, then the amount is multiplied by 1000 (overflow rejected). Number words such as `مية` and `ونص` are not built yet (follow-up).
 
 ### REQ-PARSE-013 — Currency symbols and words mapped (ج.م, جنيه, EGP, LE, $, USD, دولار)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given `EGP`, `LE`, `ج.م`, `جنيه`, `$`, `دولار`, `€` and similar, when mapped, then the ISO-4217 code is returned and unknown words give none.
 
 
 ## UX states (UI stories only)

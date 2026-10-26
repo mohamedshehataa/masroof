@@ -34,9 +34,11 @@ import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
+import eg.masroof.ui.components.StopLearningDialog
 import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.CapturedViewModel
 import eg.masroof.ui.viewmodel.HomeInsight
 import eg.masroof.ui.viewmodel.HomeInsightsViewModel
 import eg.masroof.ui.viewmodel.HomeUiState
@@ -49,9 +51,11 @@ fun HomeRoute(
     onOpenInsights: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     insightsViewModel: HomeInsightsViewModel = hiltViewModel(),
+    captured: CapturedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val insight by insightsViewModel.state.collectAsStateWithLifecycle()
+    val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
     HomeContent(
         state,
         onRetry = {
@@ -63,7 +67,10 @@ fun HomeRoute(
         onDeleteEntry = viewModel::deleteEntry,
         insight = insight,
         onOpenInsights = onOpenInsights,
+        capturedIds = capturedIds,
+        onUndoCaptured = captured::undo,
     )
+    StopLearningDialog(captured)
 }
 
 @Composable
@@ -76,6 +83,8 @@ fun HomeContent(
     onDeleteEntry: (String) -> Unit = {},
     insight: HomeInsight? = null,
     onOpenInsights: () -> Unit = {},
+    capturedIds: Map<String, String> = emptyMap(),
+    onUndoCaptured: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SpentCard(state, insight)
@@ -94,7 +103,15 @@ fun HomeContent(
         }
         ListStates(state.status, isEmpty = state.recent.isEmpty(), onRetry = onRetry) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.recent, key = { it.id }) { ExpenseListItem(it, onRetryEntry = onRetryEntry, onDeleteEntry = onDeleteEntry) }
+                items(state.recent, key = { it.id }) {
+                    ExpenseListItem(
+                        it,
+                        onRetryEntry = onRetryEntry,
+                        onDeleteEntry = onDeleteEntry,
+                        capturedLocalId = capturedIds[it.id],
+                        onUndoCaptured = onUndoCaptured,
+                    )
+                }
             }
         }
     }

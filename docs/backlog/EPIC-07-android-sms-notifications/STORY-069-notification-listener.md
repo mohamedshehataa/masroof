@@ -3,11 +3,11 @@ id: STORY-069
 epic: EPIC-07
 title: Bank-app push notification listener for allowlisted packages
 phase: 4
-status: DRAFT
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-065, STORY-067]
-reqs: [REQ-NTF-010, REQ-NTF-011, REQ-NTF-012, REQ-NTF-013]
+reqs: [REQ-NTF-010, REQ-NTF-011, REQ-NTF-012, REQ-NTF-013, REQ-NTF-014]
 implements: [PROMPT.md §4.2, PROMPT.md §11 Onboarding (optional notification access)]
 owner_agent: android-engineer
 ---
@@ -29,9 +29,12 @@ Transactions that only arrive as app notifications (InstaPay) are captured too (
 ### REQ-NTF-012 — Same OTP/promo filtering as SMS
 (to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
 
-### REQ-NTF-013 — Uploaded to /api/ingest/notification as PUSH_NOTIFICATION via the outbox
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+### REQ-NTF-013 — Parsed on the device and uploaded as a structured record with source NOTIFICATION via the outbox
+Given an allowlisted notification, when it is posted, then its title and text are parsed on the device and only the structured record is uploaded to /api/ingest/parsed-transactions (stored with source PUSH); the text is never uploaded.
 
+
+### REQ-NTF-014 — Notification capture is opt-in, explained in Arabic and English, and the app works without it
+Given Settings, when the user turns notification capture on, then a clear explanation is shown and the system Notification access screen opens; given the access is not granted or the toggle is off, then nothing is read and the app is fully usable. The monitored packages default to the InstaPay candidate package and can be edited.
 
 ## UX states (UI stories only)
 empty · loading · error · offline · RTL · dark

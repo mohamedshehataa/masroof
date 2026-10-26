@@ -692,6 +692,41 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/ingest/parsed-transactions:
+    post:
+      tags: [Ingest]
+      summary: Ingest one transaction that the phone parsed on-device (structured only)
+      description: |
+        Used by the Android app for bank/wallet SMS and bank-app notifications. The message text never leaves
+        the phone: the app sends only the structured record below, whose only free-text field is a short
+        `merchant` label with every digit removed. Idempotent on `(deviceId, localId)`. The server validates
+        strictly (enum kinds, amount bounds, currency, `instrumentLast4`, digit-free label) and answers `422`
+        for anything else; it never stores a message body for these records.
+      operationId: ingestParsedTransaction
+      security:
+        - deviceToken: []
+        - bearerJwt: []
+      x-req: [REQ-SMS-001, REQ-NTF-001]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestParsedTransactionRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/IngestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/ingest/notification:
     post:
       tags: [Ingest]
@@ -2996,6 +3031,59 @@ components:
           maxLength: 64
           description: Stable id on the device; idempotency key together with `deviceId`.
 
+    IngestParsedTransactionRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        A transaction parsed on the phone. There is deliberately no field for message text: the only
+        free text is `merchant`, a label with every digit removed.
+      required: [deviceId, localId, source, kind, amountMinor, currency, occurredAt, senderId]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        localId:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: HMAC-SHA256 (hex) of sender, received time and message text, keyed with a random per-installation secret that never leaves the phone (Android Keystore). Idempotency key with `deviceId`; reveals nothing about the text and cannot be brute-forced from it.
+        source:
+          type: string
+          enum: [SMS, NOTIFICATION]
+        kind:
+          type: string
+          enum: [PURCHASE, TRANSFER_OUT, TRANSFER_IN, INCOME, REFUND, CASH_WITHDRAWAL, FEE]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 10000000000000
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        occurredAt:
+          type: string
+          format: date-time
+        instrumentLast4:
+          type: [string, 'null']
+          pattern: '^[0-9]{4}$'
+          description: Card or account last four, only when the message named it explicitly.
+        senderId:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z._&-]{0,19}$'
+          description: Allowlisted sender id (SMS) or Android package name (notification, truncated to its institution token).
+        institution:
+          type: [string, 'null']
+          maxLength: 40
+          pattern: '^[^0-9]*$'
+        paymentMethod:
+          type: [string, 'null']
+          enum: [CARD, WALLET, INSTAPAY, BANK_TRANSFER, UNKNOWN, null]
+        merchant:
+          type: [string, 'null']
+          maxLength: 40
+          pattern: '^[^0-9]*$'
+          description: Merchant or counterparty label. Every digit removed on the device; the server rejects a label with a digit.
+
     IngestNotificationRequest:
       type: object
       required: [packageName, text, postedAt, deviceId, notificationKey]
@@ -3072,6 +3160,12 @@ components:
           type: string
           enum: [ACCEPTED, DUPLICATE, REJECTED_OTP, REJECTED_UNKNOWN_SENDER]
           description: "`DUPLICATE` means the same external id or image hash was already ingested; the original id is returned."
+        expenseId:
+          type: string
+          format: uuid
+          description: |
+            Only for `POST /api/ingest/parsed-transactions` with outcome `ACCEPTED`: the expense that was just created, so the
+            app can offer an Undo (`DELETE /api/expenses/{expenseId}`). Absent for a duplicate and for the raw-text endpoints.
 
     # ---------------------------------------------------------------- Parsing
     ParseRequest:
