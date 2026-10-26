@@ -1809,6 +1809,7 @@ free text is `merchant`, a label with every digit removed.
 |---|---|---|---|
 | `rawMessageId` | string (uuid) | yes |  |
 | `outcome` | enum(ACCEPTED, DUPLICATE, REJECTED_OTP, REJECTED_UNKNOWN_SENDER) | yes | `DUPLICATE` means the same external id or image hash was already ingested; the original id is returned. |
+| `expenseId` | string (uuid) | no | Only for `POST /api/ingest/parsed-transactions` with outcome `ACCEPTED`: the expense that was just created, so the app can offer an Undo (`DELETE /api/expenses/{expenseId}`). Absent for a duplicate and for the raw-text endpoints. |
 
 ### ParseRequest
 
@@ -2170,6 +2171,8 @@ Type: any
 | `progressBps` | integer | yes | Spent / budget in basis points (may exceed 10000). |
 | `alertsFired` | array of integer | yes |  |
 | `onTrack` | boolean | yes |  |
+| `daysLeft` | integer | no | Days after today until this budget's period ends; 0 once it is over. |
+| `periodRange` | `PeriodRange` | no |  |
 
 ### BudgetStatusList
 

@@ -2,6 +2,7 @@ package eg.masroof.data.remote
 
 import eg.masroof.api.apis.AccountsApi
 import eg.masroof.api.apis.AnalyticsApi
+import eg.masroof.api.apis.BudgetsApi
 import eg.masroof.api.apis.CategoriesApi
 import eg.masroof.api.apis.ExpensesApi
 import eg.masroof.api.apis.IngestApi
@@ -126,6 +127,10 @@ val apiJson: Json =
                         .serializer(),
                 )
                 contextual(
+                    eg.masroof.api.models.BudgetPeriod
+                        .serializer(),
+                )
+                contextual(
                     eg.masroof.api.models.MessageSource
                         .serializer(),
                 )
@@ -207,6 +212,9 @@ class ApiRemoteSource
 
         /** The generated analytics API on the authenticated client (used by the Insights tab). */
         suspend fun analyticsApi(): AnalyticsApi = retrofit().create(AnalyticsApi::class.java)
+
+        /** The generated budgets API on the authenticated client. */
+        suspend fun budgetsApi(): BudgetsApi = retrofit().create(BudgetsApi::class.java)
 
         private fun <T> Response<T>.bodyOrThrow(): T {
             if (!isSuccessful) throw HttpFailure(code())
