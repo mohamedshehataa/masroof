@@ -1,0 +1,87 @@
+{
+  "_comment": "Rules-only SMS templates (STORY-044). Patterns run on FOLDED text (alef variants -> ا, ى -> ي, ة -> ه), case-insensitive. Order matters: first match wins. Sender ids are 'verify current': an unknown sender still parses with the generic templates. Amount, currency, card last four, merchant and time are read by the engine, never by a template.",
+  "senders": [
+    { "institution": "CIB", "match": "^CIB", "method": "CARD" },
+    { "institution": "NBE", "match": "^(NBE|NATIONALBANK|ALAHLI|AHLY|الاهلي|البنكالاهلي)", "method": "CARD" },
+    { "institution": "Banque Misr", "match": "^(BANQUEMISR|BMISR|MISR|BM$|بنكمصر)", "method": "CARD" },
+    { "institution": "QNB", "match": "^QNB", "method": "CARD" },
+    { "institution": "HSBC", "match": "^HSBC", "method": "CARD" },
+    { "institution": "Banque du Caire", "match": "^(BANQUEDUCAIRE|BDC$|CAIROBANK|بنكالقاهره)", "method": "CARD" },
+    { "institution": "AAIB", "match": "^AAIB", "method": "CARD" },
+    { "institution": "Alex Bank", "match": "^ALEXBANK", "method": "CARD" },
+    { "institution": "ADIB", "match": "^ADIB", "method": "CARD" },
+    { "institution": "FAB", "match": "^(FAB$|FIRSTABU)", "method": "CARD" },
+    { "institution": "Emirates NBD", "match": "^(EMIRATESNBD|ENBD)", "method": "CARD" },
+    { "institution": "Egyptian Gulf Bank", "match": "^(EGBANK|EGYPTIANGULF)", "method": "CARD" },
+    { "institution": "SAIB", "match": "^SAIB", "method": "CARD" },
+    { "institution": "Blom", "match": "^BLOM", "method": "CARD" },
+    { "institution": "Mashreq", "match": "^MASHREQ", "method": "CARD" },
+    { "institution": "HDB", "match": "^(HDB$|HOUSINGDEV)", "method": "CARD" },
+    { "institution": "Credit Agricole", "match": "^(CREDITAGRICOLE|CAEGYPT)", "method": "CARD" },
+    { "institution": "Faisal Islamic", "match": "^(FAISAL|FIB$)", "method": "CARD" },
+    { "institution": "Telda", "match": "^TELDA", "method": "CARD" },
+    { "institution": "InstaPay", "match": "^(INSTAPAY|IPN$)", "method": "INSTAPAY" },
+    { "institution": "Vodafone Cash", "match": "^(VODAFONE|VFCASH|VF$)", "method": "WALLET" },
+    { "institution": "Orange Cash", "match": "^ORANGE", "method": "WALLET" },
+    { "institution": "e& money", "match": "^(E&|ETISALAT|EMONEY|EANDMONEY)", "method": "WALLET" },
+    { "institution": "WE Pay", "match": "^(WEPAY|WE$)", "method": "WALLET" },
+    { "institution": "Fawry", "match": "^(FAWRY|فوري)", "method": "WALLET" },
+    { "institution": "valU", "match": "^VALU", "method": "UNKNOWN" },
+    { "institution": "CashCall", "match": "^CASHCALL", "method": "UNKNOWN" },
+    { "institution": "Souhoola", "match": "^SOUHOOLA", "method": "UNKNOWN" },
+    { "institution": "Aman", "match": "^AMAN", "method": "UNKNOWN" },
+    { "institution": "Meeza", "match": "^MEEZA", "method": "CARD" }
+  ],
+  "templates": [
+    {
+      "id": "info-declined",
+      "kind": "INFO",
+      "detect": "\\b(?:declined|rejected|unsuccessful|insufficient|failed)\\b|تم رفض|رفض العمليه|فشل|غير ناجح|تعذر"
+    },
+    {
+      "id": "info-statement",
+      "kind": "INFO",
+      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment of|purchase|spent|charged|withdraw|\\bdebit\\b|تم خصم|تم دفع|شراء|سحب)).*(?:statement is ready|e-?statement|كشف حساب|due date|payment due|reminder|تاريخ الاستحقاق|تذكير)"
+    },
+    {
+      "id": "reversal",
+      "kind": "REVERSAL",
+      "detect": "\\b(?:reversal|reversed|voided|cancell?ed transaction)\\b|تم عكس|عكس عمليه|الغاء عمليه"
+    },
+    {
+      "id": "refund",
+      "kind": "REFUND",
+      "detect": "\\brefund(?:ed)?\\b|استرداد|مرتجع|رد مبلغ"
+    },
+    {
+      "id": "withdrawal",
+      "kind": "CASH_WITHDRAWAL",
+      "detect": "\\batm\\b|cash withdrawal|cash advance|\\bwithdraw(?:n|al)?\\b|سحب|ماكينه الصراف"
+    },
+    {
+      "id": "fee",
+      "kind": "FEE",
+      "detect": "\\b(?:annual fee|monthly fee|service fee|maintenance fee|card fee|sms fee|fee of|fees of|commission)\\b|خصم (?:رسوم|عموله|مصاريف)|(?:رسوم|عموله) (?:الخدمه|شهريه|سنويه|الصيانه|بطاقه|البطاقه)"
+    },
+    {
+      "id": "transfer-debit-credit",
+      "kind": "TRANSFER",
+      "detect": "(?s)^(?!.*(?:cashback|will be credited|refund)).*\\bdebited\\b.{0,120}\\bcredited to\\b"
+    },
+    {
+      "id": "income",
+      "kind": "INCOME",
+      "detect": "(?s)^(?!.*(?:debited|\\bpaid\\b|\\bpay\\b|payment|purchase|spent|charged|withdraw|\\bdebit\\b|\\bsent\\b|\\bsend\\b|beneficiary|(?:was|were|been) received|received (?:by|successfully)|تم خصم|تم دفع|شراء|سحب|خصم|دفع|ارسال|ارسلت|حولت|المستفيد|استلامها)).*(?:\\b(?:received|credited|deposit(?:ed)?|salary|incoming)\\b|ايداع|(?<!ال)استلام|استلمت|وارد|راتب|مرتب|اضافه مبلغ|تم اضافه)"
+    },
+    {
+      "id": "transfer",
+      "kind": "TRANSFER",
+      "detect": "(?s)^(?!.*(?:you(?: have)? received|\\breceived (?:egp|an?\\b|\\d)|credited with|وارد|ايداع|استلمت|(?<!ال)استلام(?!ها))).*(?:\\btransfer(?:red)?\\b|\\bsent\\b|\\bsend\\b|تحويل|حولت|تم ارسال|ارسال مبلغ|ارسلت)"
+    },
+    {
+      "id": "purchase",
+      "kind": "PURCHASE",
+      "detect": "\\b(?:purchase|used for|spent|paid|pay|payment|debited|charged|pos|debit)\\b|شراء|خصم|دفع|مدفوعات|سداد|عمليه"
+    }
+  ]
+}

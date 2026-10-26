@@ -73,3 +73,17 @@ fun classifyUploadStatus(
         else -> UploadResult.Rejected
     }
 }
+
+/** The SMS upload view of [classifyUploadStatus] for a non-2xx answer. */
+fun classifySmsStatus(
+    code: Int,
+    problem: ProblemInfo? = null,
+    retryAfterSeconds: Long? = null,
+): SmsUploadResult =
+    when (val r = classifyUploadStatus(code, false, problem, retryAfterSeconds)) {
+        UploadResult.Retry -> SmsUploadResult.Retry(null)
+        is UploadResult.RetryAfter -> SmsUploadResult.Retry(r.seconds)
+        UploadResult.RetryLimited, UploadResult.Unexpected -> SmsUploadResult.RetryLimited
+        UploadResult.Unauthorized -> SmsUploadResult.Unauthorized
+        UploadResult.Rejected, is UploadResult.Created -> SmsUploadResult.Rejected
+    }

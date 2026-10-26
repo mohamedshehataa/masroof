@@ -117,7 +117,8 @@ object TestAuth {
         remote: AuthRemote = FakeAuthRemote(),
         settings: SettingsRepository = FakeSettings(),
         wiper: LocalDataWiper = FakeWiper(),
-    ) = SessionManager(store, remote, settings, wiper, Dispatchers.Unconfined)
+        capture: eg.masroof.ingest.CaptureGate = eg.masroof.ingest.NoopCaptureGate,
+    ) = SessionManager(store, remote, settings, wiper, Dispatchers.Unconfined, capture)
 }
 
 class FakeNetwork(

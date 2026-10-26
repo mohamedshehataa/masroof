@@ -3,7 +3,7 @@ id: STORY-066
 epic: EPIC-07
 title: "Sender allowlist with defaults and 'Suggested sources' for unknown money-like senders"
 phase: 4
-status: BLOCKED
+status: IN_PROGRESS
 size: M
 modules: [android]
 depends_on: [STORY-064]
@@ -21,13 +21,13 @@ Only financial senders are ever read, and new banks are added with one tap (PROM
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-040 — Default allowlist of Egyptian banks/wallets/short codes shipped (verify current sender IDs); only allowlisted senders are read/uploaded
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the default Egyptian bank and wallet senders, when an SMS arrives, then only allowlisted senders are read; phone-number senders are never read by default.
 
 ### REQ-SMS-041 — User adds/removes senders in Settings → Sources
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the settings store, when a sender is added or a default switched off, then the policy changes. The screen to manage them is not built yet (STORY-073).
 
 ### REQ-SMS-042 — Unknown senders with money patterns appear as suggestions for one-tap approval, never auto-ingested
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an unknown sender whose message looks like a payment, when it arrives, then only its name is kept as a suggestion (no text) and one tap adds it; it is never auto-ingested.
 
 
 ## UX states (UI stories only)

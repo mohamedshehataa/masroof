@@ -21,13 +21,27 @@ import eg.masroof.R
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
+import eg.masroof.ui.components.StopLearningDialog
+import eg.masroof.ui.viewmodel.CapturedViewModel
 import eg.masroof.ui.viewmodel.TransactionsUiState
 import eg.masroof.ui.viewmodel.TransactionsViewModel
 
 @Composable
-fun TransactionsRoute(viewModel: TransactionsViewModel = hiltViewModel()) {
+fun TransactionsRoute(
+    viewModel: TransactionsViewModel = hiltViewModel(),
+    captured: CapturedViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    TransactionsContent(state, onRetry = viewModel::refresh, onRetryEntry = viewModel::retryEntry, onDeleteEntry = viewModel::deleteEntry)
+    val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
+    TransactionsContent(
+        state,
+        onRetry = viewModel::refresh,
+        onRetryEntry = viewModel::retryEntry,
+        onDeleteEntry = viewModel::deleteEntry,
+        capturedIds = capturedIds,
+        onUndoCaptured = captured::undo,
+    )
+    StopLearningDialog(captured)
 }
 
 @Composable
@@ -37,6 +51,8 @@ fun TransactionsContent(
     modifier: Modifier = Modifier,
     onRetryEntry: (String) -> Unit = {},
     onDeleteEntry: (String) -> Unit = {},
+    capturedIds: Map<String, String> = emptyMap(),
+    onUndoCaptured: (String) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -47,7 +63,15 @@ fun TransactionsContent(
         if (state.rows.isNotEmpty()) StatusBanner(state.status, onRetry)
         ListStates(state.status, isEmpty = state.rows.isEmpty(), onRetry = onRetry) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.rows, key = { it.id }) { ExpenseListItem(it, onRetryEntry = onRetryEntry, onDeleteEntry = onDeleteEntry) }
+                items(state.rows, key = { it.id }) {
+                    ExpenseListItem(
+                        it,
+                        onRetryEntry = onRetryEntry,
+                        onDeleteEntry = onDeleteEntry,
+                        capturedLocalId = capturedIds[it.id],
+                        onUndoCaptured = onUndoCaptured,
+                    )
+                }
             }
         }
     }

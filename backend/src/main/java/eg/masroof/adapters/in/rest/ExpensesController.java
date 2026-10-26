@@ -11,6 +11,7 @@ import eg.masroof.adapters.in.rest.generated.model.MessageSource;
 import eg.masroof.adapters.in.rest.generated.model.SplitRequest;
 import eg.masroof.adapters.in.rest.generated.model.TransactionType;
 import eg.masroof.application.expense.ExpenseService;
+import eg.masroof.application.sms.ExpenseSourceService;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -33,10 +34,12 @@ class ExpensesController implements ExpensesApi {
   private static final Pattern KEY = Pattern.compile("^[\\x21-\\x7E]{1,128}$");
 
   private final ExpenseService service;
+  private final ExpenseSourceService sources;
   private final JsonMapper json;
 
-  ExpensesController(ExpenseService service, JsonMapper json) {
+  ExpensesController(ExpenseService service, ExpenseSourceService sources, JsonMapper json) {
     this.service = service;
+    this.sources = sources;
     this.json = json;
   }
 
@@ -63,14 +66,18 @@ class ExpensesController implements ExpensesApi {
 
   @Override
   public ResponseEntity<Expense> getExpense(UUID expenseId) {
-    return ResponseEntity.ok(ExpenseMapper.toDto(service.get(expenseId)));
+    eg.masroof.domain.expense.Expense found = service.get(expenseId);
+    return ResponseEntity.ok(
+        ExpenseMapper.toDto(found, sources.forExpenses(List.of(found.id())).get(found.id())));
   }
 
   @Override
   public ResponseEntity<Expense> updateExpense(UUID expenseId, ExpensePatch expensePatch) {
     ExpenseMapper.requireSupported(expensePatch);
+    eg.masroof.domain.expense.Expense updated =
+        service.update(expenseId, ExpenseMapper.toCommand(expensePatch));
     return ResponseEntity.ok(
-        ExpenseMapper.toDto(service.update(expenseId, ExpenseMapper.toCommand(expensePatch))));
+        ExpenseMapper.toDto(updated, sources.forExpenses(List.of(updated.id())).get(updated.id())));
   }
 
   @Override
@@ -115,7 +122,12 @@ class ExpensesController implements ExpensesApi {
             sort,
             cursor,
             limit);
-    return ResponseEntity.ok(ExpenseMapper.toDto(service.list(query)));
+    ExpenseService.Page page = service.list(query);
+    return ResponseEntity.ok(
+        ExpenseMapper.toDto(
+            page,
+            sources.forExpenses(
+                page.items().stream().map(eg.masroof.domain.expense.Expense::id).toList())));
   }
 
   // Declared in the contract, built later (dedup, splits, restore): 501 Problem+JSON.

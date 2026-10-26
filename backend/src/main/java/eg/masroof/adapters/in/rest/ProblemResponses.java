@@ -33,6 +33,29 @@ final class ProblemResponses {
         request.getRequestURI());
   }
 
+  /** 413 for a body over the endpoint's limit. */
+  static void payloadTooLarge(HttpServletRequest request, HttpServletResponse response)
+      throws IOException {
+    write(
+        response,
+        413,
+        "Payload Too Large",
+        "The request body is larger than this endpoint accepts",
+        request.getRequestURI());
+  }
+
+  /** 422 for a structurally valid body the endpoint refuses (e.g. an unknown property). */
+  static void unprocessable(HttpServletRequest request, HttpServletResponse response, String detail)
+      throws IOException {
+    write(response, 422, "Unprocessable Content", detail, request.getRequestURI());
+  }
+
+  /** 415 for a body in a charset the endpoint does not read. */
+  static void unsupportedMediaType(
+      HttpServletRequest request, HttpServletResponse response, String detail) throws IOException {
+    write(response, 415, "Unsupported Media Type", detail, request.getRequestURI());
+  }
+
   private static void write(
       HttpServletResponse response, int status, String title, String detail, String instance)
       throws IOException {

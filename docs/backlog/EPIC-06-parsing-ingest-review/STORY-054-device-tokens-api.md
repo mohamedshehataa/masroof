@@ -19,6 +19,12 @@ owner_agent: backend-engineer
 ## Goal
 Each phone and Shortcut has its own revocable credential for ingestion (PROMPT §9, §12).
 
+## Note from STORY-065 (round 19)
+`POST /api/ingest/parsed-transactions` now accepts either a device token or the signed-in member's JWT (`bearerJwt` is a second
+security alternative in the contract, non-breaking): the Android app uploads parsed records with the member JWT today. The "Undo" of an
+automatically captured expense calls `DELETE /api/expenses/{id}`, which needs the MEMBER JWT (a device token is only valid for
+`/api/ingest/*`), so a build that moves uploads to a device token must keep the JWT for Undo.
+
 ## Requirements and acceptance criteria
 ### REQ-SEC-004 — CRUD /api/devices: create returns the token once (hashed in DB), list shows platform/name/last_seen, delete revokes instantly
 (to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
