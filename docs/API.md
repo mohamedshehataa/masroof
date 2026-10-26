@@ -2128,6 +2128,8 @@ Type: any
 | `progressBps` | integer | yes | Spent / budget in basis points (may exceed 10000). |
 | `alertsFired` | array of integer | yes |  |
 | `onTrack` | boolean | yes |  |
+| `daysLeft` | integer | no | Days after today until this budget's period ends; 0 once it is over. |
+| `periodRange` | `PeriodRange` | no |  |
 
 ### BudgetStatusList
 
