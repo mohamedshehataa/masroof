@@ -196,7 +196,8 @@ class SmsParserTest {
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
                 fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
                 fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl") + fixture("round14.jsonl") +
-                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl") + fixture("round19.jsonl")
+                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl") + fixture("round19.jsonl") +
+                fixture("round20.jsonl")
         assertTrue(rows.size >= 415)
         checkAll(rows)
     }
@@ -510,5 +511,175 @@ class InstaPaySmsTest {
         }
         val phone = MessageParser.parse(message("InstaPay", "Transfer of EGP 100.00 to 01000000012 was successful"))
         assertFalse(phone is ParseOutcome.Record && phone.record.toString().contains("0100000"))
+    }
+}
+
+class CardStoreNumberTest {
+    private fun card(merchant: String) =
+        "Your Credit Card ending with 4821 has been used for EGP 130.00 on 26/10/2026 at $merchant. Your available limit is EGP 41000.10"
+
+    @Test
+    fun `REQ-SMS-070 a store number after a card merchant is recorded with a digit-free label`() {
+        for (sender in listOf("HSBC", "CIB")) {
+            val o = MessageParser.parse(message(sender, card("HARDEE S ELMERGHANY 50")))
+            assertTrue("$sender -> $o", o is ParseOutcome.Record)
+            val r = (o as ParseOutcome.Record).record
+            assertEquals(13000L, r.amountMinor)
+            assertEquals("4821", r.instrumentLast4)
+            assertEquals("HARDEE S ELMERGHANY", LabelNormalizer.normalize(r.merchant.orEmpty()))
+        }
+        // a number in the middle is not accepted: the store number is the last token only
+        assertFalse(MessageParser.parse(message("CIB", card("SPINNEYS 3 ZAYED"))) is ParseOutcome.Record)
+        assertTrue(MessageParser.parse(message("CIB", card("CARREFOUR 7"))) is ParseOutcome.Record)
+        // without the number it was already a record
+        assertTrue(MessageParser.parse(message("HSBC", card("HARDEE S ELMERGHANY"))) is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-070 the Arabic card family accepts a store number too`() {
+        val body = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى كارفور 12"
+        assertTrue(MessageParser.parse(message("CIB", body)) is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 a store number never opens the closed world`() {
+        val bad =
+            listOf("50", "50 SHOP", "SHOP 1234", "SHOP 50 60", "SHOP 50 declined", "SHOP 50 failed", "SHOP 123456", "SHOP 50 OTP")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 an amount, an identifier or an unlabeled number after the merchant is never a store number`() {
+        val bad =
+            (
+                "SHOP 500 EGP|SHOP 500 LE|SHOP 50 USD|SHOP 50 L.E|SHOP 50 EUR|SHOP 50 GBP|SHOP 50 SAR|SHOP 50 AED|SHOP 50 KWD|" +
+                    "SHOP EGP 500|SHOP ID 123|SHOP TRX 123|SHOP ACC 999|SHOP NO 123|SHOP AUTH 123|SHOP CODE 12|A 50"
+            ).split("|")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        for (m in listOf("كارفور 50 جنيه", "كارفور 50 جم", "كارفور 50 ج.م", "كارفور رقم 123")) {
+            val o = MessageParser.parse(message("CIB", "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى $m"))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 one store number in total - a suffix clause never carries a second one`() {
+        val head = "Your Credit Card ending with 4821 has been used for EGP 130.00 on 26/10/2026 at "
+        val limit = ". Your available limit is EGP 41000.10"
+        for (m in listOf("HARDEE 50. X 60", "HARDEE. ELMERGHANY 50", "HARDEE 50. ELMERGHANY 60")) {
+            val o = MessageParser.parse(message("CIB", head + m + limit))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        val one = MessageParser.parse(message("CIB", card("HARDEE 50")))
+        assertTrue(one is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 only a number that ends the slot after a real name is a store number`() {
+        val bad =
+            (
+                "SHOP 50 POUNDS|SHOP 50 POUND|SHOP 50 DOLLARS|SHOP 50 EUROS|SHOP 50 OFF|SHOP 50 POINTS|SHOP 50 PERCENT|" +
+                    "SHOP ACCOUNT 999|SHOP TID 123|SHOP REFERENCE 123|SHOP CARD 123|SHOP INVOICE 123|SHOP ORDER 123|" +
+                    "SHOP MID 123|SHOP TERMINAL 123|SHOP POS 123|SHOP POUNDS 50|SHOP ج 50|SPINNEYS 3 ZAYED"
+            ).split("|")
+        for (m in bad) {
+            val o = MessageParser.parse(message("CIB", card(m)))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        val ar = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى "
+        for (m in listOf("كارفور 50 جنيهات", "كارفور 50 ج", "كارفور حساب 123", "كارفور فاتورة 123", "كارفور طلب 123")) {
+            val o = MessageParser.parse(message("CIB", ar + m))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+        for (m in listOf("CARREFOUR 12", "HARDEE S ELMERGHANY 50")) {
+            assertTrue(m, MessageParser.parse(message("CIB", card(m))) is ParseOutcome.Record)
+        }
+        assertTrue(MessageParser.parse(message("CIB", ar + "كارفور 12")) is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 a number inside the merchant slot never decides the recorded amount`() {
+        val en = "Your card ending 4821 was used at "
+        val bodies =
+            listOf(
+                en + "SHOP AMOUNT 500 for EGP 130.00",
+                en + "SHOP VALUE 500 for EGP 130.00",
+                en + "SHOP AMOUNT 999 for EGP 1.00",
+                en + "SHOP 500 for EGP 130.00",
+            )
+        for (b in bodies) {
+            val o = MessageParser.parse(message("CIB", b))
+            assertFalse("$b -> $o", o is ParseOutcome.Record && o.record.amountMinor in listOf(50000L, 99900L))
+        }
+        for (w in "TOTAL AMOUNT AMT VALUE BALANCE BAL VAT TAX DISCOUNT QTY QUANTITY PHONE MOBILE TEL".split(" ")) {
+            val o = MessageParser.parse(message("CIB", card("SHOP $w 500")))
+            assertFalse("$w -> $o", o is ParseOutcome.Record)
+        }
+        val hsbc = "From HSBC: 24OCT26 SHOP TOTAL 500 Purchase from 012-345***-678 EGP 130.00- Your available balance EGP 1,000.00"
+        assertFalse(MessageParser.parse(message("HSBC", hsbc)) is ParseOutcome.Record)
+        val ar = "تم خصم 130 جنيه من بطاقتك المنتهية ب 4821 لدى "
+        for (w in listOf("مبلغ", "رصيد", "قيمة", "ضريبة", "خصم", "كمية", "هاتف", "موبايل")) {
+            val o = MessageParser.parse(message("CIB", ar + "كارفور $w 500"))
+            assertFalse("$w -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 every auto-recorded fixture amount is the amount next to a currency marker`() {
+        val num = "(\\d[\\d,،]*(?:\\.\\d{1,2})?)"
+        val cur = "(?:egp|le|جنيه|جم)"
+        val after = Regex("$cur\\s*$num", RegexOption.IGNORE_CASE)
+        val before = Regex("$num\\s*$cur", RegexOption.IGNORE_CASE)
+        val files = "round3 round4 round5 round10 round15 round16 round17 round19 round20 verifier round2 corpus".split(" ")
+        val recorded =
+            files
+                .flatMap { fixture("$it.jsonl") }
+                .filter { it.opt("body") != null }
+                .mapNotNull { row ->
+                    val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+                    val o = MessageParser.parse(message(row.opt("sender") ?: "CIB", row.str("body"), source = source))
+                    (o as? ParseOutcome.Record)?.let { row to it.record.amountMinor }
+                }
+        for ((row, minor) in recorded) {
+            val body = row.str("body")
+            val seen = (after.findAll(body) + before.findAll(body)).map { it.groupValues[1].replace(",", "").replace("،", "") }.toList()
+            val ok = seen.any { v -> v.toBigDecimal().movePointRight(2).toLong() == minor }
+            // a body with no ASCII amount (Arabic-Indic digits) is covered by the fixture's own expected amount
+            assertTrue("${row.opt("id")} recorded $minor from $seen", ok || seen.isEmpty())
+        }
+        assertTrue(recorded.size > 50)
+    }
+
+    @Test
+    fun `REQ-SMS-078 a currency-like word in a name without a number is still a name`() {
+        val en = "Your card ending 4821 was charged EGP 85.00 at "
+        for (m in listOf("LE PAIN QUOTIDIEN", "LE MERIDIEN", "LE MARCHE", "YEN SUSHI", "SR MARKET")) {
+            val o = MessageParser.parse(message("CIB", en + m))
+            assertTrue("$m -> $o", o is ParseOutcome.Record)
+        }
+        // with a number, any currency word in the slot sends it to review (a deliberate trade-off)
+        for (m in listOf("LE MERIDIEN 2", "LE 50")) {
+            val o = MessageParser.parse(message("CIB", en + m))
+            assertFalse("$m -> $o", o is ParseOutcome.Record)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-078 an InstaPay counterparty with a currency-like word is judged as before`() {
+        val body = "You sent EGP 100.00 to SR AHMED"
+        val sr = MessageParser.parse(message(NotificationApps.INSTAPAY_CANDIDATE, body, source = CaptureSource.NOTIFICATION))
+        assertTrue(sr.toString(), sr is ParseOutcome.Record)
+    }
+
+    @Test
+    fun `REQ-SMS-078 the counterparty slots of InstaPay and instant transfers stay strict`() {
+        val o = MessageParser.parse(message("CIB", "You sent EGP 100.00 to AHMED 50"))
+        assertFalse(o.toString(), o is ParseOutcome.Record)
     }
 }

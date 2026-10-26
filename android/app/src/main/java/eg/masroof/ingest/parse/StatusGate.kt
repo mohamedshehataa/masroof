@@ -105,6 +105,28 @@ object StatusGate {
 
     fun isNonName(token: String): Boolean = token.lowercase().trim('.', ',', ':', ';') in nonNames
 
+    /** A word that introduces an identifier or reference: a number right after it is a code, never a store number. */
+    private val identifierWords =
+        (
+            "id no num number trx txn ref rrn acc acct auth code account tid mid terminal reference card invoice order bill " +
+                "receipt pos transaction رقم حساب فاتورة فاتوره طلب بطاقة بطاقه " +
+                "total amount amt value balance bal vat tax discount qty quantity phone mobile tel " +
+                "مبلغ قيمة قيمه رصيد ضريبة ضريبه خصم كمية كميه هاتف موبايل"
+        ).split(" ").toSet()
+
+    /** A currency code, word or abbreviation: it marks an amount, so it is never part of a merchant name. */
+    private val currencyWords =
+        (
+            "egp le l.e usd eur gbp sar sr aed dhs dh kwd qar jpy cad chf cny yen riyal " +
+                "جنيه جنيها جنية جنيهات ج جم ج.م دولار يورو ريال درهم pound pounds dollar dollars euro euros"
+        ).split(" ").toSet()
+
+    private fun bare(token: String) = token.lowercase().trim('.', ',', ':', ';')
+
+    fun isIdentifierWord(token: String): Boolean = bare(token) in identifierWords
+
+    fun isCurrencyWord(token: String): Boolean = bare(token) in currencyWords
+
     /** A single word that is a status word: it must stay a literal token in a learned shape, never merge into a name slot. */
     fun isStatusWord(word: String): Boolean {
         val w = word.lowercase()
