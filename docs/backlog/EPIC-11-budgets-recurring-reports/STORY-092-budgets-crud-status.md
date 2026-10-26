@@ -29,7 +29,7 @@ Implemented. CUSTOM periods, push/WhatsApp alerts (STORY-102) and the web page (
 - Given spending in the period, When GET /api/analytics/budgets, Then spent, remaining, progressBps (half away from zero, capped at 100x), alertsFired (50/80/100 or the budget's own), onTrack and daysLeft are computed from the same eligible rows as the analytics (Cairo periods with month_start_day, refunds netted, TRANSFER and CASH_WITHDRAWAL excluded).
 - Given a monthly household-total budget, When GET /api/analytics/summary for a month, Then remainingBudget is the total budget's remaining amount; otherwise null.
 
-### REQ-AN-051 (in-app part) — Rollover
+Rollover (the in-app part of the rollover requirement, whose heading lives in STORY-102):
 - Given rollover is on and the budget existed in the previous period, When status is read, Then the previous period's leftover (or overspend) is added to the limit, one period deep.
 - Given rollover leaves a limit of zero or less, When status is read, Then progress is full (10000 bps) or capped if anything is spent, the 100% alert fires, and onTrack is false.
 
