@@ -127,9 +127,10 @@ val apiJson: Json =
                         .serializer(),
                 )
                 contextual(
-<<<<<<< HEAD
                     eg.masroof.api.models.BudgetPeriod
-=======
+                        .serializer(),
+                )
+                contextual(
                     eg.masroof.api.models.MessageSource
                         .serializer(),
                 )
@@ -143,7 +144,6 @@ val apiJson: Json =
                 )
                 contextual(
                     eg.masroof.api.models.IngestAcceptedOutcome
->>>>>>> origin/main
                         .serializer(),
                 )
             }

@@ -64,12 +64,9 @@ private enum class Tab(
 }
 
 private const val ADD_ROUTE = "add"
-<<<<<<< HEAD
 private const val BUDGETS_ROUTE = "budgets"
-=======
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
->>>>>>> origin/main
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
