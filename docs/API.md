@@ -368,6 +368,28 @@ Request body (`application/json`): `IngestSmsRequest`
 | 413 | Body exceeds the configured size limit. | application/problem+json: `Problem` |
 | 429 | Rate limited. | application/problem+json: `Problem` |
 
+### `POST /api/ingest/parsed-transactions` - Ingest one transaction that the phone parsed on-device (structured only)
+
+- operationId: `ingestParsedTransaction`
+- Requirements: REQ-SMS-001, REQ-NTF-001
+
+Used by the Android app for bank/wallet SMS and bank-app notifications. The message text never leaves
+the phone: the app sends only the structured record below, whose only free-text field is a short
+`merchant` label with every digit removed. Idempotent on `(deviceId, localId)`. The server validates
+strictly (enum kinds, amount bounds, currency, `instrumentLast4`, digit-free label) and answers `422`
+for anything else; it never stores a message body for these records.
+
+Request body (`application/json`): `IngestParsedTransactionRequest`
+
+| Status | Description | Body |
+|---|---|---|
+| 202 | Raw message persisted; parsing continues asynchronously. | application/json: `IngestAccepted` |
+| 400 | Malformed request or validation failure. | application/problem+json: `Problem` |
+| 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
+| 413 | Body exceeds the configured size limit. | application/problem+json: `Problem` |
+| 422 | Semantically invalid (e.g. split shares do not sum to the total). | application/problem+json: `Problem` |
+| 429 | Rate limited. | application/problem+json: `Problem` |
+
 ### `POST /api/ingest/notification` - Ingest a bank-app push notification
 
 - operationId: `ingestNotification`
@@ -1731,6 +1753,26 @@ All fields optional; `null` clears a nullable field.
 | `deviceId` | string (uuid) | yes |  |
 | `smsId` | string | yes | Stable id on the device; idempotency key together with `deviceId`. |
 
+### IngestParsedTransactionRequest
+
+A transaction parsed on the phone. There is deliberately no field for message text: the only
+free text is `merchant`, a label with every digit removed.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deviceId` | string (uuid) | yes |  |
+| `localId` | string | yes | HMAC-SHA256 (hex) of sender, received time and message text, keyed with a random per-installation secret that never leaves the phone (Android Keystore). Idempotency key with `deviceId`; reveals nothing about the text and cannot be brute-forced from it. |
+| `source` | enum(SMS, NOTIFICATION) | yes |  |
+| `kind` | enum(PURCHASE, TRANSFER_OUT, TRANSFER_IN, INCOME, REFUND, CASH_WITHDRAWAL, FEE) | yes |  |
+| `amountMinor` | integer (int64) | yes |  |
+| `currency` | string | yes |  |
+| `occurredAt` | string (date-time) | yes |  |
+| `instrumentLast4` | string or null | no | Card or account last four, only when the message named it explicitly. |
+| `senderId` | string | yes | Allowlisted sender id (SMS) or Android package name (notification, truncated to its institution token). |
+| `institution` | string or null | no |  |
+| `paymentMethod` | enum(CARD, WALLET, INSTAPAY, BANK_TRANSFER, UNKNOWN, None) | no |  |
+| `merchant` | string or null | no | Merchant or counterparty label. Every digit removed on the device; the server rejects a label with a digit. |
+
 ### IngestNotificationRequest
 
 | Field | Type | Required | Description |
@@ -1767,6 +1809,7 @@ All fields optional; `null` clears a nullable field.
 |---|---|---|---|
 | `rawMessageId` | string (uuid) | yes |  |
 | `outcome` | enum(ACCEPTED, DUPLICATE, REJECTED_OTP, REJECTED_UNKNOWN_SENDER) | yes | `DUPLICATE` means the same external id or image hash was already ingested; the original id is returned. |
+| `expenseId` | string (uuid) | no | Only for `POST /api/ingest/parsed-transactions` with outcome `ACCEPTED`: the expense that was just created, so the app can offer an Undo (`DELETE /api/expenses/{expenseId}`). Absent for a duplicate and for the raw-text endpoints. |
 
 ### ParseRequest
 

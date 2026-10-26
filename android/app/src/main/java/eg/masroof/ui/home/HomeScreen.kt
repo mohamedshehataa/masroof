@@ -36,10 +36,15 @@ import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
+import eg.masroof.ui.components.StopLearningDialog
 import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.theme.LocalMoneyStyle
+<<<<<<< HEAD
 import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
+=======
+import eg.masroof.ui.viewmodel.CapturedViewModel
+>>>>>>> origin/main
 import eg.masroof.ui.viewmodel.HomeInsight
 import eg.masroof.ui.viewmodel.HomeInsightsViewModel
 import eg.masroof.ui.viewmodel.HomeUiState
@@ -52,12 +57,20 @@ fun HomeRoute(
     onOpenInsights: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     insightsViewModel: HomeInsightsViewModel = hiltViewModel(),
+<<<<<<< HEAD
     onOpenBudgets: () -> Unit = {},
     budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val insight by insightsViewModel.state.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
+=======
+    captured: CapturedViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val insight by insightsViewModel.state.collectAsStateWithLifecycle()
+    val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
+>>>>>>> origin/main
     HomeContent(
         state,
         onRetry = {
@@ -70,9 +83,15 @@ fun HomeRoute(
         onDeleteEntry = viewModel::deleteEntry,
         insight = insight,
         onOpenInsights = onOpenInsights,
+<<<<<<< HEAD
         budgets = budgets,
         onOpenBudgets = onOpenBudgets,
+=======
+        capturedIds = capturedIds,
+        onUndoCaptured = captured::undo,
+>>>>>>> origin/main
     )
+    StopLearningDialog(captured)
 }
 
 @Composable
@@ -85,8 +104,13 @@ fun HomeContent(
     onDeleteEntry: (String) -> Unit = {},
     insight: HomeInsight? = null,
     onOpenInsights: () -> Unit = {},
+<<<<<<< HEAD
     budgets: List<BudgetRowUi> = emptyList(),
     onOpenBudgets: () -> Unit = {},
+=======
+    capturedIds: Map<String, String> = emptyMap(),
+    onUndoCaptured: (String) -> Unit = {},
+>>>>>>> origin/main
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SpentCard(state, insight)
@@ -106,7 +130,15 @@ fun HomeContent(
         }
         ListStates(state.status, isEmpty = state.recent.isEmpty(), onRetry = onRetry) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.recent, key = { it.id }) { ExpenseListItem(it, onRetryEntry = onRetryEntry, onDeleteEntry = onDeleteEntry) }
+                items(state.recent, key = { it.id }) {
+                    ExpenseListItem(
+                        it,
+                        onRetryEntry = onRetryEntry,
+                        onDeleteEntry = onDeleteEntry,
+                        capturedLocalId = capturedIds[it.id],
+                        onUndoCaptured = onUndoCaptured,
+                    )
+                }
             }
         }
     }

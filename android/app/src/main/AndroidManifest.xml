@@ -2,9 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Normal (install-time) permission: only to show "offline" on the login screen and disable Sign in. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Dangerous (runtime) permission, requested from Settings only when the user turns SMS capture on. The app works
+         fully without it; READ_SMS (history backfill) is added with that feature. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Runtime permission (Android 13+), requested from Settings only when the user turns on the "Recorded ... Undo"
+         notification for transactions the phone captured by itself. The app works fully without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".MasroofApp"
@@ -29,6 +39,37 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Reason: the system delivers SMS_RECEIVED from outside the app, so the receiver must be exported; the
+             BROADCAST_SMS permission means only the system can send it. It does no work itself (hands off to WorkManager). -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
+        <receiver
+            android:name=".ingest.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- The buttons of the "Recorded ... Undo" notification. Not exported: only this app can send these broadcasts. -->
+        <receiver
+            android:name=".ingest.CapturedActionReceiver"
+            android:exported="false" />
+
+        <!-- Reason: the system binds the listener from outside the app, so it must be exported; BIND_NOTIFICATION_
+             LISTENER_SERVICE means only the system can bind it. It only hands allowlisted notification text to
+             WorkManager (REQ-NTF-001); the user must grant "Notification access" in system settings. -->
+        <!-- nosemgrep: java.android.security.exported_service.exported_service -->
+        <service
+            android:name=".ingest.MasroofNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider

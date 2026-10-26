@@ -47,3 +47,42 @@ interface RemoteSource {
 
     suspend fun upload(item: OutboxEntity): UploadResult
 }
+
+sealed interface SmsUploadResult {
+    /** 2xx: the server stored (or already had) the message. [expenseId] is the expense it created, when the server says so. */
+    data class Sent(
+        val expenseId: String? = null,
+    ) : SmsUploadResult
+
+    /** Transient: offline, 5xx, 408/429. Backed off exponentially, never failed. */
+    data class Retry(
+        val afterSeconds: Long?,
+    ) : SmsUploadResult
+
+    /** Ambiguous (409, undecodable 2xx): retried a few times, then failed. */
+    data object RetryLimited : SmsUploadResult
+
+    /** 401: sign in again. */
+    data object Unauthorized : SmsUploadResult
+
+    /** The server refused the payload for good (400/422). */
+    data object Rejected : SmsUploadResult
+}
+
+/** Upload of one structured on-device parse to POST /api/ingest/parsed-transactions (REQ-SMS-060). */
+interface ParsedRemote {
+    suspend fun uploadParsed(
+        deviceId: String,
+        item: eg.masroof.data.db.ParsedOutboxEntity,
+    ): SmsUploadResult
+}
+
+/** DELETE /api/expenses/{id} (soft delete): what "Undo" of an automatically captured expense calls. True when it is gone. */
+interface ExpenseDeleter {
+    suspend fun deleteExpense(id: String): Boolean
+}
+
+/** The deleter of a build or a test that has no network: an Undo that needs the API simply does not happen. */
+object NoExpenseDeleter : ExpenseDeleter {
+    override suspend fun deleteExpense(id: String) = false
+}

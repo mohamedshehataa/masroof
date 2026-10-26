@@ -41,6 +41,7 @@ import eg.masroof.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
+    onOpenReview: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -56,6 +57,7 @@ fun SettingsRoute(
             viewModel::syncNow,
             onToggleLanguage,
         ),
+        extra = { SmsCaptureSection(onOpenReview = onOpenReview) },
     )
 }
 
@@ -75,6 +77,7 @@ fun SettingsContent(
     state: SettingsUiState,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
+    extra: @Composable () -> Unit = {},
 ) {
     val onUrl = actions.onUrl
     val onDigits = actions.onDigits
@@ -153,6 +156,7 @@ fun SettingsContent(
             Text(stringResource(R.string.settings_save))
         }
         if (state.saved) Text(stringResource(R.string.settings_saved), color = MaterialTheme.colorScheme.primary)
+        extra()
         OutlinedButton(
             onClick = onLogout,
             enabled = !state.loggingOut,

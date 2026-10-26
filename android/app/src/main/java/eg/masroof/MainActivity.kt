@@ -43,6 +43,8 @@ import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
 import eg.masroof.ui.login.LoginRoute
+import eg.masroof.ui.review.ReviewAddRoute
+import eg.masroof.ui.review.ReviewRoute
 import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
@@ -62,7 +64,12 @@ private enum class Tab(
 }
 
 private const val ADD_ROUTE = "add"
+<<<<<<< HEAD
 private const val BUDGETS_ROUTE = "budgets"
+=======
+private const val REVIEW_ROUTE = "review"
+private const val REVIEW_ADD_ROUTE = "review/{id}/add"
+>>>>>>> origin/main
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -141,7 +148,7 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
             }
         },
         floatingActionButton = {
-            if (destination?.route != ADD_ROUTE) {
+            if (destination?.route != ADD_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
                 FloatingActionButton(onClick = { nav.navigate(ADD_ROUTE) }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
@@ -159,7 +166,13 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
             composable(Tab.Insights.route) { InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }) }
             composable(BUDGETS_ROUTE) { BudgetsRoute() }
             composable(Tab.Transactions.route) { TransactionsRoute() }
-            composable(Tab.Settings.route) { SettingsRoute(onToggleLanguage = onToggleLanguage) }
+            composable(Tab.Settings.route) {
+                SettingsRoute(onToggleLanguage = onToggleLanguage, onOpenReview = { nav.navigate(REVIEW_ROUTE) })
+            }
+            composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
+            composable(REVIEW_ADD_ROUTE) { entry ->
+                ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })
+            }
             composable(ADD_ROUTE) { AddExpenseRoute(onDone = { nav.popBackStack() }) }
         }
     }

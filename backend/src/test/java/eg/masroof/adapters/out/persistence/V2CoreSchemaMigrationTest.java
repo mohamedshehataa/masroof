@@ -97,7 +97,8 @@ class V2CoreSchemaMigrationTest {
             "V5__refresh_token_family.sql",
             "V6__audit_log_ip_hash.sql",
             "V7__analytics_index.sql",
-            "V8__budget.sql",
+            "V8__raw_message.sql",
+            "V9__budget.sql",
             "R__seed_reference.sql");
   }
 

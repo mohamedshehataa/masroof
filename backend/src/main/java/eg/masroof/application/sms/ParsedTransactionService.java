@@ -1,0 +1,285 @@
+package eg.masroof.application.sms;
+
+import eg.masroof.application.expense.ExpenseException;
+import eg.masroof.application.expense.ExpenseRepository;
+import eg.masroof.application.household.CurrentHousehold;
+import eg.masroof.application.household.CurrentHousehold.Household;
+import eg.masroof.domain.expense.Expense;
+import eg.masroof.domain.expense.ExpenseSource;
+import eg.masroof.domain.expense.ExpenseStatus;
+import eg.masroof.domain.expense.ExpenseType;
+import eg.masroof.domain.expense.PaymentMethod;
+import eg.masroof.domain.money.Money;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * POST /api/ingest/parsed-transactions (REQ-SMS-001, REQ-NTF-001). The phone parsed a bank message
+ * on-device and sends only a structured record; no message text exists on the server. Everything is
+ * validated strictly because the record is the only thing that crosses the trust boundary: the one
+ * free-text field is the merchant label, which must be digit-free and not read like a secret.
+ */
+@Service
+public class ParsedTransactionService {
+
+  static final long MAX_AMOUNT_MINOR = 10_000_000_000_000L;
+  static final int MAX_LABEL = 40;
+  static final Instant MIN_OCCURRED_AT = Instant.parse("2000-01-01T00:00:00Z");
+  static final Duration MAX_FUTURE = Duration.ofDays(1);
+  private static final Pattern LOCAL_ID = Pattern.compile("^[0-9a-f]{64}$");
+  private static final Pattern LAST4 = Pattern.compile("^[0-9]{4}$");
+  private static final Pattern SENDER = Pattern.compile("^[A-Za-z][A-Za-z._&-]{0,19}$");
+
+  /** Above this a record waits for the user (a spoofed sender id must not book a large amount). */
+  static final long REVIEW_CEILING_MINOR = 5_000_000L;
+
+  private static final Pattern CURRENCY = Pattern.compile("^[A-Z]{3}$");
+  private static final Pattern INSTITUTION = Pattern.compile("^[\\p{L} .&-]{1,40}$");
+  // The ONE label spec; the phone applies the same normalization (LabelNormalizer.kt): letters,
+  // marks, spaces
+  // and the punctuation of names and handles ("ahmed.ali@instapay", "B.TECH"). Curly quotes become
+  // an
+  // apostrophe, the registered/trademark/copyright signs are dropped, any other character becomes a
+  // space,
+  // and spaces collapse.
+  private static final Pattern DISALLOWED_LABEL_CHAR =
+      Pattern.compile("[^\\p{L}\\p{M} .&'@_/*(),+-]");
+  private static final Pattern QUOTES = Pattern.compile("[‘’ʼ`´]");
+  private static final Pattern MARKS = Pattern.compile("[®™©]");
+  // A label that reads like a secret message fragment is refused even though it has no digit.
+  private static final Pattern SECRET_WORDS =
+      Pattern.compile(
+          "\\b(?:otps?|o\\.t\\.p|pins?|codes?|passwords?|passcodes?|cvvs?|cvcs?|tokens?|secret|verification"
+              + "|verify|one[- ]?time|3d ?secure|3ds|activation|authenti[a-z]*)\\b"
+              + "|كود|رمز|رموز|تحقق|سري|كلمه المرور|كلمة المرور|كلمه السر|كلمة السر|كلمة مرور|كلمه مرور"
+              + "|باسورد|الباسورد|لا تشارك",
+          Pattern.CASE_INSENSITIVE);
+
+  /** The record as received (already shaped by the generated model). */
+  public record Command(
+      UUID deviceId,
+      String localId,
+      ExpenseSource source,
+      String kind,
+      long amountMinor,
+      String currency,
+      Instant occurredAt,
+      @Nullable String instrumentLast4,
+      String senderId,
+      @Nullable String institution,
+      @Nullable String paymentMethod,
+      @Nullable String merchant) {}
+
+  /** What happened to it. */
+  public enum Outcome {
+    ACCEPTED,
+    DUPLICATE
+  }
+
+  /**
+   * The evidence row id, the outcome and, for a new record, the expense that was created from it.
+   */
+  public record Accepted(UUID rawMessageId, Outcome outcome, @Nullable UUID expenseId) {}
+
+  private final RawMessageRepository messages;
+  private final SmsAccounts accounts;
+  private final ExpenseRepository expenses;
+  private final CurrentHousehold currentHousehold;
+  private final CallerMember callerMember;
+  private final Clock clock;
+
+  ParsedTransactionService(
+      RawMessageRepository messages,
+      SmsAccounts accounts,
+      ExpenseRepository expenses,
+      CurrentHousehold currentHousehold,
+      CallerMember callerMember,
+      Clock clock) {
+    this.messages = messages;
+    this.accounts = accounts;
+    this.expenses = expenses;
+    this.currentHousehold = currentHousehold;
+    this.callerMember = callerMember;
+    this.clock = clock;
+  }
+
+  /**
+   * Incoming money (a refund too) and unusually large amounts wait for the user: the sender id is
+   * only a claim, so a spoofed sender must not be able to book income or a large expense on its
+   * own.
+   */
+  private static boolean needsReview(String kind, long amountMinor) {
+    return "INCOME".equals(kind)
+        || "TRANSFER_IN".equals(kind)
+        || "REFUND".equals(kind)
+        || amountMinor > REVIEW_CEILING_MINOR;
+  }
+
+  /** Validates and records one parsed transaction, once per (device, local id). */
+  @Transactional
+  public Accepted ingest(Command cmd) {
+    Instant now = clock.instant();
+    Household household = currentHousehold.get();
+    ExpenseType type = validate(cmd, now, household.baseCurrency());
+    UUID member = callerMember.memberId().orElse(null);
+    RawMessageRepository.Stored stored =
+        messages.insertParsed(
+            new RawMessageRepository.NewParsed(
+                UUID.randomUUID(),
+                household.id(),
+                member,
+                cmd.source(),
+                cmd.deviceId(),
+                cmd.localId(),
+                cmd.senderId(),
+                cmd.occurredAt(),
+                now));
+    if (!stored.inserted()) {
+      // a retry after a lost answer learns the expense it created (same household only, by the
+      // query)
+      return new Accepted(
+          stored.id(),
+          Outcome.DUPLICATE,
+          messages.expenseIdOf(stored.id(), household.id()).orElse(null));
+    }
+    Optional<SmsAccounts.AccountRef> account =
+        cmd.instrumentLast4() == null
+            ? Optional.empty()
+            : accounts.findByLast4(household.id(), cmd.instrumentLast4());
+    Expense row =
+        new Expense(
+            UUID.randomUUID(),
+            household.id(),
+            type,
+            Money.of(cmd.amountMinor(), cmd.currency()),
+            cmd.occurredAt(),
+            null,
+            account.map(SmsAccounts.AccountRef::id).orElse(null),
+            account.map(SmsAccounts.AccountRef::memberId).orElse(member),
+            paymentMethod(cmd.paymentMethod()),
+            normalizedLabel(cmd.merchant()),
+            note(cmd),
+            List.of(),
+            needsReview(cmd.kind(), cmd.amountMinor())
+                ? ExpenseStatus.PENDING_REVIEW
+                : ExpenseStatus.CONFIRMED,
+            cmd.source(),
+            null,
+            now,
+            now);
+    UUID expenseId = expenses.insert(row).id();
+    messages.attachExpense(stored.id(), expenseId);
+    return new Accepted(stored.id(), Outcome.ACCEPTED, expenseId);
+  }
+
+  private static ExpenseType validate(Command cmd, Instant now, String baseCurrency) {
+    if (cmd.source() != ExpenseSource.SMS && cmd.source() != ExpenseSource.PUSH) {
+      throw ExpenseException.invalid("source", "must be SMS or NOTIFICATION");
+    }
+    if (!LOCAL_ID.matcher(cmd.localId()).matches()) {
+      throw ExpenseException.invalid("localId", "must be 64 lower-case hex characters");
+    }
+    if (cmd.amountMinor() < 1 || cmd.amountMinor() > MAX_AMOUNT_MINOR) {
+      throw ExpenseException.invalid("amountMinor", "is outside the accepted range");
+    }
+    if (!CURRENCY.matcher(cmd.currency()).matches()) {
+      throw ExpenseException.invalid("currency", "must be an ISO 4217 code");
+    }
+    if (!cmd.currency().equals(baseCurrency)) {
+      throw ExpenseException.invalid("currency", "must be the household currency");
+    }
+    if (cmd.occurredAt().isBefore(MIN_OCCURRED_AT)
+        || cmd.occurredAt().isAfter(now.plus(MAX_FUTURE))) {
+      throw ExpenseException.invalid("occurredAt", "is outside the accepted range");
+    }
+    if (cmd.instrumentLast4() != null && !LAST4.matcher(cmd.instrumentLast4()).matches()) {
+      throw ExpenseException.invalid("instrumentLast4", "must be exactly four digits");
+    }
+    if (!SENDER.matcher(cmd.senderId()).matches()) {
+      throw ExpenseException.invalid("senderId", "is not a sender id");
+    }
+    if (cmd.institution() != null && !INSTITUTION.matcher(cmd.institution()).matches()) {
+      throw ExpenseException.invalid("institution", "must be a name without digits");
+    }
+    if (cmd.paymentMethod() != null) {
+      paymentMethod(cmd.paymentMethod());
+    }
+    String label = cmd.merchant();
+    if (label != null && !label.isBlank()) {
+      if (label.codePoints().anyMatch(Character::isDigit)) {
+        throw ExpenseException.invalid("merchant", "must not contain digits");
+      }
+      String stripped = normalizeLabel(label);
+      if (stripped.length() > MAX_LABEL
+          || SECRET_WORDS.matcher(stripped.toLowerCase(Locale.ROOT)).find()) {
+        throw ExpenseException.invalid("merchant", "is not an acceptable label");
+      }
+    }
+    return typeOf(cmd.kind());
+  }
+
+  /**
+   * The shared label spec: curly quotes to an apostrophe, drop (R)(TM)(C), other disallowed chars
+   * to a space.
+   */
+  static String normalizeLabel(String label) {
+    String s = MARKS.matcher(QUOTES.matcher(label).replaceAll("'")).replaceAll("");
+    s = DISALLOWED_LABEL_CHAR.matcher(s).replaceAll(" ");
+    return s.replaceAll("\\s+", " ").strip();
+  }
+
+  private static @Nullable String normalizedLabel(@Nullable String merchant) {
+    if (merchant == null || merchant.isBlank()) {
+      return null;
+    }
+    String label = normalizeLabel(merchant);
+    return label.isEmpty() ? null : label;
+  }
+
+  private static ExpenseType typeOf(String kind) {
+    return switch (kind) {
+      case "PURCHASE", "FEE" -> ExpenseType.EXPENSE;
+      case "TRANSFER_OUT", "TRANSFER_IN" -> ExpenseType.TRANSFER;
+      case "INCOME" -> ExpenseType.INCOME;
+      case "REFUND" -> ExpenseType.REFUND;
+      case "CASH_WITHDRAWAL" -> ExpenseType.CASH_WITHDRAWAL;
+      default -> throw ExpenseException.invalid("kind", "is not a supported kind");
+    };
+  }
+
+  private static PaymentMethod paymentMethod(@Nullable String value) {
+    if (value == null) {
+      return PaymentMethod.UNKNOWN;
+    }
+    return switch (value) {
+      case "CARD" -> PaymentMethod.CARD;
+      case "WALLET" -> PaymentMethod.WALLET;
+      case "INSTAPAY" -> PaymentMethod.INSTAPAY;
+      case "BANK_TRANSFER" -> PaymentMethod.BANK_TRANSFER;
+      case "UNKNOWN" -> PaymentMethod.UNKNOWN;
+      default -> throw ExpenseException.invalid("paymentMethod", "is not a supported method");
+    };
+  }
+
+  /** "SMS CIB *1234": the title when no merchant was found; built from validated fields only. */
+  private static String note(Command cmd) {
+    StringBuilder sb =
+        new StringBuilder(cmd.source() == ExpenseSource.PUSH ? "Notification" : "SMS");
+    if (cmd.institution() != null && !cmd.institution().isBlank()) {
+      sb.append(' ').append(cmd.institution().strip());
+    }
+    if (cmd.instrumentLast4() != null) {
+      sb.append(" *").append(cmd.instrumentLast4());
+    }
+    return sb.toString();
+  }
+}

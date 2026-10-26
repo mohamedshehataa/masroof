@@ -1,8 +1,11 @@
 package eg.masroof
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import eg.masroof.core.Money
 import eg.masroof.ui.home.HomeContent
 import eg.masroof.ui.theme.MasroofTheme
@@ -11,6 +14,7 @@ import eg.masroof.ui.viewmodel.ExpenseRow
 import eg.masroof.ui.viewmodel.HomeUiState
 import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.TransactionsUiState
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,5 +65,26 @@ class ScreenStatesTest {
         compose.setContent { MasroofTheme { HomeContent(state, {}, {}) } }
         compose.onNodeWithText("1,250 EGP").assertIsDisplayed()
         compose.onNodeWithText("Offline - showing saved data").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-SMS-083 an expense the phone captured by itself shows the Captured chip with Undo`() {
+        val captured = ExpenseRow("e-1", "AMAZON", Money(50_000), LocalDate.of(2026, 10, 15), false, false, null, null, "SMS")
+        val manual = ExpenseRow("e-2", "Cafe", Money(5_000), LocalDate.of(2026, 10, 15), false, false, null, null)
+        var undone: String? = null
+        compose.setContent {
+            MasroofTheme {
+                TransactionsContent(
+                    TransactionsUiState(rows = listOf(captured, manual), status = LoadStatus.READY),
+                    onRetry = {},
+                    capturedIds = mapOf("e-1" to "local-1"),
+                    onUndoCaptured = { undone = it },
+                )
+            }
+        }
+        compose.onNodeWithText("Captured").assertIsDisplayed()
+        compose.onAllNodesWithText("Undo").assertCountEquals(1)
+        compose.onNodeWithText("Undo").performClick()
+        assertEquals("local-1", undone)
     }
 }

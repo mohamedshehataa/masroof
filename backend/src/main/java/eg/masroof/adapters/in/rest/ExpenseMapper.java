@@ -4,16 +4,23 @@ import eg.masroof.adapters.in.rest.generated.model.Expense;
 import eg.masroof.adapters.in.rest.generated.model.ExpenseCreate;
 import eg.masroof.adapters.in.rest.generated.model.ExpensePage;
 import eg.masroof.adapters.in.rest.generated.model.ExpensePatch;
+import eg.masroof.adapters.in.rest.generated.model.MessageSource;
+import eg.masroof.adapters.in.rest.generated.model.ProcessingStatus;
+import eg.masroof.adapters.in.rest.generated.model.RawMessageSummary;
+import eg.masroof.adapters.in.rest.generated.model.SourceRole;
 import eg.masroof.adapters.in.rest.generated.model.SplitMode;
 import eg.masroof.adapters.in.rest.generated.model.TransactionType;
 import eg.masroof.application.expense.ExpenseException;
 import eg.masroof.application.expense.ExpenseService;
+import eg.masroof.application.sms.RawMessageRepository;
 import eg.masroof.domain.expense.ExpenseSource;
 import eg.masroof.domain.expense.ExpenseStatus;
 import eg.masroof.domain.expense.ExpenseType;
 import eg.masroof.domain.expense.PaymentMethod;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 
 /** Maps between the generated transport model and application/domain types. */
@@ -105,6 +112,12 @@ final class ExpenseMapper {
   }
 
   static Expense toDto(eg.masroof.domain.expense.Expense e) {
+    return toDto(e, null);
+  }
+
+  /** The expense with the redacted raw message that evidences it, if any. */
+  static Expense toDto(
+      eg.masroof.domain.expense.Expense e, RawMessageRepository.@Nullable SourceView source) {
     return new Expense()
         .id(e.id())
         .householdId(e.householdId())
@@ -126,23 +139,56 @@ final class ExpenseMapper {
         .isRecurring(false)
         .splitMode(SplitMode.NONE)
         .items(List.of())
-        .sources(List.of())
+        .sources(source == null ? List.of() : List.of(sourceDto(source)))
         .splits(List.of())
         .createdAt(e.createdAt())
         .updatedAt(e.updatedAt())
         .deletedAt(e.deletedAt());
   }
 
-  static ExpensePage toDto(ExpenseService.Page page) {
+  static ExpensePage toDto(
+      ExpenseService.Page page, Map<UUID, RawMessageRepository.SourceView> sources) {
     ExpensePage dto =
         new ExpensePage()
-            .items(page.items().stream().map(ExpenseMapper::toDto).toList())
+            .items(page.items().stream().map(e -> toDto(e, sources.get(e.id()))).toList())
             .totalAmount(page.total());
     String next = page.nextCursor();
     if (next != null) {
       dto.setNextCursor(next);
     }
     return dto;
+  }
+
+  private static eg.masroof.adapters.in.rest.generated.model.ExpenseSource sourceDto(
+      RawMessageRepository.SourceView s) {
+    ProcessingStatus status;
+    try {
+      status = ProcessingStatus.fromValue(s.processingStatus());
+    } catch (IllegalArgumentException e) {
+      status = ProcessingStatus.DONE;
+    }
+    return new eg.masroof.adapters.in.rest.generated.model.ExpenseSource()
+        .rawMessageId(s.rawMessageId())
+        .role(SourceRole.PRIMARY)
+        .rawMessage(
+            new RawMessageSummary()
+                .id(s.rawMessageId())
+                .source(convert(s.source(), MessageSource.class))
+                .senderMasked(maskSender(s.sender()))
+                .memberId(s.memberId())
+                .receivedAt(s.receivedAt())
+                .processingStatus(status));
+  }
+
+  /**
+   * A sender id stays readable ("CIB"); anything with four or more digits shows only its last four.
+   */
+  static @Nullable String maskSender(@Nullable String sender) {
+    if (sender == null) {
+      return null;
+    }
+    String digits = sender.replaceAll("\\D", "");
+    return digits.length() >= 4 ? "••" + digits.substring(digits.length() - 4) : sender;
   }
 
   static @Nullable ExpenseSource source(@Nullable Enum<?> source) {

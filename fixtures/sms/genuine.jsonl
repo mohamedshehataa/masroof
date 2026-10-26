@@ -1,0 +1,22 @@
+{"id":"auth-code","sender":"CIB","body":"Purchase of EGP 250.00 at CARREFOUR on 12/03/2026 14:05 card ending 1234. Auth code 123456","kind":"PURCHASE","amountMinor":25000,"currency":"EGP","secrets":["123456"],"allowed":["1234","2026"]}
+{"id":"approval-code","sender":"CIB","body":"Purchase of EGP 250.00 at CARREFOUR on 12/03/2026 14:05 card ending 1234. Approval code: 654321","kind":"PURCHASE","amountMinor":25000,"currency":"EGP","secrets":["654321"],"allowed":["1234","2026"]}
+{"id":"arabic-operation-code","sender":"NBE","body":"تم خصم 250.00 جنيه لدى كارفور بتاريخ 12/03/2026 كود العملية 123456","kind":"PURCHASE","amountMinor":25000,"currency":"EGP","secrets":["123456"],"allowed":["2026"]}
+{"id":"instapay-reference-code","sender":"InstaPay","body":"Transfer of EGP 500.00 to Ahmed successful. Reference code 123456","kind":"TRANSFER","amountMinor":50000,"currency":"EGP","secrets":["123456"],"allowed":[]}
+{"id":"fawry-code","sender":"Fawry","body":"Payment of EGP 150.00 for Electricity bill successful. Fawry code 9876543","kind":"PURCHASE","amountMinor":15000,"currency":"EGP","secrets":["9876543"],"allowed":[]}
+{"id":"txn-code","sender":"CIB","body":"Purchase of EGP 90.00 at UBER on 12/03/2026 Txn code 004512","kind":"PURCHASE","amountMinor":9000,"currency":"EGP","secrets":["004512"],"allowed":["2026"]}
+{"id":"footer-pin-otp","sender":"CIB","body":"Purchase of EGP 90.00 at UBER on 12/03/2026 14:05. Never share your PIN or OTP with anyone","kind":"PURCHASE","amountMinor":9000,"currency":"EGP","secrets":[],"allowed":["2026"]}
+{"id":"footer-call","sender":"CIB","body":"Purchase of EGP 90.00 at UBER on 12/03/2026. For security, call 19666 if this was not you","kind":"PURCHASE","amountMinor":9000,"currency":"EGP","secrets":["19666"],"allowed":["2026"]}
+{"id":"footer-card-details","sender":"CIB","body":"Purchase of EGP 90.00 at UBER. Do not share your card details with anyone","kind":"PURCHASE","amountMinor":9000,"currency":"EGP","secrets":[],"allowed":[]}
+{"id":"arabic-top-up-code","sender":"Vodafone Cash","body":"تم شراء بمبلغ 120.00 جنيه لدى نون. كود الشحن 123456","kind":"PURCHASE","amountMinor":12000,"currency":"EGP","secrets":["123456"],"allowed":[]}
+{"id":"ref-number","sender":"CIB","body":"Purchase of EGP 75.00 at STARBUCKS. Ref 12345678","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["12345678"],"allowed":[]}
+{"id":"trx-id","sender":"CIB","body":"Purchase of EGP 75.00 at STARBUCKS. Trx ID 98765432","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["98765432"],"allowed":[]}
+{"id":"arabic-reference-number","sender":"NBE","body":"تم خصم 75.00 جنيه لدى ستاربكس. رقم المرجع 123456","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["123456"],"allowed":[]}
+{"id":"arabic-operation-number","sender":"NBE","body":"تم خصم 75.00 جنيه لدى ستاربكس. رقم العملية 0012345678","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["0012345678"],"allowed":[]}
+{"id":"approval-no","sender":"CIB","body":"Purchase of EGP 75.00 at STARBUCKS. Approval No 004512","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["004512"],"allowed":[]}
+{"id":"authorization","sender":"CIB","body":"Purchase of EGP 75.00 at STARBUCKS. Authorization 004512","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["004512"],"allowed":[]}
+{"id":"call-short-code","sender":"CIB","body":"Purchase of EGP 75.00 at STARBUCKS. Call 19666 if not you","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["19666"],"allowed":[]}
+{"id":"arabic-call-short-code","sender":"NBE","body":"تم خصم 75.00 جنيه لدى ستاربكس. للاستفسار اتصل 19623","kind":"PURCHASE","amountMinor":7500,"currency":"EGP","secrets":["19623"],"allowed":[]}
+{"id":"arabic-fawry-reference","sender":"Fawry","body":"تم دفع 150.00 جنيه لفوري. الرقم المرجعي لفوري 9876543","kind":"PURCHASE","amountMinor":15000,"currency":"EGP","secrets":["9876543"],"allowed":[]}
+{"id":"arabic-integer-amount","sender":"NBE","body":"تم خصم 1500 جنيه لدى جرير","kind":"PURCHASE","amountMinor":150000,"currency":"EGP","secrets":[],"allowed":["1500"]}
+{"id":"arabic-integer-income","sender":"NBE","body":"تم ايداع 1000 جنيه في حسابك","kind":"INCOME","amountMinor":100000,"currency":"EGP","secrets":[],"allowed":["1000"]}
+{"id":"arabic-keyword-amount","sender":"NBE","body":"تم خصم مبلغ 1500 لدى يونيكلو طوكيو","kind":"PURCHASE","amountMinor":150000,"currency":"EGP","secrets":[],"allowed":["1500"]}

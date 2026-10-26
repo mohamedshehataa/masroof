@@ -3,6 +3,8 @@ package eg.masroof.data.auth
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.normalizeServerUrl
 import eg.masroof.di.IoDispatcher
+import eg.masroof.ingest.CaptureGate
+import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,7 @@ class SessionManager
         private val settings: SettingsRepository,
         private val wiper: LocalDataWiper,
         @IoDispatcher private val io: CoroutineDispatcher,
+        private val capture: CaptureGate = NoopCaptureGate,
     ) {
         private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
         val state: StateFlow<SessionState> = _state
@@ -41,10 +44,17 @@ class SessionManager
                 when (val loaded = withContext(io) { safeLoad() }) {
                     is LoadedSession.Found -> {
                         current = loaded.session
+                        capture.open()
                         _state.value = SessionState.SignedIn(loaded.session.displayName)
                     }
-                    LoadedSession.Empty -> _state.value = SessionState.SignedOut()
-                    LoadedSession.Invalidated -> _state.value = SessionState.SignedOut(SignedOutNotice.KEYSTORE_RESET)
+                    LoadedSession.Empty -> {
+                        capture.close()
+                        _state.value = SessionState.SignedOut()
+                    }
+                    LoadedSession.Invalidated -> {
+                        capture.close()
+                        _state.value = SessionState.SignedOut(SignedOutNotice.KEYSTORE_RESET)
+                    }
                 }
                 restored = true
             }
@@ -96,6 +106,7 @@ class SessionManager
                     pendingSwitch = base to session
                     return LoginResult.AccountSwitch(unsynced)
                 }
+                capture.close()
                 wiper.wipe()
             }
             finishSignIn(base, session)
@@ -108,6 +119,7 @@ class SessionManager
         suspend fun confirmAccountSwitch() {
             val (base, session) = pendingSwitch ?: return
             pendingSwitch = null
+            capture.close()
             wiper.wipe()
             finishSignIn(base, session)
         }
@@ -131,6 +143,7 @@ class SessionManager
             withContext(io) { runCatchingStore { store.lastMemberId = session.memberId } }
             settings.update { it.copy(serverUrl = base) }
             current = session
+            capture.open()
             _state.value = SessionState.SignedIn(session.displayName, persisted)
         }
 
@@ -178,6 +191,7 @@ class SessionManager
 
         /** The server no longer accepts this session. Queued entries are kept; they upload after the next sign-in. */
         private suspend fun expire() {
+            capture.close()
             withContext(io) { runCatchingStore { store.clear() } }
             current = null
             _state.value = SessionState.SignedOut(SignedOutNotice.SESSION_EXPIRED)
@@ -186,6 +200,8 @@ class SessionManager
         /** Revokes the refresh token (best effort), then wipes tokens and all cached data for this account. */
         suspend fun logout() {
             restore()
+            // First, before any network call: from now on no message is read or queued for this account.
+            capture.close()
             val session = current
             if (session != null) {
                 remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
