@@ -14,8 +14,8 @@ class InviteCodeTest {
   private static final SecureRandom RANDOM = new SecureRandom();
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 codes carry 256 bits, are URL-safe and never repeat")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 codes carry 256 bits, are URL-safe and never repeat")
   void entropyAndAlphabet() {
     Set<String> seen = new HashSet<>();
     for (int i = 0; i < 500; i++) {
@@ -26,8 +26,8 @@ class InviteCodeTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 the stored form is a SHA-256 hex that does not contain the code")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 the stored form is a SHA-256 hex that does not contain the code")
   void hashed() {
     String code = InviteCode.generate(RANDOM);
     String hash = InviteCode.hash(code);
@@ -39,8 +39,8 @@ class InviteCodeTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 comparison accepts the right code and rejects near misses")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 comparison accepts the right code and rejects near misses")
   void constantTimeCompare() {
     String code = InviteCode.generate(RANDOM);
     String hash = InviteCode.hash(code);

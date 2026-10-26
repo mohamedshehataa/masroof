@@ -7,7 +7,7 @@ status: READY
 size: M
 modules: [backend]
 depends_on: [STORY-010]
-reqs: [REQ-SEC-002, REQ-SEC-008]
+reqs: [REQ-SEC-060, REQ-SEC-061, REQ-SEC-062]
 implements: ["PROMPT.md §9 (POST /auth/invite)", "PROMPT.md §1 (exactly two members)", "PROMPT.md §11 (PWA onboarding: accept invite)"]
 owner_agent: backend-engineer
 ---
@@ -18,13 +18,13 @@ owner_agent: backend-engineer
 The admin creates a one-time invite link for the second household member, who accepts it by setting a password and lands signed in (PROMPT §9, §11 onboarding step 1).
 
 ## Requirements and acceptance criteria
-### REQ-SEC-002 — Admin creates an invite
+### REQ-SEC-060 — Admin creates, lists and revokes invites
 **Given** an authenticated ADMIN **When** `POST /auth/invite` with `{displayName: "Mai", phoneE164: "+2010...", email?: "mai@example.com", color?}` **Then** `201` with `Invite {id, token (≥ 128 bits, shown once), url, expiresAt = now + 7 days, status: PENDING}`; the DB stores only the token hash; an `audit_log` row `INVITE_CREATED` is written.
 Unhappy path: **Given** a MEMBER (non-admin) calls it **Then** `403`; **Given** the household already has 2 active members **Then** `409 title: "Household is full"`; **Given** `phoneE164` is not E.164 (`0101234567`) **Then** `422` naming the field; **Given** a pending invite exists for the same phone **Then** the old one is revoked and a new token issued (`201`).
 
-### REQ-SEC-008 — Invite acceptance creates the member
-**Given** a pending invite token **When** `POST /auth/invite/accept` with `{token, password}` (password ≥ 10 chars, not in the top-10k breached list) **Then** `200` with `TokenPair` for the new member, a `member` row (role MEMBER, display name/colour from the invite) and `app_user` row are created, the invite becomes `ACCEPTED` and cannot be reused.
-Unhappy path: **Given** an expired token **Then** `410 title: "Invite expired"`; **Given** an unknown or already-accepted token **Then** `404` (same body for both); **Given** password `password1` **Then** `422` with `errors[0].field == "password"`; **Given** 20 accept attempts per minute from one IP **Then** `429`.
+### REQ-SEC-061 — Invite acceptance creates the member
+**Given** a pending invite token **When** `POST /auth/invite/accept` with `{code, email, password}` **Then** `201` with `TokenPair` for the new member, a `member` row (role MEMBER, display name/colour from the invite) and `app_user` row are created, the invite becomes `ACCEPTED` and cannot be reused.
+Unhappy path: **Given** an expired, unknown, revoked or already-accepted code, or an e-mail that does not match the invite's e-mail hint **Then** the same `404` body for all of them (no oracle); **Given** password `password1234` **Then** `400` with `errors[0].field == "password"`; **Given** 20 accept attempts per minute from one IP **Then** `429`.
 
 ## UX states (UI stories only)
 N/A (web screen in STORY-019).
@@ -62,3 +62,9 @@ STORY-010.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+
+### REQ-SEC-062 — Password policy for new passwords
+**Given** a new password (invite acceptance, bootstrap admin) **Then** it needs at least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit; a 73-byte or 64-character Arabic password is a `400` on field `password`, never a `500`), no NUL, and must not be one of the 10,000 most common passwords (case-folded, also after dropping trailing digits and symbols, so `password1234` fails); the bootstrap admin refuses to start with a rejected password.
+
+## Revoke
+Revoking an invite that was already accepted is `409`; revoking an already revoked one is a silent no-op (no audit row); another household's invite is `404`.

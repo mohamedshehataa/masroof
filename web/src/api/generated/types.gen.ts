@@ -171,7 +171,10 @@ export type InviteRequest = {
      * The member's WhatsApp number, so their messages map to them.
      */
     phoneE164?: string;
-    role?: MemberRole;
+    /**
+     * Only MEMBER invites exist; admins are never created through an invite.
+     */
+    role?: 'MEMBER';
 };
 
 export type Invite = {
@@ -201,6 +204,9 @@ export type InviteAcceptRequest = {
      */
     displayName?: string;
     email: string;
+    /**
+     * At least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit, enforced by the server with 400 on field `password`), and not one of the 10,000 most common passwords.
+     */
     password: string;
 };
 
@@ -1464,7 +1470,7 @@ export type AcceptInviteErrors = {
      */
     409: Problem;
     /**
-     * Invite expired or already used.
+     * Reserved and not returned today. Unknown, expired, used, revoked or e-mail-mismatched codes all answer 404 so a code's state is never revealed.
      */
     410: Problem;
     /**
@@ -1535,6 +1541,10 @@ export type RevokeInviteErrors = {
      * Resource not found in this household.
      */
     404: Problem;
+    /**
+     * The invite was already accepted and can no longer be revoked.
+     */
+    409: Problem;
 };
 
 export type RevokeInviteError = RevokeInviteErrors[keyof RevokeInviteErrors];

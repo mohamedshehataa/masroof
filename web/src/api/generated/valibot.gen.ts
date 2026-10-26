@@ -215,7 +215,7 @@ export const vInviteRequest = v.object({
     displayName: v.pipe(v.string(), v.maxLength(80)),
     email: v.optional(v.pipe(v.string(), v.email())),
     phoneE164: v.optional(v.pipe(v.string(), v.regex(/^\+[1-9]\d{6,14}$/))),
-    role: v.optional(vMemberRole)
+    role: v.optional(v.picklist(['MEMBER']), 'MEMBER')
 });
 
 export const vInvite = v.object({
@@ -240,10 +240,10 @@ export const vInviteSummary = v.object({
 });
 
 export const vInviteAcceptRequest = v.object({
-    code: v.string(),
+    code: v.pipe(v.string(), v.maxLength(128)),
     displayName: v.optional(v.pipe(v.string(), v.maxLength(80))),
     email: v.pipe(v.string(), v.email()),
-    password: v.pipe(v.string(), v.minLength(8), v.maxLength(256))
+    password: v.pipe(v.string(), v.minLength(12), v.maxLength(72))
 });
 
 export const vMember = v.object({

@@ -270,6 +270,9 @@ the 14 `required_checks` of `delivery-gates.yaml` (STORY-016).
 | REQ-SEC-028 | Signed APK; in-app update verified by SHA-256 | B3 | release.yml, Maestro |
 | REQ-SEC-029 | Alerts on signature failures, parse failures, job lag, LLM errors | B2, B6 | Alert rule tests |
 | REQ-SEC-030 | WhatsApp send only to allowlisted recipients | B8 | Unit tests |
+| REQ-SEC-060 | Household invites: admin-only create/list/revoke, single-use 256-bit code stored only as SHA-256, 7-day expiry, max 3 pending, household-scoped, audited (`INVITE_*`), code travels in the URL fragment | B5, B7 | Integration tests (403, IDOR, revoke) |
+| REQ-SEC-061 | Invite acceptance: one generic 404 for every unusable code, atomic single-use claim, per-IP and per-code rate limits, member created in the inviter's household as MEMBER only | B1, B5 | Integration tests (races, rate limit, generic errors) |
+| REQ-SEC-062 | New passwords: >= 12 characters, <= 72 UTF-8 bytes (BCrypt), not in the top-10k common list | B5 | Unit + integration tests (400, never 500) |
 
 ## 5. Out of scope / accepted for now
 - Local guardrail self-integrity (owner decision 2026-10-24): the Claude Code hooks can be disabled by a shell write to `.claude/hooks/**` (STORY-001 F-01), a write between/across calls can survive (F-02), interpreter writes to `docs/PROMPT*.md` and command-substitution delete targets are not caught (F-03, F-04). Accepted risk until STORY-146; mitigations: Claude Code permission prompts, git history, and review of every `.claude/hooks/**` diff.

@@ -2,7 +2,7 @@ import { useState, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiErrorOf } from '../../api/errors';
 import { acceptInvite } from '../../api/generated';
-import { setSession } from '../../api/session';
+import { hasSession, setSession, signOut } from '../../api/session';
 import { usePrefs } from '../../app/prefs';
 import { OfflineBanner, useOnline } from '../../components/common';
 import { useRouter } from '../../router';
@@ -17,7 +17,19 @@ const HTTP_TOO_MANY = 429;
 const DEFAULT_WAIT_S = 60;
 
 type AcceptError =
-  { kind: 'invalid' | 'conflict' | 'weak' | 'mismatch' | 'generic' | 'network' } | { kind: 'rate'; wait: string };
+  | { kind: 'invalid' | 'conflict' | 'weak' | 'email' | 'name' | 'mismatch' | 'generic' | 'network' }
+  | { kind: 'rate'; wait: string };
+
+/** Which field a 400 problem names (`errors[0].field`), so the message matches the mistake. */
+function badField(e: unknown): 'weak' | 'email' | 'name' {
+  const errors =
+    typeof e === 'object' && e !== null && 'errors' in e && Array.isArray(e.errors) ? (e.errors as unknown[]) : [];
+  const first = errors[0];
+  const field = typeof first === 'object' && first !== null && 'field' in first ? first.field : null;
+  if (field === 'email') return 'email';
+  if (field === 'displayName') return 'name';
+  return 'weak';
+}
 
 /** The code travels in the URL fragment (never sent to a server) and is removed from the address bar at once. */
 function takeCode(): string {
@@ -57,6 +69,8 @@ export const AcceptInviteScreen: FC = () => {
     }
     setBusy(true);
     try {
+      // Accepting from a signed-in browser must not leave the old member's session alive.
+      if (hasSession()) await signOut();
       const pair = await acceptInvite({
         body: { code, email: email.trim(), password, ...(name.trim() === '' ? {} : { displayName: name.trim() }) },
       });
@@ -69,7 +83,7 @@ export const AcceptInviteScreen: FC = () => {
       const { status, retryAfter } = apiErrorOf(e);
       if (status === HTTP_NOT_FOUND || status === HTTP_GONE) setError({ kind: 'invalid' });
       else if (status === HTTP_CONFLICT) setError({ kind: 'conflict' });
-      else if (status === HTTP_BAD_REQUEST) setError({ kind: 'weak' });
+      else if (status === HTTP_BAD_REQUEST) setError({ kind: badField(e) });
       else if (status === HTTP_TOO_MANY)
         setError({
           kind: 'rate',

@@ -28,7 +28,7 @@ class FakeMembersRemote : MembersRemote {
     var members =
         listOf(MemberInfo("m1", "Mohamed", true), MemberInfo("m2", "Mai", false))
     var invites = mutableListOf<InviteInfo>()
-    var forbidden = false
+    var me: String? = "m1"
     var membersFailure: MembersFailure? = null
     var createFailure: MembersFailure? = null
     val created = mutableListOf<Pair<String, String?>>()
@@ -39,10 +39,9 @@ class FakeMembersRemote : MembersRemote {
         return members
     }
 
-    override suspend fun invites(): List<InviteInfo> {
-        if (forbidden) throw MembersException(MembersFailure.Forbidden)
-        return invites.toList()
-    }
+    override suspend fun myMemberId(): String? = me
+
+    override suspend fun invites(): List<InviteInfo> = invites.toList()
 
     override suspend fun createInvite(
         displayName: String,
@@ -72,7 +71,7 @@ class MembersViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `REQ-SEC-002 an admin sees both members and an empty invite list`() =
+    fun `REQ-SEC-060 an admin sees both members and an empty invite list`() =
         runTest {
             val vm = MembersViewModel(remote, store)
             val s = vm.state.value
@@ -83,16 +82,16 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 a plain member gets the list but no invite controls`() =
+    fun `REQ-SEC-060 a plain member gets the list but no invite controls`() =
         runTest {
-            remote.forbidden = true
+            remote.me = "m2"
             val vm = MembersViewModel(remote, store)
             assertEquals(2, vm.state.value.members.size)
             assertFalse(vm.state.value.isAdmin)
         }
 
     @Test
-    fun `REQ-SEC-002 creating an invite builds a fragment link from the server url and clears the form`() =
+    fun `REQ-SEC-060 creating an invite builds a fragment link from the server url and clears the form`() =
         runTest {
             store.update { it.copy(serverUrl = "https://masroof.example") }
             val vm = MembersViewModel(remote, store)
@@ -109,7 +108,7 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 dismissing the created panel forgets the code and link`() =
+    fun `REQ-SEC-060 dismissing the created panel forgets the code and link`() =
         runTest {
             val vm = MembersViewModel(remote, store)
             vm.onName("Mai")
@@ -120,7 +119,7 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 a blank name creates nothing`() =
+    fun `REQ-SEC-060 a blank name creates nothing`() =
         runTest {
             val vm = MembersViewModel(remote, store)
             vm.onName("   ")
@@ -129,7 +128,7 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 server refusals map to errors the form can show`() =
+    fun `REQ-SEC-060 server refusals map to errors the form can show`() =
         runTest {
             val vm = MembersViewModel(remote, store)
             vm.onName("Mai")
@@ -145,7 +144,7 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 revoking removes the invite from the list`() =
+    fun `REQ-SEC-060 revoking removes the invite from the list`() =
         runTest {
             remote.invites += InviteInfo("i9", "Sara", 1_000L)
             val vm = MembersViewModel(remote, store)
@@ -159,7 +158,7 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 a failed load offers retry and a retry recovers`() =
+    fun `REQ-SEC-060 a failed load offers retry and a retry recovers`() =
         runTest {
             remote.membersFailure = MembersFailure.Offline
             val vm = MembersViewModel(remote, store)
@@ -171,8 +170,23 @@ class MembersViewModelTest {
         }
 
     @Test
-    fun `REQ-SEC-002 the link keeps the code in the fragment`() {
+    fun `REQ-SEC-060 the link keeps the code in the fragment`() {
         assertEquals("https://h.example/invite#abc", inviteLink("https://h.example/", "abc"))
         assertEquals(AppSettings.DEFAULT_SERVER_URL.trimEnd('/') + "/invite#x", inviteLink(AppSettings.DEFAULT_SERVER_URL, "x"))
     }
+
+    @Test
+    fun `REQ-SEC-060 admin comes from the member role even when listing invites would fail`() =
+        runTest {
+            remote.me = "m1"
+            val vm = MembersViewModel(remote, store)
+            assertTrue(vm.state.value.isAdmin)
+            remote.me = null
+            vm.refresh()
+            assertFalse(vm.state.value.isAdmin)
+            assertTrue(
+                vm.state.value.invites
+                    .isEmpty(),
+            )
+        }
 }

@@ -108,7 +108,7 @@ Request body (`application/json`): `LogoutRequest`
 ### `POST /auth/invite` - Invite a member to the household
 
 - operationId: `createInvite`
-- Requirements: REQ-SEC-002
+- Requirements: REQ-SEC-060
 
 Admin only. Creates a single-use invite code delivered out of band (WhatsApp or e-mail).
 
@@ -125,7 +125,7 @@ Request body (`application/json`): `InviteRequest`
 ### `POST /auth/invite/accept` - Accept an invite and create the member account
 
 - operationId: `acceptInvite`
-- Requirements: REQ-SEC-002
+- Requirements: REQ-SEC-061, REQ-SEC-062
 - Auth: none
 
 Request body (`application/json`): `InviteAcceptRequest`
@@ -136,13 +136,13 @@ Request body (`application/json`): `InviteAcceptRequest`
 | 400 | Malformed request or validation failure. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
 | 409 | State conflict (duplicate, already merged, optimistic lock). | application/problem+json: `Problem` |
-| 410 | Invite expired or already used. | application/problem+json: `Problem` |
+| 410 | Reserved and not returned today. Unknown, expired, used, revoked or e-mail-mismatched codes all answer 404 so a code's state is never revealed. | application/problem+json: `Problem` |
 | 429 | Rate limited. | application/problem+json: `Problem` |
 
 ### `GET /auth/invites` - List the household's active invites
 
 - operationId: `listInvites`
-- Requirements: REQ-SEC-002
+- Requirements: REQ-SEC-060
 
 Admin only. Pending, unexpired invites of the caller's household; the codes are never returned again.
 
@@ -155,7 +155,7 @@ Admin only. Pending, unexpired invites of the caller's household; the codes are 
 ### `DELETE /auth/invites/{inviteId}` - Revoke a pending invite
 
 - operationId: `revokeInvite`
-- Requirements: REQ-SEC-002
+- Requirements: REQ-SEC-060
 
 Admin only. Idempotent for the household's own invites; another household's invite is 404.
 
@@ -169,6 +169,7 @@ Admin only. Idempotent for the household's own invites; another household's invi
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 | 403 | Authenticated but not allowed (wrong role or household). | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
+| 409 | The invite was already accepted and can no longer be revoked. | application/problem+json: `Problem` |
 
 ## Members
 
@@ -177,7 +178,7 @@ Household members.
 ### `GET /api/members` - List the household's members
 
 - operationId: `listMembers`
-- Requirements: REQ-SEC-002
+- Requirements: REQ-SEC-060
 
 | Status | Description | Body |
 |---|---|---|
@@ -1587,7 +1588,7 @@ Type: enum(GROUP, DIRECT)
 | `displayName` | string | yes |  |
 | `email` | string (email) | no |  |
 | `phoneE164` | string | no | The member's WhatsApp number, so their messages map to them. |
-| `role` | `MemberRole` | no |  |
+| `role` | enum(MEMBER) | no | Only MEMBER invites exist; admins are never created through an invite. |
 
 ### Invite
 
@@ -1617,7 +1618,7 @@ Type: enum(GROUP, DIRECT)
 | `code` | string | yes |  |
 | `displayName` | string | no | Optional; overrides the name the admin gave the invite. |
 | `email` | string (email) | yes |  |
-| `password` | string (password) | yes |  |
+| `password` | string (password) | yes | At least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit, enforced by the server with 400 on field `password`), and not one of the 10,000 most common passwords. |
 
 ### Member
 

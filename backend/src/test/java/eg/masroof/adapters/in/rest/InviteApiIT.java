@@ -131,10 +131,10 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @Tag("REQ-SEC-008")
+  @Tag("REQ-SEC-060")
+  @Tag("REQ-SEC-061")
   @DisplayName(
-      "REQ-SEC-002 REQ-SEC-008 admin invites, the member accepts, signs in, sees both members")
+      "REQ-SEC-060 REQ-SEC-061 admin invites, the member accepts, signs in, sees both members")
   void happyPath() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -186,8 +186,8 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 a MEMBER gets 403 on create, list and revoke; no token is 401")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 a MEMBER gets 403 on create, list and revoke; no token is 401")
   void membersAreForbidden() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -223,9 +223,9 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
+  @Tag("REQ-SEC-060")
   @DisplayName(
-      "REQ-SEC-002 invites are household scoped: list excludes others, revoke is 404 (IDOR)")
+      "REQ-SEC-060 invites are household scoped: list excludes others, revoke is 404 (IDOR)")
   void householdScoping() throws Exception {
     Household a = household();
     Household b = household();
@@ -270,9 +270,9 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 revoked, used, expired and unknown codes all give the same 404")
+  @Tag("REQ-SEC-060")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 revoked, used, expired and unknown codes all give the same 404")
   void unusableCodesAreIndistinguishable() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -322,8 +322,8 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 two simultaneous accepts of one code: exactly one succeeds")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 two simultaneous accepts of one code: exactly one succeeds")
   void concurrentDoubleAccept() throws Exception {
     Household h = household();
     String code = code(invite(token(h.adminEmail(), PASSWORD), "Race"));
@@ -356,9 +356,9 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
+  @Tag("REQ-SEC-061")
   @DisplayName(
-      "REQ-SEC-008 short password is 400 and leaves the invite usable; e-mail taken is 409")
+      "REQ-SEC-061 short password is 400 and leaves the invite usable; e-mail taken is 409")
   void passwordPolicyAndEmailConflict() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -384,8 +384,8 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 at most 3 pending invites; a full household refuses invites (409)")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 at most 3 pending invites; a full household refuses invites (409)")
   void limits() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -418,8 +418,8 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 repeated wrong codes from one IP are rate limited with Retry-After")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 repeated wrong codes from one IP are rate limited with Retry-After")
   void rateLimited() throws Exception {
     String attacker = ip();
     MockHttpServletResponse last = accept("first", freshEmail(), PASSWORD, attacker);
@@ -431,8 +431,8 @@ class InviteApiIT {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 audit rows hold a hashed IP prefix, never the address or the code")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 audit rows hold a hashed IP prefix, never the address or the code")
   void auditHasNoSecrets() throws Exception {
     Household h = household();
     String admin = token(h.adminEmail(), PASSWORD);
@@ -450,5 +450,136 @@ class InviteApiIT {
                 "select count(*) from audit_log where action = 'INVITE_FAILED' and household_id is null",
                 Integer.class))
         .isGreaterThanOrEqualTo(1);
+  }
+
+  private MockHttpServletResponse inviteWithEmail(String token, String name, String email)
+      throws Exception {
+    return mvc.perform(
+            post("/auth/invite")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Forwarded-For", ip())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(JSON.writeValueAsString(Map.of("displayName", name, "email", email))))
+        .andReturn()
+        .getResponse();
+  }
+
+  @Test
+  @Tag("REQ-SEC-062")
+  @DisplayName("REQ-SEC-062 73 bytes, 64 Arabic chars and common passwords are 400, never 500")
+  void passwordEdgesAre400() throws Exception {
+    Household h = household();
+    String code = code(invite(token(h.adminEmail(), PASSWORD), "Edge"));
+    for (String pw : List.of("a".repeat(73), "ب".repeat(64), "password1234", "Password1234!")) {
+      MockHttpServletResponse r = accept(code, freshEmail(), pw, ip());
+      assertThat(r.getStatus()).as(pw.length() + " chars").isEqualTo(400);
+      assertThat(JSON.readTree(r.getContentAsString()).get("errors").get(0).get("field").asString())
+          .isEqualTo("password");
+      assertThat(r.getContentAsString()).doesNotContain(pw);
+    }
+    // the same code still works with an acceptable 72-byte password
+    assertThat(accept(code, freshEmail(), "k".repeat(72), ip()).getStatus()).isEqualTo(201);
+  }
+
+  @Test
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 revoking an accepted invite is 409, a revoked one is idempotent")
+  void revokeAfterAccept() throws Exception {
+    Household h = household();
+    String admin = token(h.adminEmail(), PASSWORD);
+    String accepted = code(invite(admin, "Done"));
+    assertThat(accept(accepted, freshEmail(), PASSWORD, ip()).getStatus()).isEqualTo(201);
+    UUID acceptedId =
+        jdbc.queryForObject(
+            "select id from invite where code_hash = ?", UUID.class, InviteCode.hash(accepted));
+    assertThat(
+            mvc.perform(
+                    delete("/auth/invites/" + acceptedId)
+                        .header("Authorization", "Bearer " + admin))
+                .andReturn()
+                .getResponse()
+                .getStatus())
+        .isEqualTo(409);
+
+    String pending = code(invite(admin, "Twice"));
+    UUID pendingId =
+        jdbc.queryForObject(
+            "select id from invite where code_hash = ?", UUID.class, InviteCode.hash(pending));
+    int before =
+        java.util.Objects.requireNonNull(
+            jdbc.queryForObject(
+                "select count(*) from audit_log where action = 'INVITE_REVOKED' and household_id = ?",
+                Integer.class,
+                h.id()));
+    for (int i = 0; i < 2; i++) {
+      assertThat(
+              mvc.perform(
+                      delete("/auth/invites/" + pendingId)
+                          .header("Authorization", "Bearer " + admin))
+                  .andReturn()
+                  .getResponse()
+                  .getStatus())
+          .isEqualTo(204);
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from audit_log where action = 'INVITE_REVOKED' and household_id = ?",
+                Integer.class,
+                h.id()))
+        .isEqualTo(before + 1); // audited once, for the real change
+  }
+
+  @Test
+  @Tag("REQ-SEC-061")
+  @DisplayName(
+      "REQ-SEC-061 an invite with an e-mail hint accepts only that e-mail (case-insensitive)")
+  void emailHint() throws Exception {
+    Household h = household();
+    String admin = token(h.adminEmail(), PASSWORD);
+    String hint = "hint-" + UUID.randomUUID() + "@example.com";
+    String code = code(inviteWithEmail(admin, "Hinted", hint));
+    MockHttpServletResponse wrong = accept(code, freshEmail(), PASSWORD, ip());
+    assertThat(wrong.getStatus()).isEqualTo(404);
+    assertThat(
+            jdbc.queryForObject(
+                "select status from invite where code_hash = ?",
+                String.class,
+                InviteCode.hash(code)))
+        .isEqualTo("PENDING");
+    assertThat(accept(code, hint.toUpperCase(java.util.Locale.ROOT), PASSWORD, ip()).getStatus())
+        .isEqualTo(201);
+  }
+
+  @Test
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 role and householdId in the accept body are ignored")
+  void massAssignmentIgnored() throws Exception {
+    Household h = household();
+    Household other = household();
+    String code = code(invite(token(h.adminEmail(), PASSWORD), "Mass"));
+    String email = freshEmail();
+    MockHttpServletResponse r =
+        mvc.perform(
+                post("/auth/invite/accept")
+                    .header("X-Forwarded-For", ip())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        JSON.writeValueAsString(
+                            Map.of(
+                                "code", code,
+                                "email", email,
+                                "password", PASSWORD,
+                                "role", "ADMIN",
+                                "householdId", other.id().toString()))))
+            .andReturn()
+            .getResponse();
+    assertThat(r.getStatus()).as(r.getContentAsString()).isEqualTo(201);
+    JsonNode member = JSON.readTree(r.getContentAsString()).get("member");
+    assertThat(member.get("role").asString()).isEqualTo("MEMBER");
+    assertThat(member.get("householdId").asString()).isEqualTo(h.id().toString());
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from member where household_id = ?", Integer.class, other.id()))
+        .isEqualTo(1); // only the other household's own admin
   }
 }

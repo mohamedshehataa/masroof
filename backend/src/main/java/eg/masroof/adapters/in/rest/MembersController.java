@@ -10,7 +10,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
-/** GET /api/members: the caller's household only (REQ-SEC-002). */
+/** GET /api/members: the caller's household only (REQ-SEC-060). */
 @RestController
 class MembersController implements MembersApi {
 

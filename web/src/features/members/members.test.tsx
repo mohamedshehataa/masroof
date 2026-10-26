@@ -30,15 +30,20 @@ interface Calls {
   created: unknown[];
   revoked: string[];
   accepted: { url: string; body: unknown }[];
+  loggedOut: number;
 }
 
 function mockApi(opts: { invites?: unknown[]; accept?: () => Promise<Response> } = {}) {
-  const calls: Calls = { created: [], revoked: [], accepted: [] };
+  const calls: Calls = { created: [], revoked: [], accepted: [], loggedOut: 0 };
   let invites = opts.invites ?? [];
   const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const req = input instanceof Request ? input : null;
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : (req?.url ?? ''));
     const method = init?.method ?? req?.method ?? 'GET';
+    if (url.pathname === '/auth/logout') {
+      calls.loggedOut += 1;
+      return reply(204, null);
+    }
     if (url.pathname === '/api/members') return reply(200, [admin, mai]);
     if (url.pathname === '/auth/invites' && method === 'GET') return reply(200, invites);
     if (url.pathname.startsWith('/auth/invites/') && method === 'DELETE') {
@@ -84,14 +89,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('REQ-SEC-002 Members in settings', () => {
-  it('REQ-SEC-002 the invite link keeps the code in the fragment, not the query string', () => {
+describe('REQ-SEC-060 Members in settings', () => {
+  it('REQ-SEC-060 the invite link keeps the code in the fragment, not the query string', () => {
     const link = inviteLink(CODE, 'https://masroof.example');
     expect(link).toBe(`https://masroof.example/invite#${CODE}`);
     expect(new URL(link).search).toBe('');
   });
 
-  it('REQ-SEC-002 an admin sees both members and creates an invite with a copyable link and code', async () => {
+  it('REQ-SEC-060 an admin sees both members and creates an invite with a copyable link and code', async () => {
     setSession({ accessToken: 'a', refreshToken: 'r', expiresIn: 900, member: admin });
     const { calls } = mockApi();
     const user = userEvent.setup();
@@ -119,7 +124,7 @@ describe('REQ-SEC-002 Members in settings', () => {
     expect(screen.queryByDisplayValue(CODE)).toBeNull(); // the code is gone from the page
   });
 
-  it('REQ-SEC-002 an admin lists and revokes a pending invite', async () => {
+  it('REQ-SEC-060 an admin lists and revokes a pending invite', async () => {
     setSession({ accessToken: 'a', refreshToken: 'r', expiresIn: 900, member: admin });
     const { calls } = mockApi({
       invites: [
@@ -141,7 +146,7 @@ describe('REQ-SEC-002 Members in settings', () => {
     expect(await screen.findByText('No pending invites.')).toBeInTheDocument();
   });
 
-  it('REQ-SEC-002 a plain member sees the members but no invite controls', async () => {
+  it('REQ-SEC-060 a plain member sees the members but no invite controls', async () => {
     setSession({ accessToken: 'a', refreshToken: 'r', expiresIn: 900, member: mai });
     const { fetchMock } = mockApi();
     go('/more');
@@ -153,8 +158,8 @@ describe('REQ-SEC-002 Members in settings', () => {
   });
 });
 
-describe('REQ-SEC-008 Accept invite page', () => {
-  it('REQ-SEC-008 reads the code from the fragment, hides it from the URL, and signs the member in', async () => {
+describe('REQ-SEC-061 Accept invite page', () => {
+  it('REQ-SEC-061 reads the code from the fragment, hides it from the URL, and signs the member in', async () => {
     const { fetchMock } = mockApi();
     const user = userEvent.setup();
     go(`/invite#${CODE}`);
@@ -178,7 +183,7 @@ describe('REQ-SEC-008 Accept invite page', () => {
     });
   });
 
-  it('REQ-SEC-008 a short or mismatched password never reaches the server', async () => {
+  it('REQ-SEC-061 a short or mismatched password never reaches the server', async () => {
     const { fetchMock } = mockApi();
     const user = userEvent.setup();
     go(`/invite#${CODE}`);
@@ -194,7 +199,7 @@ describe('REQ-SEC-008 Accept invite page', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('REQ-SEC-008 an invalid invite shows one generic message and stays signed out', async () => {
+  it('REQ-SEC-061 an invalid invite shows one generic message and stays signed out', async () => {
     mockApi({ accept: () => reply(404, { type: 'about:blank', title: 'Not Found', status: 404 }) });
     const user = userEvent.setup();
     go(`/invite#${CODE}`);
@@ -206,7 +211,7 @@ describe('REQ-SEC-008 Accept invite page', () => {
     expect(getAccessToken()).toBeUndefined();
   });
 
-  it('REQ-SEC-008 rate limiting shows the wait time', async () => {
+  it('REQ-SEC-061 rate limiting shows the wait time', async () => {
     mockApi({ accept: () => reply(429, { type: 'about:blank', title: 'x', status: 429 }, { 'Retry-After': '120' }) });
     const user = userEvent.setup();
     go(`/invite#${CODE}`);
@@ -217,12 +222,47 @@ describe('REQ-SEC-008 Accept invite page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Try again in 2 minutes/);
   });
 
-  it('REQ-SEC-008 renders Arabic with RTL', async () => {
+  it('REQ-SEC-061 renders Arabic with RTL', async () => {
     window.history.replaceState(null, '', `/invite#${CODE}`);
     vi.spyOn(window.navigator, 'language', 'get').mockReturnValue('ar-EG');
     mockApi();
     render(<Root />);
     expect(await screen.findByRole('heading', { name: 'الانضمام إلى الأسرة' })).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('dir', 'rtl');
+  });
+
+  it('REQ-SEC-061 accepting while signed in signs the old session out first', async () => {
+    setSession({ accessToken: 'old', refreshToken: 'old-r', expiresIn: 900, member: admin });
+    const { calls } = mockApi();
+    const user = userEvent.setup();
+    go(`/invite#${CODE}`);
+    await user.type(await screen.findByLabelText('Email'), 'mai@example.com');
+    await user.type(screen.getByLabelText('Password'), 'a long enough pass');
+    await user.type(screen.getByLabelText('Confirm password'), 'a long enough pass');
+    await user.click(screen.getByRole('button', { name: 'Join and sign in' }));
+    await waitFor(() => {
+      expect(getAccessToken()).toBe('new-access');
+    });
+    expect(calls.loggedOut).toBe(1);
+  });
+
+  it('REQ-SEC-061 a 400 on email and a 400 on password show different messages', async () => {
+    let field = 'email';
+    mockApi({
+      accept: () =>
+        reply(400, { type: 'about:blank', title: 'Bad Request', status: 400, errors: [{ field, message: 'x' }] }),
+    });
+    const user = userEvent.setup();
+    go(`/invite#${CODE}`);
+    await user.type(await screen.findByLabelText('Email'), 'mai@example.com');
+    await user.type(screen.getByLabelText('Password'), 'a long enough pass');
+    await user.type(screen.getByLabelText('Confirm password'), 'a long enough pass');
+    await user.click(screen.getByRole('button', { name: 'Join and sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('valid email address');
+    field = 'password';
+    await user.click(screen.getByRole('button', { name: 'Join and sign in' }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('not a common password');
+    });
   });
 });

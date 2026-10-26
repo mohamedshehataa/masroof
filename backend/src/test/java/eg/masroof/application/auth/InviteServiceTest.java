@@ -43,7 +43,8 @@ class InviteServiceTest {
   private int hashes;
   private CreateResult createResult = CreateResult.CREATED;
   private AcceptResult acceptResult = new AcceptResult.Invalid();
-  private boolean revokeFound = true;
+  private InviteStore.RevokeResult revokeResult = InviteStore.RevokeResult.REVOKED;
+  private boolean claimable = true;
 
   private final InviteStore store =
       new InviteStore() {
@@ -59,8 +60,13 @@ class InviteServiceTest {
         }
 
         @Override
-        public boolean revoke(UUID householdId, UUID inviteId, Instant now) {
-          return revokeFound;
+        public RevokeResult revoke(UUID householdId, UUID inviteId, Instant now) {
+          return revokeResult;
+        }
+
+        @Override
+        public boolean claimable(String codeHash, Instant now, String email) {
+          return claimable;
         }
 
         @Override
@@ -173,8 +179,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 an admin gets a code once; only its hash is stored; expires in 7 days")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 an admin gets a code once; only its hash is stored; expires in 7 days")
   void createStoresOnlyTheHash() {
     InviteService.Created c =
         service.create(admin, " Mai ", "Mai@Example.com", "+201000000000", null, "198.51.100.1");
@@ -192,8 +198,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 members cannot create, list or revoke invites (403)")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 members cannot create, list or revoke invites (403)")
   void membersAreForbidden() {
     assertThat(
             failure(
@@ -214,8 +220,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 limits map to 409 and other households' invites to not found")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 limits map to 409 and other households' invites to not found")
   void limitsAndRevoke() {
     createResult = CreateResult.TOO_MANY_PENDING;
     assertThat(
@@ -231,7 +237,7 @@ class InviteServiceTest {
                     () -> service.create(admin, "Mai", null, null, null, "198.51.100.1"))
                 .getMessage())
         .isEqualTo("Household is full");
-    revokeFound = false;
+    revokeResult = InviteStore.RevokeResult.NOT_FOUND;
     assertThat(
             failure(
                     InviteException.class,
@@ -242,8 +248,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-002")
-  @DisplayName("REQ-SEC-002 only MEMBER invites and valid e-mails are accepted")
+  @Tag("REQ-SEC-060")
+  @DisplayName("REQ-SEC-060 only MEMBER invites and valid e-mails are accepted")
   void validation() {
     InviteException role =
         failure(
@@ -262,8 +268,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 a short password is a 400 on field password and hits no store")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 a short password is a 400 on field password and hits no store")
   void passwordPolicy() {
     InviteException e =
         failure(
@@ -275,17 +281,18 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 an unusable code is one generic not-found, hashes the password anyway")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 an unusable code is one generic not-found and costs no BCrypt")
   void invalidCodeIsGeneric() {
+    claimable = false;
     InviteException e =
         failure(
             InviteException.class,
             () -> service.accept("whatever", "m@example.com", PASSWORD, null, "198.51.100.1"));
     assertThat(e.kind()).isEqualTo(InviteException.Kind.NOT_FOUND);
     assertThat(e.getMessage()).doesNotContain("whatever");
-    assertThat(hashes).isEqualTo(1);
-    assertThat(acceptCalls).containsExactly(InviteCode.hash("whatever"));
+    assertThat(hashes).isZero(); // no BCrypt for a code that cannot be claimed
+    assertThat(acceptCalls).isEmpty();
     assertThat(audited).containsExactly("INVITE_FAILED");
     // an oversize code never reaches the store but fails the same way
     InviteException big =
@@ -293,12 +300,12 @@ class InviteServiceTest {
             InviteException.class,
             () -> service.accept("x".repeat(500), "m@example.com", PASSWORD, null, "198.51.100.2"));
     assertThat(big.kind()).isEqualTo(InviteException.Kind.NOT_FOUND);
-    assertThat(acceptCalls).hasSize(1);
+    assertThat(acceptCalls).isEmpty();
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 a valid code returns a session for the new member and audits it")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 a valid code returns a session for the new member and audits it")
   void acceptOk() {
     Account account =
         new Account(
@@ -308,12 +315,13 @@ class InviteServiceTest {
     assertThat(s.account().role()).isEqualTo(Role.MEMBER);
     assertThat(s.accessToken()).isEqualTo("jwt");
     assertThat(acceptCalls).containsExactly(InviteCode.hash("code"));
+    assertThat(hashes).isEqualTo(1);
     assertThat(audited).containsExactly("INVITE_ACCEPTED");
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 e-mail taken and full household are 409 and still counted as failures")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 e-mail taken and full household are 409 and still counted as failures")
   void conflicts() {
     acceptResult = new AcceptResult.EmailTaken();
     assertThat(
@@ -332,8 +340,8 @@ class InviteServiceTest {
   }
 
   @Test
-  @Tag("REQ-SEC-008")
-  @DisplayName("REQ-SEC-008 ten failures from one IP block that IP; ten on one code block the code")
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 ten failures from one IP block that IP; ten on one code block the code")
   void rateLimited() {
     for (int i = 0; i < 10; i++) {
       String code = "guess-" + i;
@@ -361,5 +369,65 @@ class InviteServiceTest {
             () -> service.accept("same-code", "m@example.com", PASSWORD, null, "203.0.113.200"));
     assertThat(code.kind()).isEqualTo(Kind.RATE_LIMITED);
     assertThat(acceptCalls).hasSize(calls + 10);
+  }
+
+  @Test
+  @Tag("REQ-SEC-062")
+  @DisplayName("REQ-SEC-062 73 bytes, 64 Arabic characters and common passwords are 400, not 500")
+  void passwordPolicyEdges() {
+    for (String pw : List.of("a".repeat(73), "ب".repeat(64), "password1234", "Password1234!")) {
+      InviteException e =
+          failure(
+              InviteException.class,
+              () -> service.accept("code", "m@example.com", pw, null, "198.51.100.1"));
+      assertThat(e.kind()).isEqualTo(InviteException.Kind.INVALID_FIELD);
+      assertThat(e.field()).isEqualTo("password");
+      assertThat(e.getMessage()).doesNotContain(pw);
+    }
+    assertThat(hashes).isZero();
+    assertThat(acceptCalls).isEmpty();
+  }
+
+  @Test
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 revoking an accepted invite is 409; an already revoked one is silent")
+  void revokeStates() {
+    revokeResult = InviteStore.RevokeResult.ACCEPTED;
+    InviteException accepted =
+        failure(
+            InviteException.class, () -> service.revoke(admin, UUID.randomUUID(), "198.51.100.1"));
+    assertThat(accepted.kind()).isEqualTo(InviteException.Kind.CONFLICT);
+    assertThat(accepted.getMessage()).isEqualTo("Invite already accepted");
+    revokeResult = InviteStore.RevokeResult.ALREADY_REVOKED;
+    service.revoke(admin, UUID.randomUUID(), "198.51.100.1");
+    assertThat(audited).isEmpty();
+    revokeResult = InviteStore.RevokeResult.REVOKED;
+    service.revoke(admin, UUID.randomUUID(), "198.51.100.1");
+    assertThat(audited).containsExactly("INVITE_REVOKED");
+  }
+
+  @Test
+  @Tag("REQ-SEC-061")
+  @DisplayName("REQ-SEC-061 a taken e-mail with a valid code does not count against that code")
+  void takenEmailDoesNotBlockTheCode() {
+    acceptResult = new AcceptResult.EmailTaken();
+    for (int i = 0; i < 12; i++) {
+      String ipAddr = "203.0.113." + i;
+      InviteException e =
+          failure(
+              InviteException.class,
+              () -> service.accept("valid-code", "m@example.com", PASSWORD, null, ipAddr));
+      assertThat(e.kind()).isEqualTo(InviteException.Kind.CONFLICT);
+    }
+    acceptResult =
+        new AcceptResult.Accepted(
+            new Account(
+                UUID.randomUUID(), UUID.randomUUID(), household, "EGP", "Mai", Role.MEMBER, "h"));
+    assertThat(
+            service
+                .accept("valid-code", "new@example.com", PASSWORD, null, "203.0.113.99")
+                .account()
+                .role())
+        .isEqualTo(Role.MEMBER);
   }
 }

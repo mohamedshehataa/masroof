@@ -9,6 +9,7 @@ import eg.masroof.application.auth.InviteStore.NewInvite;
 import eg.masroof.domain.auth.FailureWindowLimiter;
 import eg.masroof.domain.auth.InviteCode;
 import eg.masroof.domain.auth.IpHasher;
+import eg.masroof.domain.auth.PasswordPolicy;
 import eg.masroof.domain.auth.Role;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -27,14 +28,12 @@ import org.springframework.stereotype.Service;
 
 /**
  * Use cases: admin creates, lists and revokes invites; a holder of a code accepts it and becomes a
- * MEMBER of the inviter's household (REQ-SEC-002, REQ-SEC-008). The code is never logged or stored.
+ * MEMBER of the inviter's household (REQ-SEC-060, REQ-SEC-061). The code is never logged or stored.
  */
 @Service
 public class InviteService {
 
   private static final Logger LOG = LoggerFactory.getLogger(InviteService.class);
-  private static final int MIN_PASSWORD = 12;
-  private static final int MAX_PASSWORD = 256;
   private static final int MAX_NAME = 80;
   private static final int MAX_FAILURES = 10;
   private static final Duration WINDOW = Duration.ofMinutes(15);
@@ -147,10 +146,15 @@ public class InviteService {
   /** Revokes a pending invite of the caller's household; admin only. */
   public void revoke(Caller caller, UUID inviteId, String clientIp) {
     requireAdmin(caller);
-    if (!store.revoke(caller.householdId(), inviteId, clock.instant())) {
+    InviteStore.RevokeResult result = store.revoke(caller.householdId(), inviteId, clock.instant());
+    if (result == InviteStore.RevokeResult.REVOKED) {
+      audit("INVITE_REVOKED", caller.memberId(), clientIp);
+    } else if (result == InviteStore.RevokeResult.ACCEPTED) {
+      throw new InviteException(InviteException.Kind.CONFLICT, "Invite already accepted", null);
+    } else if (result == InviteStore.RevokeResult.NOT_FOUND) {
       throw new InviteException(InviteException.Kind.NOT_FOUND, "Invite not found", null);
     }
-    audit("INVITE_REVOKED", caller.memberId(), clientIp);
+    // ALREADY_REVOKED: idempotent, nothing changed, so nothing is audited
   }
 
   /** Members of the caller's household. */
@@ -159,8 +163,10 @@ public class InviteService {
   }
 
   /**
-   * Accepts an invite. Every invalid, expired, used or revoked code gets the same answer, and the
-   * password is hashed on every path so timing does not reveal whether the code exists.
+   * Accepts an invite. Every invalid, expired, used, revoked or e-mail-mismatched code gets the
+   * same 404. A code that cannot be claimed is rejected by a cheap read before the BCrypt hash, so
+   * floods of bad codes cannot burn CPU; with 256-bit codes the timing difference tells an attacker
+   * nothing they can use.
    */
   public Session accept(
       String code, String email, String password, @Nullable String displayName, String clientIp) {
@@ -177,29 +183,32 @@ public class InviteService {
     if (!validEmail(mail)) {
       throw new InviteException(InviteException.Kind.INVALID_FIELD, "email is not valid", "email");
     }
-    if (password.length() < MIN_PASSWORD || password.length() > MAX_PASSWORD) {
+    Optional<PasswordPolicy.Violation> weak = PasswordPolicy.check(password);
+    if (weak.isPresent()) {
       throw new InviteException(
-          InviteException.Kind.INVALID_FIELD,
-          "password must be " + MIN_PASSWORD + " to " + MAX_PASSWORD + " characters",
-          "password");
+          InviteException.Kind.INVALID_FIELD, PasswordPolicy.message(weak.get()), "password");
     }
     String name = displayName == null || displayName.isBlank() ? null : displayName.strip();
     if (name != null && name.length() > MAX_NAME) {
       throw new InviteException(
           InviteException.Kind.INVALID_FIELD, "displayName is too long", "displayName");
     }
-    String hash = hasher.hash(password); // always, so the invalid path costs the same
+    String codeHash = InviteCode.hash(presented);
+    boolean plausible = !presented.isEmpty() && presented.length() <= InviteCode.MAX_LENGTH;
     AcceptResult result =
-        presented.isEmpty() || presented.length() > InviteCode.MAX_LENGTH
-            ? new AcceptResult.Invalid()
-            : store.accept(InviteCode.hash(presented), now, mail, name, hash, maxMembers);
+        plausible && store.claimable(codeHash, now, mail)
+            ? store.accept(codeHash, now, mail, name, hasher.hash(password), maxMembers)
+            : new AcceptResult.Invalid();
     if (result instanceof AcceptResult.Accepted accepted) {
       codeLimiter.reset(codeKey);
       audit("INVITE_ACCEPTED", accepted.account().memberId(), clientIp);
       return auth.startSession(accepted.account());
     }
     ipLimiter.recordFailure(ipKey, now);
-    codeLimiter.recordFailure(codeKey, now);
+    // A taken e-mail or a full household needs a valid code, so it is not a guess at the code.
+    if (result instanceof AcceptResult.Invalid) {
+      codeLimiter.recordFailure(codeKey, now);
+    }
     audit("INVITE_FAILED", null, clientIp);
     if (result instanceof AcceptResult.EmailTaken) {
       throw new InviteException(

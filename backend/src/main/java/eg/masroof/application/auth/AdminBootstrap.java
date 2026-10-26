@@ -1,5 +1,6 @@
 package eg.masroof.application.auth;
 
+import eg.masroof.domain.auth.PasswordPolicy;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +11,6 @@ import org.springframework.stereotype.Service;
 public class AdminBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(AdminBootstrap.class);
-  private static final int MIN_PASSWORD = 12;
 
   private final AccountStore accounts;
   private final PasswordHasher hasher;
@@ -30,10 +30,13 @@ public class AdminBootstrap {
     if (at < 2 || normalized.length() > 254) {
       throw new IllegalStateException("MASROOF_BOOTSTRAP_ADMIN_EMAIL is not a valid e-mail");
     }
-    if (password.length() < MIN_PASSWORD) {
-      throw new IllegalStateException(
-          "MASROOF_BOOTSTRAP_ADMIN_PASSWORD must be at least " + MIN_PASSWORD + " characters");
-    }
+    PasswordPolicy.check(password)
+        .ifPresent(
+            violation -> {
+              throw new IllegalStateException(
+                  "MASROOF_BOOTSTRAP_ADMIN_PASSWORD rejected: "
+                      + PasswordPolicy.message(violation));
+            });
     if (accounts.createFirstAdmin(normalized, normalized.substring(0, at), hasher.hash(password))) {
       LOG.info("Bootstrap admin created");
     } else {

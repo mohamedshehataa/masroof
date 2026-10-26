@@ -1,6 +1,7 @@
 package eg.masroof.data.members
 
 import eg.masroof.api.models.InviteRequest
+import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.remote.ApiRemoteSource
 import retrofit2.Response
 import java.io.IOException
@@ -20,6 +21,7 @@ class ApiMembersRemote
     @Inject
     constructor(
         private val source: ApiRemoteSource,
+        private val session: SessionManager,
     ) : MembersRemote {
         private fun <T> Response<T>.bodyOrThrow(): T {
             if (!isSuccessful) throw MembersException(failureOf(code()))
@@ -34,6 +36,7 @@ class ApiMembersRemote
                 else -> MembersFailure.Other
             }
 
+        // Any failure (parsing, bad id, transport) must reach the UI as a MembersFailure, never crash the screen.
         @Suppress("TooGenericExceptionCaught")
         private suspend fun <T> call(block: suspend () -> T): T =
             try {
@@ -56,6 +59,8 @@ class ApiMembersRemote
                     .bodyOrThrow()
                     .map { MemberInfo(it.id.toString(), it.displayName, it.role.value == "ADMIN") }
             }
+
+        override suspend fun myMemberId(): String? = session.memberId()
 
         override suspend fun invites(): List<InviteInfo> =
             call {

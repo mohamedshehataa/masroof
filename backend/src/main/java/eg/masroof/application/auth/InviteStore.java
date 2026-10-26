@@ -68,11 +68,26 @@ public interface InviteStore {
   /** Pending, unexpired invites of one household, newest first. */
   List<InviteView> listActive(UUID householdId, Instant now);
 
+  /** Result of revoking an invite. */
+  enum RevokeResult {
+    REVOKED,
+    ALREADY_REVOKED,
+    ACCEPTED,
+    NOT_FOUND
+  }
+
   /**
-   * Revokes a pending invite of that household. Returns false when the household has no such invite
-   * (so another household's id is indistinguishable from an unknown one).
+   * Revokes a pending invite of that household. {@link RevokeResult#NOT_FOUND} also covers another
+   * household's invite, so it is indistinguishable from an unknown id.
    */
-  boolean revoke(UUID householdId, UUID inviteId, Instant now);
+  RevokeResult revoke(UUID householdId, UUID inviteId, Instant now);
+
+  /**
+   * Cheap read: is there a pending, unexpired invite with this hash whose e-mail hint (when set)
+   * matches {@code email} case-insensitively? Lets the service skip the expensive password hash for
+   * codes that cannot be claimed.
+   */
+  boolean claimable(String codeHash, Instant now, String email);
 
   /**
    * Atomically consumes the invite with {@code codeHash} and creates the member and login in the

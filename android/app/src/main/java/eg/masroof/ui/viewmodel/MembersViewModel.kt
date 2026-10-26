@@ -32,7 +32,10 @@ data class MembersUiState(
     val created: CreatedInvite? = null,
     val link: String? = null,
     val error: MembersError? = null,
-)
+) {
+    /** The link carries the invite code, so it is never printed. */
+    override fun toString(): String = "MembersUiState(members=${members.size}, invites=${invites.size}, isAdmin=$isAdmin)"
+}
 
 @HiltViewModel
 class MembersViewModel
@@ -58,19 +61,25 @@ class MembersViewModel
                         _state.value = _state.value.copy(loading = false, loadFailed = true)
                         return@launch
                     }
-                // Only an admin may list invites; the server answers 403 for a plain member.
+                // The admin flag comes from the member's own role, not from whether invites could be listed.
+                val me = runCatching { remote.myMemberId() }.getOrNull()
+                val isAdmin = members.any { it.id == me && it.isAdmin }
                 val invites =
-                    try {
-                        remote.invites()
-                    } catch (e: MembersException) {
-                        if (e.failure == MembersFailure.Forbidden) null else emptyList()
+                    if (isAdmin) {
+                        try {
+                            remote.invites()
+                        } catch (_: MembersException) {
+                            emptyList()
+                        }
+                    } else {
+                        emptyList()
                     }
                 _state.value =
                     _state.value.copy(
                         loading = false,
                         members = members,
-                        isAdmin = invites != null,
-                        invites = invites.orEmpty(),
+                        isAdmin = isAdmin,
+                        invites = invites,
                     )
             }
         }

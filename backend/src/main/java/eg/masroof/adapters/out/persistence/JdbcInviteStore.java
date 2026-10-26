@@ -98,21 +98,44 @@ class JdbcInviteStore implements InviteStore {
   }
 
   @Override
-  public boolean revoke(UUID householdId, UUID inviteId, Instant now) {
-    jdbc.update(
-        """
-        update invite set status = 'REVOKED', revoked_at = ?
-        where id = ? and household_id = ? and status = 'PENDING'
-        """,
-        utc(now),
-        inviteId,
-        householdId);
-    Integer found =
-        jdbc.queryForObject(
-            "select count(*) from invite where id = ? and household_id = ?",
-            Integer.class,
+  public RevokeResult revoke(UUID householdId, UUID inviteId, Instant now) {
+    int changed =
+        jdbc.update(
+            """
+            update invite set status = 'REVOKED', revoked_at = ?
+            where id = ? and household_id = ? and status = 'PENDING'
+            """,
+            utc(now),
             inviteId,
             householdId);
+    if (changed > 0) {
+      return RevokeResult.REVOKED;
+    }
+    List<String> status =
+        jdbc.queryForList(
+            "select status from invite where id = ? and household_id = ?",
+            String.class,
+            inviteId,
+            householdId);
+    if (status.isEmpty()) {
+      return RevokeResult.NOT_FOUND;
+    }
+    return "ACCEPTED".equals(status.get(0)) ? RevokeResult.ACCEPTED : RevokeResult.ALREADY_REVOKED;
+  }
+
+  @Override
+  public boolean claimable(String codeHash, Instant now, String email) {
+    Integer found =
+        jdbc.queryForObject(
+            """
+            select count(*) from invite
+            where code_hash = ? and status = 'PENDING' and expires_at > ?
+              and (email is null or lower(email) = lower(?))
+            """,
+            Integer.class,
+            codeHash,
+            utc(now),
+            email);
     return found != null && found > 0;
   }
 
@@ -150,6 +173,7 @@ class JdbcInviteStore implements InviteStore {
             """
             update invite set status = 'ACCEPTED', accepted_at = ?
             where code_hash = ? and status = 'PENDING' and expires_at > ?
+              and (email is null or lower(email) = lower(?))
             returning id, household_id
             """,
             (rs, n) ->
@@ -158,7 +182,8 @@ class JdbcInviteStore implements InviteStore {
                 },
             utc(now),
             codeHash,
-            utc(now));
+            utc(now),
+            email);
     if (claimed.isEmpty()) {
       return new AcceptResult.Invalid();
     }

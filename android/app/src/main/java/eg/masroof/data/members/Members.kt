@@ -46,6 +46,9 @@ class MembersException(
 interface MembersRemote {
     suspend fun members(): List<MemberInfo>
 
+    /** The signed-in member's id, to find their own role in [members]. */
+    suspend fun myMemberId(): String?
+
     /** @throws MembersException with [MembersFailure.Forbidden] for a non-admin. */
     suspend fun invites(): List<InviteInfo>
 

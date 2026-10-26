@@ -143,10 +143,12 @@
     "error": {
       "invalid": "This invite is not valid or has expired. Ask for a new one.",
       "conflict": "This email can't be used, or the household is full.",
-      "weak": "Use a password of at least 12 characters.",
+      "weak": "Use at least 12 characters (72 bytes at most) and not a common password.",
       "mismatch": "The passwords don't match.",
       "generic": "Couldn't join. Try again.",
-      "network": "Can't reach the server. Check your connection."
+      "network": "Can't reach the server. Check your connection.",
+      "email": "Enter a valid email address.",
+      "name": "That name is too long."
     }
   }
 }
