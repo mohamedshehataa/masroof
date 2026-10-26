@@ -37,7 +37,7 @@ object TextNormalizer {
     }
 
     private fun pass(text: String): String {
-        val folded = Normalizer.normalize(truncate(text), Normalizer.Form.NFKC)
+        val folded = Normalizer.normalize(stripLatinAccents(truncate(text)), Normalizer.Form.NFKC)
         val out = StringBuilder(folded.length)
         var lastSpace = true
         for (c in folded) {
@@ -54,6 +54,30 @@ object TextNormalizer {
         if (out.isNotEmpty() && out.last() == ' ') out.setLength(out.length - 1)
         return truncate(Normalizer.normalize(out, Normalizer.Form.NFKC))
     }
+
+    /** Combining accents (U+0300..U+036F) are removed after NFKD for non-Arabic text, so "OTP" with accents is OTP. */
+    private fun stripLatinAccents(text: String): String {
+        val sb = StringBuilder(text.length)
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            i += Character.charCount(cp)
+            if (cp in ARABIC_BLOCK || cp in ARABIC_PRESENTATION) {
+                sb.appendCodePoint(cp)
+            } else {
+                Normalizer
+                    .normalize(String(Character.toChars(cp)), Normalizer.Form.NFKD)
+                    .codePoints()
+                    .filter { it !in COMBINING_ACCENTS }
+                    .forEach { sb.appendCodePoint(it) }
+            }
+        }
+        return sb.toString()
+    }
+
+    private val COMBINING_ACCENTS = 0x0300..0x036F
+    private val ARABIC_BLOCK = 0x0600..0x06FF
+    private val ARABIC_PRESENTATION = 0xFB50..0xFEFF
 
     private fun truncate(text: String): String =
         if (text.codePointCount(0, text.length) <= MAX_LENGTH) text else text.substring(0, text.offsetByCodePoints(0, MAX_LENGTH))

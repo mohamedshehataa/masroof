@@ -19,14 +19,14 @@ object SecretDetector {
 
     private val strong =
         Regex(
-            "(?<![a-z])[o0][ ._-]{0,2}t[ ._-]{0,2}p(?![a-z])|(?<![a-z])p[ ._-]{0,2}i[ ._-]{0,2}n(?![a-z])" +
+            "(?<![a-z])[o0][ ._/|-]{0,2}t[ ._/|-]{0,2}ps?(?![a-z])|(?<![a-z])p[ ._/|-]{0,2}i[ ._/|-]{0,2}ns?(?![a-z])" +
                 "|\\brequires? (?:your )?approval|\\bapproval (?:is )?(?:required|needed|pending)|\\bneeds? approval" +
                 "|\\bapproval\\s*[:#-]\\s*\\d" +
                 "|one[ _-]?time|\\bonetime\\b" +
                 "|\\bverif[a-z]*|\\bauthenticat[a-z]*" +
                 "|\\b(?:secur(?:e|ity)|activation|login|log in|sign in|signin|secret|confirmation|temporary|dynamic|access|" +
                 "payment|transaction|txn)[ _-]?(?:code|number|key|pin|password|token)\\b" +
-                "|\\b(?:passcode|password|passkey|pin|token|cvv|cvc|cvv2|mpin|tpin)\\b" +
+                "|\\b(?:passcodes?|passwords?|passkeys?|pins?|tokens?|cvvs?|cvcs?|cvv2|mpins?|tpins?)\\b" +
                 "|\\bcode is\\b|\\byour code\\b|\\bthe code\\b" +
                 "|3[ _-]?d[ _-]?secure|\\b3ds\\b" +
                 "|\\b(?:approve|authori[sz]e|confirm|enter|type|input|submit|reply)\\b[^.!?\\n]{0,40}\\b(?:with|using|code|pin|otp)\\b" +
@@ -34,8 +34,9 @@ object SecretDetector {
                 "|(?<![\\d])\\d{4,8}(?![\\d])[^.!?\\n]{0,40}\\bto (?:confirm|complete|verify|approve|proceed|activate|login|log in)\\b" +
                 "|\\bis your\\b[^.!?\\n]{0,30}\\b(?:code|pin|number|key|token|otp|password)\\b" +
                 "|\\bexpires? in\\b|\\bvalid for \\d+ ?(?:min|sec|hour)|\\bvalid (?:until|till) \\d{1,2}:\\d{2}" +
-                "|(?:رمز|كود|رقم) (?:ال)?(?:تحقق|تاكيد|تفعيل|دخول|امان|سري|مؤقت|التعريف الشخصي)" +
-                "|الرمز السري|رمز سري|الرقم السري|رقم سري|كلمه السر|كلمه المرور|كلمه سر|لمره واحده|مره واحده" +
+                "|(?:رمز|كود|رقم) (?:ال)?(?:تحقق|تاكيد|تفعيل|دخول|امان|سري|م[وؤ]قت|التعريف الشخصي)" +
+                "|الرمز السري|رمز سري|الرقم السري|رقم سري|رقمك السري|كلمه السر|كلمه المرور|كلمه سر" +
+                "|كلمه (?:ال)?مرور|كلمات (?:ال)?مرور|رقم (?:ال)?مرور|باسورد|الباسورد|باسوورد|رموز|اكواد|لمره واحده|مره واحده" +
                 "|تحقق|التحقق|تفعيل|للموافقه|الموافقه علي|تاكيد العمليه|لتاكيد|لاتمام|لاكمال" +
                 "|(?:ادخل|استخدم|اكتب|ارسل)\\s+(?:الرمز|الكود|رقم)?\\s*(?<![\\d])\\d{4,8}(?![\\d])" +
                 "|(?<![\\d])\\d{4,8}(?![\\d]).{0,40}(?:لتاكيد|لاتمام|للدخول|للتحقق)" +
@@ -44,7 +45,7 @@ object SecretDetector {
         )
 
     /** Any remaining "code"/"key"/"كود"/"رمز" is secret unless it is a recognised reference code of a finished transaction. */
-    private val weakCode = Regex("\\b(?:codes?|keys?)\\b|كود|رمز|\\bsms code\\b", ci)
+    private val weakCode = Regex("\\b(?:codes?|keys?)\\b|كود|رمز|رموز|اكواد|\\bsms code\\b", ci)
 
     /** Reference codes of a completed transaction (never an OTP): "Auth code 123456", "كود العملية 123456". */
     private val benignCode =
@@ -78,14 +79,14 @@ object SecretDetector {
             ci,
         )
 
-    private val call = Regex("(?:call|dial|hotline|اتصل|الخط الساخن|للاستفسار)[ :]*\\d{3,5}", ci)
+    private val call = Regex("(?:call|dial|hotline|اتصل|الخط الساخن|للاستفسار)(?:\\s*ب)?[ :]*\\d{3,6}", ci)
 
     /** Number labels whose number is a harmless reference, not a code. */
     private val referenceNumber =
         Regex(
             "\\b(?:ref(?:erence)?|trx|txn|trans(?:action)?|operation|approval|authori[sz]ation|auth|invoice" +
-                "|rrn|tid|mid|terminal(?: id| no\\.?| number)?|id|no\\.?|number)[ :#.-]*\\d{4,14}" +
-                "|(?:رقم|الرقم) (?:ال)?(?:مرجع|المرجعي|عمليه|العمليه|فاتوره|طلب)[^\\d]{0,12}\\d{4,14}",
+                "|rrn|tid|mid|terminal(?: id| no\\.?| number)?|id|no\\.?|number)[ :#.-]*(?=[a-z0-9]*\\d)[a-z0-9]{4,16}" +
+                "|(?:رقم|الرقم) (?:ال)?(?:مرجع|المرجعي|مرجعي|عمليه|العمليه|معامله|المعامله|فاتوره|طلب)[^\\da-z]{0,12}(?=[a-z0-9]*\\d)[a-z0-9]{4,16}",
             ci,
         )
 
@@ -93,7 +94,27 @@ object SecretDetector {
 
     /** Why a message is secret, or null when it is not. */
     fun reason(normalized: String): String? {
-        val text = fold(normalized)
+        for (variant in variants(fold(normalized))) reasonOf(variant)?.let { return it }
+        return null
+    }
+
+    private val leetRun = Regex("[a-z0-9@$]{2,12}")
+    private val leetMap = mapOf('0' to 'o', '1' to 'i', '3' to 'e', '4' to 'a', '5' to 's', '7' to 't', '@' to 'a', '$' to 's')
+    private val singleLetterGap = Regex("(?<=\\b\\p{L})[ ._/|\\\\-]+(?=\\p{L}\\b)")
+
+    /** "P1N", "c0de", "0TP": digits and symbols standing in for letters inside a word (detection only). */
+    private fun leet(text: String): String =
+        leetRun.replace(text) { m ->
+            val v = m.value
+            if (v.any { it in 'a'..'z' } && v.any { it in leetMap }) v.map { leetMap[it] ?: it }.joinToString("") else v
+        }
+
+    /** "O/T/P", "O-T-P", "P I N": single letters separated by punctuation or spaces are joined. */
+    private fun compact(text: String): String = singleLetterGap.replace(text, "")
+
+    private fun variants(folded: String): List<String> = listOf(folded, compact(folded), leet(folded), compact(leet(folded))).distinct()
+
+    private fun reasonOf(text: String): String? {
         if (digitsOnly.matches(text)) return "digits_only"
         val body = withoutFooters(text)
         val finished = completion.containsMatchIn(body) && !pending.containsMatchIn(body)
@@ -150,6 +171,24 @@ object SecretDetector {
             'Р' to 'p',
             'О' to 'o',
             'А' to 'a',
+            'Τ' to 't',
+            'Ρ' to 'p',
+            'Ι' to 'i',
+            'Ν' to 'n',
+            'Α' to 'a',
+            'Β' to 'b',
+            'Ε' to 'e',
+            'Η' to 'h',
+            'Κ' to 'k',
+            'Μ' to 'm',
+            'Χ' to 'x',
+            'Υ' to 'y',
+            'Ζ' to 'z',
+            'τ' to 't',
+            'υ' to 'u',
+            'κ' to 'k',
+            'ν' to 'v',
+            'ϲ' to 'c',
             'Е' to 'e',
             'С' to 'c',
             'Т' to 't',
@@ -168,10 +207,10 @@ object SecretDetector {
         }
 
     private val codeLikeToken =
-        Regex("otp|\\bpin\\b|cvv|passcode|password|token|verif|approv|secur|code|3ds|رمز|كود|تحقق|سري", ci)
+        Regex("otp|\\bpins?\\b|cvv|passcode|password|token|verif|approv|secur|code|3ds|رمز|كود|تحقق|سري|باسورد|مرور|رموز", ci)
 
     /** True when the text has any code-like word at all (substring, no word boundary): used to mask review text. */
-    fun hasCodeLikeToken(normalized: String): Boolean = codeLikeToken.containsMatchIn(fold(normalized))
+    fun hasCodeLikeToken(normalized: String): Boolean = variants(fold(normalized)).any { codeLikeToken.containsMatchIn(it) }
 
     /** Masks bare runs of four or more digits but keeps formatted amounts ("1,250.00") and numbers next to a currency. */
     fun maskCodes(text: String): String =

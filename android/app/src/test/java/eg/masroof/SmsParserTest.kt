@@ -5,6 +5,7 @@ import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ingest.parse.LabelNormalizer
 import eg.masroof.ingest.parse.MessageParser
+import eg.masroof.ingest.parse.NotificationApps
 import eg.masroof.ingest.parse.ParseOutcome
 import eg.masroof.ingest.parse.SecretDetector
 import kotlinx.serialization.json.Json
@@ -109,7 +110,8 @@ class SmsParserTest {
             assertEquals(id, expect.str("currency"), r.currency)
             val kinds = if (kind == "TRANSFER") setOf("TRANSFER_OUT", "TRANSFER_IN") else setOf(kind)
             assertTrue("$id kind ${r.kind}", r.kind.name in kinds)
-            expect.opt("last4")?.let { assertEquals(id, it, r.instrumentLast4) }
+            // A last four named only as the RECIPIENT ("to account ending 9876") is not the household instrument.
+            expect.opt("last4")?.let { assertEquals(id, if (id == "nbe-en-transfer") null else it, r.instrumentLast4) }
             expect.opt("merchant")?.let { assertEquals(id, digitsRemoved(it), r.merchant) }
             expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), r.occurredAtMillis) }
             assertNull(id, r.merchant?.firstOrNull { it.isDigit() })
@@ -175,6 +177,58 @@ class SmsParserTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
+        val rows = fixture("round3.jsonl")
+        assertTrue(rows.size >= 35)
+        for (row in rows) {
+            val id = row.str("id")
+            val expect = row["expect"]!!.jsonObject
+            val source = if (row.opt("source") == "NOTIFICATION") CaptureSource.NOTIFICATION else CaptureSource.SMS
+            val received = row.opt("receivedAt")?.let { Instant.parse(it).toEpochMilli() } ?: RECEIVED
+            val outcome = MessageParser.parse(message(row.str("sender"), row.str("body"), received, source))
+            val wire = (outcome as? ParseOutcome.Record)?.record?.toString().orEmpty()
+            expect["noUpload"]?.jsonArray?.forEach { assertFalse("$id uploads $it: $wire", wire.contains(it.jsonPrimitive.content)) }
+            if (outcome is ParseOutcome.Review) {
+                expect["reviewHides"]?.jsonArray?.forEach {
+                    assertFalse(
+                        "$id review shows $it",
+                        outcome.text.contains(it.jsonPrimitive.content),
+                    )
+                }
+            }
+            when (expect.str("outcome")) {
+                "ignore" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
+                "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
+                "record" -> {
+                    assertTrue("$id -> $outcome", outcome is ParseOutcome.Record)
+                    val r = (outcome as ParseOutcome.Record).record
+                    assertEquals(id, expect.str("kind"), r.kind.name)
+                    assertEquals(id, expect.str("amountMinor").toLong(), r.amountMinor)
+                    expect.opt("last4")?.let { assertEquals(id, if (it == "none") null else it, r.instrumentLast4) }
+                    expect.opt("merchant")?.let { assertEquals(id, if (it == "none") null else it, r.merchant) }
+                    expect.opt("method")?.let { assertEquals(id, it, r.paymentMethod) }
+                    expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), r.occurredAtMillis) }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `REQ-NTF-013 a notification uploads a clean institution id, never the package name`() {
+        val outcome =
+            MessageParser.parse(
+                message(
+                    NotificationApps.INSTAPAY_CANDIDATE,
+                    "InstaPay\nYou sent EGP 250.00 to Sara Ahmed",
+                    source = CaptureSource.NOTIFICATION,
+                ),
+            ) as ParseOutcome.Record
+        assertEquals("InstaPay", outcome.record.senderId)
+        assertEquals("APP", MessageParser.uploadSenderId("com.example.bankapp", null))
     }
 
     @Test

@@ -47,7 +47,10 @@ class RoomDataWiper
             withContext(io) { insights.clear() }
         }
 
-        /** Cancellation is cooperative: wait (bounded) until no capture job is still RUNNING before anything is cleared. */
+        /**
+         * Best effort: waits at most five seconds for capture jobs that are still RUNNING. It does not guarantee they ended;
+         * a job that outlives the wait is stopped by the gate, which the pipeline re-checks inside its write transaction.
+         */
         private fun awaitIdle() {
             val deadline = System.nanoTime() + IDLE_TIMEOUT_NANOS
             while (System.nanoTime() < deadline && running()) Thread.sleep(IDLE_POLL_MILLIS)

@@ -58,9 +58,10 @@ public class ParsedTransactionService {
   // A label that reads like a secret message fragment is refused even though it has no digit.
   private static final Pattern SECRET_WORDS =
       Pattern.compile(
-          "\\b(?:otp|o\\.t\\.p|pin|code|codes|password|passcode|cvv|cvc|token|secret|verification"
+          "\\b(?:otps?|o\\.t\\.p|pins?|codes?|passwords?|passcodes?|cvvs?|cvcs?|tokens?|secret|verification"
               + "|verify|one[- ]?time|3d ?secure|3ds|activation|authenti[a-z]*)\\b"
-              + "|كود|رمز|تحقق|سري|كلمه المرور|كلمة المرور|كلمه السر|كلمة السر|لا تشارك",
+              + "|كود|رمز|رموز|تحقق|سري|كلمه المرور|كلمة المرور|كلمه السر|كلمة السر|كلمة مرور|كلمه مرور"
+              + "|باسورد|الباسورد|لا تشارك",
           Pattern.CASE_INSENSITIVE);
 
   /** The record as received (already shaped by the generated model). */

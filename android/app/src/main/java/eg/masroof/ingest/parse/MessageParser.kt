@@ -35,6 +35,8 @@ object MessageParser {
     private const val LOOKBACK = 30
     private const val DATE_LOOKBACK = 25
     private const val TIME_WINDOW = 12
+    private const val TIME_BEFORE_WINDOW = 24
+    private const val LAST4_LOOKBACK = 40
 
     // ---- amounts -------------------------------------------------------------------------------------------------
     private const val NUM = "\\d{1,3}(?:\\.\\d{3})+,\\d{1,2}|\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?"
@@ -42,10 +44,11 @@ object MessageParser {
         "(?:egp|l\\.e\\.?|le|e£|جنيها|جنيه|جنية|ج\\.م\\.?|جم|usd|\\$|دولار|eur|€|يورو|gbp|£|sar|sr|ريال|riyal|aed|dhs|dh|درهم" +
             "|kwd|qar|jpy|yen|try|tl|cad|chf|cny|omr|bhd|jod)"
     private val currencyThenNumber = Regex("(?<![a-z])($CUR)[ :]?($NUM)(?![\\d]|[a-z\\p{L}])", ci)
-    private val numberThenCurrency = Regex("(?<![\\d.,])($NUM) ?($CUR)(?![a-z])", ci)
+    private val numberThenCurrency = Regex("(?<![\\d.,*-])($NUM) ?($CUR)(?![a-z])", ci)
     private val keywordAmount = Regex("(?:amount(?: of)?|value|مبلغ|بمبلغ|بقيمه|قيمه)[ :]*($NUM)(?![\\d])", ci)
     private val tokenAfter = Regex("^ ?([^ \\d.,;:!?()]+)")
-    private val balanceBefore = Regex("(?:balance|\\bbal\\b|avl|avail\\w*|limit|رصيد\\w*|الرصيد|المتاح|remaining)[^\\d]{0,18}$", ci)
+    private val balanceBefore =
+        Regex("(?:balance|\\bbal\\b|avl|avail\\w*|limit|(?:amt|amount) due|رصيد\\w*|الرصيد|المتاح|remaining)[^\\d]{0,18}$", ci)
     private val amountStopWords =
         setOf(
             "at",
@@ -150,10 +153,18 @@ object MessageParser {
             "statement is ready|e-?statement|كشف حساب|payment due|\\bdue date\\b|\\breminder\\b|تاريخ الاستحقاق|تذكير|minimum payment",
             ci,
         )
+    private val statementStrong =
+        Regex(
+            "statement date|total amt due|min(?:imum|\\.)? amt due|total amount due|minimum amount due|\\bamt due\\b" +
+                "|الحد الادني للسداد|المبلغ المستحق|الحد الادني للمبلغ",
+            ci,
+        )
+    private val transactionHeadline =
+        Regex("\\b(?:debited|purchase|spent|withdrawn|withdrawal|charged|used for)\\b|تم خصم|تم شراء|تم دفع", ci)
     private val promoWords =
         Regex(
             "% off|\\boffers?\\b|cashback|\\bpoints\\b|rewards|subscribe|t&c|terms apply|congratulations|\\bpromo|coupon|discount|" +
-                "installments up to|https?:|www\\.|عرض|عروض|نقاط|اشترك|الشروط والاحكام|مبروك|اربح|كوبون|خصم يصل|تقسيط|للمزيد",
+                "installments up to|https?:|www\\.|عرض|عروض|نقاط|اشترك|الشروط والاحكام|مبروك|اربح|كوبون|خصم يصل|تقسيط",
             ci,
         )
     private val outAnchor =
@@ -168,7 +179,7 @@ object MessageParser {
         Regex(
             "\\brefund(?:ed)? of\\b|you(?: have)? received|\\breceived (?:egp|le|an?|\\d|usd)" +
                 "|credited with|(?:has|have) been credited to your|were credited" +
-                "|\\bdeposit(?:ed)?\\b|\\bsalary\\b|\\bincoming\\b|ايداع|تم استلام|استلمت|وارد|راتب|مرتب|تم اضافه|اضافه مبلغ|استلام حواله",
+                "|\\bdeposit(?:ed)?\\b|\\bsalary\\b|\\bincoming\\b|ايداع|تم استلام|تم استقبال|استقبال تحويل|تم رد|رد مبلغ|استرداد|مرتجع|استلمت|وارد|راتب|مرتب|تم اضافه|اضافه مبلغ|استلام حواله",
             ci,
         )
     private val ambiguousReceipt = Regex("استلام (?:تحويلك|حوالتك|التحويل)|received your transfer", ci)
@@ -188,20 +199,50 @@ object MessageParser {
     private val paymentWords =
         Regex("payment|\\bpaid\\b|\\bpay\\b|purchase|spent|\\bbill\\b|merchant|\\bqr\\b|charged|دفع|سداد|شراء|فاتوره|تاجر|مشتريات", ci)
     private val ownAccount = Regex("from your (?:a/c|account|card|wallet)|من حسابك|من بطاقتك|من محفظتك", ci)
-    private val instapay = Regex("instapay|insta pay|\\bipn\\b|\\bipa\\b|انستاباي|انستا باي", ci)
+    private val instapay = Regex("instapay|insta pay|\\bipn\\b|\\bipa\\b|انستاباي|انستا باي|تحويل لحظي", ci)
 
     // ---- instrument last four -----------------------------------------------------------------------------------
+    private class Last4Pattern(
+        val regex: Regex,
+        val own: Boolean,
+    )
+
     private val last4Patterns =
         listOf(
-            Regex("\\b(?:ending|ends)(?: with| in| by)?[ :]*[x*•.#]*[ ]?(\\d{4})(?!\\d)", ci),
-            Regex("(?:card|a/c|acct|account|acc|wallet|بطاق\\w*|حساب\\w*|محفظ\\w*)[^\\d]{0,25}?(?:[x*•]{2,}|\\.{3}) ?(\\d{4})(?!\\d)", ci),
-            Regex("(?:المنتهيه|المنتهي|تنتهي|منتهيه)\\s*ب\\s*(\\d{4})(?!\\d)", ci),
+            Last4Pattern(Regex("\\b(?:ending|ends)(?: with| in| by)?[ :]*[x*•.#]*[ ]?(\\d{4})(?!\\d)", ci), false),
+            Last4Pattern(
+                Regex(
+                    "(?:card|a/c|acct|account|acc|wallet|بطاق\\w*|حساب\\w*|محفظ\\w*)[^\\d]{0,25}?(?:[x*•]{2,}|\\.{3}) ?(\\d{4})(?!\\d)",
+                    ci,
+                ),
+                false,
+            ),
+            Last4Pattern(Regex("(?:المنتهيه|المنتهي|تنتهي|منتهيه)\\s*ب\\s*(\\d{4})(?!\\d)", ci), false),
+            // "your account": possessive, so it is the household's instrument even after "to"/"إلى"
+            Last4Pattern(Regex("حساب(?:ك|كم)\\s*(?:رقم\\s*)?[x*•]*\\s*(\\d{4})(?!\\d)"), true),
         )
+
+    /** A card or account named right after "to"/"إلى"/beneficiary is the other party's, never the household's. */
+    private val recipientBefore =
+        Regex(
+            "(?:\\bto|(?<![\\p{L}\\d])الي|\\bbeneficiary|(?<![\\p{L}\\d])المستفيد)\\s+" +
+                "(?:(?:the\\s+)?(?:a/c|acct|account|card|wallet|حساب|بطاقه|محفظه)(?!\\p{L})\\s*)?" +
+                "(?:(?:no\\.?|number|رقم)\\s*)?$",
+            ci,
+        )
+
+    private val phoneNumber = Regex("(?<![\\d])(?:\\+?20)?01[0125]\\d{8}(?!\\d)")
+    private val counterpartyBefore = Regex("(?:(?<![\\p{L}\\d])الي|(?<![\\p{L}\\d])من|\\bto|\\bfrom)\\s*(?:رقم|no\\.?|number)?\\s*$", ci)
 
     // ---- dates ---------------------------------------------------------------------------------------------------
     private val dateFull = Regex("(?<![\\d/.:-])(\\d{1,2})([/.-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?![\\d/:])")
     private val dateIso = Regex("(?<![\\d/.:-])(\\d{4})-(\\d{1,2})-(\\d{1,2})(?![\\d])")
     private val dateShort = Regex("(?<![\\d/.:-])(\\d{1,2})/(\\d{1,2})(?![\\d/:]|\\.\\d)")
+    private val dateCompact =
+        Regex("(?<![\\d/.:-])(\\d{1,2})(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(\\d{4}|\\d{2})(?![\\d])", ci)
+    private val monthNames = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+    private val timeBefore =
+        Regex("(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?: ?(?:يوم|on|at|في|بتاريخ))* ?$", ci)
     private val timeAfter = Regex("^ ?(?:at |في |الساعه )?(\\d{1,2}):(\\d{2})(?::\\d{2})? ?(am|pm|ص|م)?(?![\\p{L}\\d])", ci)
     private val dateNot =
         Regex("(?:until|till|valid|due|expiry|expires?|exp|start|starts|from|استحقاق|حتي|صلاحيه|ينتهي|ابتداء|يبدا|تبدا)[^\\d]{0,12}$", ci)
@@ -268,6 +309,7 @@ object MessageParser {
             "has",
             "been",
             "transaction",
+            "purchase",
             "requires",
             "rrn",
             "tid",
@@ -399,6 +441,8 @@ object MessageParser {
         val review = { reason: String -> ParseOutcome.Review(reason, shown) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
+        // A card statement or payment reminder is never a transaction, even if it says "ignore if paid".
+        if (statementStrong.containsMatchIn(t) && !transactionHeadline.containsMatchIn(t)) return ParseOutcome.Ignore("info")
         if (ambiguousReceipt.containsMatchIn(t)) return review("ambiguous_direction")
         if (!hasOut && !hasIn) {
             return when {
@@ -558,7 +602,12 @@ object MessageParser {
         amounts.forEach { blank(it.start until it.end) }
         for (p in listOf(dateFull, dateIso, dateShort)) p.findAll(t).forEach { blank(it.range) }
         Regex("(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])").findAll(t).forEach { blank(it.range) }
-        last4Patterns.forEach { p -> p.findAll(t).forEach { blank(it.groups[1]!!.range) } }
+        last4Patterns.forEach { p -> p.regex.findAll(t).forEach { blank(it.groups[1]!!.range) } }
+        dateCompact.findAll(t).forEach { blank(it.range) }
+        // The other party's mobile number after to/from/إلى رقم is an explained counterparty, never a code.
+        phoneNumber.findAll(t).forEach { m ->
+            if (counterpartyBefore.containsMatchIn(t.substring(maxOf(0, m.range.first - LAST4_LOOKBACK), m.range.first))) blank(m.range)
+        }
         var rest = String(chars)
         rest = SecretDetector.stripReferences(rest)
         return Regex("(?<![\\d])\\d{4,}(?![\\d])").containsMatchIn(rest)
@@ -566,12 +615,26 @@ object MessageParser {
 
     // ---- last four / date / ids -------------------------------------------------------------------------------------
     private fun last4(t: String): String? {
-        for (p in last4Patterns) {
-            val m = p.find(t) ?: continue
-            return m.groupValues[1]
+        val candidates =
+            last4Patterns
+                .flatMap { p ->
+                    p.regex
+                        .findAll(t)
+                        .map { m -> Triple(m.range.first, m.groupValues[1], p.own) }
+                        .toList()
+                }.sortedBy { it.first }
+        for ((start, digits, own) in candidates) {
+            if (!own && recipientBefore.containsMatchIn(t.substring(maxOf(0, start - LAST4_LOOKBACK), start))) continue
+            return digits
         }
         return null
     }
+
+    private class DateCandidate(
+        val start: Int,
+        val range: IntRange,
+        val dates: List<LocalDate>,
+    )
 
     private fun occurredAt(
         t: String,
@@ -581,36 +644,71 @@ object MessageParser {
         val receivedDate = received.atZone(cairo).toLocalDate()
         val earliest = received.minusSeconds(MAX_DATE_AGE_DAYS * SECONDS_PER_DAY)
         val latest = received.plusSeconds(SECONDS_PER_DAY)
-        val found = mutableListOf<Triple<Int, LocalDate?, IntRange>>()
+        val found = mutableListOf<DateCandidate>()
         dateFull.findAll(t).forEach { m ->
-            val y = m.groupValues[4].let { if (it.length == 2) TWO_DIGIT_YEAR_BASE + it.toInt() else it.toInt() }
-            found += Triple(m.range.first, safeDate(y, m.groupValues[3].toInt(), m.groupValues[1].toInt()), m.range)
+            val first = m.groupValues[1].toInt()
+            val second = m.groupValues[3].toInt()
+            val yearText = m.groupValues[4]
+            val y = if (yearText.length == 2) TWO_DIGIT_YEAR_BASE + yearText.toInt() else yearText.toInt()
+            // DD/MM/YYYY is Egyptian; a two-digit year with "/" may also be M/D/YY (some banks): both readings are tried
+            // and the window decides, so "10/15/26" is 15 Oct and "10/6/26" is 6 Oct, not 10 Jun.
+            val readings =
+                if (yearText.length == 2 && m.groupValues[2] == "/") {
+                    listOfNotNull(safeDate(y, second, first), safeDate(y, first, second)).distinct()
+                } else {
+                    listOfNotNull(safeDate(y, second, first))
+                }
+            found += DateCandidate(m.range.first, m.range, readings)
         }
         dateIso.findAll(t).forEach { m ->
-            found += Triple(m.range.first, safeDate(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt()), m.range)
+            found +=
+                DateCandidate(
+                    m.range.first,
+                    m.range,
+                    listOfNotNull(safeDate(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())),
+                )
+        }
+        dateCompact.findAll(t).forEach { m ->
+            val yearText = m.groupValues[3]
+            val y = if (yearText.length == 2) TWO_DIGIT_YEAR_BASE + yearText.toInt() else yearText.toInt()
+            val month = monthNames.indexOf(m.groupValues[2].lowercase(Locale.ROOT)) + 1
+            found += DateCandidate(m.range.first, m.range, listOfNotNull(safeDate(y, month, m.groupValues[1].toInt())))
         }
         dateShort.findAll(t).forEach { m ->
             val d = m.groupValues[1].toInt()
             val mo = m.groupValues[2].toInt()
             var date = safeDate(receivedDate.year, mo, d)
             if (date != null && date.isAfter(receivedDate.plusDays(1))) date = safeDate(receivedDate.year - 1, mo, d)
-            found += Triple(m.range.first, date, m.range)
+            found += DateCandidate(m.range.first, m.range, listOfNotNull(date))
         }
-        for ((start, date, range) in found.sortedBy { it.first }) {
-            if (date == null) continue
-            if (dateNot.containsMatchIn(t.substring(maxOf(0, start - DATE_LOOKBACK), start))) continue
-            val time = timeAfter.find(t.substring(range.last + 1, minOf(t.length, range.last + 1 + TIME_WINDOW)))
-            val instant =
-                if (time != null) {
-                    toInstant(date, time)
-                } else if (date == receivedDate) {
-                    received
-                } else {
-                    date.atTime(LocalTime.of(NOON, 0)).atZone(cairo).toInstant()
-                }
-            if (instant != null && !instant.isBefore(earliest) && !instant.isAfter(latest)) return instant.toEpochMilli()
+        for (c in found.sortedBy { it.start }) {
+            if (c.dates.isEmpty()) continue
+            if (dateNot.containsMatchIn(t.substring(maxOf(0, c.start - DATE_LOOKBACK), c.start))) continue
+            val inWindow =
+                c.dates
+                    .mapNotNull { date -> instantOf(t, c.range, date, received, receivedDate) }
+                    .filter { !it.isBefore(earliest) && !it.isAfter(latest) }
+                    .distinct()
+            // Exactly one reading inside the window decides; two (or none) leave the received time.
+            if (inWindow.size == 1) return inWindow.first().toEpochMilli()
         }
         return receivedMillis
+    }
+
+    private fun instantOf(
+        t: String,
+        range: IntRange,
+        date: LocalDate,
+        received: Instant,
+        receivedDate: LocalDate,
+    ): Instant? {
+        val after = timeAfter.find(t.substring(range.last + 1, minOf(t.length, range.last + 1 + TIME_WINDOW)))
+        val time = after ?: timeBefore.find(t.substring(maxOf(0, range.first - TIME_BEFORE_WINDOW), range.first))
+        return when {
+            time != null -> toInstant(date, time)
+            date == receivedDate -> received
+            else -> date.atTime(LocalTime.of(NOON, 0)).atZone(cairo).toInstant()
+        }
     }
 
     private fun toInstant(
@@ -650,6 +748,11 @@ object MessageParser {
         sender: String,
         institution: String?,
     ): String {
+        if (sender.count { it == '.' } >= 2) {
+            // An Android package name: never upload it (truncated or not); use the institution's clean id.
+            val inst = (institution ?: "").replace(Regex("[^A-Za-z._&-]"), "").take(20)
+            return if (senderIdPattern.matches(inst)) inst else "APP"
+        }
         val key = sender.trim().replace(Regex("[^A-Za-z._&-]"), "").take(20)
         if (senderIdPattern.matches(key)) return key
         val inst = (institution ?: "").replace(Regex("[^A-Za-z._&-]"), "").take(20)
@@ -688,6 +791,7 @@ object MessageParser {
                 TxKind.TRANSFER_OUT -> "transfer"
                 else -> "out"
             }
+        hsbcLabel(norm, t)?.let { return it }
         for (prep in listOf(enPrep.getValue(role), arPrep.getValue(role))) {
             for (m in prep.findAll(t)) {
                 val label = labelAt(norm, t, m.range.last + 1)
@@ -695,6 +799,18 @@ object MessageParser {
             }
         }
         return null
+    }
+
+    /** HSBC account SMS: "<DDMONYY> <MERCHANT> Purchase from <masked account> EGP <amount>-". Not for ATM lines. */
+    private val hsbcMerchant =
+        Regex("(?<![\\d/.:-])\\d{1,2}(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\d{2,4}\\s+(?!atm\\b)(\\S.*?)\\s+purchase\\b", ci)
+
+    private fun hsbcLabel(
+        norm: String,
+        t: String,
+    ): String? {
+        val m = hsbcMerchant.find(t) ?: return null
+        return labelAt(norm, t, m.groups[1]!!.range.first)
     }
 
     private fun labelAt(
@@ -731,6 +847,7 @@ object MessageParser {
         if (label.length > MAX_LABEL) label = label.take(MAX_LABEL).substringBeforeLast(' ', label.take(MAX_LABEL))
         if (label.count { it.isLetter() } < 2) return null
         if (secretLabel.containsMatchIn(SecretDetector.fold(label))) return null
+        if (SecretDetector.reason(label) != null || SecretDetector.hasCodeLikeToken(label)) return null
         return label.trim()
     }
 

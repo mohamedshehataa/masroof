@@ -218,6 +218,10 @@ class ParsedIngestApiIT {
             "SHOP 4821",
             "ahmed 01000000000",
             "رمز التحقق",
+            "AMAZON OTPs",
+            "AMAZON PINs",
+            "امازون الباسورد",
+            "كلمة مرور",
             "x".repeat(41));
     int n = 0;
     for (String label : labels) {
