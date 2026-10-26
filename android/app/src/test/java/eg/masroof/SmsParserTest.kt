@@ -184,8 +184,8 @@ class SmsParserTest {
         val rows =
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
                 fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
-                fixture("round11.jsonl") + fixture("round12.jsonl")
-        assertTrue(rows.size >= 260)
+                fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl")
+        assertTrue(rows.size >= 290)
         checkAll(rows)
     }
 
@@ -194,7 +194,7 @@ class SmsParserTest {
         // Every probe input of the earlier verification rounds (owner identifiers removed) plus the verifier and round-2 sets:
         // nothing that was correct may become wrong.
         val rows = fixture("corpus.jsonl") + fixture("verifier.jsonl") + fixture("round2.jsonl")
-        assertTrue(rows.size >= 700)
+        assertTrue(rows.size >= 760)
         checkAll(rows)
     }
 

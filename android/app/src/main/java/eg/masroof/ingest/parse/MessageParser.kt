@@ -167,6 +167,9 @@ object MessageParser {
     private val promoWords =
         Regex(
             "% off|خصم\\s*\\d+\\s*%|\\d+\\s*%\\s*خصم|%\\s*\\d+\\s*خصم|احصل\\s+علي\\s+خصم|" +
+                // fixed-amount offers: "خصم 100 جنيه على ...", "وفر 50 جنيه", "get EGP 50 off", "EGP 100 cashback on ..."
+                "خصم\\s*[\\d.,]+\\s*(?:جنيه|جم|egp|le)?\\s+علي|وفر\\s*[\\d.,]+|\\b(?:egp|le)\\s*[\\d.,]+\\s+off\\b" +
+                "|[\\d.,]+\\s*(?:egp|le|جنيه)\\s+cashback|" +
                 "\\boffers?\\b|cashback|\\bpoints\\b|rewards|subscribe|t&c|terms apply|congratulations|\\bpromo|coupon|discount|" +
                 "installments up to|https?:|www\\.|عرض|عروض|نقاط|اشترك|الشروط والاحكام|مبروك|اربح|كوبون|خصم يصل|تقسيط",
             ci,
@@ -455,10 +458,59 @@ object MessageParser {
         Regex(
             "https?://\\S+|(?<!(?:at|لدى|لدي|عند|مطعم|مقهى|محل|شركة|شركه)\\s)(?:www\\.\\S+|(?:للمزيد|لمزيد|حمل\\s+تطبيق|زوروا|زور\\s" +
                 "|احذر\\s+من|لمعرفه\\s+(?:المزيد|احدث)|لمعرفة\\s+(?:المزيد|احدث)" +
-                "|اشترك\\s+في|استمتع\\s+ب|تابعنا|visit\\s|download\\s+(?:the\\s+)?app|for\\s+more\\s+(?:info|information|details)" +
-                "|call\\s+customer|customer\\s+service|follow\\s+us)[^.!؟\\n]*)",
+                "|اشترك\\s+في|استمتع\\s+ب|تابعنا|visit\\s|download\\s+(?:the\\s+)?(?:[\\p{L}]+\\s+){0,3}?app" +
+                "|for\\s+more\\s+(?:info|information|details)" +
+                "|call\\s+customer|customer\\s+service|follow\\s+us)(?:[^.!؟\\n]|\\.(?!\\s|$))*)",
             ci,
         )
+
+    /** Clause borders (principal clause vs fee note): sentence punctuation, new lines, the Arabic comma, and "... وتم خصم رسوم" inside one sentence. */
+    private val clauseBorder = Regex("(?<=[.;؛])\\s+|\\s*[،\\n]\\s*|\\s+(?=و?تم\\s+(?:خصم|تحصيل)\\s+(?:رسوم|مصاريف|عموله))", ci)
+
+    /** A clause whose head is a fee noun ("Transfer fee EGP 5.00", "رسوم تحويل 1.00 جنيه", "Cash advance fee of EGP 60.00 applies"). */
+    private val feeHead =
+        Regex(
+            "^\\s*(?:(?:و?تم\\s+(?:خصم|تحصيل)|and|plus|a|the|additional|incl|including)\\s+)?" +
+                "(?:[\\p{L}\\-]+\\s+){0,3}?(?:fees?|charges?|commission|رسوم|مصاريف|عموله)(?![\\p{L}])",
+            ci,
+        )
+
+    /**
+     * The PRINCIPAL clause is the first one with a transaction verb and an amount; a LATER clause headed by a fee noun is a fee
+     * note. Its amount is dropped (no second record) and it never changes the kind. A message whose own first clause is the fee
+     * ("Transfer fee of EGP 10.00 has been charged ...") stays a fee message.
+     */
+    private fun dropFeeNotes(norm: String): String {
+        val borders = clauseBorder.findAll(norm).toList()
+        if (borders.isEmpty()) return norm
+        val out = StringBuilder()
+        var start = 0
+        var principal = false
+        val ends = borders.map { it.range.first to it.range.last + 1 } + (norm.length to norm.length)
+        var separator = ""
+        for ((end, next) in ends) {
+            val clause = norm.substring(start, end)
+            val folded = SecretDetector.fold(clause)
+            val isFeeNote = principal && feeHead.containsMatchIn(folded)
+            if (isFeeNote) {
+                // "... at ZOOBA incl. service charge": the connector belongs to the fee note
+                val trimmed = connector.replace(out.toString(), "")
+                out.setLength(0)
+                out.append(trimmed)
+            } else {
+                out.append(separator).append(clause)
+                if (!feeHead.containsMatchIn(folded) && clause.any { it.isDigit() } && hasTransactionVerb(folded)) principal = true
+            }
+            separator = norm.substring(end, next)
+            start = next
+        }
+        return out.toString()
+    }
+
+    private val connector = Regex("[\\s.,]*(?<![\\p{L}\\d])(?:(?:incl|including|plus|and|و)[\\s.]*)?$", ci)
+
+    private fun hasTransactionVerb(t: String) =
+        outStrong.containsMatchIn(t) || transferVerbs.containsMatchIn(t) || withdrawal.containsMatchIn(t) || paymentWords.containsMatchIn(t)
 
     /** The first plausible amount in minor units, to prefill the manual form from a review item (never uploaded). */
     fun suggestAmountMinor(text: String): Long? {
@@ -470,7 +522,7 @@ object MessageParser {
     fun parse(msg: IncomingMessage): ParseOutcome {
         // Secrets are looked for in the WHOLE text: a code cue inside a boilerplate trailer or URL still makes it a secret
         val full = TextNormalizer.normalizeText(msg.text).trim()
-        val norm = trailer.replace(full, " ").trim()
+        val norm = dropFeeNotes(trailer.replace(full, " ").trim()).trim()
         if (norm.isBlank()) return ParseOutcome.Ignore("empty")
         val t = SecretDetector.fold(norm)
         val secret = SecretDetector.reason(full)
@@ -563,7 +615,15 @@ object MessageParser {
         return ParseOutcome.Record(record)
     }
 
-    private fun strongTransaction(t: String) =
+    /** "your next purchase", "first payment": an offer's future condition, not a completed transaction. */
+    private val futurePurchase = Regex("\\b(?:next|first|any|every|each|future)\\s+(?:online\\s+)?(?:purchases?|payments?)\\b", ci)
+
+    private fun strongTransaction(text: String): Boolean {
+        val t = futurePurchase.replace(text, " ")
+        return strongTransactionWords(t)
+    }
+
+    private fun strongTransactionWords(t: String) =
         Regex(
             "\\b(?:debited|purchase|paid|spent|withdrawn|charged|used for|(?:has|have) been used|was used)\\b" +
                 "|تم خصم|تم شراء|تم دفع|تم سحب|تم استخدام",
@@ -748,7 +808,9 @@ object MessageParser {
             "credit\\s*card\\s+(?:payment|bill|repayment)" +
                 "|payment\\s+(?:of\\s+[^;!?]{0,30}?)?(?:to|for|towards)\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?credit\\s*card" +
                 "|سداد\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان|دفع\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان" +
-                "|(?:سداد|دفع)\\s[^;!?]{0,40}?(?<![\\p{L}\\d])ل?بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان",
+                // the card is the OBJECT of the repayment (ل / الى before it); "باستخدام / ب + بطاقة الائتمان" is the instrument
+                "|(?:سداد|تسديد|دفع)\\s+(?:مستحقات\\s+)?بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان" +
+                "|(?:سداد|تسديد|دفع)\\s[^;!?]{0,40}?(?:(?<![\\p{L}\\d])ل|(?<![\\p{L}])الي\\s+)\\s*بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان",
             ci,
         )
 
