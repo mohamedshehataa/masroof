@@ -10,12 +10,19 @@ import eg.masroof.ingest.parse.TemplateShape
 import eg.masroof.ingest.parse.TxKind
 import java.security.MessageDigest
 
+/** The outcome after template matching, and the learned template that produced a record (null when none did). */
+data class Applied(
+    val outcome: ParseOutcome,
+    val templateId: String?,
+)
+
 /**
  * On-device template learning (round 15). When the user saves a review item, the digit-free shape of its message is stored with
  * the sender and the confirmed kind. Later messages of that sender with exactly that shape are recorded without asking. If the
  * user corrected the amount (or last four) the number slot that held the right value is remembered, so the template reads that
  * slot next time. Nothing here leaves the phone.
  */
+
 object TemplateLearning {
     private const val MAX_SENDER = 60
     private const val MAX_AMOUNT_MINOR = 100_000_000_000L
@@ -44,19 +51,19 @@ object TemplateLearning {
 
     private fun decodeSlots(slots: String?): List<String> = slots?.split(SLOT_SEPARATOR)?.filter { it.isNotEmpty() }.orEmpty()
 
-    /** A review outcome that matches a template the user confirmed becomes a record; anything else is returned unchanged. */
+    /** A review outcome that matches a template the user confirmed becomes a record (and says which template); else unchanged. */
     suspend fun apply(
         db: AppDatabase,
         message: IncomingMessage,
         outcome: ParseOutcome,
-    ): ParseOutcome {
-        val review = outcome as? ParseOutcome.Review ?: return outcome
-        val suggestion = review.suggestion ?: return outcome
-        val shape = TemplateShape.of(message.text) ?: return outcome
-        val template = db.learnedTemplates().find(message.sender.take(MAX_SENDER), shape.signature) ?: return outcome
+    ): Applied {
+        val review = outcome as? ParseOutcome.Review ?: return Applied(outcome, null)
+        val suggestion = review.suggestion ?: return Applied(outcome, null)
+        val shape = TemplateShape.of(message.text) ?: return Applied(outcome, null)
+        val template = db.learnedTemplates().find(message.sender.take(MAX_SENDER), shape.signature) ?: return Applied(outcome, null)
         val kind = TxKind.valueOf(template.kind)
         // the engine's direction is never overridden: a template that disagrees with it (a credit through a debit template) is a review
-        if (isIncoming(kind) != isIncoming(suggestion.kind)) return outcome
+        if (isIncoming(kind) != isIncoming(suggestion.kind)) return Applied(outcome, null)
         var record = suggestion.copy(kind = kind)
         shape.numbers.getOrNull(template.amountSlot)?.let { raw ->
             MessageParser.minorOf(raw)?.takeIf { it in 1..MAX_AMOUNT_MINOR }?.let { record = record.copy(amountMinor = it) }
@@ -64,7 +71,7 @@ object TemplateLearning {
         shape.numbers.getOrNull(template.last4Slot)?.takeIf { it.length == LAST4_LENGTH && it.all(Char::isDigit) }?.let {
             record = record.copy(instrumentLast4 = it)
         }
-        return ParseOutcome.Record(record)
+        return Applied(ParseOutcome.Record(record), template.id)
     }
 
     /**

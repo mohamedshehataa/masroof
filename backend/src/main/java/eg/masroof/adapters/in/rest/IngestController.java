@@ -47,6 +47,7 @@ class IngestController implements IngestApi {
         .body(
             new IngestAccepted()
                 .rawMessageId(accepted.rawMessageId())
+                .expenseId(accepted.expenseId())
                 .outcome(IngestAccepted.OutcomeEnum.valueOf(accepted.outcome().name())));
   }
 }

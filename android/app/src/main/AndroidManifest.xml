@@ -12,6 +12,9 @@
     <!-- Dangerous (runtime) permission, requested from Settings only when the user turns SMS capture on. The app works
          fully without it; READ_SMS (history backfill) is added with that feature. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Runtime permission (Android 13+), requested from Settings only when the user turns on the "Recorded ... Undo"
+         notification for transactions the phone captured by itself. The app works fully without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".MasroofApp"
@@ -48,6 +51,11 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <!-- The buttons of the "Recorded ... Undo" notification. Not exported: only this app can send these broadcasts. -->
+        <receiver
+            android:name=".ingest.CapturedActionReceiver"
+            android:exported="false" />
 
         <!-- Reason: the system binds the listener from outside the app, so it must be exported; BIND_NOTIFICATION_
              LISTENER_SERVICE means only the system can bind it. It only hands allowlisted notification text to

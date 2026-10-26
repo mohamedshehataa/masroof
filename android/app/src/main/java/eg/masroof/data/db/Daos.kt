@@ -176,8 +176,38 @@ interface LearnedTemplateDao {
     @Query("DELETE FROM learned_template")
     suspend fun clear()
 
+    @Query("DELETE FROM learned_template WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("SELECT * FROM learned_template")
     suspend fun all(): List<LearnedTemplateEntity>
+}
+
+@Dao
+interface CapturedDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: CapturedTxEntity)
+
+    @Query("SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff ORDER BY capturedAtMillis DESC")
+    fun observeRecent(cutoff: Long): Flow<List<CapturedTxEntity>>
+
+    @Query("SELECT * FROM captured_tx WHERE localId = :localId")
+    suspend fun find(localId: String): CapturedTxEntity?
+
+    @Query("UPDATE captured_tx SET expenseId = :expenseId WHERE localId = :localId")
+    suspend fun setExpenseId(
+        localId: String,
+        expenseId: String,
+    )
+
+    @Query("DELETE FROM captured_tx WHERE localId = :localId")
+    suspend fun delete(localId: String)
+
+    @Query("DELETE FROM captured_tx WHERE capturedAtMillis < :cutoff")
+    suspend fun purgeBefore(cutoff: Long)
+
+    @Query("SELECT * FROM captured_tx")
+    suspend fun all(): List<CapturedTxEntity>
 }
 
 @Database(
@@ -190,8 +220,9 @@ interface LearnedTemplateDao {
             ParsedOutboxEntity::class,
             ReviewItemEntity::class,
             LearnedTemplateEntity::class,
+            CapturedTxEntity::class,
         ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -206,6 +237,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reviews(): ReviewDao
 
     abstract fun learnedTemplates(): LearnedTemplateDao
+
+    abstract fun captured(): CapturedDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction
@@ -306,6 +339,28 @@ CREATE TABLE IF NOT EXISTS learned_template (
   PRIMARY KEY(id)
 )
 """
+
+private const val CREATE_CAPTURED_TX = """
+CREATE TABLE IF NOT EXISTS captured_tx (
+  localId TEXT NOT NULL,
+  expenseId TEXT,
+  amountMinor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  label TEXT,
+  source TEXT NOT NULL,
+  templateId TEXT,
+  capturedAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(localId)
+)
+"""
+
+/** v5 -> v6 (round 18): the phone's own automatic records, for the "Recorded ... Undo" notification and the "Captured" chip. */
+val MIGRATION_5_6: Migration =
+    object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(CREATE_CAPTURED_TX)
+        }
+    }
 
 /**
  * v4 -> v5 (round 15): a review item carries the engine's typed suggestion plus its digit-free shape, and the user's confirmed

@@ -3,6 +3,7 @@ package eg.masroof.ui.settings
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -84,6 +86,7 @@ fun SmsCaptureSection(
             }
         }
         NotificationCaptureSection(viewModel)
+        CapturedAlertsRow(viewModel)
         val learned by viewModel.learnedCount.collectAsStateWithLifecycle()
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -160,5 +163,35 @@ private fun NotificationCaptureSection(viewModel: SmsCaptureViewModel) {
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.ntf_enable)) }
         }
+    }
+}
+
+/** The switch for the quiet "Recorded ... Undo" notification; turning it on asks for the notification permission (Android 13+). */
+@Composable
+private fun CapturedAlertsRow(viewModel: SmsCaptureViewModel) {
+    val on by viewModel.capturedAlertsEnabled.collectAsStateWithLifecycle()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.setCapturedAlerts(granted)
+        }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.captured_alerts_title), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.captured_alerts_body), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(
+            checked = on,
+            onCheckedChange = { wanted ->
+                if (wanted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    viewModel.setCapturedAlerts(wanted)
+                }
+            },
+        )
     }
 }

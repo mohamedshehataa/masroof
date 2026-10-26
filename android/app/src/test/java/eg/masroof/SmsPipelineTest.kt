@@ -285,7 +285,7 @@ class SmsOutboxTest {
         }
 
     private class ScriptedRemote : ParsedRemote {
-        var next: SmsUploadResult = SmsUploadResult.Sent
+        var next: SmsUploadResult = SmsUploadResult.Sent()
         val sent = mutableListOf<ParsedOutboxEntity>()
 
         override suspend fun uploadParsed(

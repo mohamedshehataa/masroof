@@ -20,7 +20,11 @@ object StatusGate {
                 "processing|under\\s+review|will\\s+be|will\\s+follow|disputed|credited\\s+back|refunded\\s+to\\s+(?:the\\s+)?sender|" +
                 "not\\s+(?:successful|completed|processed|approved|delivered)|being\\s+processed|in\\s+progress|timed?\\s+out|expired|" +
                 "did\\s+not\\s+go\\s+through|revert(?:ed)?|incomplete|unpaid|pre-?authori[sz]ation|preauth|insufficient|" +
-                "subject\\s+to\\b.{0,40}?confirmation|error\\s+\\d|put\\s+on\\s+hold)\\b",
+                "subject\\s+to\\b.{0,40}?confirmation|error\\s+\\d|put\\s+on\\s+hold|denied|denial|blocked|aborted|suspended|retry|" +
+                "waiting|refused|fail|cancel|decline|reject|chargeback|invalid|unauthori[sz]ed|not\\s+authori[sz]ed|held|" +
+                "under\\s+process|status\\s*:|limit\\s+exceeded)\\b|" +
+                // a status glued to a reference: "PENDING123", "FAILED01"
+                "\\b(?:pending|failed|declined|rejected|denied|cancel+ed|void|fail)\\d",
             ci,
         )
 
@@ -32,7 +36,8 @@ object StatusGate {
                 "(?<![\\p{L}])[وك]?طلب(?:ك|كم|ه|ها)?(?![\\p{L}])|مرتجع|(?<![\\p{L}])[وب]?ارجاع|(?<![\\p{L}])و?رده|(?<![\\p{L}])[وب]?عكس|" +
                 "(?<![\\p{L}])[وس]?سيتم|استرداد\\s+للمرسل|قيد\\s+(?:المراجعه|الانتظار)|غير\\s+(?:مكتمل|ناجح)|لم\\s+تكتمل|" +
                 "(?<![\\p{L}])[وا]?تلغت|(?<![\\p{L}])[وا]?ترفضت|مش\\s+ناجح|تعذر|(?<![\\p{L}])ب?انتظار|تحت\\s+المراجعه|لم\\s+يصل|" +
-                "(?<![\\p{L}])مرتد(?![\\p{L}])|بشكل\\s+غير",
+                "(?<![\\p{L}])مرتد(?![\\p{L}])|بشكل\\s+غير|قيد\\s+المعالجه|(?<![\\p{L}])[مو]?وقوف|(?<![\\p{L}])متوقف|" +
+                "(?<![\\p{L}])منتهيه(?![\\p{L}])|غير\\s+مقبول|لم\\s+تنجح|(?<![\\p{L}])مردود|(?<![\\p{L}])الحاله(?![\\p{L}])|لعدم\\s+كفايه",
             ci,
         )
 

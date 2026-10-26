@@ -49,8 +49,10 @@ interface RemoteSource {
 }
 
 sealed interface SmsUploadResult {
-    /** 2xx: the server stored (or already had) the message. */
-    data object Sent : SmsUploadResult
+    /** 2xx: the server stored (or already had) the message. [expenseId] is the expense it created, when the server says so. */
+    data class Sent(
+        val expenseId: String? = null,
+    ) : SmsUploadResult
 
     /** Transient: offline, 5xx, 408/429. Backed off exponentially, never failed. */
     data class Retry(
@@ -73,4 +75,9 @@ interface ParsedRemote {
         deviceId: String,
         item: eg.masroof.data.db.ParsedOutboxEntity,
     ): SmsUploadResult
+}
+
+/** DELETE /api/expenses/{id} (soft delete): what "Undo" of an automatically captured expense calls. True when it is gone. */
+interface ExpenseDeleter {
+    suspend fun deleteExpense(id: String): Boolean
 }

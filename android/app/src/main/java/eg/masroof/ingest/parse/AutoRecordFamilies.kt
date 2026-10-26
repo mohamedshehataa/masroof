@@ -22,12 +22,10 @@ object AutoRecordFamilies {
     private const val DATE = "(?:\\d{1,2}[/.-](?:\\d{1,2}|[a-z]{3})[/.-]\\d{2,4}|\\d{1,2}\\s+[a-z]{3}\\s+\\d{4})"
     private const val TIME = "\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s*[ap]m)?"
 
-    // a merchant or counterparty stops at "and" / "then" / و / "(" and never holds a card-number-like run or a fee or credit word
+    // a merchant or counterparty never holds a card-number-like run or a fee or credit word; the slot validator does the rest
     private const val MERCHANT =
-        "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])(?!\\d{4})" +
-            "(?!(?:fees?|commission|رسوم|عموله|deposit|salary|refund(?:ed)?|reversal)\\b)" +
-            "[^;:(]){1,60}?"
-    private const val CPARTY = "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])[^;:(]){1,60}?"
+        "(?:(?!\\d{4})(?!(?:fees?|commission|رسوم|عموله|deposit|salary|refund(?:ed)?|reversal)\\b)[^;:(]){1,60}?"
+    private const val CPARTY = "(?:[^;:(]){1,60}?"
 
     /**
      * CLOSED WORLD: after the merchant or counterparty the clause must end, or continue only with one of these phrases (a date, a
@@ -37,8 +35,9 @@ object AutoRecordFamilies {
     private const val OK_TAIL =
         "(?:\\s+(?:(?:on|في|يوم|بتاريخ)\\s+$DATE|(?:at|الساعه)?\\s*$TIME|(?:via|عبر)\\s+(?:instapay|انستاباي)|" +
             "(?:was\\s+)?successful(?:ly)?|بنجاح|completed|تمت\\s+بنجاح|has\\s+been\\s+completed\\s+successfully|" +
+            "for\\s+(?:more\\s+than\\s+)?\\d+\\s+items?|in\\s+\\d+\\s+installments?|" +
             "(?:ref|rrn|رقم\\s+المعامله)\\s*:?\\s*[a-z0-9]+))*"
-    private const val NAME = "[\\p{L}][\\p{L} .'-]{1,40}?"
+    private const val NAME = "[\\p{L}][\\p{L} .'-]{1,50}?"
     private const val TAIL3 =
         "(?:\\s+(?:في|يوم|رقم|المعامله|للمزيد|اتصل|ب|$TIME|$DATE|(?=[a-z0-9]*\\d)[a-z0-9]{6,12}|\\d{3,6}))*"
     private const val PREFIX = "(?:[\\p{L}][\\p{L}\\d .&-]{0,25}:\\s*)?(?:dear\\s+customer,?\\s*)?"
@@ -126,16 +125,50 @@ object AutoRecordFamilies {
             Regex("^تم\\s+استلام\\s+$AMT\\s+من\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
         )
 
-    /** Balance, limit, fee, hotline and thank-you clauses are allowed after the principal clause of the card families. */
-    private val noise =
-        Regex(
-            "\\b(?:balance|available|avail|limit|remaining|fees?|charges?|commission|call|hotline|ref|reference|" +
-                "thank|thanks|share|otp|pin|" +
-                "never|beware|www|offers?|cashback|earn|enjoy|points|discover|visit|auth|approval|code|txn|trx)\\b|" +
-                "(?<![\\p{L}])(?:رمز|كود|رصيد|المتاح|رسوم|مصاريف|عموله|اتصل|شكرا|مرجع|لا\\s+تشارك|احذر|الرمز|عروض|عرض|" +
-                "استمتع|اكتشف|تابع|احصل|خصم|الحد)(?![\\p{L}])",
-            ci,
+    /**
+     * A clause after the principal one must BE noise end to end (not merely contain a noise word): a balance or limit line, a hotline
+     * line, a security footer, a cashback promise, a fee note, a thank-you or a reference. "Transaction not authorized, please call
+     * 19666" holds a hotline but is not one.
+     */
+    private val noiseClauses =
+        listOf(
+            Regex(
+                "(?:your\\s+)?(?:available\\s+)?(?:balance|limit|credit\\s+limit)" +
+                    "(?:\\s+(?:is|will\\s+be\\s+updated\\s+shortly))?(?:\\s+(?:egp\\s*$NUM|$NUM\\s*egp))?",
+            ),
+            Regex(
+                "(?:not\\s+you\\s*\\??\\s*)?(?:for\\s+(?:more\\s+info(?:rmation)?|security|assistance)\\s*,?\\s*)?" +
+                    "(?:please\\s+)?call\\s+\\d{3,6}" +
+                    "(?:\\s+if\\s+(?:this\\s+was\\s+not\\s+you|you\\s+did\\s+not\\s+make\\s+this\\s+transaction))?",
+            ),
+            Regex("(?:never|do\\s+not|don't)\\s+share\\s+[a-z ,/']{1,50}"),
+            Regex(
+                "(?:you\\s+(?:will\\s+)?earn(?:ed)?\\s+)?(?:egp\\s*$NUM\\s+)?cashback(?:\\s+(?:of\\s+)?egp\\s*$NUM)?" +
+                    "(?:\\s+(?:that\\s+)?(?:will\\s+be\\s+)?credited(?:\\s+to\\s+your\\s+(?:account|card))?)?" +
+                    "(?:\\s+within\\s+\\d+\\s+days)?",
+            ),
+            Regex("(?:track|manage|discover|explore|visit|download)\\s+[a-z ]{1,40}(?:\\s+(?:at|on)\\s+\\S+)?"),
+            Regex("احصل\\s+علي\\s+[\\p{L}\\d% ]{1,60}"),
+            Regex("(?:اكتشف|تابع|استمتع)\\s+[\\p{L} ]{1,30}(?:\\s+(?:علي|عند)\\s+\\S+)?"),
+            Regex("(?:service\\s+|foreign\\s+transaction\\s+|annual\\s+)?fees?(?:\\s+of)?\\s+egp\\s*$NUM"),
+            Regex("(?:enjoy|earn|get)\\s+[a-z0-9% ]{1,40}[!.]?"),
+            Regex("thank(?:s|\\s+you)(?:\\s+for\\s+[a-z ]{1,30})?"),
+            Regex(
+                "(?:ref|rrn|auth(?:orization)?(?:\\s+code)?|approval(?:\\s+code)?|txn\\s+id|trx\\s+id)" +
+                    "\\s*(?:no\\.?)?\\s*:?\\s*[a-z0-9]{3,16}",
+            ),
+            Regex(
+                "(?:رصيدك|الرصيد|الحد)(?:\\s+(?:الحالي|المتاح|الائتماني))*(?:\\s+[بل]بطاقتكم)?" +
+                    "(?:\\s+(?:$NUM\\s*(?:جنيه|جم)?|egp\\s*$NUM))?",
+            ),
+            Regex("(?:للمزيد\\s+)?(?:ا)?تصل\\s+ب\\s*\\d{3,6}"),
+            Regex("(?:لا\\s+تشارك|احذر)\\s+[\\p{L} ]{1,60}"),
+            Regex("شكرا\\s+لاستخدامكم\\s+[\\p{L} ]{1,30}"),
+            Regex("كاش\\s*باك[\\p{L}\\d .]{0,60}"),
+            Regex("و?سيتم\\s+[\\p{L} ]{0,20}كاش\\s*باك[\\p{L}\\d .]{0,60}"),
         )
+
+    private fun isNoise(clause: String): Boolean = clause.isBlank() || noiseClauses.any { it.matches(clause.trim()) }
 
     private val numbers = Regex(NUM)
 
@@ -157,25 +190,35 @@ object AutoRecordFamilies {
         if (clauses.isEmpty() || originals.size != clauses.size) return null
         val first = clauses.first()
         val rest = clauses.drop(1)
-        val onlyNoise = rest.all { noise.containsMatchIn(it) || it.isBlank() }
+        val onlyNoise = rest.all(::isNoise)
         return when {
             msg.source == CaptureSource.NOTIFICATION -> instapayNotification(msg, clauses, originals, record)
             record.kind != TxKind.PURCHASE && record.kind != TxKind.CASH_WITHDRAWAL && !instantKind(record) -> null
             hsbc(first, originals.first(), record) -> if (onlyNoise) "F2" else null
             instant(first, originals.first(), record) -> if (onlyNoise) "F3" else null
-            card(first, originals.first(), record) -> if (onlyNoise || cardTailIsNoise(rest)) "F1" else null
+            card(first, originals.first(), record) -> if (onlyNoise || cardTailIsNoise(rest, originals.drop(1))) "F1" else null
             else -> null
         }
     }
 
-    /** "... at GOURMET EGYPT - Y. Your available limit ...": exactly ONE short token after the merchant belongs to the merchant. */
-    private val merchantSuffix = Regex("^\\p{L}{1,25}$")
+    /** "... at GOURMET EGYPT - Y. Your available limit ...", "BTECH - NASR CITY": up to two name tokens after the merchant. */
+    private const val MAX_SUFFIX_TOKENS = 2
 
-    private fun cardTailIsNoise(rest: List<String>): Boolean {
+    private fun cardTailIsNoise(
+        rest: List<String>,
+        restOriginals: List<String>,
+    ): Boolean {
         val head = rest.firstOrNull() ?: return true
-        val isSuffix = merchantSuffix.matches(head) && !noise.containsMatchIn(head) && !StatusGate.isNonName(head)
-        val tail = if (isSuffix && !StatusGate.blocks(head)) rest.drop(1) else rest
-        return tail.all { noise.containsMatchIn(it) || it.isBlank() }
+        val original = restOriginals.firstOrNull().orEmpty()
+        val tokens = original.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val isSuffix =
+            tokens.size in 1..MAX_SUFFIX_TOKENS &&
+                !isNoise(head) &&
+                !StatusGate.blocks(head) &&
+                tokens.none { StatusGate.isNonName(it) } &&
+                tokens.all { latinNameToken(it) || it.all { c -> c in arabicLetter } }
+        val tail = if (isSuffix) rest.drop(1) else rest
+        return tail.all(::isNoise)
     }
 
     private fun instantKind(r: ParsedRecord) = r.kind == TxKind.TRANSFER_OUT || r.kind == TxKind.TRANSFER_IN || r.kind == TxKind.INCOME
@@ -192,8 +235,8 @@ object AutoRecordFamilies {
     ): Boolean = numbers.findAll(text).any { MessageParser.minorOf(it.value) == record.amountMinor }
 
     private val arabicLetter = '؀'..'ۿ'
-    private const val MAX_LATIN_TOKENS = 5
-    private const val MAX_ARABIC_TOKENS = 3
+    private const val MAX_LATIN_TOKENS = 6
+    private const val MAX_ARABIC_TOKENS = 4
 
     /** A merchant or counterparty slot must look like a name: nothing else may hide in it (closed world). */
     private fun slotLooksLikeName(
@@ -209,7 +252,7 @@ object AutoRecordFamilies {
         if (tokens.isEmpty()) return false
         val hasLatin = tokens.any { tok -> tok.any { it in 'A'..'Z' || it in 'a'..'z' } }
         val hasArabic = tokens.any { tok -> tok.any { it in arabicLetter } }
-        val plain = slot.all { it.isLetterOrDigit() || it in " .&'*-@/" }
+        val plain = slot.all { it.isLetterOrDigit() || it in " .&'*-@/,#" }
         val statusFree = tokens.none { StatusGate.isNonName(it) || StatusGate.isStatusWord(it.lowercase()) }
         return when {
             !plain || !statusFree || (hasLatin && hasArabic) -> false
@@ -218,11 +261,17 @@ object AutoRecordFamilies {
         }
     }
 
-    /** "AHMED", "Sara", "WWW.NOON.COM", "*TRIP", "7-ELEVEN": an uppercase start, no lowercase word, not a bare number. */
+    /** "AHMED", "Sara", "WWW.NOON.COM", "amazon.eg", "*TRIP", "#12", "7-ELEVEN", a handle, a mobile number: a name, never a word. */
     private val instapayHandle = Regex("^[a-z0-9._-]{2,30}@instapay$")
+    private val domainName = Regex("^[a-z0-9-]+(?:\\.[a-z0-9-]+)+$")
+    private val storeNumber = Regex("^#\\d{1,4}$")
+    private val egyptianMobile = Regex("^01[0125]\\d{8}$")
 
-    private fun latinNameToken(token: String): Boolean {
-        if (instapayHandle.matches(token)) return true
+    private fun latinNameToken(raw: String): Boolean {
+        val token = raw.trimEnd(',')
+        if (listOf(instapayHandle, domainName, storeNumber, egyptianMobile).any { it.matches(token) }) {
+            return true
+        }
         val first = token.dropWhile { it == '*' }.firstOrNull() ?: return false
         val startsRight = first.isUpperCase() || (first.isDigit() && token.none { it.isLowerCase() })
         return startsRight && token.any { it.isLetter() }

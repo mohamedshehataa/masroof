@@ -125,3 +125,28 @@ const val REVIEW_RETENTION_DAYS = 30L
 
 /** Items created before this instant are expired: they are purged, and never shown even before the purge ran. */
 fun reviewCutoff(nowMillis: Long): Long = nowMillis - REVIEW_RETENTION_DAYS * 24L * 60 * 60 * 1000
+
+/**
+ * An expense that the phone recorded by itself from an SMS or app notification (a proven family or a learned format): it drives
+ * the "Recorded ... Undo" notification and the "Captured" chip for [CAPTURED_CHIP_DAYS] days. Typed fields only, never message text.
+ * [expenseId] is the server expense once it was uploaded (needed to Undo through the API); [templateId] is the learned format
+ * that recorded it, if any, so Undo can offer "Stop learning this format?".
+ */
+@Entity(tableName = "captured_tx")
+data class CapturedTxEntity(
+    @PrimaryKey val localId: String,
+    val expenseId: String?,
+    val amountMinor: Long,
+    val currency: String,
+    val label: String?,
+    val source: String,
+    val templateId: String?,
+    val capturedAtMillis: Long,
+) {
+    override fun toString() = "CapturedTxEntity(localId=$localId)"
+}
+
+const val CAPTURED_CHIP_DAYS = 7L
+
+/** Captured rows older than this are no longer shown with a chip (and are purged). */
+fun capturedCutoff(nowMillis: Long): Long = nowMillis - CAPTURED_CHIP_DAYS * 24L * 60 * 60 * 1000

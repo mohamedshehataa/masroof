@@ -182,6 +182,8 @@ fun ExpenseListItem(
     modifier: Modifier = Modifier,
     onRetryEntry: (String) -> Unit = {},
     onDeleteEntry: (String) -> Unit = {},
+    capturedLocalId: String? = null,
+    onUndoCaptured: (String) -> Unit = {},
 ) {
     val style = LocalMoneyStyle.current
     val categoryName =
@@ -220,6 +222,19 @@ fun ExpenseListItem(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
+                }
+                if (capturedLocalId != null) {
+                    // recorded by the phone itself in the last 7 days: say so, and let the user take it back
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.captured_chip),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        TextButton(onClick = { onUndoCaptured(capturedLocalId) }, modifier = Modifier.height(48.dp)) {
+                            Text(stringResource(R.string.captured_undo))
+                        }
+                    }
                 }
                 if (row.pending) {
                     Text(

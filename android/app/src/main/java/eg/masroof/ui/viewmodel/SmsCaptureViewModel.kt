@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.reviewCutoff
 import eg.masroof.di.IoDispatcher
+import eg.masroof.ingest.CapturedAlertSettings
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.SenderSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -25,6 +26,7 @@ class SmsCaptureViewModel
     constructor(
         private val senders: SenderSettings,
         private val notifications: NotificationSettings,
+        private val capturedAlerts: CapturedAlertSettings,
         db: AppDatabase,
         clock: java.time.Clock,
         @IoDispatcher private val io: CoroutineDispatcher,
@@ -37,6 +39,16 @@ class SmsCaptureViewModel
 
         private val mutablePackages = MutableStateFlow(notifications.packages().sorted())
         val packages: StateFlow<List<String>> = mutablePackages
+
+        private val mutableCapturedAlerts = MutableStateFlow(capturedAlerts.enabled())
+
+        /** The quiet "Recorded ... Undo" notification for transactions captured by themselves (on by default). */
+        val capturedAlertsEnabled: StateFlow<Boolean> = mutableCapturedAlerts
+
+        fun setCapturedAlerts(on: Boolean) {
+            capturedAlerts.setEnabled(on)
+            mutableCapturedAlerts.value = on
+        }
 
         val reviewCount: StateFlow<Int> =
             db.reviews().observeCount(reviewCutoff(clock.millis())).stateIn(

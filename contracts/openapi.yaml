@@ -3063,6 +3063,12 @@ components:
           type: string
           enum: [ACCEPTED, DUPLICATE, REJECTED_OTP, REJECTED_UNKNOWN_SENDER]
           description: "`DUPLICATE` means the same external id or image hash was already ingested; the original id is returned."
+        expenseId:
+          type: string
+          format: uuid
+          description: |
+            Only for `POST /api/ingest/parsed-transactions` with outcome `ACCEPTED`: the expense that was just created, so the
+            app can offer an Undo (`DELETE /api/expenses/{expenseId}`). Absent for a duplicate and for the raw-text endpoints.
 
     # ---------------------------------------------------------------- Parsing
     ParseRequest:

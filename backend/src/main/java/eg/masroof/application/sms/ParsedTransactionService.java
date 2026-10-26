@@ -85,8 +85,10 @@ public class ParsedTransactionService {
     DUPLICATE
   }
 
-  /** The evidence row id and the outcome. */
-  public record Accepted(UUID rawMessageId, Outcome outcome) {}
+  /**
+   * The evidence row id, the outcome and, for a new record, the expense that was created from it.
+   */
+  public record Accepted(UUID rawMessageId, Outcome outcome, @Nullable UUID expenseId) {}
 
   private final RawMessageRepository messages;
   private final SmsAccounts accounts;
@@ -140,7 +142,7 @@ public class ParsedTransactionService {
                 cmd.occurredAt(),
                 now));
     if (!stored.inserted()) {
-      return new Accepted(stored.id(), Outcome.DUPLICATE);
+      return new Accepted(stored.id(), Outcome.DUPLICATE, null);
     }
     Optional<SmsAccounts.AccountRef> account =
         cmd.instrumentLast4() == null
@@ -169,7 +171,7 @@ public class ParsedTransactionService {
             now);
     UUID expenseId = expenses.insert(row).id();
     messages.attachExpense(stored.id(), expenseId);
-    return new Accepted(stored.id(), Outcome.ACCEPTED);
+    return new Accepted(stored.id(), Outcome.ACCEPTED, expenseId);
   }
 
   private static ExpenseType validate(Command cmd, Instant now, String baseCurrency) {

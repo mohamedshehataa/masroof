@@ -6,9 +6,9 @@ REQ → story (status, phase) → tests (file · name, last result) → implemen
 ## Summary
 | metric | value |
 |---|---|
-| total REQs | 390 |
-| covered (at least one test) | 107 |
-| passing | 87 |
+| total REQs | 395 |
+| covered (at least one test) | 112 |
+| passing | 92 |
 | failing | 0 |
 | pending (story not DONE, no test yet) | 282 |
 | orphans (DONE story, no test) | 0 |
@@ -93,6 +93,11 @@ None.
 | REQ-SMS-076 | A non-completion status anywhere blocks every automatic record and every learning | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a debit template never records a credit - the sign and Dr or Cr stay in the shape`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a learned format never records a message that carries a status word`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a template whose direction disagrees with the engine's reading goes to review`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 the status gate blocks a non-completion in English and Arabic and lets a completed credit through`() { (PASS) | PASS | — |
 | REQ-SMS-077 | Review slots never keep a code, and only an unchanged one-tap Save teaches | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-077 review slots never keep a code - secret items store none, code-like runs are masked, saving drops them` (PASS) | PASS | — |
 | REQ-SMS-078 | Closed world: only a name, then a closed tail, may follow the amount of an automatic record | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 a learned name slot keeps its token count - an extra word after it is never matched`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 a word that is never a name cannot sit in a learned merchant slot`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 the same holds in Arabic`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 the verifier's status wording is blocked by the gate as defence in depth`() { (PASS) | PASS | — |
+| REQ-SMS-079 | The Room schema keeps the review list when the captured records are added | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLifecycleTest.kt` · fun `REQ-SMS-079 migration 5 to 6 keeps the review items and adds the captured records`() = (PASS) | PASS | — |
+| REQ-SMS-080 | Every automatic record is remembered for Undo | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-080 a learned format that recorded a message remembers its template`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-080 a review item is never announced and a one-tap Save is not an automatic record`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-080 an automatic record is remembered for Undo and announced with typed fields only`() = (PASS) | PASS | — |
+| REQ-SMS-081 | Undo removes the record, or deletes the expense, and may forget the format | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-081 Undo of a record a learned format made offers to stop learning it, and yes forgets the format`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-081 Undo of a record still in the outbox removes it from the outbox`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-081 Undo of an uploaded record deletes the expense through the API`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-081 a failed delete (offline) leaves everything as it was so Undo can be tried again`() = (PASS) | PASS | — |
+| REQ-SMS-082 | The notification is quiet, optional and holds no message text | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-082 the channel toggle in Settings turns the notification off`() { (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-082 the notification holds amount, currency and label only - never message text - and is quiet`() { (PASS)<br>`android/app/src/test/java/eg/masroof/SmsCapturedTest.kt` · fun `REQ-SMS-082 without the notification permission nothing is posted`() { (PASS) | PASS | — |
+| REQ-SMS-083 | The Captured chip | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/ScreenStatesTest.kt` · fun `REQ-SMS-083 an expense the phone captured by itself shows the Captured chip with Undo`() { (PASS) | PASS | — |
 
 ## Area NTF
 | REQ | name | story | status | phase | tests | result | files |

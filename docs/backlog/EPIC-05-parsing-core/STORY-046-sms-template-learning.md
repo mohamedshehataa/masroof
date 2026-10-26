@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: M
 modules: [backend, android]
 depends_on: [STORY-044, STORY-045]
-reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077, REQ-SMS-078]
+reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077, REQ-SMS-078, REQ-SMS-079, REQ-SMS-080, REQ-SMS-081, REQ-SMS-082, REQ-SMS-083]
 implements: [PROMPT.md §4.3 (parsing strategy 3), PROMPT.md S12 (feature flags for template learning)]
 owner_agent: ai-parsing-engineer
 ---
@@ -53,6 +53,21 @@ Given a secret-looking or code-like review item, when it is stored, then no slot
 
 ### REQ-SMS-078 — Closed world: only a name, then a closed tail, may follow the amount of an automatic record
 Given a proven family or a learned format, when anything other than a date, a time, "via InstaPay", "successfully" or a reference follows the merchant or counterparty (any other word, a lowercase Latin word, an emoji, "?" or "!", Latin mixed with Arabic, more tokens than the slot allows), then the message is a review item; given a learned name slot, then only a name of the same token count matches, and a word that is never a name ("cashback", "return") never does.
+
+### REQ-SMS-079 — The Room schema keeps the review list when the captured records are added
+Given a database at version 5 with review items, when it opens at version 6, then the review items are kept and automatic records can be stored.
+
+### REQ-SMS-080 — Every automatic record is remembered for Undo
+Given a message recorded without confirmation (a proven family or a learned format), when it is queued, then a captured record with amount, currency, label and the learned template (if any) is kept for 7 days and announced once; a review item and a one-tap Save are never announced.
+
+### REQ-SMS-081 — Undo removes the record, or deletes the expense, and may forget the format
+Given a captured record, when the user taps Undo, then a record still in the outbox is removed from it, an uploaded one is deleted through the API (the server returns the created expense id on ingest), a failed delete leaves everything as it was, and for a learned format the user is asked "Stop learning this format?".
+
+### REQ-SMS-082 — The notification is quiet, optional and holds no message text
+Given the "Recorded 500 EGP at AMAZON - Undo" notification, then it is on the low-importance channel "Captured transactions" without sound or vibration, holds only amount, currency and label, can be turned off in Settings, and is not posted without the notification permission.
+
+### REQ-SMS-083 — The Captured chip
+Given an expense the phone captured itself in the last 7 days, when it is listed in Home or Transactions, then its row shows a "Captured" chip with an Undo action.
 
 ### REQ-SMS-075 — A proven family is recorded without confirmation and is never learned from
 Given a card-purchase message of family F1, when it arrives, then it is queued directly and no review item or template is created.

@@ -164,6 +164,8 @@ fun parsedRequest(
         merchant = item.merchant,
     )
 
+private const val HTTP_NOT_FOUND = 404
+
 /** [RemoteSource] backed by the Kotlin client generated from contracts/openapi.yaml. */
 @Singleton
 class ApiRemoteSource
@@ -172,7 +174,7 @@ class ApiRemoteSource
         private val settings: SettingsRepository,
         bare: OkHttpClient,
         session: SessionManager,
-    ) : RemoteSource, ParsedRemote {
+    ) : RemoteSource, ParsedRemote, ExpenseDeleter {
         private var cachedKey: String? = null
         private var cachedRetrofit: Retrofit? = null
 
@@ -281,7 +283,7 @@ class ApiRemoteSource
                 val body = parsedRequest(deviceId, item)
                 val response = retrofit().create(IngestApi::class.java).ingestParsedTransaction(body)
                 if (response.isSuccessful) {
-                    SmsUploadResult.Sent
+                    SmsUploadResult.Sent(response.body()?.expenseId?.toString())
                 } else {
                     classifySmsStatus(
                         response.code(),
@@ -295,6 +297,20 @@ class ApiRemoteSource
                 throw e
             } catch (_: Exception) {
                 SmsUploadResult.RetryLimited
+            }
+
+        @Suppress("TooGenericExceptionCaught")
+        override suspend fun deleteExpense(id: String): Boolean =
+            try {
+                val response = retrofit().create(ExpensesApi::class.java).deleteExpense(UUID.fromString(id))
+                // 404: it is already gone (deleted on another device): that is what Undo wanted
+                response.isSuccessful || response.code() == HTTP_NOT_FOUND
+            } catch (_: IOException) {
+                false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
             }
 
         private fun Expense.toEntity() =
