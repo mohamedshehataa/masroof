@@ -240,7 +240,7 @@ export const vInviteSummary = v.object({
 });
 
 export const vInviteAcceptRequest = v.object({
-    code: v.pipe(v.string(), v.maxLength(128)),
+    code: v.string(),
     displayName: v.optional(v.pipe(v.string(), v.maxLength(80))),
     email: v.pipe(v.string(), v.email()),
     password: v.pipe(v.string(), v.minLength(8), v.maxLength(256))

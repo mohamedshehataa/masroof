@@ -2550,7 +2550,6 @@ components:
       properties:
         code:
           type: string
-          maxLength: 128
         displayName:
           type: string
           maxLength: 80

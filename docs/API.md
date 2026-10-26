@@ -135,7 +135,54 @@ Request body (`application/json`): `InviteAcceptRequest`
 | 201 | Account created; tokens returned. | application/json: `TokenPair` |
 | 400 | Malformed request or validation failure. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
+| 409 | State conflict (duplicate, already merged, optimistic lock). | application/problem+json: `Problem` |
 | 410 | Invite expired or already used. | application/problem+json: `Problem` |
+| 429 | Rate limited. | application/problem+json: `Problem` |
+
+### `GET /auth/invites` - List the household's active invites
+
+- operationId: `listInvites`
+- Requirements: REQ-SEC-002
+
+Admin only. Pending, unexpired invites of the caller's household; the codes are never returned again.
+
+| Status | Description | Body |
+|---|---|---|
+| 200 | Active invites. | application/json: array of `InviteSummary` |
+| 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
+| 403 | Authenticated but not allowed (wrong role or household). | application/problem+json: `Problem` |
+
+### `DELETE /auth/invites/{inviteId}` - Revoke a pending invite
+
+- operationId: `revokeInvite`
+- Requirements: REQ-SEC-002
+
+Admin only. Idempotent for the household's own invites; another household's invite is 404.
+
+| Parameter | In | Type | Required |
+|---|---|---|---|
+| `inviteId` | path | string (uuid) | yes |
+
+| Status | Description | Body |
+|---|---|---|
+| 204 | Revoked. |  |
+| 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
+| 403 | Authenticated but not allowed (wrong role or household). | application/problem+json: `Problem` |
+| 404 | Resource not found in this household. | application/problem+json: `Problem` |
+
+## Members
+
+Household members.
+
+### `GET /api/members` - List the household's members
+
+- operationId: `listMembers`
+- Requirements: REQ-SEC-002
+
+| Status | Description | Body |
+|---|---|---|
+| 200 | Members of the caller's household. | application/json: array of `Member` |
+| 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 
 ## Expenses
 
@@ -1529,11 +1576,24 @@ Type: enum(GROUP, DIRECT)
 | `displayName` | string | yes |  |
 | `expiresAt` | string (date-time) | yes |  |
 
+### InviteSummary
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `displayName` | string | yes |  |
+| `email` | string or null | no |  |
+| `phoneE164` | string or null | no |  |
+| `status` | enum(PENDING, ACCEPTED, REVOKED) | yes |  |
+| `expiresAt` | string (date-time) | yes |  |
+| `createdAt` | string (date-time) | yes |  |
+
 ### InviteAcceptRequest
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `code` | string | yes |  |
+| `displayName` | string | no | Optional; overrides the name the admin gave the invite. |
 | `email` | string (email) | yes |  |
 | `password` | string (password) | yes |  |
 
