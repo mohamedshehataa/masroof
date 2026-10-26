@@ -714,7 +714,6 @@ object MessageParser {
         dateIso.findAll(t).forEach { blankDate(it, 1) }
         dateShort.findAll(t).forEach { blank(it.range) }
         Regex("(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])").findAll(t).forEach { blank(it.range) }
-        val trusted = ownAccountTrusted(t)
         last4Patterns.forEach { p ->
             p.regex.findAll(t).forEach { m -> if (!p.own || bareAccepted(t, m.range.first)) blank(m.groups[1]!!.range) }
         }
