@@ -19,7 +19,6 @@ import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.OutboxEntity
 import eg.masroof.data.normalizeServerUrl
-import kotlinx.datetime.Instant
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
@@ -46,6 +45,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 object UuidSerializer : KSerializer<UUID> {
     override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
@@ -84,6 +85,7 @@ object BigDecimalSerializer : KSerializer<BigDecimal> {
 }
 
 /** Json configuration for the generated models (they mark UUID/Instant/enums as @Contextual). */
+@OptIn(ExperimentalTime::class)
 val apiJson: Json =
     Json {
         ignoreUnknownKeys = true

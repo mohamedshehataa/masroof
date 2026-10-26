@@ -6,13 +6,15 @@ import eg.masroof.api.models.Money
 import eg.masroof.api.models.PaymentMethod
 import eg.masroof.api.models.TransactionType
 import eg.masroof.data.remote.apiJson
-import kotlinx.datetime.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /** Guards the generated client against the real wire format: Money.amountMinor is Long, enums/UUID/Instant round-trip. */
+@OptIn(ExperimentalTime::class)
 class ApiJsonTest {
     @Test
     fun `REQ-OPS-055 create request serialises money as integer minor units`() {
