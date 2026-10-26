@@ -294,6 +294,19 @@ CREATE TABLE IF NOT EXISTS review_item (
 )
 """
 
+private const val CREATE_LEARNED_TEMPLATE = """
+CREATE TABLE IF NOT EXISTS learned_template (
+  id TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  shape TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amountSlot INTEGER NOT NULL,
+  last4Slot INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(id)
+)
+"""
+
 /**
  * v4 -> v5 (round 15): a review item carries the engine's typed suggestion plus its digit-free shape, and the user's confirmed
  * message formats are stored on the phone as `learned_template` rows.
@@ -301,20 +314,19 @@ CREATE TABLE IF NOT EXISTS review_item (
 val MIGRATION_4_5: Migration =
     object : Migration(4, 5) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            for (column in listOf("sugKind TEXT", "sugAmountMinor INTEGER", "sugCurrency TEXT", "sugOccurredAtMillis INTEGER")) {
-                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
-            }
-            for (column in listOf("sugLast4 TEXT", "sugSenderId TEXT", "sugInstitution TEXT", "sugPaymentMethod TEXT")) {
-                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
-            }
-            for (column in listOf("sugMerchant TEXT", "shape TEXT", "slots TEXT")) {
-                db.execSQL("ALTER TABLE review_item ADD COLUMN $column")
-            }
-            db.execSQL(
-                "CREATE TABLE IF NOT EXISTS learned_template (id TEXT NOT NULL, sender TEXT NOT NULL, shape TEXT NOT NULL, " +
-                    "kind TEXT NOT NULL, amountSlot INTEGER NOT NULL, last4Slot INTEGER NOT NULL, createdAtMillis INTEGER NOT NULL, " +
-                    "PRIMARY KEY(id))",
-            )
+            // One literal statement per column: SQL is never assembled from strings (semgrep CWE-89 rules).
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugKind TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugAmountMinor INTEGER")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugCurrency TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugOccurredAtMillis INTEGER")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugLast4 TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugSenderId TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugInstitution TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugPaymentMethod TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugMerchant TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN shape TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN slots TEXT")
+            db.execSQL(CREATE_LEARNED_TEMPLATE)
         }
     }
 
