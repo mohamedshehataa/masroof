@@ -42,7 +42,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
-    id("org.openapi.generator") version "7.14.0"
+    id("org.openapi.generator") version "7.26.0"
 }
 
 group = "eg.masroof"
@@ -81,8 +81,8 @@ dependencies {
 val openApiOut = layout.buildDirectory.dir("generated/openapi")
 openApiGenerate {
     generatorName = "spring"
-    inputSpec = rootProject.file("../contracts/openapi.yaml").toURI().toString()
-    outputDir = openApiOut.map { it.asFile.absolutePath }
+    inputSpec.set(layout.projectDirectory.file("../contracts/openapi.yaml"))
+    outputDir.set(openApiOut)
     apiPackage = "eg.masroof.adapters.in.rest.generated.api"
     modelPackage = "eg.masroof.adapters.in.rest.generated.model"
     invokerPackage = "eg.masroof.adapters.in.rest.generated"
