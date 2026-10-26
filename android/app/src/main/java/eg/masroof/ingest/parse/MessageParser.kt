@@ -628,13 +628,21 @@ object MessageParser {
         val anyIn = strongIn || ownDest || weakCredit
         val anyOut = debit || ownSource || (transfer && third) || minusSign.containsMatchIn(now)
         return when {
-            anyIn && anyOut -> if (ownSource && ownDest && !strongIn && !debit) Dir.OUT else Dir.CONFLICT
+            anyIn && anyOut -> if (isOwnToOwn(ownSource, ownDest, strongIn, debit)) Dir.OUT else Dir.CONFLICT
             anyIn -> Dir.IN
             anyOut -> Dir.OUT
             transfer -> Dir.CONFLICT // a transfer that says nothing about who gave or received
             else -> Dir.NONE
         }
     }
+
+    /** Own account on both ends and nothing else: money moved between the household's own accounts. */
+    private fun isOwnToOwn(
+        ownSource: Boolean,
+        ownDest: Boolean,
+        strongIn: Boolean,
+        debit: Boolean,
+    ) = ownSource && ownDest && !strongIn && !debit
 
     private val futureClause = Regex("(?<![\\p{L}])(?:وسيتم|سيتم|وسوف|سوف|will(?: be)?)(?![\\p{L}])[^.!?؟\\n]*", ci)
     private val paymentContext = Regex("\\bbill\\b|فاتوره|سداد|شحن", ci)
@@ -794,9 +802,6 @@ object MessageParser {
     }
 
     // ---- last four / date / ids -------------------------------------------------------------------------------------
-
-    /** A match that itself starts with "your account/card/wallet" (حسابك, بطاقتك, محفظتك) is the household's own. */
-    private val ownText = Regex("^(?:حساب(?:ك|كم)|بطاقت(?:ك|كم)|محفظت(?:ك|كم)|your\\s)", ci)
 
     /** A bare number after "your account" is trusted only when nothing in the message hints at a secret or a security footer. */
     private fun ownAccountTrusted(t: String): Boolean = !SecretDetector.hasHintWord(t) && !SecretDetector.hasSecurityFooter(t)
