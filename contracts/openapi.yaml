@@ -3937,6 +3937,11 @@ components:
             type: integer
         onTrack:
           type: boolean
+        daysLeft:
+          type: integer
+          description: Days after today until this budget's period ends; 0 once it is over.
+        periodRange:
+          $ref: '#/components/schemas/PeriodRange'
 
     BudgetStatusList:
       type: object

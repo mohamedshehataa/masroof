@@ -1081,6 +1081,11 @@ export type BudgetStatus = {
     progressBps: number;
     alertsFired: Array<number>;
     onTrack: boolean;
+    /**
+     * Days after today until this budget's period ends; 0 once it is over.
+     */
+    daysLeft?: number;
+    periodRange?: PeriodRange;
 };
 
 export type BudgetStatusList = {

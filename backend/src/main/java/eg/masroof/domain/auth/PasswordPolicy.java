@@ -14,9 +14,10 @@ import java.util.Set;
 /**
  * Password rules for every new password (invite acceptance, bootstrap admin): at least 12
  * characters; at most 72 UTF-8 bytes, because BCrypt reads no more and Spring's encoder throws
- * beyond it (so the limit is enforced here, with a 400, instead of a 500); no NUL; at least five distinct characters and no single repeated or sequential run; and not a
- * common password. "Common" is the 10,000 most used passwords (SecLists, MIT), compared case-folded, also
- * after dropping trailing digits and symbols so {@code Password1234!} fails too.
+ * beyond it (so the limit is enforced here, with a 400, instead of a 500); no NUL; at least five
+ * distinct characters and no single repeated or sequential run; and not a common password. "Common"
+ * is the 10,000 most used passwords (SecLists, MIT), compared case-folded, also after dropping
+ * trailing digits and symbols so {@code Password1234!} fails too.
  */
 public final class PasswordPolicy {
 
@@ -62,7 +63,8 @@ public final class PasswordPolicy {
     // Digits, punctuation, symbols and any space (including NBSP) around the word do not make it
     // uncommon: "!Password1234", "1234password" and "password 1234" all reduce to "password".
     String folded = password.toLowerCase(Locale.ROOT);
-    String stem = folded.replaceAll("^[\\p{N}\\p{P}\\p{S}\\p{Z}\\s]+|[\\p{N}\\p{P}\\p{S}\\p{Z}\\s]+$", "");
+    String stem =
+        folded.replaceAll("^[\\p{N}\\p{P}\\p{S}\\p{Z}\\s]+|[\\p{N}\\p{P}\\p{S}\\p{Z}\\s]+$", "");
     if (Holder.COMMON.contains(folded.strip())
         || Holder.COMMON.contains(folded)
         || (!stem.isEmpty() && Holder.COMMON.contains(stem))) {
@@ -83,8 +85,8 @@ public final class PasswordPolicy {
   }
 
   /**
-   * Fewer than five distinct characters, one block repeated ("123412341234"), or a single
-   * ascending or descending run ("abcdefghijkl", "123456789012", digits wrap 9 to 0).
+   * Fewer than five distinct characters, one block repeated ("123412341234"), or a single ascending
+   * or descending run ("abcdefghijkl", "123456789012", digits wrap 9 to 0).
    */
   private static boolean repetitive(String password) {
     int[] cps = password.codePoints().toArray();

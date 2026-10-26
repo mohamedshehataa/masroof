@@ -151,7 +151,7 @@ export const listInvites = <ThrowOnError extends boolean = true>(options?: Optio
 /**
  * Revoke a pending invite
  *
- * Admin only. Idempotent for the household's own invites; another household's invite is 404.
+ * Admin only. Idempotent for pending or already revoked invites; accepted → 409; other household → 404.
  */
 export const revokeInvite = <ThrowOnError extends boolean = true>(options: Options<RevokeInviteData, ThrowOnError>): RequestResult<RevokeInviteResponses, RevokeInviteErrors, ThrowOnError, 'data'> => (options.client ?? client).delete<RevokeInviteResponses, RevokeInviteErrors, ThrowOnError, 'data'>({
     responseValidator: async (data) => await v.parseAsync(vRevokeInviteResponse, data),

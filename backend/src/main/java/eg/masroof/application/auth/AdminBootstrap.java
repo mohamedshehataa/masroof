@@ -26,8 +26,8 @@ public class AdminBootstrap {
 
   /**
    * Does nothing when either value is blank or a login already exists (then only a warning without
-   * values). The password policy applies only when the first admin is really created. Never logs the
-   * password.
+   * values). The password policy applies only when the first admin is really created. Never logs
+   * the password.
    */
   public void run(String email, String password) {
     if (email.isBlank() || password.isEmpty()) {

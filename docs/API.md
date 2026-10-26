@@ -157,7 +157,7 @@ Admin only. Pending, unexpired invites of the caller's household; the codes are 
 - operationId: `revokeInvite`
 - Requirements: REQ-SEC-060
 
-Admin only. Idempotent for the household's own invites; another household's invite is 404.
+Admin only. Idempotent for pending or already revoked invites; accepted → 409; other household → 404.
 
 | Parameter | In | Type | Required |
 |---|---|---|---|
@@ -2232,6 +2232,8 @@ Type: any
 | `progressBps` | integer | yes | Spent / budget in basis points (may exceed 10000). |
 | `alertsFired` | array of integer | yes |  |
 | `onTrack` | boolean | yes |  |
+| `daysLeft` | integer | no | Days after today until this budget's period ends; 0 once it is over. |
+| `periodRange` | `PeriodRange` | no |  |
 
 ### BudgetStatusList
 

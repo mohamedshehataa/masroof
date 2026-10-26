@@ -81,7 +81,8 @@ class PasswordPolicyTest {
 
   @Test
   @Tag("REQ-SEC-062")
-  @DisplayName("REQ-SEC-062 leading and trailing digits, symbols and spaces do not hide a common word")
+  @DisplayName(
+      "REQ-SEC-062 leading and trailing digits, symbols and spaces do not hide a common word")
   void paddedCommonWords() {
     for (String pw :
         new String[] {
@@ -89,7 +90,7 @@ class PasswordPolicyTest {
           "!Password1234",
           "1234password",
           "PASSWORD\u00a0\u00a0\u00a0\u00a0",
-          "  password  ",
+          "  password  1234  ",
           "--password--99"
         }) {
       assertThat(PasswordPolicy.check(pw)).as(pw).contains(Violation.COMMON);

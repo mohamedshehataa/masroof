@@ -76,7 +76,8 @@ class AdminBootstrapPolicyTest {
 
   @Test
   @Tag("REQ-SEC-062")
-  @DisplayName("REQ-SEC-062 once a login exists the variables are ignored: no throw, nothing created")
+  @DisplayName(
+      "REQ-SEC-062 once a login exists the variables are ignored: no throw, nothing created")
   void ignoredWhenLoginExists() {
     loginExists = true;
     bootstrap.run("owner@example.com", "password1234");

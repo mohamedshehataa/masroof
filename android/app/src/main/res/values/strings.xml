@@ -214,4 +214,35 @@
     <string name="members_error_invalid">Check the name and email.</string>
     <string name="members_error_offline">No connection. Try again.</string>
     <string name="members_error_other">Something went wrong. Try again.</string>
+    <string name="budgets_title">Budgets</string>
+    <string name="budgets_add">Add budget</string>
+    <string name="budgets_edit">Edit budget</string>
+    <string name="budgets_empty_title">No budgets yet</string>
+    <string name="budgets_empty_body">Set a monthly limit for a category or for all spending and watch your progress.</string>
+    <string name="budgets_all_spending">All spending</string>
+    <string name="budgets_category">Category</string>
+    <string name="budgets_amount">Monthly limit (EGP)</string>
+    <string name="budgets_rollover">Carry over unspent or overspent amount</string>
+    <string name="budgets_cancel">Cancel</string>
+    <string name="budgets_spent_of">%1$s of %2$s</string>
+    <string name="budgets_remaining">%1$s left</string>
+    <string name="budgets_over_by">%1$s over</string>
+    <string name="budgets_weekly">Weekly</string>
+    <string name="budgets_level_ok">On track</string>
+    <string name="budgets_level_half">Halfway</string>
+    <string name="budgets_level_warning">Close to the limit</string>
+    <string name="budgets_level_over">Over budget</string>
+    <string name="budgets_row_desc">%1$s budget: %2$s spent of %3$s, %4$s used, %5$s</string>
+    <string name="budgets_home_desc">Budgets: %1$s</string>
+    <string name="budgets_home_cta">Set a budget</string>
+    <string name="budgets_error_amount">Enter an amount greater than zero, e.g. 1500</string>
+    <string name="budgets_error_invalid">The server rejected these values. Check the amount.</string>
+    <string name="budgets_error_duplicate">A monthly budget for this category already exists.</string>
+    <string name="budgets_error_offline">You are offline. Try again when connected.</string>
+    <string name="budgets_error_sign_in">Sign in again to save budgets.</string>
+    <string name="budgets_error_failed">Could not save. Try again.</string>
+    <plurals name="budgets_days_left">
+        <item quantity="one">%1$s day left</item>
+        <item quantity="other">%1$s days left</item>
+    </plurals>
 </resources>

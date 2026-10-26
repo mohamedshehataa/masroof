@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,9 +60,12 @@ private const val MAX_CATEGORY_ROWS = 8
 private const val DONUT_SLICES = 8
 
 @Composable
-fun InsightsRoute(viewModel: InsightsViewModel = hiltViewModel()) {
+fun InsightsRoute(
+    onOpenBudgets: () -> Unit = {},
+    viewModel: InsightsViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    InsightsContent(state, onPeriod = viewModel::selectPeriod, onRetry = viewModel::refresh)
+    InsightsContent(state, onPeriod = viewModel::selectPeriod, onRetry = viewModel::refresh, onOpenBudgets = onOpenBudgets)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +75,7 @@ fun InsightsContent(
     onPeriod: (InsightsPeriod) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenBudgets: () -> Unit = {},
 ) {
     val data = state.data
     Column(modifier.fillMaxSize()) {
@@ -81,6 +86,9 @@ fun InsightsContent(
                 modifier = Modifier.semantics { heading() },
             )
             PeriodToggle(state.period, onPeriod)
+            TextButton(onClick = onOpenBudgets, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.budgets_title))
+            }
         }
         when {
             data == null -> NoDataState(state.status, onRetry)

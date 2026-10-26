@@ -998,7 +998,9 @@ export const vBudgetStatus = v.object({
     rolledOver: v.optional(vMoney),
     progressBps: v.pipe(v.number(), v.integer()),
     alertsFired: v.array(v.pipe(v.number(), v.integer())),
-    onTrack: v.boolean()
+    onTrack: v.boolean(),
+    daysLeft: v.optional(v.pipe(v.number(), v.integer())),
+    periodRange: v.optional(vPeriodRange)
 });
 
 export const vBudgetStatusList = v.object({
