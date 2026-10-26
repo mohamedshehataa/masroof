@@ -191,7 +191,7 @@ class CapturedDedupTest {
     }
 
     @Test
-    fun `REQ-UI-040 received money is cached with its review state and never counted as spending`() =
+    fun `REQ-SMS-092 received money is cached with its review state and never counted as spending`() =
         runTest {
             db.expenses().upsert(
                 listOf(

@@ -176,6 +176,18 @@ fun SectionCard(
     }
 }
 
+/**
+ * What a list row says about the kind of money movement, by its TYPE (a review state alone says nothing about direction: the server
+ * also holds large purchases for review). Null for an ordinary confirmed expense.
+ */
+fun kindLabelRes(row: ExpenseRow): Int? =
+    when {
+        row.income -> if (row.reviewPending) R.string.income_pending_review else R.string.income_received
+        row.transfer -> if (row.reviewPending) R.string.transfer_pending_review else R.string.transfer_label
+        row.reviewPending -> R.string.expense_pending_review
+        else -> null
+    }
+
 @Composable
 fun ExpenseListItem(
     row: ExpenseRow,
@@ -223,9 +235,10 @@ fun ExpenseListItem(
                         color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
-                if (row.income || row.reviewPending) {
+                val kindLabel = kindLabelRes(row)
+                if (kindLabel != null) {
                     Text(
-                        stringResource(if (row.reviewPending) R.string.income_pending_review else R.string.income_received),
+                        stringResource(kindLabel),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )

@@ -109,7 +109,8 @@ class CapturedUploadTest {
         runTest {
             val p = pipeline()
             p.accept(IncomingMessage(CaptureSource.SMS, "BDC", sms, at))
-            p.accept(IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, at + 3_000))
+            // received more than five minutes apart (pairing is by receive time): two records, both must be accepted
+            p.accept(IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, at + 6 * 60_000))
             assertEquals(2, db.parsedOutbox().all().size)
             val report = uploader().uploadPending()
             assertTrue("server refused: $problems", problems.isEmpty())

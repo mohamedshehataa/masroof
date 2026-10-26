@@ -140,6 +140,9 @@
     <string name="captured_undo">Undo</string>
     <string name="income_received">Money received</string>
     <string name="income_pending_review">Money received - pending review</string>
+    <string name="transfer_label">Transfer</string>
+    <string name="transfer_pending_review">Transfer - pending review</string>
+    <string name="expense_pending_review">Needs review</string>
     <string name="captured_chip">Captured</string>
     <string name="captured_stop_learning_title">Stop learning this format?</string>
     <string name="captured_stop_learning_text">Masroof recorded that one because you confirmed this message format before.</string>

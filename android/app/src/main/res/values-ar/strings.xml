@@ -148,6 +148,9 @@
     <string name="captured_undo">تراجع</string>
     <string name="income_received">فلوس داخلة</string>
     <string name="income_pending_review">فلوس داخلة - في انتظار المراجعة</string>
+    <string name="transfer_label">تحويل</string>
+    <string name="transfer_pending_review">تحويل - في انتظار المراجعة</string>
+    <string name="expense_pending_review">محتاج مراجعة</string>
     <string name="captured_chip">اتسجلت تلقائيا</string>
     <string name="captured_stop_learning_title">تبطل تحفظ شكل الرسالة ده؟</string>
     <string name="captured_stop_learning_text">مصروف سجلها لأنك أكدت شكل الرسالة دي قبل كده.</string>

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 8,
-    "identityHash": "5d324bb4e62db25cba1736a6f0eef8a8",
+    "identityHash": "d23f415f2bcd491a290ccf1ecfdb13d3",
     "entities": [
       {
         "tableName": "expense",
@@ -228,7 +228,7 @@
       },
       {
         "tableName": "parsed_outbox",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` TEXT NOT NULL, `source` TEXT NOT NULL, `kind` TEXT NOT NULL, `amountMinor` INTEGER NOT NULL, `currency` TEXT NOT NULL, `occurredAtMillis` INTEGER NOT NULL, `instrumentLast4` TEXT, `senderId` TEXT NOT NULL, `institution` TEXT, `paymentMethod` TEXT, `merchant` TEXT, `attempts` INTEGER NOT NULL, `failed` INTEGER NOT NULL, `createdAtMillis` INTEGER NOT NULL, PRIMARY KEY(`localId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` TEXT NOT NULL, `source` TEXT NOT NULL, `kind` TEXT NOT NULL, `amountMinor` INTEGER NOT NULL, `currency` TEXT NOT NULL, `occurredAtMillis` INTEGER NOT NULL, `instrumentLast4` TEXT, `senderId` TEXT NOT NULL, `institution` TEXT, `paymentMethod` TEXT, `merchant` TEXT, `attempts` INTEGER NOT NULL, `failed` INTEGER NOT NULL, `createdAtMillis` INTEGER NOT NULL, `claimedAtMillis` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`localId`))",
         "fields": [
           {
             "fieldPath": "localId",
@@ -309,6 +309,13 @@
             "columnName": "createdAtMillis",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "claimedAtMillis",
+            "columnName": "claimedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -483,7 +490,7 @@
       },
       {
         "tableName": "captured_tx",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` TEXT NOT NULL, `expenseId` TEXT, `amountMinor` INTEGER NOT NULL, `currency` TEXT NOT NULL, `label` TEXT, `source` TEXT NOT NULL, `templateId` TEXT, `capturedAtMillis` INTEGER NOT NULL, `undoRequested` INTEGER NOT NULL DEFAULT 0, `kind` TEXT, `occurredAtMillis` INTEGER NOT NULL DEFAULT 0, `instrumentLast4` TEXT, PRIMARY KEY(`localId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` TEXT NOT NULL, `expenseId` TEXT, `amountMinor` INTEGER NOT NULL, `currency` TEXT NOT NULL, `label` TEXT, `source` TEXT NOT NULL, `templateId` TEXT, `capturedAtMillis` INTEGER NOT NULL, `undoRequested` INTEGER NOT NULL DEFAULT 0, `kind` TEXT, `receivedAtMillis` INTEGER NOT NULL DEFAULT 0, `paired` INTEGER NOT NULL DEFAULT 0, `instrumentLast4` TEXT, PRIMARY KEY(`localId`))",
         "fields": [
           {
             "fieldPath": "localId",
@@ -543,8 +550,15 @@
             "affinity": "TEXT"
           },
           {
-            "fieldPath": "occurredAtMillis",
-            "columnName": "occurredAtMillis",
+            "fieldPath": "receivedAtMillis",
+            "columnName": "receivedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "paired",
+            "columnName": "paired",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
@@ -565,7 +579,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5d324bb4e62db25cba1736a6f0eef8a8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd23f415f2bcd491a290ccf1ecfdb13d3')"
     ]
   }
 }

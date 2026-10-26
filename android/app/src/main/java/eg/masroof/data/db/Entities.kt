@@ -76,6 +76,8 @@ data class ParsedOutboxEntity(
     val attempts: Int = 0,
     val failed: Boolean = false,
     val createdAtMillis: Long,
+    /** When an upload of this row started (0 = not being sent). Replacing a row is only allowed while this is unset or stale. */
+    @ColumnInfo(defaultValue = "0") val claimedAtMillis: Long = 0L,
 )
 
 /**
@@ -149,10 +151,12 @@ data class CapturedTxEntity(
     val capturedAtMillis: Long,
     // The user pressed Undo while the upload was (or may have been) in flight: the expense is deleted as soon as its id is known.
     @ColumnInfo(defaultValue = "0") val undoRequested: Boolean = false,
-    // What the record was (a TxKind name), when it happened and the account tail: lets the pipeline see that a second channel
-    // (bank SMS + app notification) announced the same transfer. Null / 0 on rows made before version 8: they never match.
+    // What the record was (a TxKind name), when the phone RECEIVED the message and the account tail: lets the pipeline see that a
+    // second channel (bank SMS + app notification) announced the same transfer. Rows made before version 8 get them from the outbox.
     val kind: String? = null,
-    @ColumnInfo(defaultValue = "0") val occurredAtMillis: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val receivedAtMillis: Long = 0L,
+    // This record is already matched with one record of the other channel: it takes part in no further match.
+    @ColumnInfo(defaultValue = "0") val paired: Boolean = false,
     val instrumentLast4: String? = null,
 ) {
     override fun toString() = "CapturedTxEntity(localId=$localId)"

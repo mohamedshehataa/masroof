@@ -122,6 +122,27 @@ interface ParsedOutboxDao {
     @Query("DELETE FROM parsed_outbox WHERE localId = :localId")
     suspend fun delete(localId: String)
 
+    /**
+     * Takes the row for an upload. One statement, so of two uploaders (or an uploader and a replacement) exactly one gets 1.
+     * A claim older than [staleBefore] belongs to a request that died: it can be taken again.
+     */
+    @Query("UPDATE parsed_outbox SET claimedAtMillis = :now WHERE localId = :localId AND failed = 0 AND claimedAtMillis < :staleBefore")
+    suspend fun claim(
+        localId: String,
+        now: Long,
+        staleBefore: Long,
+    ): Int
+
+    @Query("UPDATE parsed_outbox SET claimedAtMillis = 0 WHERE localId = :localId")
+    suspend fun release(localId: String)
+
+    /** Replaces a queued record: deletes it only while no upload holds it. Returns 1 when it was deleted, 0 when sent or in flight. */
+    @Query("DELETE FROM parsed_outbox WHERE localId = :localId AND claimedAtMillis < :staleBefore")
+    suspend fun deleteIfUnclaimed(
+        localId: String,
+        staleBefore: Long,
+    ): Int
+
     /** Permanently failed rows go after the retention window. */
     @Query("DELETE FROM parsed_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
     suspend fun purgeFailedBefore(olderThanMillis: Long)
@@ -217,19 +238,28 @@ interface CapturedDao {
     @Query("SELECT * FROM captured_tx")
     suspend fun all(): List<CapturedTxEntity>
 
-    /** Records of ANOTHER channel with the same amount and direction around the same time (one transfer announced twice). */
+    /**
+     * Records of ANOTHER channel with the same amount and direction received around the same time and not matched yet (one transfer
+     * announced twice), the closest in time first. The phone's receive time is used, not the time written in the message body.
+     */
     @Query(
         """SELECT * FROM captured_tx WHERE source != :source AND currency = :currency AND amountMinor = :amountMinor
-            AND kind IN (:kinds) AND occurredAtMillis BETWEEN :from AND :to ORDER BY capturedAtMillis""",
+            AND paired = 0 AND kind IN (:kinds) AND receivedAtMillis BETWEEN :from AND :to
+            ORDER BY ABS(receivedAtMillis - :at), capturedAtMillis""",
     )
     suspend fun otherChannel(
         source: String,
         currency: String,
         amountMinor: Long,
         kinds: List<String>,
+        at: Long,
         from: Long,
         to: Long,
     ): List<CapturedTxEntity>
+
+    /** Marks a record as matched; 1 for the one caller that did it, 0 when someone else already had. */
+    @Query("UPDATE captured_tx SET paired = 1 WHERE localId = :localId AND paired = 0")
+    suspend fun claimPair(localId: String): Int
 }
 
 @Database(
@@ -376,13 +406,25 @@ CREATE TABLE IF NOT EXISTS captured_tx (
 )
 """
 
+private const val MIGRATION_8_BACKFILL_KIND =
+    "UPDATE captured_tx SET kind = (SELECT p.kind FROM parsed_outbox p WHERE p.localId = captured_tx.localId)"
+private const val MIGRATION_8_BACKFILL_LAST4 =
+    "UPDATE captured_tx SET instrumentLast4 = (SELECT p.instrumentLast4 FROM parsed_outbox p WHERE p.localId = captured_tx.localId)"
+
 /** v7 -> v8: what a captured record was, so a second channel announcing the same transfer is recognized. */
 val MIGRATION_7_8: Migration =
     object : Migration(7, 8) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE captured_tx ADD COLUMN kind TEXT")
-            db.execSQL("ALTER TABLE captured_tx ADD COLUMN occurredAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN receivedAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN paired INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE captured_tx ADD COLUMN instrumentLast4 TEXT")
+            db.execSQL("ALTER TABLE parsed_outbox ADD COLUMN claimedAtMillis INTEGER NOT NULL DEFAULT 0")
+            // Records still queued from before the update keep matching: kind and tail come from the outbox row, the capture time
+            // stands in for the receive time. Already uploaded ones stay unmatched.
+            db.execSQL(MIGRATION_8_BACKFILL_KIND)
+            db.execSQL(MIGRATION_8_BACKFILL_LAST4)
+            db.execSQL("UPDATE captured_tx SET receivedAtMillis = capturedAtMillis WHERE kind IS NOT NULL")
             db.execSQL("ALTER TABLE expense ADD COLUMN type TEXT NOT NULL DEFAULT 'EXPENSE'")
             db.execSQL("ALTER TABLE expense ADD COLUMN status TEXT NOT NULL DEFAULT 'CONFIRMED'")
         }
