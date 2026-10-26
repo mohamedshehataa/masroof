@@ -42,13 +42,16 @@ data class ExpenseRow(
     val category: CategoryEntity?,
     val notes: String?,
     val source: String? = null,
+    val income: Boolean = false,
+    val reviewPending: Boolean = false,
+    val transfer: Boolean = false,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val RECENT_LIMIT = 5
 private const val MAX_NOTES = 500
 
-private fun toRows(
+internal fun toRows(
     expenses: List<ExpenseEntity>,
     categories: List<CategoryEntity>,
 ): List<ExpenseRow> {
@@ -64,6 +67,9 @@ private fun toRows(
             category = it.categoryId?.let(byId::get),
             notes = it.notes,
             source = it.source,
+            income = it.type == "INCOME",
+            transfer = it.type == "TRANSFER",
+            reviewPending = it.status == "PENDING_REVIEW",
         )
     }
 }

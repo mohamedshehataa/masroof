@@ -115,6 +115,8 @@ class SmsPipeline
         private val idKey: LocalIdKey,
         private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
+        private val pairing = ChannelPairing(db, clock, notifier)
+
         suspend fun accept(message: IncomingMessage): Disposition {
             // No session (logged out, between two accounts): nothing is read, queued or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
@@ -139,7 +141,8 @@ class SmsPipeline
             templateId: String?,
         ): Disposition =
             when (outcome) {
-                is ParseOutcome.Record -> storeRecord(outcome.record, id, templateId)
+                is ParseOutcome.Record ->
+                    storeRecord(outcome.record, id, templateId, message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis())
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
                     db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
@@ -167,9 +170,17 @@ class SmsPipeline
             r: ParsedRecord,
             id: String,
             templateId: String?,
+            receivedAt: Long,
         ): Disposition {
             // the same message accepted again after its upload is the same record: no second row, no second notice
-            if (db.captured().find(id) != null) {
+            // (also when this message was the dropped or replaced twin of a pair: its id is remembered on the other record)
+            if (db.captured().knows(id) > 0) {
+                scheduler.scheduleUpload()
+                return Disposition.QUEUED
+            }
+            // the same transfer announced by the other channel (bank SMS + app notification): one record, one notice
+            val match = pairing.matchIncoming(r, id, receivedAt)
+            if (match.pairing == Pairing.SKIP) {
                 scheduler.scheduleUpload()
                 return Disposition.QUEUED
             }
@@ -203,6 +214,11 @@ class SmsPipeline
                         source = r.source.name,
                         templateId = templateId,
                         capturedAtMillis = clock.millis(),
+                        kind = r.kind.name,
+                        receivedAtMillis = receivedAt,
+                        paired = match.pairing == Pairing.STORE_PAIRED,
+                        pairedLocalId = match.twinId,
+                        instrumentLast4 = r.instrumentLast4,
                     )
                 db.captured().insert(item)
                 notifier.captured(item)
@@ -269,7 +285,10 @@ class SmsUploader
         private val gate: CaptureGate,
         private val deleter: ExpenseDeleter = NoExpenseDeleter,
         private val locks: CapturedLocks = CapturedLocks(),
+        private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
+        private val pairing = ChannelPairing(db, clock, notifier)
+
         suspend fun uploadPending(): SmsSyncReport {
             val dao = db.parsedOutbox()
             // Retention is enforced here too, so an old review item goes even if no new message ever arrives.
@@ -283,43 +302,86 @@ class SmsUploader
             var retry = false
             var retryAfter: Long? = null
             resolveUndoRequests()
+            // records queued by an older version of the app, never compared with each other, are paired before anything is sent
+            pairing.pairQueued()
+            var stopped = false
+            var wait = 0L
             for (item in dao.pending()) {
-                locks.begin(item.localId)
-                val result =
-                    try {
-                        remote.uploadParsed(device.get(), item)
-                    } finally {
-                        locks.end(item.localId)
-                    }
-                when (result) {
+                if (retry || stopped) break
+                val step = uploadOne(item)
+                sent += step.sent
+                rejected += step.rejected
+                retry = step.retry
+                retryAfter = step.retryAfter
+                stopped = step.needsSignIn
+                wait = maxOf(wait, step.waitSeconds)
+            }
+            if (stopped) return SmsSyncReport(sent, rejected, false)
+            if (wait > 0) {
+                // a row is held by another upload (maybe a dead one): come back when its claim runs out
+                retry = true
+                retryAfter = maxOf(retryAfter ?: 0L, wait)
+            }
+            return SmsSyncReport(sent, rejected, retry, retryAfter)
+        }
+
+        /** What one row's upload changed. An unclaimed row (another upload holds it, or it is gone) changes nothing. */
+        private data class Step(
+            val sent: Int = 0,
+            val rejected: Int = 0,
+            val retry: Boolean = false,
+            val retryAfter: Long? = null,
+            val needsSignIn: Boolean = false,
+            val waitSeconds: Long = 0L,
+        )
+
+        private suspend fun uploadOne(item: ParsedOutboxEntity): Step {
+            val dao = db.parsedOutbox()
+            // One statement takes the row: a second uploader skips it, and a replacement by the other channel cannot delete it.
+            val token = clock.millis()
+            if (dao.claim(item.localId, token, token - UPLOAD_CLAIM_TTL_MILLIS) == 0) return heldStep(item.localId, token)
+            locks.begin(item.localId)
+            try {
+                return when (val result = remote.uploadParsed(device.get(), item)) {
                     is SmsUploadResult.Sent -> {
                         dao.delete(item.localId)
                         recordSent(item.localId, result.expenseId)
-                        sent++
+                        Step(sent = 1)
                     }
                     is SmsUploadResult.Retry -> {
                         dao.bumpAttempts(item.localId)
-                        retry = true
-                        retryAfter = result.afterSeconds
+                        Step(retry = true, retryAfter = result.afterSeconds)
                     }
                     SmsUploadResult.RetryLimited ->
                         if (item.attempts + 1 >= MAX_LIMITED_ATTEMPTS) {
                             moveToReview(item)
-                            rejected++
+                            Step(rejected = 1)
                         } else {
                             dao.bumpAttempts(item.localId)
-                            retry = true
+                            Step(retry = true)
                         }
                     // Needs a new sign-in; the rows stay queued and the next sign-in/app start uploads them.
-                    SmsUploadResult.Unauthorized -> return SmsSyncReport(sent, rejected, false)
+                    SmsUploadResult.Unauthorized -> Step(needsSignIn = true)
                     SmsUploadResult.Rejected -> {
                         moveToReview(item)
-                        rejected++
+                        Step(rejected = 1)
                     }
                 }
-                if (retry) break
+            } finally {
+                locks.end(item.localId)
+                // the claim is held until the outcome is stored, so a replacement never sees a half-finished upload
+                dao.release(item.localId, token)
             }
-            return SmsSyncReport(sent, rejected, retry, retryAfter)
+        }
+
+        /** The row was not taken: gone or finished (nothing to do), or held by a live claim (come back when it runs out). */
+        private suspend fun heldStep(
+            localId: String,
+            now: Long,
+        ): Step {
+            val held = db.parsedOutbox().find(localId)?.takeIf { !it.failed && it.claimedAtMillis > 0 } ?: return Step()
+            val remainingMillis = held.claimedAtMillis + UPLOAD_CLAIM_TTL_MILLIS - now
+            return if (remainingMillis > 0) Step(waitSeconds = remainingMillis / MILLIS_PER_SECOND + 1) else Step()
         }
 
         /**
@@ -391,6 +453,7 @@ class SmsUploader
             const val MAX_LIMITED_ATTEMPTS = 5
             const val RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
+            const val MILLIS_PER_SECOND = 1000L
             const val CENTS = 100
         }
     }
@@ -402,12 +465,20 @@ class SmsIntakeWorker
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         private val pipeline: SmsPipeline,
+        private val uploader: SmsUploader,
+        private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
-            pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
+            val disposition = pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
+            // This job is already running, so the phone is awake: send the record now instead of hoping that a second job
+            // (some vendors hold those back for apps that are not in the foreground) runs soon. A failure schedules the retry.
+            if (disposition == Disposition.QUEUED) {
+                val report = uploader.uploadPending()
+                if (report.retry) scheduler.scheduleUploadRetry(OutboxBackoff.delaySeconds(0, report.retryAfterSeconds), 1)
+            }
             return Result.success()
         }
     }

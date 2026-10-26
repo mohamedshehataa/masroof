@@ -27,6 +27,7 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.capturedCutoff
 import eg.masroof.data.remote.ExpenseDeleter
+import eg.masroof.ingest.parse.TxKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +70,9 @@ class AndroidNotificationPermission(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
+
+/** Money coming in: the notification says "Received", and a second channel announcing the same amount is the same transfer. */
+val INCOMING_KINDS: Set<String> = setOf(TxKind.INCOME.name, TxKind.TRANSFER_IN.name)
 
 /** What the pipeline calls right after it recorded an expense on its own (a proven family or a learned format). */
 interface CapturedNotifier {
@@ -117,9 +121,7 @@ class AndroidCapturedNotifier
                 context.resources.configuration.locales[0]
                     .language == "ar"
             val amount = MoneyFormat.format(Money(item.amountMinor, item.currency), arabic, eg.masroof.core.DigitStyle.WESTERN)
-            val title =
-                item.label?.let { context.getString(R.string.captured_title_at, amount, it) }
-                    ?: context.getString(R.string.captured_title, amount)
+            val title = title(item, amount)
             val undo = receiverIntent(ACTION_UNDO_CAPTURED, item.localId, null, requestCode = item.localId.hashCode())
             val notification =
                 NotificationCompat
@@ -135,6 +137,25 @@ class AndroidCapturedNotifier
                     .addAction(0, context.getString(R.string.captured_undo), undo)
                     .build()
             manager.notify(item.localId.hashCode(), notification)
+        }
+
+        /** "Received 1 EGP via Banque du Caire", "Sent ...", "Recorded 500 EGP at AMAZON": by what the record was. */
+        private fun title(
+            item: CapturedTxEntity,
+            amount: String,
+        ): String {
+            val label = item.label
+            return when (item.kind) {
+                in INCOMING_KINDS ->
+                    label?.let { context.getString(R.string.captured_received_via, amount, it) }
+                        ?: context.getString(R.string.captured_received, amount)
+                TxKind.TRANSFER_OUT.name ->
+                    label?.let { context.getString(R.string.captured_sent_via, amount, it) }
+                        ?: context.getString(R.string.captured_sent, amount)
+                else ->
+                    label?.let { context.getString(R.string.captured_title_at, amount, it) }
+                        ?: context.getString(R.string.captured_title, amount)
+            }
         }
 
         /** After an Undo of a record that a learned format made: "Stop learning this format?". */
@@ -281,13 +302,9 @@ class CapturedActions
                 val queued = db.parsedOutbox().all().any { it.localId == localId }
                 when {
                     locks.isInFlight(localId) -> remember(item)
-                    queued -> {
-                        db.withTransaction {
-                            db.parsedOutbox().delete(localId)
-                            db.captured().delete(localId)
-                        }
-                        UndoResult(true, item.templateId)
-                    }
+                    // never sent: simply forgotten. Sent once (the answer may be lost): the server may have it, so the Undo is remembered
+                    // and the expense is deleted through the API when the next upload pass learns its id.
+                    queued -> if (removeUnsent(localId)) UndoResult(true, item.templateId) else remember(item)
                     // uploaded, but the server has not told us which expense it made: remembered, resolved by the next upload pass
                     item.expenseId == null -> remember(item)
                     !deleter.deleteExpense(item.expenseId) -> UndoResult(false, item.templateId)
@@ -299,6 +316,13 @@ class CapturedActions
                         UndoResult(true, item.templateId)
                     }
                 }
+            }
+
+        private suspend fun removeUnsent(localId: String): Boolean =
+            db.withTransaction {
+                val gone = db.parsedOutbox().deleteIfUnclaimed(localId, clock.millis() - UPLOAD_CLAIM_TTL_MILLIS) == 1
+                if (gone) db.captured().delete(localId)
+                gone
             }
 
         private suspend fun remember(item: CapturedTxEntity): UndoResult {

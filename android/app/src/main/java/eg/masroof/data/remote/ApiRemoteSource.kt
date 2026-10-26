@@ -193,6 +193,8 @@ class ApiRemoteSource
                 .newBuilder()
                 .addInterceptor(BearerInterceptor(session))
                 .authenticator(TokenAuthenticator(session))
+                // no request outlives the claim the uploader holds on its row (UPLOAD_CLAIM_TTL_MILLIS)
+                .callTimeout(CALL_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
 
         private suspend fun retrofit(): Retrofit {
@@ -231,12 +233,13 @@ class ApiRemoteSource
         }
 
         override suspend fun fetchExpenses(): List<ExpenseEntity> {
-            val page =
-                retrofit()
-                    .create(ExpensesApi::class.java)
-                    .listExpenses(type = TransactionType.EXPENSE, limit = PAGE_LIMIT)
-                    .bodyOrThrow()
-            return page.items.map { it.toEntity() }
+            val api = retrofit().create(ExpensesApi::class.java)
+            // Spending, received money and transfers (listed, never counted as spending); refunds and cash are not shown here.
+            val items =
+                listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER).flatMap { type ->
+                    api.listExpenses(type = type, limit = PAGE_LIMIT).bodyOrThrow().items
+                }
+            return items.map { it.toEntity() }
         }
 
         override suspend fun fetchCategories(): List<CategoryEntity> =
@@ -347,6 +350,8 @@ class ApiRemoteSource
                         ?.rawMessage
                         ?.source
                         ?.value,
+                type = type.value,
+                status = status.value,
             )
 
         private fun PaymentAccount.toEntity(): AccountEntity {
@@ -357,5 +362,6 @@ class ApiRemoteSource
 
         private companion object {
             const val PAGE_LIMIT = 200
+            const val CALL_TIMEOUT_SECONDS = 90L
         }
     }

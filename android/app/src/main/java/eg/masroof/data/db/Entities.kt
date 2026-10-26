@@ -19,6 +19,10 @@ data class ExpenseEntity(
     val failed: Boolean = false,
     /** Channel that produced the entry ("SMS", "MANUAL" ...); null for rows cached before sources existed. */
     val source: String? = null,
+    /** "EXPENSE" or "INCOME" (received money is listed, never added to spending). */
+    @ColumnInfo(defaultValue = "'EXPENSE'") val type: String = "EXPENSE",
+    /** The server's review state: "PENDING_REVIEW" for received money that waits for the household's OK. */
+    @ColumnInfo(defaultValue = "'CONFIRMED'") val status: String = "CONFIRMED",
 )
 
 @Entity(tableName = "category")
@@ -72,6 +76,10 @@ data class ParsedOutboxEntity(
     val attempts: Int = 0,
     val failed: Boolean = false,
     val createdAtMillis: Long,
+    /** When an upload of this row started (0 = not being sent). Replacing a row is only allowed while this is unset or stale. */
+    @ColumnInfo(defaultValue = "0") val claimedAtMillis: Long = 0L,
+    /** How many uploads of this row were ever started (rows from before version 8 start with their attempts). Above 0: never replaced. */
+    @ColumnInfo(defaultValue = "0") val claims: Int = 0,
 )
 
 /**
@@ -145,6 +153,15 @@ data class CapturedTxEntity(
     val capturedAtMillis: Long,
     // The user pressed Undo while the upload was (or may have been) in flight: the expense is deleted as soon as its id is known.
     @ColumnInfo(defaultValue = "0") val undoRequested: Boolean = false,
+    // What the record was (a TxKind name), when the phone RECEIVED the message and the account tail: lets the pipeline see that a
+    // second channel (bank SMS + app notification) announced the same transfer. Rows made before version 8 get them from the outbox.
+    val kind: String? = null,
+    @ColumnInfo(defaultValue = "0") val receivedAtMillis: Long = 0L,
+    // This record is already matched with one record of the other channel: it takes part in no further match.
+    @ColumnInfo(defaultValue = "0") val paired: Boolean = false,
+    // The other message of the pair: the dropped newcomer, or the queued record this one replaced. Accepting that message again is a no-op.
+    val pairedLocalId: String? = null,
+    val instrumentLast4: String? = null,
 ) {
     override fun toString() = "CapturedTxEntity(localId=$localId)"
 }
