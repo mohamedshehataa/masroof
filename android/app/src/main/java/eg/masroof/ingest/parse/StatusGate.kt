@@ -17,7 +17,10 @@ object StatusGate {
         Regex(
             "\\b(?:failed|fails|failure|declined|rejected|could\\s+not|couldn'?t|unsuccessful(?:ly)?|cancel+ed|void(?:ed)?|" +
                 "revers(?:ed|al)|returned|pending|on\\s+hold|(?:authori[sz]ation\\s+)?hold|awaiting|scheduled|requests?|requested|" +
-                "processing|under\\s+review|will\\s+be|will\\s+follow|disputed|credited\\s+back|refunded\\s+to\\s+(?:the\\s+)?sender)\\b",
+                "processing|under\\s+review|will\\s+be|will\\s+follow|disputed|credited\\s+back|refunded\\s+to\\s+(?:the\\s+)?sender|" +
+                "not\\s+(?:successful|completed|processed|approved|delivered)|being\\s+processed|in\\s+progress|timed?\\s+out|expired|" +
+                "did\\s+not\\s+go\\s+through|revert(?:ed)?|incomplete|unpaid|pre-?authori[sz]ation|preauth|insufficient|" +
+                "subject\\s+to\\b.{0,40}?confirmation|error\\s+\\d|put\\s+on\\s+hold)\\b",
             ci,
         )
 
@@ -27,7 +30,9 @@ object StatusGate {
             "لم\\s+(?:يتم|تتم)|(?<![\\p{L}])و?فشل|مرفوض|(?<![\\p{L}])و?رفض|(?<![\\p{L}])[وب]?ملغ(?:ي|يه|اه|ا)(?![\\p{L}])|" +
                 "(?<![\\p{L}])[وب]?الغا[ءؤو]|(?<![\\p{L}])معلق|قيد\\s+التنفيذ|(?<!حساب\\s)(?<![\\p{L}])جاري(?![\\p{L}])|" +
                 "(?<![\\p{L}])[وك]?طلب(?:ك|كم|ه|ها)?(?![\\p{L}])|مرتجع|(?<![\\p{L}])[وب]?ارجاع|(?<![\\p{L}])و?رده|(?<![\\p{L}])[وب]?عكس|" +
-                "(?<![\\p{L}])[وس]?سيتم|استرداد\\s+للمرسل",
+                "(?<![\\p{L}])[وس]?سيتم|استرداد\\s+للمرسل|قيد\\s+(?:المراجعه|الانتظار)|غير\\s+(?:مكتمل|ناجح)|لم\\s+تكتمل|" +
+                "(?<![\\p{L}])[وا]?تلغت|(?<![\\p{L}])[وا]?ترفضت|مش\\s+ناجح|تعذر|(?<![\\p{L}])ب?انتظار|تحت\\s+المراجعه|لم\\s+يصل|" +
+                "(?<![\\p{L}])مرتد(?![\\p{L}])|بشكل\\s+غير",
             ci,
         )
 
@@ -44,6 +49,56 @@ object StatusGate {
         val text = rewardPromise.replace(folded, " ")
         return english.containsMatchIn(text) || arabic.containsMatchIn(text)
     }
+
+    /** Words that are never part of a merchant or a person's name: a slot holding one is not a name. */
+    private val nonNames =
+        setOf(
+            "cashback",
+            "return",
+            "returns",
+            "returned",
+            "refund",
+            "refunds",
+            "refunded",
+            "reversal",
+            "reversed",
+            "fee",
+            "fees",
+            "charge",
+            "charges",
+            "void",
+            "error",
+            "failed",
+            "cancelled",
+            "canceled",
+            "pending",
+            "declined",
+            "rejected",
+            "expired",
+            "timed",
+            "out",
+            "incomplete",
+            "unpaid",
+            "reverted",
+            "request",
+            "requested",
+            "hold",
+            "scheduled",
+            "disputed",
+            "insufficient",
+            "funds",
+            "completed",
+            "approved",
+            "successful",
+            "successfully",
+            "not",
+            "none",
+            "null",
+            "n/a",
+            "unknown",
+        )
+
+    fun isNonName(token: String): Boolean = token.lowercase().trim('.', ',', ':', ';') in nonNames
 
     /** A single word that is a status word: it must stay a literal token in a learned shape, never merge into a name slot. */
     fun isStatusWord(word: String): Boolean {

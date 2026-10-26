@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: M
 modules: [backend, android]
 depends_on: [STORY-044, STORY-045]
-reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077]
+reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077, REQ-SMS-078]
 implements: [PROMPT.md §4.3 (parsing strategy 3), PROMPT.md S12 (feature flags for template learning)]
 owner_agent: ai-parsing-engineer
 ---
@@ -50,6 +50,9 @@ Given a message that says the operation failed, was declined, cancelled, reverse
 
 ### REQ-SMS-077 — Review slots never keep a code, and only an unchanged one-tap Save teaches
 Given a secret-looking or code-like review item, when it is stored, then no slots are kept (a code-like run is masked) and they are dropped when the item is saved or dismissed; given a hand-edited save, then nothing is learned.
+
+### REQ-SMS-078 — Closed world: only a name, then a closed tail, may follow the amount of an automatic record
+Given a proven family or a learned format, when anything other than a date, a time, "via InstaPay", "successfully" or a reference follows the merchant or counterparty (any other word, a lowercase Latin word, an emoji, "?" or "!", Latin mixed with Arabic, more tokens than the slot allows), then the message is a review item; given a learned name slot, then only a name of the same token count matches, and a word that is never a name ("cashback", "return") never does.
 
 ### REQ-SMS-075 — A proven family is recorded without confirmation and is never learned from
 Given a card-purchase message of family F1, when it arrives, then it is queued directly and no review item or template is created.

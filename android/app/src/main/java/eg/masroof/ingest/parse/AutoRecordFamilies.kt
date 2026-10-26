@@ -24,9 +24,20 @@ object AutoRecordFamilies {
 
     // a merchant or counterparty stops at "and" / "then" / و / "(" and never holds a card-number-like run or a fee or credit word
     private const val MERCHANT =
-        "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])(?!\\d{4})(?!(?:fees?|commission|رسوم|عموله|deposit|salary|refund|reversal)\\b)" +
+        "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])(?!\\d{4})" +
+            "(?!(?:fees?|commission|رسوم|عموله|deposit|salary|refund(?:ed)?|reversal)\\b)" +
             "[^;:(]){1,60}?"
-    private const val CPARTY = "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])[^;:?!(]){1,60}"
+    private const val CPARTY = "(?:(?!\\s+(?:and|then|ثم)\\s)(?!\\s+و[\\p{L}])[^;:(]){1,60}?"
+
+    /**
+     * CLOSED WORLD: after the merchant or counterparty the clause must end, or continue only with one of these phrases (a date, a
+     * time, "via InstaPay", "successfully", a reference). Any other word, symbol or punctuation is absorbed by the slot, and the slot
+     * validator then rejects it: nothing outside this list can follow a recorded merchant.
+     */
+    private const val OK_TAIL =
+        "(?:\\s+(?:(?:on|في|يوم|بتاريخ)\\s+$DATE|(?:at|الساعه)?\\s*$TIME|(?:via|عبر)\\s+(?:instapay|انستاباي)|" +
+            "(?:was\\s+)?successful(?:ly)?|بنجاح|completed|تمت\\s+بنجاح|has\\s+been\\s+completed\\s+successfully|" +
+            "(?:ref|rrn|رقم\\s+المعامله)\\s*:?\\s*[a-z0-9]+))*"
     private const val NAME = "[\\p{L}][\\p{L} .'-]{1,40}?"
     private const val TAIL3 =
         "(?:\\s+(?:في|يوم|رقم|المعامله|للمزيد|اتصل|ب|$TIME|$DATE|(?=[a-z0-9]*\\d)[a-z0-9]{6,12}|\\d{3,6}))*"
@@ -42,16 +53,14 @@ object AutoRecordFamilies {
             Regex(
                 "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+(?:used\\s+for|charged|debited)" +
                     "(?:\\s+(?:with|by|for))?\\s+(?:a\\s+purchase\\s+of\\s+)?$AMT" +
-                    "$DATE_TAIL\\s+at\\s+$MERCHANT$DATE_TAIL$",
+                    "$DATE_TAIL\\s+at\\s+(?<m>$MERCHANT)$OK_TAIL$",
                 ci,
             ),
             Regex(
-                "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+used\\s+at\\s+$MERCHANT\\s+for\\s+$AMT$DATE_TAIL$",
+                "^$PREFIX$CARD_EN\\s+(?:was|has\\s+been)\\s+used\\s+at\\s+(?<m>$MERCHANT)\\s+for\\s+$AMT$OK_TAIL$",
                 ci,
             ),
         )
-
-    private const val AR_DATE_TAIL = "(?:\\s+(?:يوم|بتاريخ)\\s+$DATE(?:\\s+(?:الساعه\\s+)?$TIME)?)?"
 
     /** "... وسيتم إضافة كاش باك 25 جنيه إلى حسابك": a promised reward after the merchant is a trailer, not a status. */
     private const val REWARD_TAIL = "(?:\\s+و?سيتم\\s+[^;:]*?(?:كاش\\s*باك|نقاط)[^;:]*)?"
@@ -64,14 +73,14 @@ object AutoRecordFamilies {
         listOf(
             Regex(
                 "^$PREFIX" + "تم\\s+(?:اجراء\\s+)?(?:خصم|شراء|سحب|عمليه(?:\\s+ناجحه)?)\\s+(?:(?:بمبلغ|بقيمه|مبلغ)\\s*)?$AMT\\s*" +
-                    "$CARD_AR\\s+لدي\\s+$MERCHANT$AR_DATE_TAIL$REWARD_TAIL$",
+                    "$CARD_AR\\s+لدي\\s+(?<m>$MERCHANT)$OK_TAIL$REWARD_TAIL$",
                 ci,
             ),
             // the mirrored order: the merchant before the card
             Regex(
                 "^$PREFIX" +
-                    "تم\\s+(?:خصم|شراء)\\s+(?:(?:بمبلغ|مبلغ)\\s*)?$AMT\\s+(?:لدي|من)\\s+$MERCHANT\\s+$CARD_AR" +
-                    "$AR_DATE_TAIL$",
+                    "تم\\s+(?:خصم|شراء)\\s+(?:(?:بمبلغ|مبلغ)\\s*)?$AMT\\s+(?:لدي|من)\\s+(?<m>$MERCHANT)\\s+$CARD_AR" +
+                    "$OK_TAIL$",
                 ci,
             ),
         )
@@ -79,14 +88,14 @@ object AutoRecordFamilies {
     private const val ACCOUNT = "[\\d*x\\-]{4,}(?:\\s[\\d*x\\-]+)*"
     private val hsbcPurchase =
         Regex(
-            "^(?:from\\s+hsbc:\\s*)?\\d{2}[a-z]{3}\\d{2}\\s+$MERCHANT\\s+purchase\\s+from\\s+$ACCOUNT" +
-                "\\s+egp\\s*($NUM)-\\s*your\\s+available\\s+balance.*$",
+            "^(?:from\\s+hsbc:\\s*)?\\d{2}[a-z]{3}\\d{2}\\s+(?<m>$MERCHANT)\\s+purchase\\s+from\\s+$ACCOUNT" +
+                "\\s+egp\\s*(?<amt>$NUM)-\\s*your\\s+available\\s+balance(?:\\s+is)?\\s+egp\\s*$NUM$",
             ci,
         )
     private val hsbcAtm =
         Regex(
             "^(?:from\\s+hsbc:\\s*)?\\d{2}[a-z]{3}\\d{2}\\s+atm\\s+cash\\s+withdrawal\\s+from\\s+$ACCOUNT" +
-                "\\s+egp\\s*($NUM)-\\s*your\\s+available\\s+balance.*$",
+                "\\s+egp\\s*(?<amt>$NUM)-\\s*your\\s+available\\s+balance(?:\\s+is)?\\s+egp\\s*$NUM$",
             ci,
         )
 
@@ -98,39 +107,45 @@ object AutoRecordFamilies {
     private val instantIn =
         Regex(
             "^$PREFIX" +
-                "تم\\s+استقبال\\s+تحويل\\s+لحظي\\s+الي\\s+حسابكم\\s+(?:رقم\\s+)?[*•x]*(?<l4>\\d{4})\\s+بمبلغ\\s+$AMT\\s+من\\s+$NAME$TAIL3$",
+                "تم\\s+استقبال\\s+تحويل\\s+لحظي\\s+الي\\s+حسابكم\\s+(?:رقم\\s+)?[*•x]*(?<l4>\\d{4})" +
+                "\\s+بمبلغ\\s+$AMT\\s+من\\s+(?<m>$NAME)$TAIL3$",
             ci,
         )
 
     private val instapayHeader = Regex("^(?:instapay|انستاباي|تم\\s+التحويل\\s+بنجاح|تم\\s+الدفع\\s+بنجاح)$", ci)
     private val instapayOut =
         listOf(
-            Regex("^you\\s+(?:have\\s+)?sent\\s+$AMT\\s+to\\s+$CPARTY$", ci),
-            Regex("^(?:instapay\\s+)?payment\\s+of\\s+$AMT\\s+to\\s+$CPARTY$", ci),
-            Regex("^تم\\s+تحويل\\s+$AMT\\s+الي\\s+$CPARTY$", ci),
-            Regex("^تم\\s+دفع\\s+$AMT\\s+الي\\s+$CPARTY$", ci),
+            Regex("^you\\s+(?:have\\s+)?sent\\s+$AMT\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^(?:instapay\\s+)?payment\\s+of\\s+$AMT\\s+to\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+تحويل\\s+$AMT\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+دفع\\s+$AMT\\s+الي\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
         )
     private val instapayIn =
         listOf(
-            Regex("^you\\s+(?:have\\s+)?received\\s+$AMT\\s+from\\s+$CPARTY$", ci),
-            Regex("^تم\\s+استلام\\s+$AMT\\s+من\\s+$CPARTY$", ci),
+            Regex("^you\\s+(?:have\\s+)?received\\s+$AMT\\s+from\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
+            Regex("^تم\\s+استلام\\s+$AMT\\s+من\\s+(?<m>$CPARTY)$OK_TAIL$", ci),
         )
 
     /** Balance, limit, fee, hotline and thank-you clauses are allowed after the principal clause of the card families. */
     private val noise =
         Regex(
-            "balance|limit|avail|remaining|fee|charge|commission|call|hotline|ref|thank|share|otp|pin\\b|never|beware|www|offer|cashback|" +
-                "earn|enjoy|points|discover|visit|auth|approval|code|txn|trx|رمز|كود|رصيد|المتاح|حد|رسوم|مصاريف|عموله|اتصل|شكرا|مرجع|" +
-                "لا تشارك|احذر|الرمز|عروض|عرض|" +
-                "استمتع|اكتشف|تابع|احصل|خصم",
+            "\\b(?:balance|available|avail|limit|remaining|fees?|charges?|commission|call|hotline|ref|reference|" +
+                "thank|thanks|share|otp|pin|" +
+                "never|beware|www|offers?|cashback|earn|enjoy|points|discover|visit|auth|approval|code|txn|trx)\\b|" +
+                "(?<![\\p{L}])(?:رمز|كود|رصيد|المتاح|رسوم|مصاريف|عموله|اتصل|شكرا|مرجع|لا\\s+تشارك|احذر|الرمز|عروض|عرض|" +
+                "استمتع|اكتشف|تابع|احصل|خصم|الحد)(?![\\p{L}])",
             ci,
         )
 
     private val numbers = Regex(NUM)
 
-    /** The matching family ("F1".."F4") or null when the message must be confirmed by the user first. */
+    /**
+     * The matching family ("F1".."F4") or null when the message must be confirmed by the user first. [norm] is the same text as
+     * [t] with its case kept (the two are aligned character by character): a merchant or counterparty must LOOK like a name.
+     */
     fun family(
         msg: IncomingMessage,
+        norm: String,
         t: String,
         record: ParsedRecord,
     ): String? {
@@ -138,35 +153,28 @@ object AutoRecordFamilies {
         // (on the whole text too: a fee-note clause such as "charge disputed" is cut before classification, its status is not)
         if (StatusGate.blocks(t) || StatusGate.blocks(SecretDetector.fold(TextNormalizer.normalizeText(msg.text)).lowercase())) return null
         val clauses = splitClauses(t)
-        if (clauses.isEmpty()) return null
+        val originals = splitClauses(norm)
+        if (clauses.isEmpty() || originals.size != clauses.size) return null
         val first = clauses.first()
         val rest = clauses.drop(1)
         val onlyNoise = rest.all { noise.containsMatchIn(it) || it.isBlank() }
         return when {
-            msg.source == CaptureSource.NOTIFICATION -> instapayNotification(msg, clauses, record)
+            msg.source == CaptureSource.NOTIFICATION -> instapayNotification(msg, clauses, originals, record)
             record.kind != TxKind.PURCHASE && record.kind != TxKind.CASH_WITHDRAWAL && !instantKind(record) -> null
-            hsbc(first, record) -> if (onlyNoise) "F2" else null
-            instant(first, record) -> if (onlyNoise) "F3" else null
-            card(first, record) -> if (onlyNoise || cardTailIsNoise(rest)) "F1" else null
+            hsbc(first, originals.first(), record) -> if (onlyNoise) "F2" else null
+            instant(first, originals.first(), record) -> if (onlyNoise) "F3" else null
+            card(first, originals.first(), record) -> if (onlyNoise || cardTailIsNoise(rest)) "F1" else null
             else -> null
         }
     }
 
-    /** "... at GOURMET EGYPT - Y. Your available limit ...": a short name after the merchant belongs to the merchant. */
-    private val merchantSuffix = Regex("^[a-z][a-z .&'-]{0,25}$", ci)
-    private val notASuffix = Regex("refund|revers|void|cancel|credit|cashback|return|fee|charge", ci)
+    /** "... at GOURMET EGYPT - Y. Your available limit ...": exactly ONE short token after the merchant belongs to the merchant. */
+    private val merchantSuffix = Regex("^\\p{L}{1,25}$")
 
     private fun cardTailIsNoise(rest: List<String>): Boolean {
         val head = rest.firstOrNull() ?: return true
-        val tail =
-            if (merchantSuffix.matches(head) &&
-                !notASuffix.containsMatchIn(head) &&
-                !noise.containsMatchIn(head)
-            ) {
-                rest.drop(1)
-            } else {
-                rest
-            }
+        val isSuffix = merchantSuffix.matches(head) && !noise.containsMatchIn(head) && !StatusGate.isNonName(head)
+        val tail = if (isSuffix && !StatusGate.blocks(head)) rest.drop(1) else rest
         return tail.all { noise.containsMatchIn(it) || it.isBlank() }
     }
 
@@ -183,29 +191,69 @@ object AutoRecordFamilies {
         record: ParsedRecord,
     ): Boolean = numbers.findAll(text).any { MessageParser.minorOf(it.value) == record.amountMinor }
 
+    private val arabicLetter = '؀'..'ۿ'
+    private const val MAX_LATIN_TOKENS = 5
+    private const val MAX_ARABIC_TOKENS = 3
+
+    /** A merchant or counterparty slot must look like a name: nothing else may hide in it (closed world). */
+    private fun slotLooksLikeName(
+        original: String,
+        match: MatchResult,
+    ): Boolean {
+        // a family with no merchant or counterparty slot (the ATM line, the outgoing instant transfer) has no group "m"
+        val group = runCatching { match.groups["m"] }.getOrNull()
+        val range = group?.range ?: return true
+        if (range.last >= original.length) return false
+        val slot = original.substring(range).trim()
+        val tokens = slot.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return false
+        val hasLatin = tokens.any { tok -> tok.any { it in 'A'..'Z' || it in 'a'..'z' } }
+        val hasArabic = tokens.any { tok -> tok.any { it in arabicLetter } }
+        val plain = slot.all { it.isLetterOrDigit() || it in " .&'*-@/" }
+        val statusFree = tokens.none { StatusGate.isNonName(it) || StatusGate.isStatusWord(it.lowercase()) }
+        return when {
+            !plain || !statusFree || (hasLatin && hasArabic) -> false
+            hasArabic -> tokens.size <= MAX_ARABIC_TOKENS && tokens.all { tok -> tok.all { it in arabicLetter } }
+            else -> tokens.size <= MAX_LATIN_TOKENS && tokens.all { latinNameToken(it) }
+        }
+    }
+
+    /** "AHMED", "Sara", "WWW.NOON.COM", "*TRIP", "7-ELEVEN": an uppercase start, no lowercase word, not a bare number. */
+    private val instapayHandle = Regex("^[a-z0-9._-]{2,30}@instapay$")
+
+    private fun latinNameToken(token: String): Boolean {
+        if (instapayHandle.matches(token)) return true
+        val first = token.dropWhile { it == '*' }.firstOrNull() ?: return false
+        val startsRight = first.isUpperCase() || (first.isDigit() && token.none { it.isLowerCase() })
+        return startsRight && token.any { it.isLetter() }
+    }
+
     private fun card(
         clause: String,
+        original: String,
         record: ParsedRecord,
     ): Boolean {
         if (record.kind != TxKind.PURCHASE) return false
         val regexes = cardPurchaseEn + cardPurchaseAr
         val m = regexes.firstNotNullOfOrNull { it.find(clause) } ?: return false
-        return m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record)
+        return m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record) && slotLooksLikeName(original, m)
     }
 
     private fun hsbc(
         clause: String,
+        original: String,
         record: ParsedRecord,
     ): Boolean {
         val purchase = hsbcPurchase.find(clause)
         val atm = hsbcAtm.find(clause)
         val m = purchase ?: atm ?: return false
         val kindOk = if (purchase != null) record.kind == TxKind.PURCHASE else record.kind == TxKind.CASH_WITHDRAWAL
-        return kindOk && MessageParser.minorOf(m.groupValues[1]) == record.amountMinor
+        return kindOk && MessageParser.minorOf(m.groups["amt"]!!.value) == record.amountMinor && slotLooksLikeName(original, m)
     }
 
     private fun instant(
         clause: String,
+        original: String,
         record: ParsedRecord,
     ): Boolean {
         val out = instantOut.find(clause)
@@ -217,20 +265,26 @@ object AutoRecordFamilies {
             } else {
                 record.kind == TxKind.INCOME || record.kind == TxKind.TRANSFER_IN
             }
-        return kindOk && m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record)
+        return kindOk && m.groups["l4"]?.value == record.instrumentLast4 && amountAgrees(clause, record) && slotLooksLikeName(original, m)
     }
 
     private fun instapayNotification(
         msg: IncomingMessage,
         clauses: List<String>,
+        originals: List<String>,
         record: ParsedRecord,
     ): String? {
         if (msg.sender != NotificationApps.INSTAPAY_CANDIDATE) return null
-        val body = clauses.filterNot { instapayHeader.matches(it) }
-        if (body.size != 1) return null
-        val clause = body.single()
-        val out = instapayOut.any { it.matches(clause) } && (record.kind == TxKind.TRANSFER_OUT || record.kind == TxKind.PURCHASE)
-        val inn = instapayIn.any { it.matches(clause) } && (record.kind == TxKind.INCOME || record.kind == TxKind.TRANSFER_IN)
-        return if ((out || inn) && amountAgrees(clause, record)) "F4" else null
+        val bodyIndexes = clauses.indices.filterNot { instapayHeader.matches(clauses[it]) }
+        if (bodyIndexes.size != 1) return null
+        val clause = clauses[bodyIndexes.single()]
+        val original = originals[bodyIndexes.single()]
+        val outOk =
+            (record.kind == TxKind.TRANSFER_OUT || record.kind == TxKind.PURCHASE) &&
+                instapayOut.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) } == true }
+        val inOk =
+            (record.kind == TxKind.INCOME || record.kind == TxKind.TRANSFER_IN) &&
+                instapayIn.any { r -> r.find(clause)?.let { slotLooksLikeName(original, it) } == true }
+        return if ((outOk || inOk) && amountAgrees(clause, record)) "F4" else null
     }
 }

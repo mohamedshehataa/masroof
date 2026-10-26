@@ -683,7 +683,7 @@ object MessageParser {
                 merchant = merchant(norm, t, kind),
             )
         // Confidence gate: only a proven family is uploaded without a human; the rest is a review item with this as its suggestion
-        if (AutoRecordFamilies.family(msg, t, record) != null) return ParseOutcome.Record(record)
+        if (AutoRecordFamilies.family(msg, norm, t, record) != null) return ParseOutcome.Record(record)
         return ParseOutcome.Review("unconfirmed", shown, record)
     }
 

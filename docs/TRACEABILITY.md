@@ -6,9 +6,9 @@ REQ → story (status, phase) → tests (file · name, last result) → implemen
 ## Summary
 | metric | value |
 |---|---|
-| total REQs | 389 |
-| covered (at least one test) | 106 |
-| passing | 86 |
+| total REQs | 390 |
+| covered (at least one test) | 107 |
+| passing | 87 |
 | failing | 0 |
 | pending (story not DONE, no test yet) | 282 |
 | orphans (DONE story, no test) | 0 |
@@ -92,6 +92,7 @@ None.
 | REQ-SMS-075 | A proven family is recorded without confirmation and is never learned from | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-075 a proven family is recorded without any confirmation and never learned from`() = (PASS) | PASS | — |
 | REQ-SMS-076 | A non-completion status anywhere blocks every automatic record and every learning | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a debit template never records a credit - the sign and Dr or Cr stay in the shape`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a learned format never records a message that carries a status word`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 a template whose direction disagrees with the engine's reading goes to review`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-076 the status gate blocks a non-completion in English and Arabic and lets a completed credit through`() { (PASS) | PASS | — |
 | REQ-SMS-077 | Review slots never keep a code, and only an unchanged one-tap Save teaches | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-077 review slots never keep a code - secret items store none, code-like runs are masked, saving drops them` (PASS) | PASS | — |
+| REQ-SMS-078 | Closed world: only a name, then a closed tail, may follow the amount of an automatic record | STORY-046 | IN_PROGRESS | 3 | `android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 a learned name slot keeps its token count - an extra word after it is never matched`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 a word that is never a name cannot sit in a learned merchant slot`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 the same holds in Arabic`() = (PASS)<br>`android/app/src/test/java/eg/masroof/SmsLearningTest.kt` · fun `REQ-SMS-078 the verifier's status wording is blocked by the gate as defence in depth`() { (PASS) | PASS | — |
 
 ## Area NTF
 | REQ | name | story | status | phase | tests | result | files |

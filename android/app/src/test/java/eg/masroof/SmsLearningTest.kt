@@ -282,6 +282,80 @@ class SmsLearningTest {
         }
 
     @Test
+    fun `REQ-SMS-078 a learned name slot keeps its token count - an extra word after it is never matched`() =
+        runTest {
+            pipeline.accept(sms("Transfer of EGP 500.00 to AHMED ALI"))
+            saveFirstReview()
+            var at = 2_000L
+            for (extra in listOf("timed out", "expired", "REVERTED", "incomplete", "unpaid", "\u274C", "RETURN")) {
+                assertEquals(extra, Disposition.REVIEW, pipeline.accept(sms("Transfer of EGP 300.00 to MONA ADEL $extra", at = at)))
+                at += 1_000L
+            }
+            assertEquals("one token is not two", Disposition.REVIEW, pipeline.accept(sms("Transfer of EGP 300.00 to MONA", at = at)))
+            assertEquals(
+                "a name of the same length is the format",
+                Disposition.QUEUED,
+                pipeline.accept(sms("Transfer of EGP 300.00 to MONA ADEL", at = at + 1_000L)),
+            )
+        }
+
+    @Test
+    fun `REQ-SMS-078 the same holds in Arabic`() =
+        runTest {
+            pipeline.accept(sms("تم تحويل 500 جنيه الى احمد علي", sender = "NBE"))
+            saveFirstReview()
+            var at = 2_000L
+            for (extra in listOf("غير مكتملة", "لم تكتمل", "اترفضت", "اتلغت", "مش ناجحة")) {
+                assertEquals(
+                    extra,
+                    Disposition.REVIEW,
+                    pipeline.accept(sms("تم تحويل 300 جنيه الى منى عادل $extra", sender = "NBE", at = at)),
+                )
+                at += 1_000L
+            }
+            assertEquals(Disposition.QUEUED, pipeline.accept(sms("تم تحويل 300 جنيه الى منى عادل", sender = "NBE", at = at)))
+        }
+
+    @Test
+    fun `REQ-SMS-078 a word that is never a name cannot sit in a learned merchant slot`() =
+        runTest {
+            pipeline.accept(sms("Purchase of EGP 99.00 at BAKERY"))
+            saveFirstReview()
+            assertEquals(Disposition.REVIEW, pipeline.accept(sms("Purchase of EGP 45.00 at CASHBACK", at = 2_000L)))
+            assertEquals(Disposition.REVIEW, pipeline.accept(sms("Purchase of EGP 45.00 at RETURN", at = 3_000L)))
+            assertEquals(Disposition.QUEUED, pipeline.accept(sms("Purchase of EGP 45.00 at CAFE", at = 4_000L)))
+        }
+
+    @Test
+    fun `REQ-SMS-078 the verifier's status wording is blocked by the gate as defence in depth`() {
+        val blocked =
+            listOf(
+                "payment of egp 500.00 to ahmed ali timed out",
+                "payment is being processed",
+                "payment is in progress",
+                "payment was not successful",
+                "payment not processed",
+                "transaction expired",
+                "payment reverted",
+                "payment incomplete",
+                "payment unpaid",
+                "preauthorization only",
+                "pre-authorization hold",
+                "amount subject to merchant confirmation",
+                "payment did not go through",
+                "تم تحويل 500 جنيه الي احمد علي قيد المراجعه",
+                "تم تحويل 500 جنيه الي احمد علي قيد الانتظار",
+                "تم تحويل 500 جنيه الي احمد علي غير مكتمله",
+                "تم تحويل 500 جنيه الي احمد علي لم تكتمل",
+                "تم تحويل 500 جنيه الي احمد علي اتلغت",
+                "تم تحويل 500 جنيه الي احمد علي اترفضت",
+                "تم تحويل 500 جنيه الي احمد علي مش ناجحه",
+                "تم تحويل 500 جنيه الي احمد علي ولم يصل",
+            )
+        for (text in blocked) assertTrue(text, StatusGate.blocks(text))
+    }
+
+    @Test
     fun `REQ-SMS-077 review slots never keep a code - secret items store none, code-like runs are masked, saving drops them`() =
         runTest {
             pipeline.accept(sms("Your PIN is 7351 purchase of EGP 500.00 at AMAZON"))
