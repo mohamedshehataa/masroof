@@ -3,11 +3,11 @@ id: STORY-044
 epic: EPIC-05
 title: "SMS template rules engine: per-sender regex templates with hot reload and direction mapping"
 phase: 3
-status: BLOCKED
+status: IN_PROGRESS
 size: M
 modules: [backend]
 depends_on: [STORY-041, STORY-042, STORY-014]
-reqs: [REQ-SMS-002, REQ-SMS-010, REQ-SMS-011, REQ-SMS-012, REQ-SMS-013]
+reqs: [REQ-SMS-002, REQ-SMS-010, REQ-SMS-011, REQ-SMS-012, REQ-SMS-013, REQ-SMS-016]
 implements: ["PROMPT.md §4.3 (parsing strategy 1, rules)", PROMPT.md §9 (CRUD /api/sms-templates), PROMPT.md §8 (sms_template)]
 owner_agent: ai-parsing-engineer
 ---
@@ -21,19 +21,19 @@ Bank and wallet SMS are parsed deterministically and for free by regex templates
 
 ## Requirements and acceptance criteria
 ### REQ-SMS-002 — CRUD /api/sms-templates (sender_pattern, regex, field_mapping, status ACTIVE|PROPOSED|DISABLED, hit_count)
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given the template CRUD API, when used, then templates are managed. NOT built in the SMS slice: templates are a JSON resource loaded at start (follow-up).
 
 ### REQ-SMS-010 — Template extraction of amount, currency, original amount/currency, merchant, last-4, date/time, balance, reference from fixture SMS
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given an anonymized bank or wallet SMS in `fixtures/sms/cases.jsonl`, when parsed by the template engine, then amount, currency, kind, merchant, card last four and time (Africa/Cairo to UTC) match the expectations; given no template or no amount, then nothing is extracted.
 
 ### REQ-SMS-011 — Templates are hot-reloaded from DB without restart; hit_count increments
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given edited templates, when saved, then they are hot-reloaded without restart. NOT built in the SMS slice (follow-up).
 
 ### REQ-SMS-012 — Direction mapping: debit/credit/refund/reversal/own-transfer/ATM/fee → expense type; balance stored, never an expense
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a purchase, ATM, refund, fee, transfer, salary or reversal message, when parsed, then the kind maps to EXPENSE, CASH_WITHDRAWAL, REFUND, FEE, TRANSFER, INCOME or a review/ignore outcome, and a balance is never an expense.
 
 ### REQ-SMS-013 — Card/account last-4 maps to payment_account and therefore to the owner member
-(to be specified) — Given/When/Then incl. unhappy paths written by /spec at phase start.
+Given a card last four that matches exactly one payment account, when the expense is created, then it is linked to that account and paid by its owner.
 
 
 ## UX states (UI stories only)
@@ -72,3 +72,6 @@ STORY-041, STORY-042, STORY-014
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+
+### REQ-SMS-016 — On-device engine (Kotlin) returns a structured record only; InstaPay transfers, payments, receipts and fees are covered
+Given a bank or wallet SMS (Arabic or English) or an InstaPay notification, when the on-device engine runs, then it emits amountMinor, currency, kind (PURCHASE, TRANSFER_OUT, TRANSFER_IN, INCOME, REFUND, CASH_WITHDRAWAL, FEE), occurredAt (Cairo local to UTC, received time unless a date within 45 days is found), an explicit last four, institution and a digit-free label taken only from at/to/from slots; a failed or declined message, a promotion or an OTP yields nothing; a foreign currency, an unknown template, a secret-looking message or a number it cannot explain stays on the phone. InstaPay sent to a person is TRANSFER_OUT (excluded from spending per PROMPT §4.3), payment to a merchant is PURCHASE, received is INCOME.

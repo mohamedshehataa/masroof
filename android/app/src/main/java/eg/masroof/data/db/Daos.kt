@@ -7,6 +7,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -101,9 +103,133 @@ interface LookupDao {
     suspend fun upsertAccounts(items: List<AccountEntity>)
 }
 
+@Dao
+interface ParsedOutboxDao {
+    /** IGNORE: the same message seen live and in a backfill is stored once. Returns the new row id, or -1 if it existed. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: ParsedOutboxEntity): Long
+
+    @Query("SELECT * FROM parsed_outbox WHERE failed = 0 ORDER BY occurredAtMillis")
+    suspend fun pending(): List<ParsedOutboxEntity>
+
+    @Query("UPDATE parsed_outbox SET attempts = attempts + 1 WHERE localId = :localId")
+    suspend fun bumpAttempts(localId: String)
+
+    @Query("UPDATE parsed_outbox SET failed = 1 WHERE localId = :localId")
+    suspend fun markFailed(localId: String)
+
+    @Query("DELETE FROM parsed_outbox WHERE localId = :localId")
+    suspend fun delete(localId: String)
+
+    /** Permanently failed rows go after the retention window. */
+    @Query("DELETE FROM parsed_outbox WHERE failed = 1 AND createdAtMillis < :olderThanMillis")
+    suspend fun purgeFailedBefore(olderThanMillis: Long)
+
+    @Query("SELECT COUNT(*) FROM parsed_outbox WHERE failed = 0")
+    suspend fun countPending(): Int
+
+    @Query("SELECT COUNT(*) FROM parsed_outbox")
+    suspend fun countAll(): Int
+
+    @Query("SELECT * FROM parsed_outbox")
+    suspend fun all(): List<ParsedOutboxEntity>
+}
+
+@Dao
+interface ReviewDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: ReviewItemEntity): Long
+
+    @Query("SELECT * FROM review_item WHERE createdAtMillis >= :cutoff ORDER BY receivedAtMillis DESC")
+    fun observeAll(cutoff: Long): Flow<List<ReviewItemEntity>>
+
+    @Query("SELECT COUNT(*) FROM review_item WHERE createdAtMillis >= :cutoff")
+    fun observeCount(cutoff: Long): Flow<Int>
+
+    @Query("SELECT * FROM review_item WHERE id = :id")
+    suspend fun find(id: String): ReviewItemEntity?
+
+    @Query("DELETE FROM review_item WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM review_item WHERE createdAtMillis < :olderThanMillis")
+    suspend fun purgeBefore(olderThanMillis: Long)
+
+    @Query("SELECT * FROM review_item")
+    suspend fun all(): List<ReviewItemEntity>
+}
+
+@Dao
+interface LearnedTemplateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: LearnedTemplateEntity)
+
+    @Query("SELECT * FROM learned_template WHERE sender = :sender AND shape = :shape LIMIT 1")
+    suspend fun find(
+        sender: String,
+        shape: String,
+    ): LearnedTemplateEntity?
+
+    @Query("SELECT COUNT(*) FROM learned_template")
+    fun observeCount(): Flow<Int>
+
+    @Query("DELETE FROM learned_template")
+    suspend fun clear()
+
+    @Query("DELETE FROM learned_template WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("SELECT * FROM learned_template")
+    suspend fun all(): List<LearnedTemplateEntity>
+}
+
+@Dao
+interface CapturedDao {
+    /** IGNORE: the same message accepted again never overwrites the row (it would lose its expense id). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: CapturedTxEntity): Long
+
+    @Query("SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff AND undoRequested = 0 ORDER BY capturedAtMillis DESC")
+    fun observeRecent(cutoff: Long): Flow<List<CapturedTxEntity>>
+
+    @Query("SELECT * FROM captured_tx WHERE localId = :localId")
+    suspend fun find(localId: String): CapturedTxEntity?
+
+    @Query("UPDATE captured_tx SET expenseId = :expenseId WHERE localId = :localId")
+    suspend fun setExpenseId(
+        localId: String,
+        expenseId: String,
+    )
+
+    @Query("UPDATE captured_tx SET undoRequested = 1 WHERE localId = :localId")
+    suspend fun requestUndo(localId: String)
+
+    @Query("SELECT * FROM captured_tx WHERE undoRequested = 1")
+    suspend fun undoRequests(): List<CapturedTxEntity>
+
+    @Query("DELETE FROM captured_tx WHERE localId = :localId")
+    suspend fun delete(localId: String)
+
+    @Query("DELETE FROM captured_tx WHERE capturedAtMillis < :cutoff")
+    suspend fun purgeBefore(cutoff: Long)
+
+    @Query("SELECT * FROM captured_tx")
+    suspend fun all(): List<CapturedTxEntity>
+}
+
 @Database(
-    entities = [ExpenseEntity::class, CategoryEntity::class, AccountEntity::class, OutboxEntity::class],
-    version = 2,
+    entities =
+        [
+            ExpenseEntity::class,
+            CategoryEntity::class,
+            AccountEntity::class,
+            OutboxEntity::class,
+            ParsedOutboxEntity::class,
+            ReviewItemEntity::class,
+            LearnedTemplateEntity::class,
+            CapturedTxEntity::class,
+        ],
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -112,6 +238,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun outbox(): OutboxDao
 
     abstract fun lookups(): LookupDao
+
+    abstract fun parsedOutbox(): ParsedOutboxDao
+
+    abstract fun reviews(): ReviewDao
+
+    abstract fun learnedTemplates(): LearnedTemplateDao
+
+    abstract fun captured(): CapturedDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction
@@ -153,3 +287,137 @@ abstract class AppDatabase : RoomDatabase() {
         expenses().delete(clientId)
     }
 }
+
+private const val CREATE_SMS_OUTBOX = """
+CREATE TABLE IF NOT EXISTS sms_outbox (
+  smsId TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  body TEXT NOT NULL,
+  receivedAtMillis INTEGER NOT NULL,
+  attempts INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(smsId)
+)
+"""
+
+private const val CREATE_PARSED_OUTBOX = """
+CREATE TABLE IF NOT EXISTS parsed_outbox (
+  localId TEXT NOT NULL,
+  source TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amountMinor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  occurredAtMillis INTEGER NOT NULL,
+  instrumentLast4 TEXT,
+  senderId TEXT NOT NULL,
+  institution TEXT,
+  paymentMethod TEXT,
+  merchant TEXT,
+  attempts INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(localId)
+)
+"""
+
+private const val CREATE_REVIEW_ITEM = """
+CREATE TABLE IF NOT EXISTS review_item (
+  id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  text TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  receivedAtMillis INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(id)
+)
+"""
+
+private const val CREATE_LEARNED_TEMPLATE = """
+CREATE TABLE IF NOT EXISTS learned_template (
+  id TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  shape TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amountSlot INTEGER NOT NULL,
+  last4Slot INTEGER NOT NULL,
+  createdAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(id)
+)
+"""
+
+private const val CREATE_CAPTURED_TX = """
+CREATE TABLE IF NOT EXISTS captured_tx (
+  localId TEXT NOT NULL,
+  expenseId TEXT,
+  amountMinor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  label TEXT,
+  source TEXT NOT NULL,
+  templateId TEXT,
+  capturedAtMillis INTEGER NOT NULL,
+  PRIMARY KEY(localId)
+)
+"""
+
+/** v6 -> v7 (round 19): an Undo pressed while the upload was in flight is remembered until the expense id is known. */
+val MIGRATION_6_7: Migration =
+    object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN undoRequested INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+/** v5 -> v6 (round 18): the phone's own automatic records, for the "Recorded ... Undo" notification and the "Captured" chip. */
+val MIGRATION_5_6: Migration =
+    object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(CREATE_CAPTURED_TX)
+        }
+    }
+
+/**
+ * v4 -> v5 (round 15): a review item carries the engine's typed suggestion plus its digit-free shape, and the user's confirmed
+ * message formats are stored on the phone as `learned_template` rows.
+ */
+val MIGRATION_4_5: Migration =
+    object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // One literal statement per column: SQL is never assembled from strings (semgrep CWE-89 rules).
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugKind TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugAmountMinor INTEGER")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugCurrency TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugOccurredAtMillis INTEGER")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugLast4 TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugSenderId TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugInstitution TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugPaymentMethod TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN sugMerchant TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN shape TEXT")
+            db.execSQL("ALTER TABLE review_item ADD COLUMN slots TEXT")
+            db.execSQL(CREATE_LEARNED_TEMPLATE)
+        }
+    }
+
+/**
+ * v3 -> v4: SMS text no longer leaves or lingers on the phone. The v3 `sms_outbox` (which held redacted text) is dropped
+ * and replaced by a typed `parsed_outbox` (no text) and the local `review_item` list.
+ */
+val MIGRATION_3_4: Migration =
+    object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS sms_outbox")
+            db.execSQL(CREATE_PARSED_OUTBOX)
+            db.execSQL(CREATE_REVIEW_ITEM)
+        }
+    }
+
+/** v2 -> v3: where an expense came from, and the SMS upload queue. Keeps the manual-entry outbox intact. */
+val MIGRATION_2_3: Migration =
+    object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expense ADD COLUMN source TEXT")
+            db.execSQL(CREATE_SMS_OUTBOX)
+        }
+    }

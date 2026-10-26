@@ -92,3 +92,4 @@ Alerts and dashboards: `infra/observability/` (TODO, S13).
 
 Single-VM hosting (Google Cloud Free Tier e2-micro + DuckDNS) is described in [HOSTING.md](HOSTING.md); `make deploy-prod` there supersedes the VPS notes above for the first deployment target.
 prod-deployed v0.1.0 2026-10-26 backend=0.1.0 web=0.1.0 host=GCP e2-micro us-central1-c url=https://masroof-mo.duckdns.org (images shipped over ssh, GHCR packages private)
+prod-deployed v0.1.1 2026-10-26 backend=0.1.1 web=0.1.1 gitSha=b3ce076 host=GCP e2-micro (owner: deploy now, Oracle later); version string in /health still 0.1.0 (bump skipped)
