@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 class AdminBootstrapPolicyTest {
 
   private final List<String> created = new ArrayList<>();
+  private boolean loginExists;
 
   private final AccountStore accounts =
       new AccountStore() {
@@ -25,6 +26,11 @@ class AdminBootstrapPolicyTest {
         @Override
         public Optional<Account> findByUserId(UUID userId) {
           return Optional.empty();
+        }
+
+        @Override
+        public boolean hasAnyLogin() {
+          return loginExists;
         }
 
         @Override
@@ -66,5 +72,15 @@ class AdminBootstrapPolicyTest {
     assertThat(created).isEmpty();
     bootstrap.run("owner@example.com", "a long bootstrap phrase");
     assertThat(created).containsExactly("owner@example.com");
+  }
+
+  @Test
+  @Tag("REQ-SEC-062")
+  @DisplayName("REQ-SEC-062 once a login exists the variables are ignored: no throw, nothing created")
+  void ignoredWhenLoginExists() {
+    loginExists = true;
+    bootstrap.run("owner@example.com", "password1234");
+    bootstrap.run("not-an-email", "short");
+    assertThat(created).isEmpty();
   }
 }

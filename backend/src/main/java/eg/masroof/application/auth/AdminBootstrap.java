@@ -12,6 +12,10 @@ public class AdminBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(AdminBootstrap.class);
 
+  private static final String WARN_EXISTING =
+      "MASROOF_BOOTSTRAP_ADMIN_* are set but a login already exists; remove them from the"
+          + " environment";
+
   private final AccountStore accounts;
   private final PasswordHasher hasher;
 
@@ -20,9 +24,18 @@ public class AdminBootstrap {
     this.hasher = hasher;
   }
 
-  /** Does nothing when either value is blank or a login already exists. Never logs the password. */
+  /**
+   * Does nothing when either value is blank or a login already exists (then only a warning without
+   * values). The password policy applies only when the first admin is really created. Never logs the
+   * password.
+   */
   public void run(String email, String password) {
     if (email.isBlank() || password.isEmpty()) {
+      return;
+    }
+    if (accounts.hasAnyLogin()) {
+      // The variables only act while no login exists: ignore them (and their values), never throw.
+      LOG.warn(WARN_EXISTING);
       return;
     }
     String normalized = email.strip().toLowerCase(Locale.ROOT);
@@ -40,9 +53,7 @@ public class AdminBootstrap {
     if (accounts.createFirstAdmin(normalized, normalized.substring(0, at), hasher.hash(password))) {
       LOG.info("Bootstrap admin created");
     } else {
-      LOG.warn(
-          "MASROOF_BOOTSTRAP_ADMIN_* are set but a login already exists; remove them from the"
-              + " environment");
+      LOG.warn(WARN_EXISTING);
     }
   }
 }

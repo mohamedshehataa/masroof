@@ -293,7 +293,7 @@ paths:
     delete:
       tags: [Auth]
       summary: Revoke a pending invite
-      description: Admin only. Idempotent for the household's own invites; another household's invite is 404.
+      description: Admin only. Idempotent for pending or already revoked invites; accepted → 409; other household → 404.
       operationId: revokeInvite
       x-req: [REQ-SEC-060]
       parameters:

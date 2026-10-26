@@ -478,7 +478,8 @@ class InviteApiIT {
       assertThat(r.getContentAsString()).doesNotContain(pw);
     }
     // the same code still works with an acceptable 72-byte password
-    assertThat(accept(code, freshEmail(), "k".repeat(72), ip()).getStatus()).isEqualTo(201);
+    assertThat(accept(code, freshEmail(), "abcdefghijklmnopqrstuvwxyz".repeat(3).substring(0, 72), ip()).getStatus())
+        .isEqualTo(201);
   }
 
   @Test
