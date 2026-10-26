@@ -55,6 +55,9 @@ openApiGenerate {
 
 tasks.named("openApiGenerate") {
     dependsOn(patchSpec)
+    // inputSpec is a URI string, which generator 7.26 does not track as a file input: declare the spec explicitly so a
+    // contract change always regenerates (a stale client hid BudgetStatus.daysLeft after merging main).
+    inputs.file(patchedSpec).withPropertyName("patchedSpec")
     // Stale files from earlier runs must not leak into the build.
     doFirst { delete(generatedDir) }
 }
