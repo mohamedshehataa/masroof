@@ -94,8 +94,6 @@ class WorkManagerSmsScheduler
         }
     }
 
-private enum class Pairing { STORE, STORE_PAIRED, SKIP }
-
 /** What the pipeline did with one message. */
 enum class Disposition { QUEUED, REVIEW, DROPPED }
 
@@ -117,6 +115,8 @@ class SmsPipeline
         private val idKey: LocalIdKey,
         private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
+        private val pairing = ChannelPairing(db, clock, notifier)
+
         suspend fun accept(message: IncomingMessage): Disposition {
             // No session (logged out, between two accounts): nothing is read, queued or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
@@ -173,13 +173,14 @@ class SmsPipeline
             receivedAt: Long,
         ): Disposition {
             // the same message accepted again after its upload is the same record: no second row, no second notice
-            if (db.captured().find(id) != null) {
+            // (also when this message was the dropped or replaced twin of a pair: its id is remembered on the other record)
+            if (db.captured().knows(id) > 0) {
                 scheduler.scheduleUpload()
                 return Disposition.QUEUED
             }
             // the same transfer announced by the other channel (bank SMS + app notification): one record, one notice
-            val pairing = matchOtherChannel(r, id, receivedAt)
-            if (pairing == Pairing.SKIP) {
+            val match = pairing.matchIncoming(r, id, receivedAt)
+            if (match.pairing == Pairing.SKIP) {
                 scheduler.scheduleUpload()
                 return Disposition.QUEUED
             }
@@ -215,7 +216,8 @@ class SmsPipeline
                         capturedAtMillis = clock.millis(),
                         kind = r.kind.name,
                         receivedAtMillis = receivedAt,
-                        paired = pairing == Pairing.STORE_PAIRED,
+                        paired = match.pairing == Pairing.STORE_PAIRED,
+                        pairedLocalId = match.twinId,
                         instrumentLast4 = r.instrumentLast4,
                     )
                 db.captured().insert(item)
@@ -223,50 +225,6 @@ class SmsPipeline
             }
             return Disposition.QUEUED
         }
-
-        /**
-         * Is [r] the same transfer as a record the OTHER channel already made (same direction, amount and currency, received within
-         * [DUPLICATE_WINDOW_MILLIS] of each other)? Each record pairs with at most one record of the other channel, so the answer does
-         * not depend on the order messages arrive in: a record that absorbed (or was absorbed by) a twin matches nothing else.
-         * [Pairing.SKIP]: a duplicate, not stored. [Pairing.STORE_PAIRED]: stored in place of a queued twin that knew less (the account
-         * tail); that twin is deleted with ONE conditional statement that fails when its upload has started, in which case [r] is the
-         * duplicate. [Pairing.STORE]: no twin, a new transfer.
-         */
-        private suspend fun matchOtherChannel(
-            r: ParsedRecord,
-            id: String,
-            receivedAt: Long,
-        ): Pairing {
-            val kinds = directionKinds(r.kind) ?: return Pairing.STORE
-            val twins =
-                db.captured().otherChannel(
-                    r.source.name,
-                    r.currency,
-                    r.amountMinor,
-                    kinds,
-                    receivedAt,
-                    receivedAt - DUPLICATE_WINDOW_MILLIS,
-                    receivedAt + DUPLICATE_WINDOW_MILLIS,
-                )
-            for (twin in twins) {
-                if (db.captured().claimPair(twin.localId) == 0) continue
-                val richer = twin.instrumentLast4 == null && r.instrumentLast4 != null && id != twin.localId
-                if (richer && db.parsedOutbox().deleteIfUnclaimed(twin.localId, clock.millis() - CLAIM_TTL_MILLIS) == 1) {
-                    db.captured().delete(twin.localId)
-                    notifier.cancel(twin.localId)
-                    return Pairing.STORE_PAIRED
-                }
-                return Pairing.SKIP
-            }
-            return Pairing.STORE
-        }
-
-        private fun directionKinds(kind: TxKind): List<String>? =
-            when (kind) {
-                TxKind.INCOME, TxKind.TRANSFER_IN -> INCOMING_KINDS.toList()
-                TxKind.TRANSFER_OUT -> listOf(TxKind.TRANSFER_OUT.name)
-                else -> null
-            }
 
         private fun ReviewItemEntity.withSuggestion(
             suggestion: ParsedRecord?,
@@ -301,16 +259,11 @@ class SmsPipeline
 
         private companion object {
             const val NOT_INSERTED = -1L
-            const val DUPLICATE_WINDOW_MILLIS = 5L * 60 * 1000
-            const val CLAIM_TTL_MILLIS = UPLOAD_CLAIM_TTL_MILLIS
             const val MAX_SENDER = 60
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
         }
     }
-
-/** An upload that started longer ago than this is taken to have died; its row may be sent again or replaced. */
-const val UPLOAD_CLAIM_TTL_MILLIS = 2L * 60 * 1000
 
 /** Result of one upload pass over the outbox. */
 data class SmsSyncReport(
@@ -332,7 +285,10 @@ class SmsUploader
         private val gate: CaptureGate,
         private val deleter: ExpenseDeleter = NoExpenseDeleter,
         private val locks: CapturedLocks = CapturedLocks(),
+        private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
+        private val pairing = ChannelPairing(db, clock, notifier)
+
         suspend fun uploadPending(): SmsSyncReport {
             val dao = db.parsedOutbox()
             // Retention is enforced here too, so an old review item goes even if no new message ever arrives.
@@ -346,7 +302,10 @@ class SmsUploader
             var retry = false
             var retryAfter: Long? = null
             resolveUndoRequests()
+            // records queued by an older version of the app, never compared with each other, are paired before anything is sent
+            pairing.pairQueued()
             var stopped = false
+            var wait = 0L
             for (item in dao.pending()) {
                 if (retry || stopped) break
                 val step = uploadOne(item)
@@ -355,8 +314,14 @@ class SmsUploader
                 retry = step.retry
                 retryAfter = step.retryAfter
                 stopped = step.needsSignIn
+                wait = maxOf(wait, step.waitSeconds)
             }
             if (stopped) return SmsSyncReport(sent, rejected, false)
+            if (wait > 0) {
+                // a row is held by another upload (maybe a dead one): come back when its claim runs out
+                retry = true
+                retryAfter = maxOf(retryAfter ?: 0L, wait)
+            }
             return SmsSyncReport(sent, rejected, retry, retryAfter)
         }
 
@@ -367,12 +332,14 @@ class SmsUploader
             val retry: Boolean = false,
             val retryAfter: Long? = null,
             val needsSignIn: Boolean = false,
+            val waitSeconds: Long = 0L,
         )
 
         private suspend fun uploadOne(item: ParsedOutboxEntity): Step {
             val dao = db.parsedOutbox()
             // One statement takes the row: a second uploader skips it, and a replacement by the other channel cannot delete it.
-            if (dao.claim(item.localId, clock.millis(), clock.millis() - UPLOAD_CLAIM_TTL_MILLIS) == 0) return Step()
+            val token = clock.millis()
+            if (dao.claim(item.localId, token, token - UPLOAD_CLAIM_TTL_MILLIS) == 0) return heldStep(item.localId, token)
             locks.begin(item.localId)
             try {
                 return when (val result = remote.uploadParsed(device.get(), item)) {
@@ -403,8 +370,18 @@ class SmsUploader
             } finally {
                 locks.end(item.localId)
                 // the claim is held until the outcome is stored, so a replacement never sees a half-finished upload
-                dao.release(item.localId)
+                dao.release(item.localId, token)
             }
+        }
+
+        /** The row was not taken: gone or finished (nothing to do), or held by a live claim (come back when it runs out). */
+        private suspend fun heldStep(
+            localId: String,
+            now: Long,
+        ): Step {
+            val held = db.parsedOutbox().find(localId)?.takeIf { !it.failed && it.claimedAtMillis > 0 } ?: return Step()
+            val remainingMillis = held.claimedAtMillis + UPLOAD_CLAIM_TTL_MILLIS - now
+            return if (remainingMillis > 0) Step(waitSeconds = remainingMillis / MILLIS_PER_SECOND + 1) else Step()
         }
 
         /**
@@ -476,6 +453,7 @@ class SmsUploader
             const val MAX_LIMITED_ATTEMPTS = 5
             const val RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
+            const val MILLIS_PER_SECOND = 1000L
             const val CENTS = 100
         }
     }

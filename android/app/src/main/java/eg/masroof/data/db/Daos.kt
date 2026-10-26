@@ -126,18 +126,31 @@ interface ParsedOutboxDao {
      * Takes the row for an upload. One statement, so of two uploaders (or an uploader and a replacement) exactly one gets 1.
      * A claim older than [staleBefore] belongs to a request that died: it can be taken again.
      */
-    @Query("UPDATE parsed_outbox SET claimedAtMillis = :now WHERE localId = :localId AND failed = 0 AND claimedAtMillis < :staleBefore")
+    @Query("SELECT * FROM parsed_outbox WHERE localId = :localId")
+    suspend fun find(localId: String): ParsedOutboxEntity?
+
+    @Query(
+        """UPDATE parsed_outbox SET claimedAtMillis = :now, claims = claims + 1
+            WHERE localId = :localId AND failed = 0 AND claimedAtMillis < :staleBefore""",
+    )
     suspend fun claim(
         localId: String,
         now: Long,
         staleBefore: Long,
     ): Int
 
-    @Query("UPDATE parsed_outbox SET claimedAtMillis = 0 WHERE localId = :localId")
-    suspend fun release(localId: String)
+    /** Gives a claim back, but only the caller's own ([token] is the time it took the claim): a newer holder keeps its claim. */
+    @Query("UPDATE parsed_outbox SET claimedAtMillis = 0 WHERE localId = :localId AND claimedAtMillis = :token")
+    suspend fun release(
+        localId: String,
+        token: Long,
+    )
 
-    /** Replaces a queued record: deletes it only while no upload holds it. Returns 1 when it was deleted, 0 when sent or in flight. */
-    @Query("DELETE FROM parsed_outbox WHERE localId = :localId AND claimedAtMillis < :staleBefore")
+    /**
+     * Deletes a queued record, but only one that no upload ever started: a row that was claimed once may be on the server (its answer
+     * can be lost), so it keeps its local id and is retried. Returns 1 when deleted, 0 otherwise.
+     */
+    @Query("DELETE FROM parsed_outbox WHERE localId = :localId AND claims = 0 AND claimedAtMillis < :staleBefore")
     suspend fun deleteIfUnclaimed(
         localId: String,
         staleBefore: Long,
@@ -257,9 +270,23 @@ interface CapturedDao {
         to: Long,
     ): List<CapturedTxEntity>
 
-    /** Marks a record as matched; 1 for the one caller that did it, 0 when someone else already had. */
-    @Query("UPDATE captured_tx SET paired = 1 WHERE localId = :localId AND paired = 0")
-    suspend fun claimPair(localId: String): Int
+    /** Marks a record as matched with [otherId]; 1 for the one caller that did it, 0 when someone else already had. */
+    @Query("UPDATE captured_tx SET paired = 1, pairedLocalId = :otherId WHERE localId = :localId AND paired = 0")
+    suspend fun claimPair(
+        localId: String,
+        otherId: String,
+    ): Int
+
+    /** Has this message (or its dropped / replaced twin) been handled already? */
+    @Query("SELECT COUNT(*) FROM captured_tx WHERE localId = :id OR pairedLocalId = :id")
+    suspend fun knows(id: String): Int
+
+    /** Unmatched records that still wait in the upload outbox, oldest first. */
+    @Query(
+        """SELECT c.* FROM captured_tx c INNER JOIN parsed_outbox p ON p.localId = c.localId
+            WHERE c.paired = 0 AND c.kind IS NOT NULL AND p.failed = 0 ORDER BY c.receivedAtMillis, c.capturedAtMillis""",
+    )
+    suspend fun queuedUnpaired(): List<CapturedTxEntity>
 }
 
 @Database(
@@ -419,7 +446,11 @@ val MIGRATION_7_8: Migration =
             db.execSQL("ALTER TABLE captured_tx ADD COLUMN receivedAtMillis INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE captured_tx ADD COLUMN paired INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE captured_tx ADD COLUMN instrumentLast4 TEXT")
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN pairedLocalId TEXT")
             db.execSQL("ALTER TABLE parsed_outbox ADD COLUMN claimedAtMillis INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE parsed_outbox ADD COLUMN claims INTEGER NOT NULL DEFAULT 0")
+            // a row that was already tried may have reached the server: it counts as claimed
+            db.execSQL("UPDATE parsed_outbox SET claims = attempts")
             // Records still queued from before the update keep matching: kind and tail come from the outbox row, the capture time
             // stands in for the receive time. Already uploaded ones stay unmatched.
             db.execSQL(MIGRATION_8_BACKFILL_KIND)

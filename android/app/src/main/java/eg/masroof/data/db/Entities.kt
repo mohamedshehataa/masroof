@@ -78,6 +78,8 @@ data class ParsedOutboxEntity(
     val createdAtMillis: Long,
     /** When an upload of this row started (0 = not being sent). Replacing a row is only allowed while this is unset or stale. */
     @ColumnInfo(defaultValue = "0") val claimedAtMillis: Long = 0L,
+    /** How many uploads of this row were ever started (rows from before version 8 start with their attempts). Above 0: never replaced. */
+    @ColumnInfo(defaultValue = "0") val claims: Int = 0,
 )
 
 /**
@@ -157,6 +159,8 @@ data class CapturedTxEntity(
     @ColumnInfo(defaultValue = "0") val receivedAtMillis: Long = 0L,
     // This record is already matched with one record of the other channel: it takes part in no further match.
     @ColumnInfo(defaultValue = "0") val paired: Boolean = false,
+    // The other message of the pair: the dropped newcomer, or the queued record this one replaced. Accepting that message again is a no-op.
+    val pairedLocalId: String? = null,
     val instrumentLast4: String? = null,
 ) {
     override fun toString() = "CapturedTxEntity(localId=$localId)"

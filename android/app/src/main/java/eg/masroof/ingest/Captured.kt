@@ -302,13 +302,9 @@ class CapturedActions
                 val queued = db.parsedOutbox().all().any { it.localId == localId }
                 when {
                     locks.isInFlight(localId) -> remember(item)
-                    queued -> {
-                        db.withTransaction {
-                            db.parsedOutbox().delete(localId)
-                            db.captured().delete(localId)
-                        }
-                        UndoResult(true, item.templateId)
-                    }
+                    // never sent: simply forgotten. Sent once (the answer may be lost): the server may have it, so the Undo is remembered
+                    // and the expense is deleted through the API when the next upload pass learns its id.
+                    queued -> if (removeUnsent(localId)) UndoResult(true, item.templateId) else remember(item)
                     // uploaded, but the server has not told us which expense it made: remembered, resolved by the next upload pass
                     item.expenseId == null -> remember(item)
                     !deleter.deleteExpense(item.expenseId) -> UndoResult(false, item.templateId)
@@ -320,6 +316,13 @@ class CapturedActions
                         UndoResult(true, item.templateId)
                     }
                 }
+            }
+
+        private suspend fun removeUnsent(localId: String): Boolean =
+            db.withTransaction {
+                val gone = db.parsedOutbox().deleteIfUnclaimed(localId, clock.millis() - UPLOAD_CLAIM_TTL_MILLIS) == 1
+                if (gone) db.captured().delete(localId)
+                gone
             }
 
         private suspend fun remember(item: CapturedTxEntity): UndoResult {

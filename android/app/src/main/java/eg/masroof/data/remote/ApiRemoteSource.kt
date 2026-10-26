@@ -193,6 +193,8 @@ class ApiRemoteSource
                 .newBuilder()
                 .addInterceptor(BearerInterceptor(session))
                 .authenticator(TokenAuthenticator(session))
+                // no request outlives the claim the uploader holds on its row (UPLOAD_CLAIM_TTL_MILLIS)
+                .callTimeout(CALL_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
 
         private suspend fun retrofit(): Retrofit {
@@ -360,5 +362,6 @@ class ApiRemoteSource
 
         private companion object {
             const val PAGE_LIMIT = 200
+            const val CALL_TIMEOUT_SECONDS = 90L
         }
     }

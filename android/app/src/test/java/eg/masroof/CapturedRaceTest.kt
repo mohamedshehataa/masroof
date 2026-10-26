@@ -137,7 +137,7 @@ class CapturedRaceTest {
         }
 
     @Test
-    fun `REQ-SMS-090 a claim is atomic - the second taker and the replacement both lose`() =
+    fun `REQ-SMS-090 a claim is atomic - the second taker and the replacement both lose, and a row once claimed is never replaced`() =
         runTest {
             pipeline.accept(appPush(at))
             val id =
@@ -151,8 +151,13 @@ class CapturedRaceTest {
             assertEquals(1, db.parsedOutbox().claim(id, now, stale))
             assertEquals(0, db.parsedOutbox().claim(id, now, stale))
             assertEquals(0, db.parsedOutbox().deleteIfUnclaimed(id, stale))
-            db.parsedOutbox().release(id)
-            assertEquals(1, db.parsedOutbox().deleteIfUnclaimed(id, stale))
+            // a release with someone else's token changes nothing; with its own token it frees the row for the next upload
+            db.parsedOutbox().release(id, now - 1)
+            assertEquals(0, db.parsedOutbox().claim(id, now, stale))
+            db.parsedOutbox().release(id, now)
+            // freed, but it was started once: the server may have it, so it is never deleted as a replaced duplicate
+            assertEquals(0, db.parsedOutbox().deleteIfUnclaimed(id, stale))
+            assertEquals(1, db.parsedOutbox().claim(id, now, stale))
         }
 
     @Test
