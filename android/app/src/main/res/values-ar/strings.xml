@@ -150,4 +150,23 @@
     <string name="settings_section_server">الخادم</string>
     <string name="settings_section_display">العرض</string>
     <string name="settings_language">اللغة</string>
+    <string name="members_title">الأعضاء</string>
+    <string name="members_row_admin">%1$s (مدير)</string>
+    <string name="members_row_member">%1$s</string>
+    <string name="members_load_failed">تعذر تحميل الأعضاء.</string>
+    <string name="members_pending">الدعوات المعلقة</string>
+    <string name="members_no_pending">لا توجد دعوات معلقة.</string>
+    <string name="members_revoke">إلغاء</string>
+    <string name="members_name">الاسم</string>
+    <string name="members_email_hint">البريد الإلكتروني (اختياري)</string>
+    <string name="members_invite">إنشاء دعوة</string>
+    <string name="members_created">دعوة %1$s</string>
+    <string name="members_shown_once">تظهر مرة واحدة. شاركها بشكل خاص؛ تعمل مرة واحدة وتنتهي بعد 7 أيام.</string>
+    <string name="members_share">مشاركة رابط الدعوة</string>
+    <string name="members_share_title">دعوة مصروف</string>
+    <string name="members_done">تم</string>
+    <string name="members_error_conflict">دعوات معلقة كثيرة أو الأسرة مكتملة.</string>
+    <string name="members_error_invalid">تحقق من الاسم والبريد الإلكتروني.</string>
+    <string name="members_error_offline">لا يوجد اتصال. حاول مرة أخرى.</string>
+    <string name="members_error_other">حدث خطأ. حاول مرة أخرى.</string>
 </resources>

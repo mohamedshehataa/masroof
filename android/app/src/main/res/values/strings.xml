@@ -134,4 +134,23 @@
     <string name="settings_section_server">Server</string>
     <string name="settings_section_display">Display</string>
     <string name="settings_language">Language</string>
+    <string name="members_title">Members</string>
+    <string name="members_row_admin">%1$s (admin)</string>
+    <string name="members_row_member">%1$s</string>
+    <string name="members_load_failed">Could not load members.</string>
+    <string name="members_pending">Pending invites</string>
+    <string name="members_no_pending">No pending invites.</string>
+    <string name="members_revoke">Revoke</string>
+    <string name="members_name">Name</string>
+    <string name="members_email_hint">Email (optional)</string>
+    <string name="members_invite">Create invite</string>
+    <string name="members_created">Invite for %1$s</string>
+    <string name="members_shown_once">Shown once. Share it privately; it works one time and expires in 7 days.</string>
+    <string name="members_share">Share invite link</string>
+    <string name="members_share_title">Masroof invite</string>
+    <string name="members_done">Done</string>
+    <string name="members_error_conflict">Too many pending invites, or the household is full.</string>
+    <string name="members_error_invalid">Check the name and email.</string>
+    <string name="members_error_offline">No connection. Try again.</string>
+    <string name="members_error_other">Something went wrong. Try again.</string>
 </resources>

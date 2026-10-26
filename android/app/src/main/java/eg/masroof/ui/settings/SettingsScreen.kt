@@ -56,6 +56,7 @@ fun SettingsRoute(
             viewModel::syncNow,
             onToggleLanguage,
         ),
+        members = { MembersRoute() },
     )
 }
 
@@ -75,6 +76,7 @@ fun SettingsContent(
     state: SettingsUiState,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
+    members: @Composable () -> Unit = {},
 ) {
     val onUrl = actions.onUrl
     val onDigits = actions.onDigits
@@ -149,6 +151,7 @@ fun SettingsContent(
                 }
             }
         }
+        members()
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(stringResource(R.string.settings_save))
         }
