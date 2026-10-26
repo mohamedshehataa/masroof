@@ -45,11 +45,11 @@ class PrefsNotificationSettings(
 
     private fun removed() = prefs.getStringSet(REMOVED, emptySet()).orEmpty().toSet()
 
-    override fun isMonitored(pkg: String) = pkg in packages()
+    override fun isMonitored(pkg: String) = pkg in packages() && !NotificationApps.isDenied(pkg)
 
     override fun addPackage(pkg: String) {
         val clean = pkg.trim()
-        if (!PACKAGE.matches(clean)) return
+        if (!PACKAGE.matches(clean) || NotificationApps.isDenied(clean)) return
         prefs.edit {
             putStringSet(ADDED, added() + clean)
             putStringSet(REMOVED, removed() - clean)
@@ -75,6 +75,7 @@ class PrefsNotificationSettings(
 class NotificationHandoff(
     private val settings: NotificationSettings,
     private val scheduler: SmsWorkScheduler,
+    private val gate: CaptureGate,
 ) {
     fun handOff(
         packageName: String,
@@ -82,7 +83,7 @@ class NotificationHandoff(
         text: String?,
         postedAtMillis: Long,
     ) {
-        if (!settings.enabled() || !settings.isMonitored(packageName)) return
+        if (!gate.isOpen() || !settings.enabled() || !settings.isMonitored(packageName)) return
         val joined = listOfNotNull(title, text).filter { it.isNotBlank() }.joinToString("\n")
         if (joined.isBlank() || MessageHygiene.isPlainSecret(joined)) return
         scheduler.enqueueIntake(IncomingMessage(CaptureSource.NOTIFICATION, packageName, joined, postedAtMillis).capped())
@@ -95,6 +96,8 @@ interface NotificationEntryPoint {
     fun notificationSettings(): NotificationSettings
 
     fun smsScheduler(): SmsWorkScheduler
+
+    fun captureGate(): CaptureGate
 }
 
 /**
@@ -107,7 +110,7 @@ class MasroofNotificationListener : NotificationListenerService() {
         val extras = n.notification.extras
         val graph = EntryPointAccessors.fromApplication(applicationContext, NotificationEntryPoint::class.java)
         val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT)
-        NotificationHandoff(graph.notificationSettings(), graph.smsScheduler())
+        NotificationHandoff(graph.notificationSettings(), graph.smsScheduler(), graph.captureGate())
             .handOff(n.packageName, extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(), text?.toString(), n.postTime)
     }
 }

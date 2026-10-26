@@ -37,8 +37,14 @@ import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.RemoteSource
+import eg.masroof.ingest.CaptureData
+import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.DeviceIdProvider
+import eg.masroof.ingest.KeystoreLocalIdKey
+import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.NotificationSettings
+import eg.masroof.ingest.PrefsCaptureData
+import eg.masroof.ingest.PrefsCaptureGate
 import eg.masroof.ingest.PrefsNotificationSettings
 import eg.masroof.ingest.PrefsSenderSettings
 import eg.masroof.ingest.SenderSettings
@@ -106,6 +112,22 @@ object ProvidersModule {
     fun workManager(
         @ApplicationContext context: Context,
     ): WorkManager = WorkManager.getInstance(context)
+
+    @Provides @Singleton
+    fun captureGate(
+        @ApplicationContext context: Context,
+    ): CaptureGate = PrefsCaptureGate(context.getSharedPreferences("masroof_capture", Context.MODE_PRIVATE))
+
+    @Provides @Singleton
+    fun localIdKey(
+        @ApplicationContext context: Context,
+    ): LocalIdKey = KeystoreLocalIdKey(context)
+
+    @Provides @Singleton
+    fun captureData(
+        @ApplicationContext context: Context,
+        key: LocalIdKey,
+    ): CaptureData = PrefsCaptureData(context, key)
 
     @Provides @Singleton
     fun notificationSettings(

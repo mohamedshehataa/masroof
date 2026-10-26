@@ -92,3 +92,6 @@ data class ReviewItemEntity(
 }
 
 const val REVIEW_RETENTION_DAYS = 30L
+
+/** Items created before this instant are expired: they are purged, and never shown even before the purge ran. */
+fun reviewCutoff(nowMillis: Long): Long = nowMillis - REVIEW_RETENTION_DAYS * 24L * 60 * 60 * 1000

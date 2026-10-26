@@ -140,11 +140,11 @@ interface ReviewDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: ReviewItemEntity): Long
 
-    @Query("SELECT * FROM review_item ORDER BY receivedAtMillis DESC")
-    fun observeAll(): Flow<List<ReviewItemEntity>>
+    @Query("SELECT * FROM review_item WHERE createdAtMillis >= :cutoff ORDER BY receivedAtMillis DESC")
+    fun observeAll(cutoff: Long): Flow<List<ReviewItemEntity>>
 
-    @Query("SELECT COUNT(*) FROM review_item")
-    fun observeCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM review_item WHERE createdAtMillis >= :cutoff")
+    fun observeCount(cutoff: Long): Flow<Int>
 
     @Query("SELECT * FROM review_item WHERE id = :id")
     suspend fun find(id: String): ReviewItemEntity?

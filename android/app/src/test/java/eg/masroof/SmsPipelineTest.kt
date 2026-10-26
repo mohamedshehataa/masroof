@@ -11,9 +11,11 @@ import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.data.remote.apiJson
 import eg.masroof.data.remote.classifySmsStatus
 import eg.masroof.data.remote.parsedRequest
+import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.IncomingSms
+import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.NotificationHandoff
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.PrefsNotificationSettings
@@ -27,6 +29,7 @@ import eg.masroof.ingest.SmsWorkScheduler
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ingest.parse.NotificationApps
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import org.junit.After
@@ -84,6 +87,26 @@ internal class MemorySettings(
     }
 
     override fun dismissSuggestion(sender: String) = Unit
+}
+
+internal class MemoryGate(
+    var open: Boolean = true,
+) : CaptureGate {
+    override fun isOpen() = open
+
+    override fun open() {
+        open = true
+    }
+
+    override fun close() {
+        open = false
+    }
+}
+
+internal object FixedKey : LocalIdKey {
+    override fun get() = ByteArray(32) { it.toByte() }
+
+    override fun wipe() = Unit
 }
 
 internal class MemoryNotifications(
@@ -171,10 +194,26 @@ class SenderSettingsTest {
     }
 }
 
+class NotificationPackageDenyTest {
+    @Test
+    fun `REQ-NTF-010 messaging, social and email apps can never be added or read`() {
+        for (pkg in listOf(
+            "com.whatsapp",
+            "org.telegram.messenger",
+            "com.facebook.orca",
+            "com.google.android.gm",
+            "com.google.android.apps.messaging",
+        )) {
+            assertTrue(pkg, NotificationApps.isDenied(pkg))
+        }
+        assertFalse(NotificationApps.isDenied(NotificationApps.INSTAPAY_CANDIDATE))
+    }
+}
+
 class SmsHandoffTest {
     private val scheduler = FakeSmsScheduler()
     private val settings = MemorySettings()
-    private val handoff = SmsHandoff(settings, scheduler)
+    private val handoff = SmsHandoff(settings, scheduler, MemoryGate())
     private val purchase = "Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05"
 
     @Test
@@ -211,7 +250,7 @@ class NotificationHandoffTest {
     @Test
     fun `REQ-NTF-010 only enabled and monitored packages are handed over, with title and text joined`() {
         val settings = MemoryNotifications(on = false)
-        val handoff = NotificationHandoff(settings, scheduler)
+        val handoff = NotificationHandoff(settings, scheduler, MemoryGate())
         handoff.handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "You sent EGP 250.00 to Sara", 1_000L)
         assertTrue("off by default", scheduler.intake.isEmpty())
         settings.on = true
@@ -224,7 +263,7 @@ class NotificationHandoffTest {
 
     @Test
     fun `REQ-NTF-012 a notification OTP is dropped before WorkManager`() {
-        NotificationHandoff(MemoryNotifications(), scheduler)
+        NotificationHandoff(MemoryNotifications(), scheduler, MemoryGate())
             .handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "Your OTP is 556677", 1_000L)
         assertTrue(scheduler.intake.isEmpty())
     }
@@ -239,6 +278,7 @@ class SmsOutboxTest {
     private val settings = MemorySettings()
     private val notifications = MemoryNotifications()
     private val remote = ScriptedRemote()
+    private val gate = MemoryGate()
     private val device =
         object : DeviceIdProvider {
             override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
@@ -266,8 +306,8 @@ class SmsOutboxTest {
     @After
     fun tearDown() = db.close()
 
-    private val pipeline get() = SmsPipeline(db, settings, notifications, scheduler, clock)
-    private val uploader get() = SmsUploader(db, remote, device, clock)
+    private val pipeline get() = SmsPipeline(db, settings, notifications, scheduler, clock, gate, FixedKey)
+    private val uploader get() = SmsUploader(db, remote, device, clock, gate)
 
     private fun sms(
         body: String,
@@ -354,7 +394,15 @@ class SmsOutboxTest {
         runTest {
             pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))
             val later = Clock.fixed(Instant.parse("2026-12-30T09:00:00Z"), ZoneOffset.UTC)
-            SmsPipeline(db, settings, notifications, scheduler, later).accept(sms("Another unparsed note from CIB", at = 2L))
+            SmsPipeline(
+                db,
+                settings,
+                notifications,
+                scheduler,
+                later,
+                gate,
+                FixedKey,
+            ).accept(sms("Another unparsed note from CIB", at = 2L))
             assertEquals(1, db.reviews().all().size)
         }
 
@@ -397,24 +445,66 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-061 a permanent rejection fails the row, an ambiguous answer fails it after five tries`() =
+    fun `REQ-SMS-063 a record the server refuses is never silently lost - it moves to the review list`() =
         runTest {
             pipeline.accept(sms(purchase))
             remote.next = SmsUploadResult.Rejected
             assertEquals(1, uploader.uploadPending().rejected)
-            assertTrue(
-                db
-                    .parsedOutbox()
-                    .all()
-                    .single()
-                    .failed,
-            )
-            assertTrue(db.parsedOutbox().pending().isEmpty())
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            val item = db.reviews().all().single()
+            assertEquals("rejected", item.reason)
+            assertTrue("described from typed fields only", item.text.contains("PURCHASE 99.00 EGP"))
+            assertFalse(item.text.contains("12/03/2026"))
 
             pipeline.accept(sms("Purchase of EGP 10.00 at KIOSK", at = 2_000L))
             remote.next = SmsUploadResult.RetryLimited
             repeat(5) { uploader.uploadPending() }
-            assertEquals(2, db.parsedOutbox().all().count { it.failed })
+            assertEquals("an ambiguous answer ends in review after five tries", 2, db.reviews().all().size)
+            assertTrue(db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-062 after logout nothing is read, queued or uploaded - and the next account gets nothing`() =
+        runTest {
+            gate.close()
+            assertEquals(Disposition.DROPPED, pipeline.accept(sms(purchase)))
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            val closedHandoff = FakeSmsScheduler()
+            SmsHandoff(settings, closedHandoff, gate).handOff(listOf(IncomingSms("CIB", purchase, 1_000L)))
+            NotificationHandoff(notifications, closedHandoff, gate)
+                .handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "You sent EGP 250.00 to Sara", 1_000L)
+            assertTrue(closedHandoff.intake.isEmpty())
+            // a row queued before logout is not sent while no one is signed in
+            gate.open()
+            pipeline.accept(sms(purchase))
+            gate.close()
+            assertEquals(0, uploader.uploadPending().sent)
+            assertTrue(remote.sent.isEmpty())
+            // login as B: the wipe cleared the queue, so nothing of A's is uploaded
+            db.clearAllTables()
+            gate.open()
+            assertEquals(0, uploader.uploadPending().sent)
+            assertTrue(remote.sent.isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-063 expired review items are neither shown nor kept`() =
+        runTest {
+            pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))
+            val cutoff =
+                eg.masroof.data.db
+                    .reviewCutoff(clock.millis() + 31L * 24 * 60 * 60 * 1000)
+            assertTrue(
+                db
+                    .reviews()
+                    .observeAll(cutoff)
+                    .first()
+                    .isEmpty(),
+            )
+            assertEquals(0, db.reviews().observeCount(cutoff).first())
+            val muchLater = Clock.fixed(Instant.parse("2026-12-30T09:00:00Z"), ZoneOffset.UTC)
+            SmsUploader(db, remote, device, muchLater, gate).uploadPending()
+            assertTrue("purged at upload time even with no new message", db.reviews().all().isEmpty())
         }
 
     @Test
@@ -439,10 +529,10 @@ class SmsOutboxTest {
                     .localId,
             )
             val later = Clock.fixed(Instant.parse("2026-10-18T09:00:00Z"), ZoneOffset.UTC)
-            SmsUploader(db, remote, device, later).uploadPending()
+            SmsUploader(db, remote, device, later, gate).uploadPending()
             assertEquals(1, db.parsedOutbox().all().size)
             val muchLater = Clock.fixed(Instant.parse("2026-11-30T09:00:00Z"), ZoneOffset.UTC)
-            SmsUploader(db, remote, device, muchLater).uploadPending()
+            SmsUploader(db, remote, device, muchLater, gate).uploadPending()
             assertTrue(db.parsedOutbox().all().isEmpty())
         }
 }

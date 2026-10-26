@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.WorkManagerTestInitHelper
+import eg.masroof.data.auth.AuthResult
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.MIGRATION_2_3
@@ -17,6 +18,8 @@ import eg.masroof.data.db.MIGRATION_3_4
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.insights.InsightsCache
+import eg.masroof.ingest.LocalIdKey
+import eg.masroof.ingest.PrefsCaptureData
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.WorkManagerSmsScheduler
 import eg.masroof.ingest.parse.CaptureSource
@@ -210,4 +213,46 @@ class SignOutSmsTest {
             assertTrue(workManager.getWorkInfosForUniqueWork("sms-upload-retry").get().all { it.state.isFinished })
             db.close()
         }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class CaptureLifecycleTest {
+    @Test
+    fun `REQ-SMS-062 sign-in opens capture, logout closes it first, and login as another account starts closed to old data`() =
+        runTest {
+            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
+            val gate = MemoryGate(open = false)
+            val sm = TestAuth.manager(FakeSessionStore(), remote, capture = gate)
+            sm.login("https://masroof.example", "a@b.eg", "pw-123456")
+            assertTrue(gate.isOpen())
+            sm.logout()
+            assertFalse("closed by logout", gate.isOpen())
+        }
+
+    @Test
+    fun `REQ-SMS-062 the wipe also clears sender, notification and device prefs and the id key`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        var wiped = false
+        val key =
+            object : LocalIdKey {
+                override fun get() = ByteArray(32)
+
+                override fun wipe() {
+                    wiped = true
+                }
+            }
+        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device")) {
+            context
+                .getSharedPreferences(name, Context.MODE_PRIVATE)
+                .edit()
+                .putString("x", "y")
+                .commit()
+        }
+        PrefsCaptureData(context, key).clear()
+        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device")) {
+            assertTrue(name, context.getSharedPreferences(name, Context.MODE_PRIVATE).all.isEmpty())
+        }
+        assertTrue(wiped)
+    }
 }

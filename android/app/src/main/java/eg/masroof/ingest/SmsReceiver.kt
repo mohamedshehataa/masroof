@@ -15,6 +15,8 @@ interface SmsReceiverEntryPoint {
     fun senderSettings(): SenderSettings
 
     fun smsScheduler(): SmsWorkScheduler
+
+    fun captureGate(): CaptureGate
 }
 
 /**
@@ -40,6 +42,6 @@ class SmsReceiver : BroadcastReceiver() {
                     )
                 }
         val graph = EntryPointAccessors.fromApplication(context.applicationContext, SmsReceiverEntryPoint::class.java)
-        SmsHandoff(graph.senderSettings(), graph.smsScheduler()).handOff(joined)
+        SmsHandoff(graph.senderSettings(), graph.smsScheduler(), graph.captureGate()).handOff(joined)
     }
 }

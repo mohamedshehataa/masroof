@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ReviewItemEntity
+import eg.masroof.data.db.reviewCutoff
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.parse.MessageParser
 import kotlinx.coroutines.CoroutineDispatcher
@@ -34,11 +35,12 @@ class ReviewViewModel
     constructor(
         private val db: AppDatabase,
         @IoDispatcher private val io: CoroutineDispatcher,
+        clock: java.time.Clock,
     ) : ViewModel() {
         val items: StateFlow<List<ReviewItemEntity>?> =
             db
                 .reviews()
-                .observeAll()
+                .observeAll(reviewCutoff(clock.millis()))
                 .map<List<ReviewItemEntity>, List<ReviewItemEntity>?> { it }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), null)
 

@@ -103,15 +103,19 @@ class SmsPipeline
         private val notifications: NotificationSettings,
         private val scheduler: SmsWorkScheduler,
         private val clock: Clock,
+        private val gate: CaptureGate,
+        private val idKey: LocalIdKey,
     ) {
         suspend fun accept(message: IncomingMessage): Disposition {
-            if (!isAllowed(message)) return Disposition.DROPPED
+            // No session (logged out, between two accounts): nothing is read, queued or kept.
+            if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
+            val id = LocalIdHasher.id(idKey.get(), message)
             return when (val outcome = MessageParser.parse(message)) {
                 is ParseOutcome.Record -> {
                     val r = outcome.record
                     db.parsedOutbox().insert(
                         ParsedOutboxEntity(
-                            localId = r.localId,
+                            localId = id,
                             source = r.source.name,
                             kind = r.kind.name,
                             amountMinor = r.amountMinor,
@@ -133,7 +137,7 @@ class SmsPipeline
                     db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
                     db.reviews().insert(
                         ReviewItemEntity(
-                            id = MessageParser.localId(message),
+                            id = id,
                             source = message.source.name,
                             sender = message.sender.take(MAX_SENDER),
                             text = outcome.text.take(MAX_REVIEW_TEXT),
@@ -178,10 +182,15 @@ class SmsUploader
         private val remote: ParsedRemote,
         private val device: DeviceIdProvider,
         private val clock: Clock,
+        private val gate: CaptureGate,
     ) {
         suspend fun uploadPending(): SmsSyncReport {
             val dao = db.parsedOutbox()
+            // Retention is enforced here too, so an old review item goes even if no new message ever arrives.
+            db.reviews().purgeBefore(clock.millis() - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
             dao.purgeFailedBefore(clock.millis() - RETENTION_MILLIS)
+            // Signed out (or between two accounts): rows are never sent; logout cleared them, this is the belt.
+            if (!gate.isOpen()) return SmsSyncReport(0, 0, false)
             var sent = 0
             var rejected = 0
             var retry = false
@@ -199,7 +208,7 @@ class SmsUploader
                     }
                     SmsUploadResult.RetryLimited ->
                         if (item.attempts + 1 >= MAX_LIMITED_ATTEMPTS) {
-                            dao.markFailed(item.localId)
+                            moveToReview(item)
                             rejected++
                         } else {
                             dao.bumpAttempts(item.localId)
@@ -208,7 +217,7 @@ class SmsUploader
                     // Needs a new sign-in; the rows stay queued and the next sign-in/app start uploads them.
                     SmsUploadResult.Unauthorized -> return SmsSyncReport(sent, rejected, false)
                     SmsUploadResult.Rejected -> {
-                        dao.markFailed(item.localId)
+                        moveToReview(item)
                         rejected++
                     }
                 }
@@ -217,9 +226,37 @@ class SmsUploader
             return SmsSyncReport(sent, rejected, retry, retryAfter)
         }
 
+        /**
+         * A record the server refuses for good is never silently lost: it moves to the local review list, described from
+         * its typed fields only (the original text is not kept), where the user can create the expense by hand.
+         */
+        private suspend fun moveToReview(item: ParsedOutboxEntity) {
+            val summary =
+                buildString {
+                    append(item.kind).append(' ').append("%d.%02d".format(item.amountMinor / CENTS, item.amountMinor % CENTS))
+                    append(' ').append(item.currency)
+                    item.merchant?.let { append(" - ").append(it) }
+                    item.instrumentLast4?.let { append(" - **").append(it) }
+                }
+            db.reviews().insert(
+                ReviewItemEntity(
+                    id = item.localId,
+                    source = item.source,
+                    sender = item.senderId,
+                    text = summary,
+                    reason = "rejected",
+                    receivedAtMillis = item.occurredAtMillis,
+                    createdAtMillis = clock.millis(),
+                ),
+            )
+            db.parsedOutbox().delete(item.localId)
+        }
+
         private companion object {
             const val MAX_LIMITED_ATTEMPTS = 5
             const val RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
+            const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
+            const val CENTS = 100
         }
     }
 

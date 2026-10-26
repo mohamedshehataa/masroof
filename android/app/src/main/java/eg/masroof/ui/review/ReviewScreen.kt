@@ -101,6 +101,7 @@ private fun reasonLabel(reason: String): String =
             "secret" -> R.string.review_reason_secret
             "unsupported_currency" -> R.string.review_reason_unsupported_currency
             "unexplained_number" -> R.string.review_reason_unexplained_number
+            "rejected" -> R.string.review_reason_rejected
             else -> R.string.review_reason_other
         },
     )

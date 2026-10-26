@@ -123,6 +123,7 @@
     <string name="review_reason_unsupported_currency">عملة أجنبية</string>
     <string name="review_reason_unexplained_number">فيها رقم مصروف مش عارفه</string>
     <string name="review_reason_other">مش مفهومة</string>
+    <string name="review_reason_rejected">السيرفر مقدرش يقبل العملية دي. أضفها بإيدك لو حقيقية.</string>
 
     <string name="nav_insights">التحليلات</string>
 

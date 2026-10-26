@@ -19,7 +19,9 @@ object SecretDetector {
 
     private val strong =
         Regex(
-            "\\b[o0][ ._-]{0,2}t[ ._-]{0,2}p\\b" +
+            "(?<![a-z])[o0][ ._-]{0,2}t[ ._-]{0,2}p(?![a-z])|(?<![a-z])p[ ._-]{0,2}i[ ._-]{0,2}n(?![a-z])" +
+                "|\\brequires? (?:your )?approval|\\bapproval (?:is )?(?:required|needed|pending)|\\bneeds? approval" +
+                "|\\bapproval\\s*[:#-]\\s*\\d" +
                 "|one[ _-]?time|\\bonetime\\b" +
                 "|\\bverif[a-z]*|\\bauthenticat[a-z]*" +
                 "|\\b(?:secur(?:e|ity)|activation|login|log in|sign in|signin|secret|confirmation|temporary|dynamic|access|" +
@@ -82,7 +84,7 @@ object SecretDetector {
     private val referenceNumber =
         Regex(
             "\\b(?:ref(?:erence)?|trx|txn|trans(?:action)?|operation|approval|authori[sz]ation|auth|invoice" +
-                "|id|no\\.?|number)[ :#.-]*\\d{4,14}" +
+                "|rrn|tid|mid|terminal(?: id| no\\.?| number)?|id|no\\.?|number)[ :#.-]*\\d{4,14}" +
                 "|(?:رقم|الرقم) (?:ال)?(?:مرجع|المرجعي|عمليه|العمليه|فاتوره|طلب)[^\\d]{0,12}\\d{4,14}",
             ci,
         )
@@ -95,7 +97,7 @@ object SecretDetector {
         if (digitsOnly.matches(text)) return "digits_only"
         val body = withoutFooters(text)
         val finished = completion.containsMatchIn(body) && !pending.containsMatchIn(body)
-        val cleaned = if (finished) benignCode.replace(body, " ") else body
+        val cleaned = if (finished) withoutBenignCodes(body) else body
         return when {
             strong.containsMatchIn(cleaned) -> "otp_signal"
             weakCode.containsMatchIn(cleaned) -> "code_word"
@@ -111,10 +113,72 @@ object SecretDetector {
     private fun withoutFooters(text: String): String =
         footer.replace(text) { m -> if (m.value.any { it.isDigit() }) m.value else " " }
 
-    /** Lower-cases ASCII only, so every index of the result lines up with the input (needed by the engine). */
+    private val amountBefore = Regex("\\d[\\d.,]*\\s?(?:egp|le|l\\.e|جنيه|ج\\.م|جم)|(?:egp|le|l\\.e|جنيه|ج\\.م)\\s?\\d")
+    private val purposeAfter = Regex("^\\W*(?:for|to|pay|لشراء|للشراء|لدفع|لاتمام|لعمليه)", ci)
+
+    /**
+     * A reference code is harmless only as a trailing receipt detail: it must come AFTER the amount and must not be
+     * followed by a purpose ("for purchase of ...", "لشراء ..."), which is how an OTP for a pending payment reads.
+     */
+    private fun withoutBenignCodes(text: String): String =
+        benignCode.replace(text) { m ->
+            val before = text.substring(0, m.range.first)
+            val after = text.substring(m.range.last + 1)
+            if (amountBefore.containsMatchIn(before) && !purposeAfter.containsMatchIn(after)) " " else m.value
+        }
+
+    /** Look-alike letters (Cyrillic, Greek) an attacker could use to dodge the word lists. */
+    private val confusables =
+        mapOf(
+            'а' to 'a',
+            'е' to 'e',
+            'о' to 'o',
+            'р' to 'p',
+            'с' to 'c',
+            'х' to 'x',
+            'у' to 'y',
+            'і' to 'i',
+            'ј' to 'j',
+            'ѕ' to 's',
+            'к' to 'k',
+            'ο' to 'o',
+            'α' to 'a',
+            'ρ' to 'p',
+            'ι' to 'i',
+            'ν' to 'v',
+            'Ο' to 'o',
+            'Р' to 'p',
+            'О' to 'o',
+            'А' to 'a',
+            'Е' to 'e',
+            'С' to 'c',
+            'Т' to 't',
+            'Н' to 'h',
+            'Х' to 'x',
+            'І' to 'i',
+        )
+
+    /** Lower-cases ASCII only and maps look-alikes to Latin, one char for one char, so indexes line up with the input. */
     fun fold(text: String): String =
         buildString(text.length) {
-            for (c in TextNormalizer.fold(text)) append(if (c in 'A'..'Z') c.lowercaseChar() else c)
+            for (c in TextNormalizer.fold(text)) {
+                val latin = confusables[c] ?: c
+                append(if (latin in 'A'..'Z') latin.lowercaseChar() else latin)
+            }
+        }
+
+    private val codeLikeToken =
+        Regex("otp|\\bpin\\b|cvv|passcode|password|token|verif|approv|secur|code|3ds|رمز|كود|تحقق|سري", ci)
+
+    /** True when the text has any code-like word at all (substring, no word boundary): used to mask review text. */
+    fun hasCodeLikeToken(normalized: String): Boolean = codeLikeToken.containsMatchIn(fold(normalized))
+
+    /** Masks bare runs of four or more digits but keeps formatted amounts ("1,250.00") and numbers next to a currency. */
+    fun maskCodes(text: String): String =
+        Regex("(?<![\\d.,])\\d{4,}(?![\\d]|[.,]\\d)").replace(text) { m ->
+            val after = text.substring(m.range.last + 1).trimStart().lowercase()
+            val isAmount = after.startsWith("egp") || after.startsWith("le ") || after.startsWith("جنيه") || after.startsWith("ج.م")
+            if (isAmount) m.value else "•".repeat(m.value.length)
         }
 
     /** The text with every run of four or more digits masked: how a secret message is kept in the local review list. */

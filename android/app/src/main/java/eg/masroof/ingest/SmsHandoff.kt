@@ -37,9 +37,11 @@ interface SmsWorkScheduler {
 class SmsHandoff(
     private val settings: SenderSettings,
     private val scheduler: SmsWorkScheduler,
+    private val gate: CaptureGate,
 ) {
     fun handOff(messages: List<IncomingSms>) {
-        if (messages.isEmpty()) return
+        // Nobody signed in: read nothing, suggest nothing, queue nothing.
+        if (messages.isEmpty() || !gate.isOpen()) return
         val policy = settings.policy()
         for (sms in messages) {
             if (policy.isAllowed(sms.sender)) {

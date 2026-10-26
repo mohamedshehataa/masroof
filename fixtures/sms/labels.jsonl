@@ -1,0 +1,12 @@
+{"input": "McDonald’s Maadi", "expected": "McDonald's Maadi"}
+{"input": "Spinneys®", "expected": "Spinneys"}
+{"input": "Brand™ Store©", "expected": "Brand Store"}
+{"input": "CAFE #A", "expected": "CAFE A"}
+{"input": "Zooba | Zamalek", "expected": "Zooba Zamalek"}
+{"input": "Yalla!Go", "expected": "Yalla Go"}
+{"input": "ahmed.ali@instapay", "expected": "ahmed.ali@instapay"}
+{"input": "B.TECH", "expected": "B.TECH"}
+{"input": "  many   spaces  ", "expected": "many spaces"}
+{"input": "سيوودي ماركت", "expected": "سيوودي ماركت"}
+{"input": "Tom & Jerry's (Maadi)", "expected": "Tom & Jerry's (Maadi)"}
+{"input": "A<script>B", "expected": "A script B"}

@@ -3,7 +3,6 @@ package eg.masroof.ingest.parse
 import eg.masroof.ingest.DefaultSenders
 import eg.masroof.ingest.senderKey
 import java.math.BigDecimal
-import java.security.MessageDigest
 import java.time.DateTimeException
 import java.time.Instant
 import java.time.LocalDate
@@ -36,7 +35,6 @@ object MessageParser {
     private const val LOOKBACK = 30
     private const val DATE_LOOKBACK = 25
     private const val TIME_WINDOW = 12
-    private const val ID_BYTES = 32
 
     // ---- amounts -------------------------------------------------------------------------------------------------
     private const val NUM = "\\d{1,3}(?:\\.\\d{3})+,\\d{1,2}|\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?"
@@ -160,14 +158,16 @@ object MessageParser {
         )
     private val outAnchor =
         Regex(
-            "\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent" +
+            "\\btransaction (?:of|was made|has been made|approved|completed)\\b" +
+                "|\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent" +
                 "|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
                 "|تم خصم|خصم|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه",
             ci,
         )
     private val inAnchor =
         Regex(
-            "you(?: have)? received|\\breceived (?:egp|le|an?|\\d|usd)|credited with|(?:has|have) been credited to your|were credited" +
+            "\\brefund(?:ed)? of\\b|you(?: have)? received|\\breceived (?:egp|le|an?|\\d|usd)" +
+                "|credited with|(?:has|have) been credited to your|were credited" +
                 "|\\bdeposit(?:ed)?\\b|\\bsalary\\b|\\bincoming\\b|ايداع|تم استلام|استلمت|وارد|راتب|مرتب|تم اضافه|اضافه مبلغ|استلام حواله",
             ci,
         )
@@ -193,7 +193,7 @@ object MessageParser {
     // ---- instrument last four -----------------------------------------------------------------------------------
     private val last4Patterns =
         listOf(
-            Regex("\\b(?:ending|ends)(?: with| in| by)?[ :]*[x*•.]*[ ]?(\\d{4})(?!\\d)", ci),
+            Regex("\\b(?:ending|ends)(?: with| in| by)?[ :]*[x*•.#]*[ ]?(\\d{4})(?!\\d)", ci),
             Regex("(?:card|a/c|acct|account|acc|wallet|بطاق\\w*|حساب\\w*|محفظ\\w*)[^\\d]{0,25}?(?:[x*•]{2,}|\\.{3}) ?(\\d{4})(?!\\d)", ci),
             Regex("(?:المنتهيه|المنتهي|تنتهي|منتهيه)\\s*ب\\s*(\\d{4})(?!\\d)", ci),
         )
@@ -268,6 +268,16 @@ object MessageParser {
             "has",
             "been",
             "transaction",
+            "requires",
+            "rrn",
+            "tid",
+            "mid",
+            "terminal",
+            "credited",
+            "debited",
+            "approval",
+            "needs",
+            "يوم",
             "reference",
             "paid",
             "id",
@@ -384,7 +394,9 @@ object MessageParser {
         hasOut: Boolean,
         hasIn: Boolean,
     ): ParseOutcome {
-        val review = { reason: String -> ParseOutcome.Review(reason, norm) }
+        // A review item that merely looks code-like keeps its amounts but never a bare 4+ digit run.
+        val shown = if (SecretDetector.hasCodeLikeToken(norm)) SecretDetector.maskCodes(norm) else norm
+        val review = { reason: String -> ParseOutcome.Review(reason, shown) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
         if (ambiguousReceipt.containsMatchIn(t)) return review("ambiguous_direction")
@@ -409,7 +421,7 @@ object MessageParser {
         val institution = institutionOf(sender)
         val record =
             ParsedRecord(
-                localId = localId(msg),
+                localId = "", // keyed by LocalIdHasher in the pipeline, never by the parser
                 source = msg.source,
                 kind = kind,
                 amountMinor = amount.minor,
@@ -626,14 +638,6 @@ object MessageParser {
             null
         }
 
-    /** SHA-256 of sender, time and text. Computed from the raw text so the live receiver and a later backfill agree. */
-    fun localId(msg: IncomingMessage): String {
-        val material = "${senderKey(msg.sender)}|${msg.receivedAtMillis / MILLIS_PER_SECOND}|${msg.text}"
-        val digest = MessageDigest.getInstance("SHA-256").digest(material.toByteArray(Charsets.UTF_8))
-        return digest.take(ID_BYTES).joinToString("") { "%02x".format(it) }
-    }
-
-    private const val MILLIS_PER_SECOND = 1000L
     private const val SECONDS_PER_DAY = 86_400L
 
     // ---- sender -------------------------------------------------------------------------------------------------
@@ -706,16 +710,18 @@ object MessageParser {
             var j = i
             while (j < t.length && t[j] != ' ') j++
             val raw = norm.substring(i, j)
-            val folded = t.substring(i, j)
-            val core = folded.trim(*PUNCT)
+            val clean = LabelNormalizer.normalize(raw)
+            i = j
+            // A token of symbols only ("|", "®") carries no name: skip it instead of ending the label.
+            if (clean.isEmpty()) continue
+            val core = SecretDetector.fold(clean).trim(*PUNCT)
             if (core.isEmpty() || core in stopWords) break
             if (core.any { Character.isDigit(it) }) break
             if (tokens.isEmpty() && core in badFirst) return null
-            tokens += raw.trim(*PUNCT)
+            tokens += clean.trim(*PUNCT)
             if (raw.last() in ".,;:!?،") break
-            i = j
         }
-        var label = tokens.joinToString(" ").trim(*PUNCT).replace(Regex("\\s+"), " ")
+        var label = LabelNormalizer.normalize(tokens.joinToString(" ").trim(*PUNCT))
         label =
             label
                 .codePoints()
@@ -739,4 +745,37 @@ object NotificationApps {
     val defaults: Map<String, String> = mapOf(INSTAPAY_CANDIDATE to "InstaPay")
 
     fun institutionOf(sender: String): String? = defaults[sender]
+
+    private val deniedPrefixes =
+        listOf(
+            "com.whatsapp",
+            "org.telegram",
+            "org.thunderdog.challegram",
+            "com.facebook",
+            "com.instagram",
+            "com.snapchat",
+            "com.google.android.gm",
+            "com.google.android.apps.messaging",
+            "com.android.mms",
+            "com.samsung.android.messaging",
+            "com.android.messaging",
+            "com.microsoft.office.outlook",
+            "com.google.android.apps.dynamite",
+            "com.viber",
+            "org.signal",
+            "com.discord",
+            "com.twitter",
+            "com.skype",
+            "com.tencent.mm",
+            "com.android.email",
+            "com.yahoo.mobile.client",
+            "ch.protonmail",
+            "com.slack",
+            "com.microsoft.teams",
+            "com.truecaller",
+            "com.android.dialer",
+        )
+
+    /** Messaging, social and email apps are never read, even if the user types their package name. */
+    fun isDenied(pkg: String): Boolean = deniedPrefixes.any { pkg == it || pkg.startsWith("$it.") }
 }

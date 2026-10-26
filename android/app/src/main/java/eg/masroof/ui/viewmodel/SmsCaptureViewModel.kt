@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.reviewCutoff
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.SenderSettings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ class SmsCaptureViewModel
         private val senders: SenderSettings,
         private val notifications: NotificationSettings,
         db: AppDatabase,
+        clock: java.time.Clock,
     ) : ViewModel() {
         private val mutableSuggestions = MutableStateFlow(senders.suggestions())
         val suggestions: StateFlow<List<String>> = mutableSuggestions
@@ -32,7 +34,7 @@ class SmsCaptureViewModel
         val packages: StateFlow<List<String>> = mutablePackages
 
         val reviewCount: StateFlow<Int> =
-            db.reviews().observeCount().stateIn(
+            db.reviews().observeCount(reviewCutoff(clock.millis())).stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(STOP_TIMEOUT),
                 0,

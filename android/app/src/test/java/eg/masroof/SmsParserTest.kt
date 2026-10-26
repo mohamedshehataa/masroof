@@ -1,9 +1,12 @@
 package eg.masroof
 
+import eg.masroof.ingest.LocalIdHasher
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
+import eg.masroof.ingest.parse.LabelNormalizer
 import eg.masroof.ingest.parse.MessageParser
 import eg.masroof.ingest.parse.ParseOutcome
+import eg.masroof.ingest.parse.SecretDetector
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -139,8 +142,8 @@ class SmsParserTest {
 
     @Test
     fun `REQ-SMS-030 every input from the three verifier rounds is kept on the phone or classified safely`() {
-        val rows = fixture("verifier.jsonl")
-        assertTrue(rows.size >= 80)
+        val rows = fixture("verifier.jsonl") + fixture("round2.jsonl")
+        assertTrue(rows.size >= 100)
         for (row in rows) {
             val id = row.str("id")
             val expect = row["expect"]!!.jsonObject
@@ -199,13 +202,38 @@ class SmsParserTest {
     }
 
     @Test
-    fun `REQ-SMS-010 the local id is stable and reveals nothing about the text`() {
+    fun `REQ-SMS-062 the local id is a keyed HMAC - stable per installation key, different with another key, never a plain hash`() {
         val a = message("CIB", "Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05", 5_000L)
-        val id = MessageParser.localId(a)
+        val key = ByteArray(32) { it.toByte() }
+        val id = LocalIdHasher.id(key, a)
         assertEquals(64, id.length)
-        assertEquals(id, MessageParser.localId(message("cib", a.text, 5_999L)))
-        assertTrue(MessageParser.localId(message("CIB", a.text, 7_000L)) != id)
-        assertTrue(MessageParser.localId(message("CIB", a.text + "!", 5_000L)) != id)
+        assertEquals(id, LocalIdHasher.id(key, message("cib", a.text, 5_999L)))
+        assertTrue(LocalIdHasher.id(key, message("CIB", a.text, 7_000L)) != id)
+        assertTrue(LocalIdHasher.id(key, message("CIB", a.text + "!", 5_000L)) != id)
+        assertTrue("another installation key gives another id", LocalIdHasher.id(ByteArray(32) { 9 }, a) != id)
+        val plain =
+            java.security.MessageDigest
+                .getInstance("SHA-256")
+                .digest("cib|5|${a.text}".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        assertTrue("not the unkeyed SHA-256 of the text", plain != id)
+    }
+
+    @Test
+    fun `REQ-SMS-016 the label spec is shared - the phone and the server normalize the same way`() {
+        for (row in fixture("labels.jsonl")) {
+            assertEquals(row.str("input"), row.str("expected"), LabelNormalizer.normalize(row.str("input")))
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-063 a code-like review item keeps formatted amounts but never a bare digit run`() {
+        val masked = SecretDetector.maskCodes("Balance 1,250.00 code 889900 ref 123456 EGP 500 and 4821 here")
+        assertFalse(masked.contains("889900"))
+        assertFalse(masked.contains("4821"))
+        assertTrue(masked.contains("1,250.00"))
+        val outcome = MessageParser.parse(message("CIB", "Hello: your approval pin was 889900 for a mystery thing"))
+        if (outcome is ParseOutcome.Review) assertFalse(outcome.text.contains("889900"))
     }
 
     @Test
