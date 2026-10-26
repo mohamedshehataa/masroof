@@ -98,5 +98,57 @@
     "show": "Show",
     "showPassword": "Show password",
     "rateLimited": "Too many attempts. Try again in {{wait}}."
+  },
+  "members": {
+    "title": "Members",
+    "role": {
+      "ADMIN": "Admin",
+      "MEMBER": "Member"
+    },
+    "pending": "Pending invites",
+    "noPending": "No pending invites.",
+    "expires": "expires {{date}}",
+    "name": "Name",
+    "emailHint": "Email (optional)",
+    "invite": "Create invite",
+    "created": "Invite for {{name}}",
+    "shownOnce": "Shown once. Share it privately; it works one time and expires in {{days}} days.",
+    "link": "Invite link",
+    "code": "Invite code",
+    "copyLink": "Copy link",
+    "copyCode": "Copy code",
+    "copied": "Copied.",
+    "copyFailed": "Couldn't copy. Select the text and copy it manually.",
+    "share": "Share",
+    "shareTitle": "Masroof invite",
+    "done": "Done",
+    "revoke": "Revoke",
+    "revokeFor": "Revoke invite for {{name}}",
+    "error": {
+      "conflict": "Can't create another invite: too many pending invites, or the household is full.",
+      "invalid": "Check the name and email.",
+      "generic": "Couldn't create the invite. Try again.",
+      "load": "Couldn't load."
+    }
+  },
+  "invite": {
+    "title": "Join the household",
+    "intro": "Choose your sign-in details to join Masroof.",
+    "code": "Invite code",
+    "name": "Your name (optional)",
+    "confirm": "Confirm password",
+    "passwordHint": "At least {{min}} characters.",
+    "submit": "Join and sign in",
+    "rateLimited": "Too many attempts. Try again in {{wait}}.",
+    "error": {
+      "invalid": "This invite is not valid or has expired. Ask for a new one.",
+      "conflict": "This email can't be used, or the household is full.",
+      "weak": "Use at least 12 characters (72 bytes at most) and not a common password.",
+      "mismatch": "The passwords don't match.",
+      "generic": "Couldn't join. Try again.",
+      "network": "Can't reach the server. Check your connection.",
+      "email": "Enter a valid email address.",
+      "name": "That name is too long."
+    }
   }
 }

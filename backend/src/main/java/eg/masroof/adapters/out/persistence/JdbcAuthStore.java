@@ -91,6 +91,12 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore, AuditLog {
   }
 
   @Override
+  public boolean hasAnyLogin() {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject("select exists (select 1 from app_user)", Boolean.class));
+  }
+
+  @Override
   @Transactional
   public boolean createFirstAdmin(String email, String displayName, String passwordHash) {
     jdbc.execute("select pg_advisory_xact_lock(90091)");

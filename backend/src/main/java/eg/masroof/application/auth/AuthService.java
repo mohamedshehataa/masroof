@@ -119,6 +119,14 @@ public class AuthService {
     return session(account, refresh, now);
   }
 
+  /** Opens a session for an account that was just created (invite acceptance). */
+  public Session startSession(Account account) {
+    Instant now = clock.instant();
+    String refresh = newRefreshToken();
+    refreshTokens.insertNewFamily(account.userId(), sha256(refresh), now.plus(REFRESH_TTL));
+    return session(account, refresh, now);
+  }
+
   /** Rotates a refresh token. */
   public Session refresh(String presented) {
     Instant now = clock.instant();

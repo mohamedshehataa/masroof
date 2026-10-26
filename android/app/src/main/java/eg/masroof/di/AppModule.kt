@@ -41,6 +41,8 @@ import eg.masroof.data.insights.FileInsightsCache
 import eg.masroof.data.insights.InsightsCache
 import eg.masroof.data.insights.InsightsRemote
 import eg.masroof.data.insights.InsightsRepository
+import eg.masroof.data.members.ApiMembersRemote
+import eg.masroof.data.members.MembersRemote
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.ExpenseDeleter
 import eg.masroof.data.remote.ParsedRemote
@@ -108,6 +110,8 @@ abstract class BindingsModule {
     @Binds abstract fun insights(impl: DefaultInsightsRepository): InsightsRepository
 
     @Binds abstract fun insightsRemote(impl: ApiInsightsRemote): InsightsRemote
+
+    @Binds abstract fun membersRemote(impl: ApiMembersRemote): MembersRemote
 
     @Binds abstract fun budgets(impl: DefaultBudgetsRepository): BudgetsRepository
 

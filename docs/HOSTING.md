@@ -143,7 +143,11 @@ use it yet.
 
 ### First login
 `bootstrap.sh` generates `MASROOF_JWT_SECRET`. To create the first admin, add `MASROOF_BOOTSTRAP_ADMIN_EMAIL` and
-`MASROOF_BOOTSTRAP_ADMIN_PASSWORD` (12+ characters) to the server `.env` before the first start. **Remove both
+`MASROOF_BOOTSTRAP_ADMIN_PASSWORD` to the server `.env` before the first start. The password must be 12 to 72
+characters (BCrypt reads 72 bytes), have at least 5 different characters, not be a single repeated or sequential
+run, and not be a common password (the SecLists top 10,000, also with digits, symbols or spaces around the word);
+`bootstrap-host.sh admin-add` also limits it to letters, digits and `. _ ~ -`. A rejected password stops the first
+start with a message that names the rule, never the value. Once a login exists the variables are ignored. **Remove both
 lines after the first start**: they only act while no login exists, and the backend logs a warning (without values)
 when they are still set later. The compose network is pinned (`172.28.0.0/24`, Caddy at `172.28.0.10`; override with `MASROOF_NET_SUBNET`/`CADDY_IP` if it
 collides with something on the host) and the backend trusts `X-Forwarded-For` only from that one address

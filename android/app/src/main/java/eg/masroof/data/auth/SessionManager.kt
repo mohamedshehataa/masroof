@@ -71,6 +71,12 @@ class SessionManager
                 LoadedSession.Invalidated
             }
 
+        /** The signed-in member's id (not secret), or null when signed out. */
+        suspend fun memberId(): String? {
+            restore()
+            return current?.memberId
+        }
+
         suspend fun accessToken(): String? {
             restore()
             return current?.accessToken

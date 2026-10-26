@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { getMember, signOut, subscribeSession } from '../../api/session';
 import { usePrefs } from '../../app/prefs';
 import { Link } from '../../router';
+import { MembersSection } from '../members/MembersSection';
 
 export const InsightsScreen: FC = () => {
   const { t } = useTranslation();
@@ -43,6 +44,7 @@ export const MoreScreen: FC = () => {
           />
           <span>{t('more.digits')}</span>
         </label>
+        <MembersSection />
         <Link to="/version" className="link-row">
           {t('more.version')}
         </Link>

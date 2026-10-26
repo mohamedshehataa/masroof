@@ -99,6 +99,7 @@ class V2CoreSchemaMigrationTest {
             "V7__analytics_index.sql",
             "V8__raw_message.sql",
             "V9__budget.sql",
+            "V10__invite.sql",
             "R__seed_reference.sql");
   }
 

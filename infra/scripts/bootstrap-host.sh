@@ -4,6 +4,8 @@
 #     -> installs the DuckDNS token (stdin, root-only file) and runs infra/host/bootstrap.sh with sudo.
 #   HOST=... ADMIN_EMAIL=<email> ADMIN_PASSWORD_FILE=<local file> bash infra/scripts/bootstrap-host.sh admin-add
 #     -> adds MASROOF_BOOTSTRAP_ADMIN_* to the server .env (values over stdin, never on a command line).
+#        Password: 12-72 characters, at least 5 different ones, letters/digits/._~- only; the backend also refuses
+#        repeated or sequential runs and common passwords (top-10k list) at first start.
 #   HOST=... bash infra/scripts/bootstrap-host.sh admin-clear
 #     -> removes those lines again once the first login exists (docs/HOSTING.md, First login).
 # Secrets are read from local files and streamed over stdin; nothing secret is printed or put in argv.
@@ -43,6 +45,8 @@ case "$cmd" in
     need_file "${ADMIN_PASSWORD_FILE:-}" ADMIN_PASSWORD_FILE
     pass="$(tr -d '\r\n' < "$ADMIN_PASSWORD_FILE")"
     [ "${#pass}" -ge 12 ] || die_input "the admin password must be at least 12 characters"
+    [ "${#pass}" -le 72 ] || die_input "the admin password must be at most 72 bytes"
+    [ "$(printf '%s' "$pass" | fold -w1 | sort -u | wc -l)" -ge 5 ] || die_input "the admin password needs at least 5 different characters"
     [[ "$pass" =~ ^[A-Za-z0-9._~-]+$ ]] || die_input "the admin password may only use letters, digits and . _ ~ -"
     printf 'MASROOF_BOOTSTRAP_ADMIN_EMAIL=%s\nMASROOF_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$email" "$pass" \
       | ssh "${ssh_opts[@]}" -- "$host" \
