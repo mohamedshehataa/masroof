@@ -38,6 +38,7 @@ import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.budgets.BudgetsRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
@@ -63,6 +64,7 @@ private enum class Tab(
 }
 
 private const val ADD_ROUTE = "add"
+private const val BUDGETS_ROUTE = "budgets"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 
@@ -155,9 +157,11 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
                 HomeRoute(
                     onSeeAll = { nav.navigate(Tab.Transactions.route) },
                     onOpenInsights = { nav.navigate(Tab.Insights.route) },
+                    onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
                 )
             }
-            composable(Tab.Insights.route) { InsightsRoute() }
+            composable(Tab.Insights.route) { InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }) }
+            composable(BUDGETS_ROUTE) { BudgetsRoute() }
             composable(Tab.Transactions.route) { TransactionsRoute() }
             composable(Tab.Settings.route) {
                 SettingsRoute(onToggleLanguage = onToggleLanguage, onOpenReview = { nav.navigate(REVIEW_ROUTE) })

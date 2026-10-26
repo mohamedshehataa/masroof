@@ -29,6 +29,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.budgets.BudgetRowUi
+import eg.masroof.ui.budgets.HomeBudgetsCard
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
@@ -39,6 +41,7 @@ import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.CapturedViewModel
+import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
 import eg.masroof.ui.viewmodel.HomeInsight
 import eg.masroof.ui.viewmodel.HomeInsightsViewModel
 import eg.masroof.ui.viewmodel.HomeUiState
@@ -51,22 +54,28 @@ fun HomeRoute(
     onOpenInsights: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     insightsViewModel: HomeInsightsViewModel = hiltViewModel(),
+    onOpenBudgets: () -> Unit = {},
+    budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
     captured: CapturedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val insight by insightsViewModel.state.collectAsStateWithLifecycle()
+    val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
     val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
     HomeContent(
         state,
         onRetry = {
             viewModel.refresh()
             insightsViewModel.refresh()
+            budgetsViewModel.refresh()
         },
         onSeeAll = onSeeAll,
         onRetryEntry = viewModel::retryEntry,
         onDeleteEntry = viewModel::deleteEntry,
         insight = insight,
         onOpenInsights = onOpenInsights,
+        budgets = budgets,
+        onOpenBudgets = onOpenBudgets,
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
     )
@@ -83,6 +92,8 @@ fun HomeContent(
     onDeleteEntry: (String) -> Unit = {},
     insight: HomeInsight? = null,
     onOpenInsights: () -> Unit = {},
+    budgets: List<BudgetRowUi> = emptyList(),
+    onOpenBudgets: () -> Unit = {},
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
 ) {
@@ -90,6 +101,7 @@ fun HomeContent(
         SpentCard(state, insight)
         if (state.recent.isNotEmpty()) StatusBanner(state.status, onRetry)
         if (insight != null && insight.pendingReview > 0) ReviewBanner(insight.pendingReview, onOpenInsights)
+        HomeBudgetsCard(budgets, onOpenBudgets)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
