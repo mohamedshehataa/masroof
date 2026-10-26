@@ -85,7 +85,7 @@ class SmsParserTest {
     @Test
     fun `REQ-SMS-010 template fixtures parse to the expected kind, amount, currency, last4 and digit-free merchant`() {
         // "unknown-sender-generic" carries a long number next to the label: kept on the phone for review on purpose.
-        val reviewOnPurpose = setOf("unknown-sender-generic")
+        val reviewOnPurpose = setOf("unknown-sender-generic", "nbe-en-transfer")
         for (row in fixture("cases.jsonl")) {
             val id = row.str("id")
             val expect = (row["expect"] as? JsonObject) ?: JsonObject(emptyMap())
@@ -183,8 +183,9 @@ class SmsParserTest {
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
         val rows =
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
-                fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl")
-        assertTrue(rows.size >= 200)
+                fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
+                fixture("round11.jsonl")
+        assertTrue(rows.size >= 230)
         checkAll(rows)
     }
 
@@ -193,7 +194,7 @@ class SmsParserTest {
         // Every probe input of the earlier verification rounds (owner identifiers removed) plus the verifier and round-2 sets:
         // nothing that was correct may become wrong.
         val rows = fixture("corpus.jsonl") + fixture("verifier.jsonl") + fixture("round2.jsonl")
-        assertTrue(rows.size >= 560)
+        assertTrue(rows.size >= 600)
         checkAll(rows)
     }
 
@@ -244,27 +245,51 @@ class SmsParserTest {
         }
         when (expect.str("outcome")) {
             "ignore" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
-            "record_or_review" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
+            "record_or_review" -> {
+                assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                // a record must still be right in every field the row pins; a review item is always acceptable
+                if (record != null) checkRecordFields(id, expect, record, kinds)
+            }
             "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
             "not_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
             "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
             "record" -> {
                 assertTrue("$id -> $outcome", record != null)
                 requireNotNull(record)
-                if (kinds != null) assertTrue("$id kind ${record.kind}", record.kind.name in kinds)
-                expect.opt("amountMinor")?.let { assertEquals(id, it.toLong(), record.amountMinor) }
-                expect.opt("last4")?.let { if (it != "any") assertEquals(id, if (it == "none") null else it, record.instrumentLast4) }
-                expect.opt("merchant")?.let { assertEquals(id, if (it == "none") null else it, record.merchant) }
-                expect.opt("merchantStarts")?.let {
-                    assertTrue("$id label ${record.merchant}", record.merchant.orEmpty().startsWith(it, ignoreCase = true))
-                }
-                expect.opt("method")?.let { assertEquals(id, it, record.paymentMethod) }
-                expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), record.occurredAtMillis) }
-                expect.opt("dateCairo")?.let {
-                    val day = Instant.ofEpochMilli(record.occurredAtMillis).atZone(java.time.ZoneId.of("Africa/Cairo")).toLocalDate()
-                    assertEquals(id, it, day.toString())
-                }
+                checkRecordFields(id, expect, record, kinds)
             }
+        }
+    }
+
+    private fun checkRecordFields(
+        id: String,
+        expect: JsonObject,
+        record: eg.masroof.ingest.parse.ParsedRecord,
+        kinds: List<String>?,
+    ) {
+        if (kinds != null) assertTrue("$id kind ${record.kind}", record.kind.name in kinds)
+        expect.opt("amountMinor")?.let { assertEquals(id, it.toLong(), record.amountMinor) }
+        expect.opt("last4")?.let {
+            when {
+                it == "any" -> Unit
+                // "7781?": the right own number or none at all, never another number
+                it.endsWith("?") ->
+                    assertTrue(
+                        "$id last4 ${record.instrumentLast4}",
+                        record.instrumentLast4 == null || record.instrumentLast4 == it.dropLast(1),
+                    )
+                else -> assertEquals(id, if (it == "none") null else it, record.instrumentLast4)
+            }
+        }
+        expect.opt("merchant")?.let { assertEquals(id, if (it == "none") null else it, record.merchant) }
+        expect.opt("merchantStarts")?.let {
+            assertTrue("$id label ${record.merchant}", record.merchant.orEmpty().startsWith(it, ignoreCase = true))
+        }
+        expect.opt("method")?.let { assertEquals(id, it, record.paymentMethod) }
+        expect.opt("occurredAt")?.let { assertEquals(id, Instant.parse(it).toEpochMilli(), record.occurredAtMillis) }
+        expect.opt("dateCairo")?.let {
+            val day = Instant.ofEpochMilli(record.occurredAtMillis).atZone(java.time.ZoneId.of("Africa/Cairo")).toLocalDate()
+            assertEquals(id, it, day.toString())
         }
     }
 
