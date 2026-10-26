@@ -166,7 +166,7 @@ object MessageParser {
         Regex("\\b(?:debited|purchase|spent|withdrawn|withdrawal|charged|used for)\\b|تم خصم|تم شراء|تم دفع", ci)
     private val promoWords =
         Regex(
-            "% off|خصم\\s*\\d+\\s*%|\\d+\\s*%\\s*خصم|" +
+            "% off|خصم\\s*\\d+\\s*%|\\d+\\s*%\\s*خصم|%\\s*\\d+\\s*خصم|احصل\\s+علي\\s+خصم|" +
                 "\\boffers?\\b|cashback|\\bpoints\\b|rewards|subscribe|t&c|terms apply|congratulations|\\bpromo|coupon|discount|" +
                 "installments up to|https?:|www\\.|عرض|عروض|نقاط|اشترك|الشروط والاحكام|مبروك|اربح|كوبون|خصم يصل|تقسيط",
             ci,
@@ -176,7 +176,8 @@ object MessageParser {
             "\\btransaction (?:of|was made|has been made|approved|completed)\\b" +
                 "|\\b(?:debited|debit|deducted|withdraw(?:n|al)?|charged|spent|paid|pay|sent" +
                 "|send|purchased?|payment|transfer(?:red)?|used for|pos)\\b" +
-                "|تم خصم|خصم(?!\\s*\\d+\\s*%)|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه|تم استخدام",
+                "|تم خصم|خصم(?!\\s*\\d+\\s*%)|تم دفع|دفع|شراء|سداد|تحويل|تم ارسال|ارسال|ارسلت|حولت|سحب|مدفوعات|عمليه|تم استخدام" +
+                "|$CARD_AT",
             ci,
         )
     private val inAnchor =
@@ -452,10 +453,10 @@ object MessageParser {
     /** Boilerplate trailers are cut before anything is classified (to the end of their sentence). */
     private val trailer =
         Regex(
-            "https?://\\S+|www\\.\\S+|(?:للمزيد|لمزيد|حمل\\s+تطبيق|زوروا|زور\\s|احذر\\s+من" +
-                "|لمعرفه\\s+(?:المزيد|احدث)|لمعرفة\\s+(?:المزيد|احدث)" +
+            "https?://\\S+|(?<!(?:at|لدى|لدي|عند|مطعم|مقهى|محل|شركة|شركه)\\s)(?:www\\.\\S+|(?:للمزيد|لمزيد|حمل\\s+تطبيق|زوروا|زور\\s" +
+                "|احذر\\s+من|لمعرفه\\s+(?:المزيد|احدث)|لمعرفة\\s+(?:المزيد|احدث)" +
                 "|اشترك\\s+في|استمتع\\s+ب|تابعنا|visit\\s|download\\s+(?:the\\s+)?app|for\\s+more\\s+(?:info|information|details)" +
-                "|call\\s+customer|customer\\s+service|follow\\s+us)[^.!؟\\n]*",
+                "|call\\s+customer|customer\\s+service|follow\\s+us)[^.!؟\\n]*)",
             ci,
         )
 
@@ -467,17 +468,19 @@ object MessageParser {
 
     /** Parses one message. [received] is the SMS received time or the notification post time. */
     fun parse(msg: IncomingMessage): ParseOutcome {
-        val norm = trailer.replace(TextNormalizer.normalizeText(msg.text), " ").trim()
+        // Secrets are looked for in the WHOLE text: a code cue inside a boilerplate trailer or URL still makes it a secret
+        val full = TextNormalizer.normalizeText(msg.text).trim()
+        val norm = trailer.replace(full, " ").trim()
         if (norm.isBlank()) return ParseOutcome.Ignore("empty")
         val t = SecretDetector.fold(norm)
-        val secret = SecretDetector.reason(norm)
+        val secret = SecretDetector.reason(full)
         val amounts = findAmounts(t)
         val hasOut = outAnchor.containsMatchIn(t)
         val hasIn = inAnchor.containsMatchIn(t)
         val moneyLike = amounts.any { !it.balance } && (hasOut || hasIn)
         if (secret != null) {
             // An OTP that reads like a purchase is kept (masked) for the user; a plain OTP is dropped without a trace.
-            return if (moneyLike) ParseOutcome.Review("secret", SecretDetector.mask(norm)) else ParseOutcome.Ignore("otp")
+            return if (moneyLike) ParseOutcome.Review("secret", SecretDetector.mask(full)) else ParseOutcome.Ignore("otp")
         }
         return classify(msg, norm, t, amounts, hasOut, hasIn)
     }
@@ -522,7 +525,8 @@ object MessageParser {
         if (promoWords.containsMatchIn(t) && !strongTransaction(t)) {
             // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
             val ownRef = sourceIsOwn.containsMatchIn(t) || destinationIsOwn.containsMatchIn(t) || ownSubjectCredited.containsMatchIn(t)
-            val verb = outStrong.containsMatchIn(t) || explicitIn.containsMatchIn(t) || transferVerbs.containsMatchIn(t)
+            // A discount offer's own words (خصم, دفع, شراء) are not a completed transaction; only a credit or a transfer verb is
+            val verb = explicitIn.containsMatchIn(t) || transferVerbs.containsMatchIn(t)
             return if ((verb || ownRef) && amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
         }
         val direction =
@@ -569,13 +573,20 @@ object MessageParser {
     // ---- direction: ROLE phrases only; no role, or two roles, is a review item ---------------------------------------------
     private enum class Dir { IN, OUT, CONFLICT, NONE }
 
+    private const val CARD_AT =
+        "عمليه[^;!?]{0,60}?ب(?:حساب|بطاقت)(?:ك|كم)[^;!?]{0,80}?(?<![\\p{L}\\d])(?:لدي|عند)\\s+\\p{L}" +
+            "|(?<![\\p{L}\\d])(?:ب|على)\\s*بطاقت(?:ك|كم)[^;!?]{0,60}?(?<![\\p{L}\\d])(?:لدي|عند)\\s+\\p{L}" +
+            "|\\bon\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?card\\b[^;!?]{0,40}?\\bat\\s+\\p{L}" +
+            "|\\b(?:was|been)\\s+used\\s+at\\b|\\b(?:charge|authorization)\\s+of\\b"
     private const val OWN_NOUN = "(?:حساب|محفظت|بطاقت)(?:ك|كم)"
     private const val OWN_EN = "your\\s+(?:[\\p{L}]+\\s+){0,2}?(?:account|a/c|acct|wallet|card)"
 
     /** The household's own account/wallet/card as the DESTINATION of a movement. */
     private val destinationIsOwn =
         Regex(
-            "(?<![\\p{L}\\d])(?:ب|ل|الي|في|على|لصالح)\\s*$OWN_NOUN(?!\\p{L})" +
+            "(?<![\\p{L}\\d])(?:ل|الي|في|على|لصالح)\\s*$OWN_NOUN(?!\\p{L})" +
+                // ب + own noun is "with/in your card" (the instrument) unless a credit word comes first: "ايداع ... بحسابكم"
+                "|(?:ايداع|اضافه|استلام|ائتمان|تحويل)[^;!?]{0,40}?(?<![\\p{L}\\d])ب\\s*$OWN_NOUN(?!\\p{L})" +
                 "|\\b(?:to|into|in|on)\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?(?:account|a/c|acct|wallet|card)\\b",
             ci,
         )
@@ -588,7 +599,7 @@ object MessageParser {
     private val ownSubjectCredited =
         Regex(
             "$OWN_EN\\b(?:(?!\\b(?:to|from)\\b)[^.()]){0,30}?" +
-                "\\b(?:(?:was|has been|have been|is|were)\\s+credited|received\\s+(?:an?\\b|egp\\b|\\d))",
+                "\\b(?:(?:(?:was|has been|have been|is|were)\\s+)?credited|received\\s+(?:an?\\b|egp\\b|\\d))",
             ci,
         )
 
@@ -609,7 +620,9 @@ object MessageParser {
             "\\b(?:debited|debit(?!\\s+card)|deducted|withdraw(?:n|al)?|charged|spent|purchased?|used for|pos)\\b" +
                 "|\\bpaid(?!\\s+(?:to\\s+)?you)\\b" +
                 "|\\btransaction (?:of|was made|has been made|approved|completed)\\b" +
-                "|تم خصم|خصم(?!\\s*\\d+\\s*%)|تم دفع|دفع|شراء|سداد|سحب|صادر|مدفوعات|تم استخدام",
+                "|تم خصم|خصم(?!\\s*\\d+\\s*%)|تم دفع|دفع|شراء|سداد|سحب|صادر|مدفوعات|تم استخدام" +
+                // "عملية ببطاقتكم/بحسابكم ... لدى MERCHANT": a card or account operation at a named merchant is a purchase
+                "|$CARD_AT",
             ci,
         )
 
@@ -707,7 +720,18 @@ object MessageParser {
     /** A merchant payee ("لدى X", "عند X") or a payment verb means something was paid for, not a bank charge. */
     private val payeeOrPayment = Regex("(?<![\\p{L}\\d])(?:لدي|عند)\\s+\\p{L}|\\bpaid\\b|\\bpayment\\b|سداد|تم دفع", ci)
 
+    /** A named bank charge: it is a fee even when the text mentions the payment or transfer it belongs to. */
+    private val bankFeeNoun =
+        Regex(
+            "\\b(?:late\\s+payment|payment\\s+processing|bill\\s+payment|cash\\s+advance|transfer|instapay|sms(?:\\s+alert)?|" +
+                "service|annual|monthly|maintenance|card)\\s+(?:fees?|charges?)\\b|\\binterest\\s+(?:of|charges?)\\b" +
+                "|(?<![\\p{L}])(?:رسوم|مصاريف|عموله)\\s+(?:(?:تاخير|تاخر)\\s+)?(?:سداد|تحويل|تاخير|سحب|رسايل|رسائل|خدمه|صيانه)" +
+                "(?![\\p{L}])",
+            ci,
+        )
+
     private fun feeIsTheTransaction(t: String): Boolean {
+        if (bankFeeNoun.containsMatchIn(t) && !boughtFee.containsMatchIn(t)) return true
         if (boughtFee.containsMatchIn(t) || thirdPartyNamed.containsMatchIn(t) || payeeOrPayment.containsMatchIn(t)) return false
         val feeAt = fee.find(t)?.range?.first ?: return false
         val other = listOfNotNull(transferVerbs.find(t)?.range?.first, paymentWords.find(t)?.range?.first)
@@ -723,7 +747,8 @@ object MessageParser {
         Regex(
             "credit\\s*card\\s+(?:payment|bill|repayment)" +
                 "|payment\\s+(?:of\\s+[^;!?]{0,30}?)?(?:to|for|towards)\\s+your\\s+(?:[\\p{L}]+\\s+){0,2}?credit\\s*card" +
-                "|سداد\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان|دفع\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان",
+                "|سداد\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان|دفع\\s+(?:ال)?بطاق[هة]\\s+(?:ال)?ائتمان" +
+                "|(?:سداد|دفع)\\s[^;!?]{0,40}?(?<![\\p{L}\\d])ل?بطاق(?:ه|تك|تكم)\\s*(?:ال)?ائتمان",
             ci,
         )
 
@@ -738,6 +763,7 @@ object MessageParser {
     ): TxKind =
         when {
             refund.containsMatchIn(t) -> TxKind.REFUND
+            outgoing && bankFeeNoun.containsMatchIn(t) && feeIsTheTransaction(t) -> TxKind.FEE
             withdrawal.containsMatchIn(t) && outgoing && !atmTransfer(t) -> TxKind.CASH_WITHDRAWAL
             outgoing && feeIsTheTransaction(t) -> TxKind.FEE
             outgoing && cardRepayment.containsMatchIn(t) -> TxKind.TRANSFER_OUT
@@ -950,7 +976,8 @@ object MessageParser {
                 when {
                     c.bare -> bareAccepted(t, c.start)
                     c.own -> true
-                    else -> !transferKind
+                    // an explicitly incoming transfer "to account ***7781" with no other account in the text: that is ours
+                    else -> !transferKind || (!outgoing && c.role == Role.DESTINATION && candidates.size == 1)
                 }
             }
         val distinct = accepted.map { it.digits }.distinct()
@@ -1125,6 +1152,8 @@ object MessageParser {
         t: String,
         kind: TxKind,
     ): String? {
+        // A bank charge has no counterparty: "fee for your transfer to AHMED" must not label the fee with the person
+        if (kind == TxKind.FEE) return null
         val role =
             when (kind) {
                 TxKind.INCOME, TxKind.TRANSFER_IN, TxKind.REFUND -> "in"
