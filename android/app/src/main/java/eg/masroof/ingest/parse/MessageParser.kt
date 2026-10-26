@@ -35,6 +35,7 @@ object MessageParser {
     private const val LOOKBACK = 30
     private const val DATE_LOOKBACK = 25
     private const val TIME_WINDOW = 24
+    private val PLAUSIBLE_YEARS = 1990..2100
     private const val TIME_BEFORE_WINDOW = 24
     private const val LAST4_LOOKBACK = 40
 
@@ -457,7 +458,13 @@ object MessageParser {
                     .map { it.groups[1]!!.range }
                     .toList()
             }
-        val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts) + ownDigits)
+        val malformed =
+            amounts.filter { it.ambiguous }.map { a ->
+                var end = a.end
+                while (end < t.length && (t[end].isDigit() || t[end] == '.' || t[end] == ',')) end++
+                a.start until end
+            }
+        val shown = maskRanges(codeMasked, unexplainedRanges(t, amounts) + ownDigits + malformed)
         val review = { reason: String -> ParseOutcome.Review(reason, shown) }
         if (declined.containsMatchIn(t)) return ParseOutcome.Ignore("declined")
         if (reversal.containsMatchIn(t)) return review("reversal")
@@ -471,7 +478,10 @@ object MessageParser {
                 else -> review("no_template")
             }
         }
-        if (promoWords.containsMatchIn(t) && !strongTransaction(t)) return ParseOutcome.Ignore("promo")
+        if (promoWords.containsMatchIn(t) && !strongTransaction(t)) {
+            // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
+            return if (amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
+        }
         val direction = firstDirection(t) ?: return review("no_template")
         val amount = chooseAmount(t, amounts) ?: return review("no_amount")
         if (amount.ambiguous || amount.minor == null) return review("ambiguous_amount")
@@ -502,19 +512,22 @@ object MessageParser {
 
     private fun strongTransaction(t: String) =
         Regex(
-            "\\b(?:debited|purchase|paid|spent|withdrawn)\\b|تم خصم|تم شراء|تم دفع",
+            "\\b(?:debited|purchase|paid|spent|withdrawn|charged|used for|(?:has|have) been used|was used)\\b" +
+                "|تم خصم|تم شراء|تم دفع|تم سحب|تم استخدام",
             ci,
         ).containsMatchIn(t)
 
     /** The direction is whichever verb comes first: "transfer ... was received" is outgoing, "received ... sent by" incoming. */
     private val destinationIsOwn =
         Regex(
-            "(?<![\\p{L}\\d])الي\\s+(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bto\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
+            "(?<![\\p{L}\\d])(?:ل|الي|في|لصالح)\\s*(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})" +
+                "|\\b(?:to|into|in|for)\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b" +
+                "|\\b(?:transferred|sent|credited|paid)\\s+to\\s+you\\b|\\bto\\s+you\\s+by\\b",
             ci,
         )
     private val sourceIsOwn =
         Regex(
-            "(?<![\\p{L}\\d])من\\s+(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bfrom\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
+            "(?<![\\p{L}\\d])من\\s*(?:حساب|محفظت|بطاقت)(?:ك|كم)(?!\\p{L})|\\bfrom\\s+your\\s+(?:account|a/c|acct|wallet|card)\\b",
             ci,
         )
     private val debitVerbs =
@@ -659,12 +672,24 @@ object MessageParser {
             for (i in range) if (i < chars.size) chars[i] = ' '
         }
         amounts.forEach { blank(it.start until it.end) }
-        for (p in listOf(dateFull, dateIso, dateShort)) p.findAll(t).forEach { blank(it.range) }
+
+        fun blankDate(
+            m: MatchResult,
+            yearGroup: Int,
+        ) {
+            blank(m.range)
+            val year = m.groupValues[yearGroup]
+            // "Oct 21, 7351": a four-digit year nobody could mean is a number nothing explains
+            if (year.length == 4 && year.toInt() !in PLAUSIBLE_YEARS) for (i in m.groups[yearGroup]!!.range) chars[i] = t[i]
+        }
+        dateFull.findAll(t).forEach { blankDate(it, 4) }
+        dateIso.findAll(t).forEach { blankDate(it, 1) }
+        dateShort.findAll(t).forEach { blank(it.range) }
         Regex("(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])").findAll(t).forEach { blank(it.range) }
         val trusted = ownAccountTrusted(t)
         last4Patterns.forEach { p -> if (!p.own || trusted) p.regex.findAll(t).forEach { blank(it.groups[1]!!.range) } }
-        dateCompact.findAll(t).forEach { blank(it.range) }
-        dateMonthFirst.findAll(t).forEach { blank(it.range) }
+        dateCompact.findAll(t).forEach { blankDate(it, 3) }
+        dateMonthFirst.findAll(t).forEach { blankDate(it, 3) }
         // The other party's mobile number after to/from/إلى رقم is an explained counterparty, never a code.
         phoneNumber.findAll(t).forEach { m ->
             if (counterpartyBefore.containsMatchIn(t.substring(maxOf(0, m.range.first - LAST4_LOOKBACK), m.range.first))) blank(m.range)
@@ -689,7 +714,7 @@ object MessageParser {
     private val ownText = Regex("^(?:حساب(?:ك|كم)|بطاقت(?:ك|كم)|محفظت(?:ك|كم)|your\\s)", ci)
 
     /** A bare number after "your account" is trusted only when nothing in the message hints at a secret or a security footer. */
-    private fun ownAccountTrusted(t: String): Boolean = !SecretDetector.hasCodeLikeToken(t) && !SecretDetector.hasSecurityFooter(t)
+    private fun ownAccountTrusted(t: String): Boolean = !SecretDetector.hasHintWord(t) && !SecretDetector.hasSecurityFooter(t)
 
     private fun last4(t: String): String? {
         val candidates =
@@ -916,7 +941,7 @@ object MessageParser {
             // A token of symbols only ("|", "®") carries no name: skip it instead of ending the label.
             if (clean.isEmpty()) continue
             val core = SecretDetector.fold(clean).trim(*PUNCT)
-            if (core.isEmpty() || core in stopWords) break
+            if (core.isEmpty() || core in stopWords || SecretDetector.hasHintWord(clean)) break
             if (core.any { Character.isDigit(it) }) break
             if (tokens.isEmpty() && core in badFirst) return null
             tokens += clean.trim(*PUNCT)
@@ -932,7 +957,7 @@ object MessageParser {
         if (label.length > MAX_LABEL) label = label.take(MAX_LABEL).substringBeforeLast(' ', label.take(MAX_LABEL))
         if (label.count { it.isLetter() } < 2) return null
         if (secretLabel.containsMatchIn(SecretDetector.fold(label))) return null
-        if (SecretDetector.reason(label) != null || SecretDetector.hasCodeLikeToken(label)) return null
+        if (SecretDetector.reason(label) != null || SecretDetector.hasHintWord(label)) return null
         return label.trim()
     }
 

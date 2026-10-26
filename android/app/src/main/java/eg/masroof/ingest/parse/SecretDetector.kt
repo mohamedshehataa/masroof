@@ -226,6 +226,16 @@ object SecretDetector {
     private val codeLikeToken =
         Regex("otp|\\bpins?\\b|cvv|passcode|password|token|verif|approv|secur|code|3ds|رمز|كود|تحقق|سري|باسورد|مرور|رموز", ci)
 
+    private val hintWord =
+        Regex(
+            "(?<![\\p{L}])(?:البن|بن|البين|بسورد|بسوورد|باس\\s*ورد|الشخصي|التعريفي|او\\s*تي\\s*بي|اوتيبي|ادخل|استخدم)(?![\\p{L}])" +
+                "|keep it|private|confidential",
+            ci,
+        )
+
+    /** Any secret-ish vocabulary at all (the code-like words plus the colloquial and disguised Arabic hints). */
+    fun hasHintWord(text: String): Boolean = hasCodeLikeToken(text) || variants(fold(text)).any { hintWord.containsMatchIn(it) }
+
     /** True when the text has any code-like word at all (substring, no word boundary): used to mask review text. */
     fun hasCodeLikeToken(normalized: String): Boolean = variants(fold(normalized)).any { codeLikeToken.containsMatchIn(it) }
 

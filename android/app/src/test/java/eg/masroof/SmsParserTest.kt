@@ -181,8 +181,8 @@ class SmsParserTest {
 
     @Test
     fun `REQ-SMS-016 real-shape bank messages, payer-side last four and every round-3 look-alike`() {
-        val rows = fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl")
-        assertTrue(rows.size >= 80)
+        val rows = fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl")
+        assertTrue(rows.size >= 105)
         for (row in rows) {
             val id = row.str("id")
             val expect = row["expect"]!!.jsonObject
@@ -201,6 +201,19 @@ class SmsParserTest {
             }
             when (expect.str("outcome")) {
                 "ignore" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                "record_or_review" -> {
+                    assertFalse("$id -> $outcome", outcome is ParseOutcome.Ignore)
+                    if (outcome is ParseOutcome.Record) {
+                        expect["merchantNot"]?.jsonArray?.forEach {
+                            assertFalse(
+                                "$id label ${outcome.record.merchant}",
+                                outcome.record.merchant
+                                    .orEmpty()
+                                    .contains(it.jsonPrimitive.content),
+                            )
+                        }
+                    }
+                }
                 "review" -> assertTrue("$id -> $outcome", outcome is ParseOutcome.Review)
                 "never_record" -> assertFalse("$id -> $outcome", outcome is ParseOutcome.Record)
                 "record" -> {
