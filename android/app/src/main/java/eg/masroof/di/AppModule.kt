@@ -30,6 +30,7 @@ import eg.masroof.data.db.MIGRATION_2_3
 import eg.masroof.data.db.MIGRATION_3_4
 import eg.masroof.data.db.MIGRATION_4_5
 import eg.masroof.data.db.MIGRATION_5_6
+import eg.masroof.data.db.MIGRATION_6_7
 import eg.masroof.data.insights.ApiInsightsRemote
 import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.FileInsightsCache
@@ -41,6 +42,7 @@ import eg.masroof.data.remote.ExpenseDeleter
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.RemoteSource
 import eg.masroof.ingest.AndroidCapturedNotifier
+import eg.masroof.ingest.AndroidNotificationPermission
 import eg.masroof.ingest.CaptureData
 import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.CapturedAlertSettings
@@ -48,6 +50,7 @@ import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.KeystoreLocalIdKey
 import eg.masroof.ingest.LocalIdKey
+import eg.masroof.ingest.NotificationPermission
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.PrefsCaptureData
 import eg.masroof.ingest.PrefsCaptureGate
@@ -115,7 +118,7 @@ object ProvidersModule {
         Room
             .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
             // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigrationFrom(true, 1)
             .build()
 
@@ -139,6 +142,11 @@ object ProvidersModule {
         @ApplicationContext context: Context,
         key: LocalIdKey,
     ): CaptureData = PrefsCaptureData(context, key)
+
+    @Provides @Singleton
+    fun notificationPermission(
+        @ApplicationContext context: Context,
+    ): NotificationPermission = AndroidNotificationPermission(context)
 
     @Provides @Singleton
     fun capturedAlertSettings(

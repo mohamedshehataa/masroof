@@ -19,6 +19,7 @@ import eg.masroof.data.db.MIGRATION_2_3
 import eg.masroof.data.db.MIGRATION_3_4
 import eg.masroof.data.db.MIGRATION_4_5
 import eg.masroof.data.db.MIGRATION_5_6
+import eg.masroof.data.db.MIGRATION_6_7
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.insights.InsightsCache
@@ -92,7 +93,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration24.db")
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -129,7 +130,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration34.db")
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -170,7 +171,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration45.db")
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -199,7 +200,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration56.db")
-                    .addMigrations(MIGRATION_5_6)
+                    .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -220,6 +221,33 @@ class RoomMigrationTest {
                         .single()
                         .label,
                 )
+            } finally {
+                db.close()
+            }
+        }
+
+    @Test
+    fun `REQ-SMS-084 migration 6 to 7 keeps the captured records and adds the Undo request flag`() =
+        runTest {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val raw = createFromSchema(context, "migration67.db", 6)
+            raw.execSQL(
+                "INSERT INTO captured_tx (localId, expenseId, amountMinor, currency, label, source, templateId, capturedAtMillis) " +
+                    "VALUES ('c1', NULL, 50000, 'EGP', 'AMAZON', 'SMS', NULL, 3)",
+            )
+            raw.version = 6
+            raw.close()
+            val db =
+                Room
+                    .databaseBuilder(context, AppDatabase::class.java, "migration67.db")
+                    .addMigrations(MIGRATION_6_7)
+                    .allowMainThreadQueries()
+                    .build()
+            try {
+                val kept = db.captured().find("c1")!!
+                assertFalse("an old record has no Undo request", kept.undoRequested)
+                db.captured().requestUndo("c1")
+                assertEquals(1, db.captured().undoRequests().size)
             } finally {
                 db.close()
             }
@@ -274,13 +302,27 @@ class SignOutSmsTest {
             db.reviews().insert(ReviewItemEntity("r1", "SMS", "CIB", "unparsed text", "no_template", 1, 2))
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().isNotEmpty())
 
-            val wiper = RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined)
+            db.captured().insert(CapturedTxEntity("c1", "e-1", 50_000, "EGP", "AMAZON", "SMS", null, 1))
+            var cancelledAll = false
+            val notifier =
+                object : eg.masroof.ingest.CapturedNotifier {
+                    override fun captured(item: CapturedTxEntity) = Unit
+
+                    override fun cancel(localId: String) = Unit
+
+                    override fun cancelAll() {
+                        cancelledAll = true
+                    }
+                }
+            val wiper = RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined, notifier = notifier)
             assertEquals("the logout warning counts queued records", 1, wiper.unsyncedCount())
             assertEquals(1, wiper.retryableCount())
             wiper.wipe()
 
             assertTrue(db.parsedOutbox().all().isEmpty())
             assertTrue("the local review list is cleared on logout", db.reviews().all().isEmpty())
+            assertTrue("the captured records are cleared on logout", db.captured().all().isEmpty())
+            assertTrue("every Recorded ... Undo notification is taken down on logout", cancelledAll)
             assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().all { it.state.isFinished })
             assertTrue(workManager.getWorkInfosForUniqueWork("sms-upload").get().all { it.state.isFinished })
             assertTrue(workManager.getWorkInfosForUniqueWork("sms-upload-retry").get().all { it.state.isFinished })

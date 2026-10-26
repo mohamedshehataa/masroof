@@ -203,6 +203,19 @@ class JdbcRawMessageRepository implements RawMessageRepository, SmsAccounts {
   }
 
   @Override
+  public Optional<UUID> expenseIdOf(UUID rawMessageId, UUID householdId) {
+    return jdbc
+        .query(
+            "select expense_id from raw_message where id = ? and household_id = ?",
+            (rs, n) -> rs.getObject("expense_id", UUID.class),
+            rawMessageId,
+            householdId)
+        .stream()
+        .filter(java.util.Objects::nonNull)
+        .findFirst();
+  }
+
+  @Override
   public Optional<RawMessage> claimNext(Instant now, Duration lease) {
     return jdbc.query(CLAIM, RAW, utc(now.plus(lease)), utc(now)).stream().findFirst();
   }

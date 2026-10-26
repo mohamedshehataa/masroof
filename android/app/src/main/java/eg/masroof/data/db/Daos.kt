@@ -185,10 +185,11 @@ interface LearnedTemplateDao {
 
 @Dao
 interface CapturedDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(item: CapturedTxEntity)
+    /** IGNORE: the same message accepted again never overwrites the row (it would lose its expense id). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: CapturedTxEntity): Long
 
-    @Query("SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff ORDER BY capturedAtMillis DESC")
+    @Query("SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff AND undoRequested = 0 ORDER BY capturedAtMillis DESC")
     fun observeRecent(cutoff: Long): Flow<List<CapturedTxEntity>>
 
     @Query("SELECT * FROM captured_tx WHERE localId = :localId")
@@ -199,6 +200,12 @@ interface CapturedDao {
         localId: String,
         expenseId: String,
     )
+
+    @Query("UPDATE captured_tx SET undoRequested = 1 WHERE localId = :localId")
+    suspend fun requestUndo(localId: String)
+
+    @Query("SELECT * FROM captured_tx WHERE undoRequested = 1")
+    suspend fun undoRequests(): List<CapturedTxEntity>
 
     @Query("DELETE FROM captured_tx WHERE localId = :localId")
     suspend fun delete(localId: String)
@@ -222,7 +229,7 @@ interface CapturedDao {
             LearnedTemplateEntity::class,
             CapturedTxEntity::class,
         ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -353,6 +360,14 @@ CREATE TABLE IF NOT EXISTS captured_tx (
   PRIMARY KEY(localId)
 )
 """
+
+/** v6 -> v7 (round 19): an Undo pressed while the upload was in flight is remembered until the expense id is known. */
+val MIGRATION_6_7: Migration =
+    object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE captured_tx ADD COLUMN undoRequested INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 
 /** v5 -> v6 (round 18): the phone's own automatic records, for the "Recorded ... Undo" notification and the "Captured" chip. */
 val MIGRATION_5_6: Migration =

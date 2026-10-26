@@ -180,10 +180,11 @@ class ParsedIngestApiIT {
     assertThat(b.get("outcome").asString()).isEqualTo("DUPLICATE");
     assertThat(b.get("rawMessageId").asString()).isEqualTo(a.get("rawMessageId").asString());
     Map<String, Object> e = expenseOf(a.get("rawMessageId").asString());
-    // the created expense id is returned for a new record (so the app can offer Undo) and absent
-    // for a duplicate
+    // the created expense id is returned for a new record (so the app can offer Undo)
     assertThat(a.get("expenseId").asString()).isEqualTo(String.valueOf(e.get("id")));
-    assertThat(b.path("expenseId").isNull() || b.path("expenseId").isMissingNode()).isTrue();
+    // a retried upload (the first answer was lost) learns the id of what it created, so Undo stays
+    // possible
+    assertThat(b.get("expenseId").asString()).isEqualTo(a.get("expenseId").asString());
     assertThat(e.get("source")).isEqualTo("SMS");
     assertThat(e.get("status")).isEqualTo("CONFIRMED");
     assertThat(e.get("merchant_raw")).isEqualTo("CARREFOUR MAADI");
@@ -206,7 +207,26 @@ class ParsedIngestApiIT {
     JsonNode b = JSON.readTree(send(tokenB, r).getContentAsString());
     assertThat(b.get("outcome").asString()).isEqualTo("ACCEPTED");
     assertThat(b.get("rawMessageId").asString()).isNotEqualTo(a.get("rawMessageId").asString());
+    // another household never gets the first household's expense id, not even by repeating the same
+    // record
+    assertThat(b.get("expenseId").asString()).isNotEqualTo(a.get("expenseId").asString());
+    JsonNode again = JSON.readTree(send(tokenB, r).getContentAsString());
+    assertThat(again.get("outcome").asString()).isEqualTo("DUPLICATE");
+    assertThat(again.get("expenseId").asString()).isEqualTo(b.get("expenseId").asString());
+    assertThat(again.get("expenseId").asString()).isNotEqualTo(a.get("expenseId").asString());
     assertThat(send(null, r).getStatus()).isEqualTo(401);
+  }
+
+  @Test
+  @Tag("REQ-SMS-003")
+  @DisplayName("REQ-SMS-003 a refund waits for the user like other incoming money")
+  void refundWaitsForReview() throws Exception {
+    Map<String, Object> r = record("refund");
+    r.put("kind", "REFUND");
+    JsonNode a = JSON.readTree(send(tokenA, r).getContentAsString());
+    assertThat(a.get("outcome").asString()).isEqualTo("ACCEPTED");
+    assertThat(expenseOf(a.get("rawMessageId").asString()).get("status"))
+        .isEqualTo("PENDING_REVIEW");
   }
 
   @Test

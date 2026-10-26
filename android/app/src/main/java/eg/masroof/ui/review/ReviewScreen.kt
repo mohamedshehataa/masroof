@@ -32,6 +32,7 @@ import eg.masroof.core.Money
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
 import eg.masroof.ui.viewmodel.ReviewViewModel
 
@@ -42,6 +43,7 @@ fun ReviewRoute(
     viewModel: ReviewViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
+    SecureWindow()
     ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss, onSave = viewModel::save)
 }
 

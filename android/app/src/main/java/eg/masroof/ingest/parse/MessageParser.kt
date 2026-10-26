@@ -1427,6 +1427,8 @@ object NotificationApps {
 
     private val deniedPrefixes =
         listOf(
+            // this app's own notifications ("Recorded 500 EGP ...") must never be read back as a bank message
+            "eg.masroof",
             "com.whatsapp",
             "org.telegram",
             "org.thunderdog.challegram",

@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
@@ -50,6 +51,7 @@ fun AddExpenseRoute(
     viewModel: AddExpenseViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    SecureWindow()
     LaunchedEffect(state.form.saved) { if (state.form.saved) onDone() }
     AddExpenseContent(
         state = state,

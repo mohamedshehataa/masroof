@@ -162,6 +162,15 @@ object AutoRecordFamilies {
                     "(?:\\s+(?:$NUM\\s*(?:جنيه|جم)?|egp\\s*$NUM))?",
             ),
             Regex("(?:للمزيد\\s+)?(?:ا)?تصل\\s+ب\\s*\\d{3,6}"),
+            // "If you did not make this transaction, call 19666 to block your card" (and the Arabic wording)
+            Regex(
+                "if\\s+you\\s+did\\s+not\\s+make\\s+this\\s+transaction\\s*,?\\s*(?:please\\s+)?call\\s+\\d{3,6}" +
+                    "(?:\\s+to\\s+(?:block|freeze)\\s+your\\s+card)?",
+            ),
+            Regex(
+                "(?:اذا\\s+لم\\s+تقم\\s+بهذه\\s+العمليه|في\\s+حاله\\s+عدم\\s+قيامك\\s+بهذه\\s+العمليه)\\s*[,،]?\\s*" +
+                    "(?:ا)?تصل\\s+ب\\s*\\d{3,6}(?:\\s+ل[\\p{L} ]{1,30})?",
+            ),
             Regex("(?:لا\\s+تشارك|احذر)\\s+[\\p{L} ]{1,60}"),
             Regex("شكرا\\s+لاستخدامكم\\s+[\\p{L} ]{1,30}"),
             Regex("كاش\\s*باك[\\p{L}\\d .]{0,60}"),

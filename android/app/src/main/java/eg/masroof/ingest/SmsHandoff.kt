@@ -59,7 +59,12 @@ class SmsHandoff(
 /** WorkManager input data is capped at 10 KB; a bank message is far shorter. */
 private const val MAX_TEXT = 2000
 
-internal fun IncomingMessage.capped() = copy(text = text.take(MAX_TEXT))
+internal fun IncomingMessage.capped(): IncomingMessage {
+    val clipped = text.take(MAX_TEXT)
+    val normalized = TextNormalizer.normalizeText(clipped)
+    // a code-like digit run is masked BEFORE the text goes into WorkManager's input data (which WorkManager stores in its database)
+    return copy(text = if (SecretDetector.hasCodeLikeToken(normalized)) SecretDetector.maskLongCodes(normalized) else clipped)
+}
 
 /** Cheap keyword-level checks usable from the receiver. */
 object MessageHygiene {

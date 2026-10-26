@@ -132,6 +132,7 @@
     <string name="captured_title_at">Recorded %1$s at %2$s</string>
     <string name="captured_text">Captured from a bank message on this phone. Undo it if it is wrong.</string>
     <string name="captured_public_title">Transaction recorded</string>
+    <string name="captured_undo_failed">Could not undo right now. Check your connection and try again.</string>
     <string name="captured_undo">Undo</string>
     <string name="captured_chip">Captured</string>
     <string name="captured_stop_learning_title">Stop learning this format?</string>

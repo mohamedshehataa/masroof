@@ -60,7 +60,10 @@ class WebSecurityConfiguration {
     return bean;
   }
 
-  /** Size and rate guard for POST /api/ingest/sms; runs right after authentication. */
+  /**
+   * Size and rate guard for the /api/ingest/* endpoints (parsed transactions); runs right after
+   * authentication.
+   */
   @Bean
   FilterRegistrationBean<IngestGuardFilter> ingestGuardFilter(Clock clock) {
     FilterRegistrationBean<IngestGuardFilter> bean =

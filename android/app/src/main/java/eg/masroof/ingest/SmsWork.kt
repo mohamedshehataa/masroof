@@ -20,6 +20,8 @@ import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.REVIEW_RETENTION_DAYS
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.db.capturedCutoff
+import eg.masroof.data.remote.ExpenseDeleter
+import eg.masroof.data.remote.NoExpenseDeleter
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.ingest.parse.CaptureSource
@@ -28,6 +30,7 @@ import eg.masroof.ingest.parse.MessageParser
 import eg.masroof.ingest.parse.ParseOutcome
 import eg.masroof.ingest.parse.ParsedRecord
 import eg.masroof.ingest.parse.TemplateShape
+import eg.masroof.ingest.parse.TxKind
 import eg.masroof.work.OutboxBackoff
 import java.time.Clock
 import java.util.concurrent.TimeUnit
@@ -136,44 +139,7 @@ class SmsPipeline
             templateId: String?,
         ): Disposition =
             when (outcome) {
-                is ParseOutcome.Record -> {
-                    val r = outcome.record
-                    val inserted =
-                        db.parsedOutbox().insert(
-                            ParsedOutboxEntity(
-                                localId = id,
-                                source = r.source.name,
-                                kind = r.kind.name,
-                                amountMinor = r.amountMinor,
-                                currency = r.currency,
-                                occurredAtMillis = r.occurredAtMillis,
-                                instrumentLast4 = r.instrumentLast4,
-                                senderId = r.senderId,
-                                institution = r.institution,
-                                paymentMethod = r.paymentMethod,
-                                merchant = r.merchant,
-                                createdAtMillis = clock.millis(),
-                            ),
-                        ) != NOT_INSERTED
-                    scheduler.scheduleUpload()
-                    // the safety net: a record the phone made by itself can be undone for a while (the same message seen twice: once)
-                    if (inserted) {
-                        val item =
-                            CapturedTxEntity(
-                                localId = id,
-                                expenseId = null,
-                                amountMinor = r.amountMinor,
-                                currency = r.currency,
-                                label = r.merchant,
-                                source = r.source.name,
-                                templateId = templateId,
-                                capturedAtMillis = clock.millis(),
-                            )
-                        db.captured().insert(item)
-                        notifier.captured(item)
-                    }
-                    Disposition.QUEUED
-                }
+                is ParseOutcome.Record -> storeRecord(outcome.record, id, templateId)
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
                     db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
@@ -196,6 +162,54 @@ class SmsPipeline
                 is ParseOutcome.Ignore -> Disposition.DROPPED
             }
 
+        /** An automatic record: queued for upload, remembered for Undo and announced (once per message). */
+        private suspend fun storeRecord(
+            r: ParsedRecord,
+            id: String,
+            templateId: String?,
+        ): Disposition {
+            // the same message accepted again after its upload is the same record: no second row, no second notice
+            if (db.captured().find(id) != null) {
+                scheduler.scheduleUpload()
+                return Disposition.QUEUED
+            }
+            val inserted =
+                db.parsedOutbox().insert(
+                    ParsedOutboxEntity(
+                        localId = id,
+                        source = r.source.name,
+                        kind = r.kind.name,
+                        amountMinor = r.amountMinor,
+                        currency = r.currency,
+                        occurredAtMillis = r.occurredAtMillis,
+                        instrumentLast4 = r.instrumentLast4,
+                        senderId = r.senderId,
+                        institution = r.institution,
+                        paymentMethod = r.paymentMethod,
+                        merchant = r.merchant,
+                        createdAtMillis = clock.millis(),
+                    ),
+                ) != NOT_INSERTED
+            scheduler.scheduleUpload()
+            // the safety net: a record the phone made by itself can be undone for a while (the same message seen twice: once)
+            if (inserted) {
+                val item =
+                    CapturedTxEntity(
+                        localId = id,
+                        expenseId = null,
+                        amountMinor = r.amountMinor,
+                        currency = r.currency,
+                        label = noticeLabel(r),
+                        source = r.source.name,
+                        templateId = templateId,
+                        capturedAtMillis = clock.millis(),
+                    )
+                db.captured().insert(item)
+                notifier.captured(item)
+            }
+            return Disposition.QUEUED
+        }
+
         private fun ReviewItemEntity.withSuggestion(
             suggestion: ParsedRecord?,
             shape: TemplateShape.Shape?,
@@ -213,6 +227,13 @@ class SmsPipeline
                 shape = shape?.signature,
                 slots = shape?.let { TemplateLearning.encodeSlots(it.numbers) },
             )
+
+        /** The notification names a merchant, but never a person: a transfer shows the institution only. */
+        private fun noticeLabel(r: ParsedRecord): String? =
+            when (r.kind) {
+                TxKind.PURCHASE, TxKind.CASH_WITHDRAWAL, TxKind.FEE -> r.merchant
+                else -> r.institution
+            }
 
         private fun isAllowed(message: IncomingMessage): Boolean =
             when (message.source) {
@@ -246,6 +267,8 @@ class SmsUploader
         private val device: DeviceIdProvider,
         private val clock: Clock,
         private val gate: CaptureGate,
+        private val deleter: ExpenseDeleter = NoExpenseDeleter,
+        private val locks: CapturedLocks = CapturedLocks(),
     ) {
         suspend fun uploadPending(): SmsSyncReport {
             val dao = db.parsedOutbox()
@@ -259,12 +282,19 @@ class SmsUploader
             var rejected = 0
             var retry = false
             var retryAfter: Long? = null
+            resolveUndoRequests()
             for (item in dao.pending()) {
-                when (val result = remote.uploadParsed(device.get(), item)) {
+                locks.begin(item.localId)
+                val result =
+                    try {
+                        remote.uploadParsed(device.get(), item)
+                    } finally {
+                        locks.end(item.localId)
+                    }
+                when (result) {
                     is SmsUploadResult.Sent -> {
                         dao.delete(item.localId)
-                        // the expense the server created is what an Undo of this captured record deletes
-                        result.expenseId?.let { db.captured().setExpenseId(item.localId, it) }
+                        recordSent(item.localId, result.expenseId)
                         sent++
                     }
                     is SmsUploadResult.Retry -> {
@@ -290,6 +320,43 @@ class SmsUploader
                 if (retry) break
             }
             return SmsSyncReport(sent, rejected, retry, retryAfter)
+        }
+
+        /**
+         * The server accepted [localId]: remember the expense it made (what Undo deletes). If the user pressed Undo while the request
+         * was in flight, the expense is deleted right now; without an id the request stays remembered for a later pass.
+         */
+        private suspend fun recordSent(
+            localId: String,
+            expenseId: String?,
+        ) {
+            locks.guard {
+                val captured = db.captured().find(localId) ?: return@guard
+                expenseId?.let { db.captured().setExpenseId(localId, it) }
+                val id = expenseId ?: captured.expenseId
+                if (captured.undoRequested && id != null) deleteRequested(localId, id)
+            }
+        }
+
+        /** Undo requests that could not be finished before (no id yet, or offline): retried at the start of every pass. */
+        private suspend fun resolveUndoRequests() {
+            locks.guard {
+                for (c in db.captured().undoRequests()) {
+                    val id = c.expenseId
+                    if (id != null && !locks.isInFlight(c.localId)) deleteRequested(c.localId, id)
+                }
+            }
+        }
+
+        private suspend fun deleteRequested(
+            localId: String,
+            expenseId: String,
+        ) {
+            if (!deleter.deleteExpense(expenseId)) return
+            db.withTransaction {
+                db.expenses().delete(expenseId)
+                db.captured().delete(localId)
+            }
         }
 
         /**

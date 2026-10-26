@@ -113,12 +113,14 @@ public class ParsedTransactionService {
   }
 
   /**
-   * Incoming money and unusually large amounts wait for the user: the sender id is only a claim, so
-   * a spoofed sender must not be able to book income or a large expense on its own.
+   * Incoming money (a refund too) and unusually large amounts wait for the user: the sender id is
+   * only a claim, so a spoofed sender must not be able to book income or a large expense on its
+   * own.
    */
   private static boolean needsReview(String kind, long amountMinor) {
     return "INCOME".equals(kind)
         || "TRANSFER_IN".equals(kind)
+        || "REFUND".equals(kind)
         || amountMinor > REVIEW_CEILING_MINOR;
   }
 
@@ -142,7 +144,12 @@ public class ParsedTransactionService {
                 cmd.occurredAt(),
                 now));
     if (!stored.inserted()) {
-      return new Accepted(stored.id(), Outcome.DUPLICATE, null);
+      // a retry after a lost answer learns the expense it created (same household only, by the
+      // query)
+      return new Accepted(
+          stored.id(),
+          Outcome.DUPLICATE,
+          messages.expenseIdOf(stored.id(), household.id()).orElse(null));
     }
     Optional<SmsAccounts.AccountRef> account =
         cmd.instrumentLast4() == null

@@ -7,7 +7,9 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.insights.InsightsCache
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.CaptureData
+import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.NoCaptureData
+import eg.masroof.ingest.NoCapturedNotifier
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.SMS_UPLOAD_RETRY_WORK
 import eg.masroof.ingest.SMS_UPLOAD_WORK
@@ -27,6 +29,7 @@ class RoomDataWiper
         private val workManager: WorkManager,
         @IoDispatcher private val io: CoroutineDispatcher,
         private val capture: CaptureData = NoCaptureData,
+        private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) : LocalDataWiper {
         override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() + db.parsedOutbox().countAll() }
 
@@ -43,6 +46,8 @@ class RoomDataWiper
             withContext(io) { awaitIdle() }
             workManager.pruneWork()
             withContext(io) { capture.clear() }
+            // nothing of the old account stays on the lock screen: every "Recorded ... Undo" notification goes
+            notifier.cancelAll()
             withContext(io) { db.clearAllTables() }
             withContext(io) { insights.clear() }
         }

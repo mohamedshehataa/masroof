@@ -32,6 +32,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -55,13 +57,36 @@ class PrefsCapturedAlertSettings(
     }
 }
 
+/** Whether the system lets this app post notifications (a runtime permission on Android 13+). */
+interface NotificationPermission {
+    fun granted(): Boolean
+}
+
+class AndroidNotificationPermission(
+    private val context: Context,
+) : NotificationPermission {
+    override fun granted() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+}
+
 /** What the pipeline calls right after it recorded an expense on its own (a proven family or a learned format). */
 interface CapturedNotifier {
     fun captured(item: CapturedTxEntity)
+
+    /** The notification of one record (its Undo was used somewhere else). */
+    fun cancel(localId: String)
+
+    /** Every notification of captured transactions (logout, account switch): nothing of the old account stays on the lock screen. */
+    fun cancelAll()
 }
 
 object NoCapturedNotifier : CapturedNotifier {
     override fun captured(item: CapturedTxEntity) = Unit
+
+    override fun cancel(localId: String) = Unit
+
+    override fun cancelAll() = Unit
 }
 
 const val CAPTURED_CHANNEL_ID = "captured_transactions"
@@ -82,6 +107,7 @@ class AndroidCapturedNotifier
     constructor(
         @ApplicationContext private val context: Context,
         private val settings: CapturedAlertSettings,
+        private val permission: NotificationPermission = AndroidNotificationPermission(context),
     ) : CapturedNotifier {
         override fun captured(item: CapturedTxEntity) {
             if (!canPost()) return
@@ -132,8 +158,12 @@ class AndroidCapturedNotifier
             manager.notify(promptId(templateId), notification)
         }
 
-        fun cancel(localId: String) {
+        override fun cancel(localId: String) {
             context.getSystemService(NotificationManager::class.java)?.cancel(localId.hashCode())
+        }
+
+        override fun cancelAll() {
+            context.getSystemService(NotificationManager::class.java)?.cancelAll()
         }
 
         fun cancelPrompt(templateId: String) {
@@ -142,13 +172,7 @@ class AndroidCapturedNotifier
 
         private fun promptId(templateId: String) = templateId.hashCode() xor PROMPT_SALT
 
-        private fun canPost(): Boolean =
-            settings.enabled() &&
-                (
-                    Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-                        PackageManager.PERMISSION_GRANTED
-                )
+        private fun canPost(): Boolean = settings.enabled() && permission.granted()
 
         private fun publicVersion(): Notification =
             Notification
@@ -197,16 +221,48 @@ class AndroidCapturedNotifier
         }
     }
 
-/** How one Undo ended: [removed] is true when the record is gone; [templateId] is the learned format that made it, if any. */
+/**
+ * Serializes Undo against the upload of the same record. [begin]/[end] bracket an upload request that may be in flight; [guard]
+ * is a short critical section for the database work that follows (never held across a network call except the delete itself).
+ */
+@Singleton
+class CapturedLocks
+    @Inject
+    constructor() {
+        private val inFlight =
+            java.util.concurrent.ConcurrentHashMap
+                .newKeySet<String>()
+        private val mutex = Mutex()
+
+        fun begin(localId: String) {
+            inFlight.add(localId)
+        }
+
+        fun end(localId: String) {
+            inFlight.remove(localId)
+        }
+
+        fun isInFlight(localId: String) = localId in inFlight
+
+        suspend fun <T> guard(block: suspend () -> T): T = mutex.withLock { block() }
+    }
+
+/**
+ * How one Undo ended: [removed] is true when the record is gone or will be (see [deferred]); [templateId] is the learned format
+ * that made it, if any. [deferred]: the upload was in flight (or the server id is not known yet), so the Undo is remembered and the
+ * expense is deleted the moment its id arrives.
+ */
 data class UndoResult(
     val removed: Boolean,
     val templateId: String?,
+    val deferred: Boolean = false,
 )
 
 /**
  * Undo of an automatically captured expense, shared by the notification action and the chip in the lists. If the record is still in
  * the upload outbox it is simply removed from it; otherwise the expense is deleted through the API (a soft delete the server can
- * restore). A failure (offline) leaves everything as it was so the user can try again.
+ * restore). While an upload of the same record may be in flight the Undo is only REMEMBERED (never half-applied): the uploader
+ * deletes the expense when the server answers. A failure (offline) leaves everything as it was so the user can try again.
  */
 @Singleton
 class CapturedActions
@@ -215,26 +271,39 @@ class CapturedActions
         private val db: AppDatabase,
         private val deleter: ExpenseDeleter,
         private val clock: Clock,
+        private val locks: CapturedLocks = CapturedLocks(),
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
-        suspend fun undo(localId: String): UndoResult {
-            val item = db.captured().find(localId) ?: return UndoResult(false, null)
-            if (db.parsedOutbox().all().any { it.localId == localId }) {
-                db.withTransaction {
-                    db.parsedOutbox().delete(localId)
-                    db.captured().delete(localId)
+        suspend fun undo(localId: String): UndoResult =
+            locks.guard {
+                val item = db.captured().find(localId) ?: return@guard UndoResult(false, null)
+                val queued = db.parsedOutbox().all().any { it.localId == localId }
+                when {
+                    locks.isInFlight(localId) -> remember(item)
+                    queued -> {
+                        db.withTransaction {
+                            db.parsedOutbox().delete(localId)
+                            db.captured().delete(localId)
+                        }
+                        UndoResult(true, item.templateId)
+                    }
+                    // uploaded, but the server has not told us which expense it made: remembered, resolved by the next upload pass
+                    item.expenseId == null -> remember(item)
+                    !deleter.deleteExpense(item.expenseId) -> UndoResult(false, item.templateId)
+                    else -> {
+                        db.withTransaction {
+                            db.expenses().delete(item.expenseId)
+                            db.captured().delete(localId)
+                        }
+                        UndoResult(true, item.templateId)
+                    }
                 }
-                return UndoResult(true, item.templateId)
             }
-            // uploaded: the server expense id is needed; without it (not reported yet) nothing can be undone from here
-            val expenseId = item.expenseId ?: return UndoResult(false, item.templateId)
-            if (!deleter.deleteExpense(expenseId)) return UndoResult(false, item.templateId)
-            db.withTransaction {
-                db.expenses().delete(expenseId)
-                db.captured().delete(localId)
-            }
-            return UndoResult(true, item.templateId)
+
+        private suspend fun remember(item: CapturedTxEntity): UndoResult {
+            db.captured().requestUndo(item.localId)
+            return UndoResult(removed = true, templateId = item.templateId, deferred = true)
         }
 
         /** "Stop learning this format?" answered yes. */

@@ -636,6 +636,7 @@ paths:
       operationId: ingestParsedTransaction
       security:
         - deviceToken: []
+        - bearerJwt: []
       x-req: [REQ-SMS-001, REQ-NTF-001]
       requestBody:
         required: true

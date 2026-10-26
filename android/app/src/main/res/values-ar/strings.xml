@@ -140,6 +140,7 @@
     <string name="captured_title_at">اتسجل %1$s عند %2$s</string>
     <string name="captured_text">اتسجلت من رسالة بنك على الموبايل ده. تراجع لو غلط.</string>
     <string name="captured_public_title">اتسجلت معاملة</string>
+    <string name="captured_undo_failed">مقدرتش أتراجع دلوقتي. اتأكد من الاتصال وحاول تاني.</string>
     <string name="captured_undo">تراجع</string>
     <string name="captured_chip">اتسجلت تلقائيا</string>
     <string name="captured_stop_learning_title">تبطل تحفظ شكل الرسالة ده؟</string>

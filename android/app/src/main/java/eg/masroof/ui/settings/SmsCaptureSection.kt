@@ -51,11 +51,14 @@ fun SmsCaptureSection(
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
     var enabled by remember { mutableStateOf(granted()) }
     var denied by remember { mutableStateOf(false) }
+    // the quiet "Recorded ... Undo" notification needs its own permission on Android 13+: asked right when capture is turned on
+    val askNotifications = rememberNotificationRequester(viewModel)
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
             enabled = ok
             denied = !ok
             viewModel.refresh()
+            if (ok) askNotifications()
         }
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val reviewCount by viewModel.reviewCount.collectAsStateWithLifecycle()
@@ -108,6 +111,7 @@ fun SmsCaptureSection(
 @Composable
 private fun NotificationCaptureSection(viewModel: SmsCaptureViewModel) {
     val context = LocalContext.current
+    val askNotifications = rememberNotificationRequester(viewModel)
     val on by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val packages by viewModel.packages.collectAsStateWithLifecycle()
     var newPackage by remember { mutableStateOf("") }
@@ -158,7 +162,11 @@ private fun NotificationCaptureSection(viewModel: SmsCaptureViewModel) {
             Button(
                 onClick = {
                     viewModel.setNotifications(true)
-                    if (!accessGranted) openAccessSettings()
+                    if (!viewModel.notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        askNotifications()
+                    } else if (!accessGranted) {
+                        openAccessSettings()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.ntf_enable)) }
@@ -193,5 +201,17 @@ private fun CapturedAlertsRow(viewModel: SmsCaptureViewModel) {
                 }
             },
         )
+    }
+}
+
+/** Asks for the notification permission when the system needs it (Android 13+); the screen re-reads the real state afterwards. */
+@Composable
+private fun rememberNotificationRequester(viewModel: SmsCaptureViewModel): () -> Unit {
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.onNotificationPermission() }
+    return {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !viewModel.notificationsGranted) {
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 }

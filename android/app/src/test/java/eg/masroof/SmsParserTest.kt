@@ -196,8 +196,8 @@ class SmsParserTest {
             fixture("round3.jsonl") + fixture("round4.jsonl") + fixture("round5.jsonl") + fixture("round6.jsonl") +
                 fixture("round7.jsonl") + fixture("round8.jsonl") + fixture("round9.jsonl") + fixture("round10.jsonl") +
                 fixture("round11.jsonl") + fixture("round12.jsonl") + fixture("round13.jsonl") + fixture("round14.jsonl") +
-                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl")
-        assertTrue(rows.size >= 410)
+                fixture("round15.jsonl") + fixture("round16.jsonl") + fixture("round17.jsonl") + fixture("round19.jsonl")
+        assertTrue(rows.size >= 415)
         checkAll(rows)
     }
 

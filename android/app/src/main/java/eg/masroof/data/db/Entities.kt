@@ -1,5 +1,6 @@
 package eg.masroof.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -142,6 +143,8 @@ data class CapturedTxEntity(
     val source: String,
     val templateId: String?,
     val capturedAtMillis: Long,
+    // The user pressed Undo while the upload was (or may have been) in flight: the expense is deleted as soon as its id is known.
+    @ColumnInfo(defaultValue = "0") val undoRequested: Boolean = false,
 ) {
     override fun toString() = "CapturedTxEntity(localId=$localId)"
 }

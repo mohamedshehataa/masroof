@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: M
 modules: [backend, android]
 depends_on: [STORY-044, STORY-045]
-reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077, REQ-SMS-078, REQ-SMS-079, REQ-SMS-080, REQ-SMS-081, REQ-SMS-082, REQ-SMS-083]
+reqs: [REQ-SMS-014, REQ-SMS-015, REQ-SMS-070, REQ-SMS-071, REQ-SMS-072, REQ-SMS-073, REQ-SMS-074, REQ-SMS-075, REQ-SMS-076, REQ-SMS-077, REQ-SMS-078, REQ-SMS-079, REQ-SMS-080, REQ-SMS-081, REQ-SMS-082, REQ-SMS-083, REQ-SMS-084, REQ-SMS-085, REQ-SMS-086]
 implements: [PROMPT.md §4.3 (parsing strategy 3), PROMPT.md S12 (feature flags for template learning)]
 owner_agent: ai-parsing-engineer
 ---
@@ -68,6 +68,15 @@ Given the "Recorded 500 EGP at AMAZON - Undo" notification, then it is on the lo
 
 ### REQ-SMS-083 — The Captured chip
 Given an expense the phone captured itself in the last 7 days, when it is listed in Home or Transactions, then its row shows a "Captured" chip with an Undo action.
+
+### REQ-SMS-084 — The Room schema keeps the captured records when the Undo request flag is added
+Given a database at version 6 with captured records, when it opens at version 7, then the records are kept without an Undo request and one can be recorded.
+
+### REQ-SMS-085 — The review and add screens cannot be screenshotted
+Given the review list or the add form is shown, when the window is created, then it is FLAG_SECURE (and the recents thumbnail is hidden on Android 13+), and normal again when the screen is left.
+
+### REQ-SMS-086 — This app's own notifications are never read, and codes are masked before WorkManager
+Given a notification of this app's package or a message with a code-like digit run, when it is handed to WorkManager, then the own package is denied, and a long digit run that is not an amount is masked in the input data while the card's last four and the amount stay.
 
 ### REQ-SMS-075 — A proven family is recorded without confirmation and is never learned from
 Given a card-purchase message of family F1, when it arrives, then it is queued directly and no review item or template is created.

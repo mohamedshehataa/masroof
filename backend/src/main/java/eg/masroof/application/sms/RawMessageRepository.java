@@ -63,6 +63,13 @@ public interface RawMessageRepository {
   /** Links the expense created from a parsed record to its evidence row. */
   void attachExpense(UUID rawMessageId, UUID expenseId);
 
+  /**
+   * The expense linked to an evidence row, only when the row belongs to {@code householdId}: a
+   * retried upload (its answer was lost) learns the id of what it created, and another household
+   * never learns anything.
+   */
+  Optional<UUID> expenseIdOf(UUID rawMessageId, UUID householdId);
+
   /** Stores the message as QUEUED; an existing (device, id) pair is returned untouched. */
   Stored insertSms(NewSms sms);
 

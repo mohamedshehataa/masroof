@@ -7,6 +7,7 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.reviewCutoff
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.CapturedAlertSettings
+import eg.masroof.ingest.NotificationPermission
 import eg.masroof.ingest.NotificationSettings
 import eg.masroof.ingest.SenderSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,6 +28,7 @@ class SmsCaptureViewModel
         private val senders: SenderSettings,
         private val notifications: NotificationSettings,
         private val capturedAlerts: CapturedAlertSettings,
+        private val notificationPermission: NotificationPermission,
         db: AppDatabase,
         clock: java.time.Clock,
         @IoDispatcher private val io: CoroutineDispatcher,
@@ -40,15 +42,22 @@ class SmsCaptureViewModel
         private val mutablePackages = MutableStateFlow(notifications.packages().sorted())
         val packages: StateFlow<List<String>> = mutablePackages
 
-        private val mutableCapturedAlerts = MutableStateFlow(capturedAlerts.enabled())
+        private val mutableCapturedAlerts = MutableStateFlow(capturedAlerts.enabled() && notificationPermission.granted())
 
-        /** The quiet "Recorded ... Undo" notification for transactions captured by themselves (on by default). */
+        /** The quiet "Recorded ... Undo" notification: ON only when the user wants it AND the system permission is granted. */
         val capturedAlertsEnabled: StateFlow<Boolean> = mutableCapturedAlerts
 
         fun setCapturedAlerts(on: Boolean) {
             capturedAlerts.setEnabled(on)
-            mutableCapturedAlerts.value = on
+            mutableCapturedAlerts.value = on && notificationPermission.granted()
         }
+
+        /** The system answered the notification-permission dialog (or the user came back from the system settings). */
+        fun onNotificationPermission() {
+            mutableCapturedAlerts.value = capturedAlerts.enabled() && notificationPermission.granted()
+        }
+
+        val notificationsGranted: Boolean get() = notificationPermission.granted()
 
         val reviewCount: StateFlow<Int> =
             db.reviews().observeCount(reviewCutoff(clock.millis())).stateIn(

@@ -247,6 +247,17 @@ object SecretDetector {
             if (isAmount) m.value else "•".repeat(m.value.length)
         }
 
+    /**
+     * Masks bare runs of FIVE or more digits (not amounts): what is kept in WorkManager's input data. A four-digit run stays, so a
+     * card's last four ("ending 4512") still reaches the parser.
+     */
+    fun maskLongCodes(text: String): String =
+        Regex("(?<![\\d.,])\\d{5,}(?![\\d]|[.,]\\d)").replace(text) { m ->
+            val after = text.substring(m.range.last + 1).trimStart().lowercase()
+            val isAmount = after.startsWith("egp") || after.startsWith("le ") || after.startsWith("جنيه") || after.startsWith("ج.م")
+            if (isAmount) m.value else "•".repeat(m.value.length)
+        }
+
     /** The text with every run of four or more digits masked: how a secret message is kept in the local review list. */
     fun mask(text: String): String =
         Regex("\\d(?:[\\d .,/:-]*\\d)?").replace(text) { m ->

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.ingest.CapturedActions
+import eg.masroof.ingest.CapturedNotifier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,7 @@ class CapturedViewModel
     @Inject
     constructor(
         private val actions: CapturedActions,
+        private val notifier: CapturedNotifier,
     ) : ViewModel() {
         val byExpenseId: StateFlow<Map<String, String>> =
             actions
@@ -35,10 +37,25 @@ class CapturedViewModel
         /** The learned format to ask about after an Undo of a record it made ("Stop learning this format?"). */
         val stopLearning: StateFlow<String?> = mutableStopLearning
 
+        private val mutableUndoFailed = MutableStateFlow(false)
+
+        /** True after an Undo that could not be done (offline): the screen tells the user once and calls [undoFailureShown]. */
+        val undoFailed: StateFlow<Boolean> = mutableUndoFailed
+
+        fun undoFailureShown() {
+            mutableUndoFailed.value = false
+        }
+
         fun undo(localId: String) {
             viewModelScope.launch {
                 val result = actions.undo(localId)
-                if (result.removed) mutableStopLearning.value = result.templateId
+                if (result.removed) {
+                    // the notification of this record would now do nothing: take it down
+                    notifier.cancel(localId)
+                    mutableStopLearning.value = result.templateId
+                } else {
+                    mutableUndoFailed.value = true
+                }
             }
         }
 

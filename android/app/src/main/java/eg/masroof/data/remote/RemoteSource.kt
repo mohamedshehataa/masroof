@@ -81,3 +81,8 @@ interface ParsedRemote {
 interface ExpenseDeleter {
     suspend fun deleteExpense(id: String): Boolean
 }
+
+/** The deleter of a build or a test that has no network: an Undo that needs the API simply does not happen. */
+object NoExpenseDeleter : ExpenseDeleter {
+    override suspend fun deleteExpense(id: String) = false
+}

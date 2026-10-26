@@ -16,13 +16,18 @@ import eg.masroof.ingest.AndroidCapturedNotifier
 import eg.masroof.ingest.CAPTURED_CHANNEL_ID
 import eg.masroof.ingest.CapturedActions
 import eg.masroof.ingest.CapturedAlertSettings
+import eg.masroof.ingest.CapturedLocks
 import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
+import eg.masroof.ingest.NotificationPermission
+import eg.masroof.ingest.PrefsCapturedAlertSettings
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.SmsUploader
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
+import eg.masroof.ui.viewmodel.SmsCaptureViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -64,10 +69,23 @@ private class MemoryAlerts(
 
 private class RecordingNotifier : CapturedNotifier {
     val items = mutableListOf<CapturedTxEntity>()
+    val cancelled = mutableListOf<String>()
 
     override fun captured(item: CapturedTxEntity) {
         items += item
     }
+
+    override fun cancel(localId: String) {
+        cancelled += localId
+    }
+
+    override fun cancelAll() = Unit
+}
+
+private class FakePermission(
+    var granted: Boolean,
+) : NotificationPermission {
+    override fun granted() = granted
 }
 
 /** Round 18: the safety net for automatic capture, the "Recorded ... Undo" notification and the Undo itself. */
@@ -298,6 +316,179 @@ class SmsCapturedTest {
         shadowOf(context as android.app.Application).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         AndroidCapturedNotifier(context, MemoryAlerts()).captured(CapturedTxEntity("c1", null, 100, "EGP", null, "SMS", null, 1L))
         val manager = context.getSystemService(NotificationManager::class.java)
+        assertTrue(shadowOf(manager).allNotifications.isEmpty())
+    }
+
+    private val device =
+        object : DeviceIdProvider {
+            override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
+        }
+
+    @Test
+    fun `REQ-SMS-081 Undo while the upload is in flight is remembered and the expense is deleted when the server answers`() =
+        runTest {
+            pipeline.accept(sms(family))
+            val localId =
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .localId
+            val locks = CapturedLocks()
+            val racing = CapturedActions(db, deleter, clock, locks)
+            var undoDuringUpload: eg.masroof.ingest.UndoResult? = null
+            var serverReceived = 0
+            val remote =
+                object : ParsedRemote {
+                    override suspend fun uploadParsed(
+                        deviceId: String,
+                        item: ParsedOutboxEntity,
+                    ): SmsUploadResult {
+                        // the user taps Undo while this request is on the wire
+                        undoDuringUpload = racing.undo(localId)
+                        serverReceived++
+                        return SmsUploadResult.Sent("3f2b1c64-1111-4222-8333-000000000005")
+                    }
+                }
+            SmsUploader(db, remote, device, clock, MemoryGate(), deleter, locks).uploadPending()
+            assertTrue(undoDuringUpload!!.removed)
+            assertTrue("remembered, not half applied", undoDuringUpload!!.deferred)
+            assertEquals(1, serverReceived)
+            assertEquals("the expense the server made is deleted", listOf("3f2b1c64-1111-4222-8333-000000000005"), deleter.deleted)
+            assertTrue(db.captured().all().isEmpty())
+            assertTrue(db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-081 an Undo with no server id yet stays remembered and is finished by a later pass`() =
+        runTest {
+            db.captured().insert(CapturedTxEntity("c1", null, 50_000, "EGP", "AMAZON", "SMS", null, clock.millis()))
+            val result = actions.undo("c1")
+            assertTrue(result.removed && result.deferred)
+            assertTrue(
+                "hidden from the chips at once",
+                db
+                    .captured()
+                    .observeRecent(0L)
+                    .first()
+                    .isEmpty(),
+            )
+            assertEquals(1, db.captured().undoRequests().size)
+            // the id arrives later (a retry of the upload told us)
+            db.captured().setExpenseId("c1", "e-77")
+            val remote =
+                object : ParsedRemote {
+                    override suspend fun uploadParsed(
+                        deviceId: String,
+                        item: ParsedOutboxEntity,
+                    ) = SmsUploadResult.Sent()
+                }
+            SmsUploader(db, remote, device, clock, MemoryGate(), deleter).uploadPending()
+            assertEquals(listOf("e-77"), deleter.deleted)
+            assertTrue(db.captured().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-081 a lost answer then a retry learns the expense id from the duplicate answer and Undo works`() =
+        runTest {
+            pipeline.accept(sms(family))
+            val localId =
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .localId
+            var calls = 0
+            val remote =
+                object : ParsedRemote {
+                    override suspend fun uploadParsed(
+                        deviceId: String,
+                        item: ParsedOutboxEntity,
+                    ): SmsUploadResult {
+                        calls++
+                        // the first answer is lost; the retry gets DUPLICATE, which now carries the id of the expense
+                        return if (calls == 1) SmsUploadResult.Retry(null) else SmsUploadResult.Sent("3f2b1c64-1111-4222-8333-000000000010")
+                    }
+                }
+            val uploader = SmsUploader(db, remote, device, clock, MemoryGate(), deleter)
+            assertTrue(uploader.uploadPending().retry)
+            uploader.uploadPending()
+            assertEquals("3f2b1c64-1111-4222-8333-000000000010", db.captured().find(localId)!!.expenseId)
+            assertTrue(actions.undo(localId).removed)
+            assertEquals(listOf("3f2b1c64-1111-4222-8333-000000000010"), deleter.deleted)
+        }
+
+    @Test
+    fun `REQ-SMS-081 the same message accepted again after its upload keeps the expense id and is announced once`() =
+        runTest {
+            pipeline.accept(sms(family))
+            val localId =
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .localId
+            val remote =
+                object : ParsedRemote {
+                    override suspend fun uploadParsed(
+                        deviceId: String,
+                        item: ParsedOutboxEntity,
+                    ) = SmsUploadResult.Sent("e-9")
+                }
+            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
+            assertEquals("e-9", db.captured().find(localId)!!.expenseId)
+            pipeline.accept(sms(family))
+            assertEquals("e-9", db.captured().find(localId)!!.expenseId)
+            assertEquals(1, notifier.items.size)
+            assertTrue("nothing is queued a second time", db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-082 a transfer is announced with the institution only, never the counterparty's name`() =
+        runTest {
+            val incoming = "تم إستقبال تحويل لحظي إلى حسابكم 7781 بمبلغ 900.00 جم من MONA ADEL"
+            assertEquals(Disposition.QUEUED, pipeline.accept(sms(incoming)))
+            val label =
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .label
+            assertFalse(label.orEmpty().contains("MONA"))
+            assertFalse(label.orEmpty().contains("ADEL"))
+        }
+
+    @Test
+    fun `REQ-SMS-082 the switch shows ON only when the permission is granted, and a fresh install without it is OFF`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fresh = PrefsCapturedAlertSettings(context.getSharedPreferences("fresh-alerts", Context.MODE_PRIVATE))
+        assertTrue("the preference itself defaults to on", fresh.enabled())
+        val permission = FakePermission(granted = false)
+
+        fun viewModel() = SmsCaptureViewModel(MemorySettings(), MemoryNotifications(), fresh, permission, db, clock, Dispatchers.Unconfined)
+        val vm = viewModel()
+        assertFalse("no permission: the switch is OFF, whatever the preference says", vm.capturedAlertsEnabled.value)
+        vm.setCapturedAlerts(true)
+        assertFalse("asking for ON without the permission does not make it ON", vm.capturedAlertsEnabled.value)
+        permission.granted = true
+        vm.onNotificationPermission()
+        assertTrue("the user granted it: ON", vm.capturedAlertsEnabled.value)
+        vm.setCapturedAlerts(false)
+        assertFalse(vm.capturedAlertsEnabled.value)
+    }
+
+    @Test
+    fun `REQ-SMS-082 every captured notification can be cancelled at once and one by one`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val notifier = AndroidCapturedNotifier(context, MemoryAlerts())
+        notifier.captured(CapturedTxEntity("c1", null, 100, "EGP", null, "SMS", null, 1L))
+        notifier.captured(CapturedTxEntity("c2", null, 200, "EGP", null, "SMS", null, 1L))
+        val manager = context.getSystemService(NotificationManager::class.java)
+        assertEquals(2, shadowOf(manager).allNotifications.size)
+        notifier.cancel("c1")
+        assertEquals(1, shadowOf(manager).allNotifications.size)
+        notifier.cancelAll()
         assertTrue(shadowOf(manager).allNotifications.isEmpty())
     }
 }
