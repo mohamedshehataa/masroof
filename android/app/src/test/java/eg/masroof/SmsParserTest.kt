@@ -81,7 +81,7 @@ class SmsParserTest {
         }
     }
 
-    @Suppress("LoopWithTooManyJumpStatements")
+    @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod")
     @Test
     fun `REQ-SMS-010 template fixtures parse to the expected kind, amount, currency, last4 and digit-free merchant`() {
         // "unknown-sender-generic" carries a long number next to the label: kept on the phone for review on purpose.
