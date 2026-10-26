@@ -344,6 +344,13 @@ object MessageParser {
             "transaction",
             "purchase",
             "requires",
+            "into",
+            "via",
+            "through",
+            "لحساب",
+            "خلال",
+            "عبر",
+            "طريق",
             "كاش",
             "كاشباك",
             "rrn",
@@ -503,10 +510,11 @@ object MessageParser {
         }
         if (promoWords.containsMatchIn(t) && !strongTransaction(t)) {
             // Safety net: a message with an amount and a debit/credit verb is never dropped silently.
-            return if (amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
+            val verb = outStrong.containsMatchIn(t) || explicitIn.containsMatchIn(t)
+            return if (verb && amounts.any { !it.balance }) review("promo_with_transaction") else ParseOutcome.Ignore("promo")
         }
         val direction =
-            when (decideDirection(t)) {
+            when (decideDirection(t, norm)) {
                 Dir.IN -> false
                 Dir.OUT -> true
                 Dir.CONFLICT -> return review("direction_conflict")
@@ -530,7 +538,7 @@ object MessageParser {
                 amountMinor = amount.minor,
                 currency = currency,
                 occurredAtMillis = occurredAt(t, msg.receivedAtMillis),
-                instrumentLast4 = last4(t, kind, direction),
+                instrumentLast4 = last4(t, norm, kind, direction),
                 senderId = uploadSenderId(sender, institution),
                 institution = institution,
                 paymentMethod = paymentMethod(sender, institution, t, kind),
@@ -570,7 +578,8 @@ object MessageParser {
             "$OWN_EN\\b(?:(?!\\b(?:to|from)\\b)[^.()]){0,30}?" +
                 "\\b(?:(?:was|has been|have been|is|were)\\s+credited|received\\s+(?:an?\\b|egp\\b|\\d))" +
                 // a masked account number as the subject ("A/C ***7781 credited with ..."): banks mask only their customer's own
-                "|\\b(?:account|a/c|acct)\\s*(?:no\\.?|number)?\\s*[*xX•]+\\s?\\d{4}\\s+(?:(?:was|has been|have been)\\s+)?credited\\b",
+                "|(?<!\\bto\\s)(?<!\\binto\\s)(?<!\\bfor\\s)\\b(?:account|a/c|acct)\\s*(?:no\\.?|number)?\\s*[*xX•]+\\s?\\d{4}\\s+" +
+                "(?:(?:was|has been|have been)\\s+)?credited\\b",
             ci,
         )
 
@@ -623,24 +632,75 @@ object MessageParser {
             ci,
         )
 
-    /** Someone else as the SOURCE: "from AHMED ALI", "بتحويل من AHMED ALI" (not "from account ...", not "من حسابك"). */
-    private val thirdPartySource =
-        Regex(
-            "\\bfrom\\s+(?!your\\b|account\\b|a/c\\b|acct\\b|card\\b|wallet\\b)[\\p{L}@]" +
-                "|(?<![\\p{L}\\d])من\\s+(?!حساب|محفظت|بطاقت|رقم|ماكينه|\\d)[\\p{L}]",
-            ci,
-        )
     private val youDid = Regex("\\byou(?:\\s+have)?\\s+(?:transferred|sent|paid)\\b", ci)
 
-    /** An incoming transfer to a masked, unnamed account from a named source (or credited/إضافة/إيداع wording). */
-    private fun maskedInbound(now: String): Boolean {
-        if (!maskedAccountDest.containsMatchIn(now)) return false
-        if (!(thirdPartySource.containsMatchIn(now) || weakIn.containsMatchIn(now))) return false
-        if (sourceIsOwn.containsMatchIn(now) || outStrong.containsMatchIn(now) || youDid.containsMatchIn(now)) return false
-        return !thirdPartyDestination.containsMatchIn(maskedAccountDest.replace(now, " "))
+    /** Something the household started itself: "Your InstaPay transfer ...", "You made a transfer ...". */
+    private val ownInitiated =
+        Regex(
+            "\\byour\\s+(?:instapay\\s+)?transfer\\b|\\byou\\s+(?:made|did|initiated|requested)\\s+(?:an?\\s+)?(?:[\\p{L}]+\\s+)?transfer\\b",
+            ci,
+        )
+
+    /** Words that name a channel or means ("from CIB Mobile app", "من خلال انستاباي"), not a sender. */
+    private val channelWord =
+        Regex(
+            "\\b(?:mobile|app|application|internet|online|banking|atm|branch|wallet|smart|portal|web|instapay|fawry|meeza|" +
+                "cib|nbe|qnb|aaib|hsbc|bank|net|service)\\b",
+            ci,
+        )
+    private const val AR_CHANNELS =
+        "خلال|عبر|طريق|تطبيق|خدمه|انستاباي|ميزه|فرع|الموبايل|الانترنت|الاهلي|فوري|ماكينه|موقع|البنك|بنك|حساب|محفظت|بطاقت|رقم|الخدمه|التطبيق"
+    private val latinSource =
+        Regex(
+            "(?:\\bfrom|(?<![\\p{L}\\d])من)\\s+(?!(?:[Yy]our|[Aa]ccount|A/C|a/c|[Cc]ard|[Ww]allet)\\b)([A-Z][\\p{L}.'@-]*(?:\\s+[A-Z][\\p{L}.'@-]*)*)",
+        )
+    private val arabicSource = Regex("(?<![\\p{L}\\d])من\\s+(?!(?:$AR_CHANNELS)(?![\\p{L}]))([\\u0621-\\u064A]{2,})")
+    private val arabicLetter = Regex("[\\u0600-\\u06FF]")
+    private val incomingCue = Regex("\\b(?:received|credited|incoming|deposit(?:ed)?)\\b|وارد|اضافه|ايداع|استلام|استقبال", ci)
+
+    /** Where a named person (Latin name of 2+ capitalised words, or an all-caps one, or an Arabic name) is the source. */
+    private class PersonSource(
+        val at: Int,
+        val latin: Boolean,
+    )
+
+    private fun personSource(
+        t: String,
+        norm: String,
+    ): PersonSource? {
+        for (m in latinSource.findAll(norm)) {
+            val name = m.groupValues[1].trim()
+            val tokens = name.split(Regex("\\s+"))
+            val looksLikeName = tokens.size >= 2 || (tokens[0].length >= 3 && tokens[0] == tokens[0].uppercase())
+            if (looksLikeName && !channelWord.containsMatchIn(name)) return PersonSource(m.range.first, true)
+        }
+        return arabicSource.find(t)?.let { PersonSource(it.range.first, false) }
     }
 
-    private fun decideDirection(t: String): Dir {
+    /**
+     * An incoming transfer to a masked, unnamed account from a named person. With the destination written first and
+     * Latin wording ("to account ***N from NAME") it needs an incoming cue, because the same words come from the
+     * sender's bank when the name is a channel or the sender.
+     */
+    private fun maskedInbound(
+        now: String,
+        t: String,
+        norm: String,
+    ): Boolean {
+        val dest = maskedAccountDest.find(t) ?: return false
+        val source = personSource(t, norm) ?: return false
+        if (sourceIsOwn.containsMatchIn(now) || outStrong.containsMatchIn(now) || youDid.containsMatchIn(now)) return false
+        if (ownInitiated.containsMatchIn(now)) return false
+        if (thirdPartyDestination.containsMatchIn(maskedAccountDest.replace(now, " "))) return false
+        // an Arabic message with a Latin name is still Arabic wording: only fully Latin messages need the cue
+        val latinMessage = !arabicLetter.containsMatchIn(t)
+        return !(source.latin && latinMessage && source.at > dest.range.first && !incomingCue.containsMatchIn(now))
+    }
+
+    private fun decideDirection(
+        t: String,
+        norm: String,
+    ): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
         val debit =
@@ -649,7 +709,7 @@ object MessageParser {
                 ourPayment.containsMatchIn(now)
         val transfer = transferVerbs.containsMatchIn(now)
         val ownSource = sourceIsOwn.containsMatchIn(now)
-        val maskedIn = maskedInbound(now)
+        val maskedIn = maskedInbound(now, t, norm)
         val third = thirdPartyDestination.containsMatchIn(if (maskedIn) maskedAccountDest.replace(now, " ") else now)
         val hardDebit = outStrong.containsMatchIn(now)
         val ownDest =
@@ -660,7 +720,13 @@ object MessageParser {
                 (paymentReceived.containsMatchIn(now) && !ourPayment.containsMatchIn(now))
         val weakCredit = (weakIn.containsMatchIn(now) && !transfer && !third && !debit && !ownSource) || maskedIn
         val anyIn = strongIn || ownDest || weakCredit
-        val anyOut = debit || ownSource || (transfer && third) || minusSign.containsMatchIn(now) || youDid.containsMatchIn(now)
+        val anyOut =
+            debit ||
+                ownSource ||
+                (transfer && third) ||
+                minusSign.containsMatchIn(now) ||
+                youDid.containsMatchIn(now) ||
+                ownInitiated.containsMatchIn(now)
         return when {
             anyIn && anyOut -> if (isOwnToOwn(ownSource, ownDest, strongIn, debit)) Dir.OUT else Dir.CONFLICT
             anyIn -> Dir.IN
@@ -692,7 +758,16 @@ object MessageParser {
             ci,
         )
 
+    /** A fee noun that names what was bought is a purchase, not a bank charge. */
+    private val boughtFee =
+        Regex(
+            "\\b(?:school|tuition|university|college|admission|exam|registration|membership|licen[sc]e|course)\\s+fees?\\b" +
+                "|رسوم\\s+(?:دراسيه|المدرسه|الجامعه|التسجيل|الاشتراك|الترخيص|الامتحان|امتحان)",
+            ci,
+        )
+
     private fun feeIsTheTransaction(t: String): Boolean {
+        if (boughtFee.containsMatchIn(t)) return false
         val feeAt = fee.find(t)?.range?.first ?: return false
         val other = listOfNotNull(transferVerbs.find(t)?.range?.first, paymentWords.find(t)?.range?.first)
         if (other.none { it < feeAt }) return true
@@ -910,11 +985,18 @@ object MessageParser {
      */
     private fun last4(
         t: String,
+        norm: String,
         kind: TxKind,
         outgoing: Boolean,
     ): String? {
         val transferKind = kind == TxKind.TRANSFER_OUT || kind == TxKind.TRANSFER_IN || kind == TxKind.INCOME
-        val inboundMasked = !outgoing && maskedInbound(futureClause.replace(t, " "))
+        // the direction is already incoming: a masked, unnamed destination account is the household's own
+        val now = futureClause.replace(t, " ")
+        val inboundMasked =
+            !outgoing &&
+                maskedAccountDest.containsMatchIn(t) &&
+                !sourceIsOwn.containsMatchIn(now) &&
+                !thirdPartyDestination.containsMatchIn(maskedAccountDest.replace(now, " "))
         val candidates =
             last4Patterns.flatMap { p ->
                 p.regex
