@@ -1,6 +1,7 @@
 package eg.masroof.adapters.in.rest;
 
 import eg.masroof.adapters.in.rest.ApiProblemException.FieldProblem;
+import eg.masroof.application.attachment.AttachmentException;
 import eg.masroof.application.auth.AuthException;
 import eg.masroof.application.auth.InviteException;
 import eg.masroof.application.expense.ExpenseException;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import tools.jackson.core.JacksonException;
 
@@ -76,6 +78,37 @@ class ProblemAdvice extends ResponseEntityExceptionHandler {
           e.issues().stream().map(i -> new FieldProblem(i.field(), i.message())).toList());
     }
     return ResponseEntity.status(status).body(problem);
+  }
+
+  @ExceptionHandler(AttachmentException.class)
+  ResponseEntity<Object> handleAttachment(AttachmentException e, HttpServletRequest request) {
+    HttpStatus status =
+        switch (e.kind()) {
+          case EMPTY -> HttpStatus.BAD_REQUEST;
+          case TOO_LARGE -> HttpStatus.CONTENT_TOO_LARGE;
+          case UNSUPPORTED_TYPE -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+          case STORAGE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+        };
+    List<FieldProblem> errors =
+        e.kind() == AttachmentException.Kind.EMPTY
+            ? List.of(new FieldProblem("file", "must not be empty"))
+            : List.of();
+    return handleApi(
+        new ApiProblemException(status, String.valueOf(e.getMessage()), errors), request);
+  }
+
+  @Override
+  protected @Nullable ResponseEntity<Object> handleMaxUploadSizeExceededException(
+      MaxUploadSizeExceededException e,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.CONTENT_TOO_LARGE, "The file is larger than 8 MiB", null);
+    if (request instanceof ServletWebRequest swr) {
+      problem.setInstance(URI.create(swr.getRequest().getRequestURI()));
+    }
+    return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(problem);
   }
 
   @ExceptionHandler(UnauthenticatedException.class)

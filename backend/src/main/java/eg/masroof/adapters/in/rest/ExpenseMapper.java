@@ -2,6 +2,7 @@ package eg.masroof.adapters.in.rest;
 
 import eg.masroof.adapters.in.rest.generated.model.Expense;
 import eg.masroof.adapters.in.rest.generated.model.ExpenseCreate;
+import eg.masroof.adapters.in.rest.generated.model.ExpenseItem;
 import eg.masroof.adapters.in.rest.generated.model.ExpensePage;
 import eg.masroof.adapters.in.rest.generated.model.ExpensePatch;
 import eg.masroof.adapters.in.rest.generated.model.MessageSource;
@@ -13,11 +14,13 @@ import eg.masroof.adapters.in.rest.generated.model.TransactionType;
 import eg.masroof.application.expense.ExpenseException;
 import eg.masroof.application.expense.ExpenseService;
 import eg.masroof.application.sms.RawMessageRepository;
+import eg.masroof.domain.expense.ExpenseItemRules;
 import eg.masroof.domain.expense.ExpenseSource;
 import eg.masroof.domain.expense.ExpenseStatus;
 import eg.masroof.domain.expense.ExpenseType;
 import eg.masroof.domain.expense.PaymentMethod;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,9 +51,6 @@ final class ExpenseMapper {
     if (body.getMerchantId() != null) {
       throw ExpenseException.invalid("merchantId", "merchants are not supported yet");
     }
-    if (body.getItems() != null && !body.getItems().isEmpty()) {
-      throw ExpenseException.invalid("items", "line items are not supported yet");
-    }
     if ((body.getSplits() != null && !body.getSplits().isEmpty())
         || (body.getSplitMode() != null && body.getSplitMode() != SplitMode.NONE)) {
       throw ExpenseException.invalid("splits", "splits are not supported yet");
@@ -64,9 +64,40 @@ final class ExpenseMapper {
     if (body.getRecurringSeriesId() != null || Boolean.TRUE.equals(body.getIsRecurring())) {
       throw ExpenseException.invalid("isRecurring", "recurring series are not supported yet");
     }
-    if (body.getItems() != null && !body.getItems().isEmpty()) {
-      throw ExpenseException.invalid("items", "line items are not supported yet");
+  }
+
+  /** Items are validated by the domain rules; a null element is a client error, not a 500. */
+  private static @Nullable List<ExpenseItemRules.Draft> drafts(@Nullable List<ExpenseItem> items) {
+    if (items == null) {
+      return null;
     }
+    List<ExpenseItemRules.Draft> out = new ArrayList<>(items.size());
+    for (int i = 0; i < items.size(); i++) {
+      ExpenseItem item = items.get(i);
+      if (item == null) {
+        throw ExpenseException.invalid("items[" + i + "]", "must not be null");
+      }
+      out.add(
+          new ExpenseItemRules.Draft(
+              item.getName(),
+              item.getQty(),
+              item.getTotal(),
+              item.getUnitPrice() != null,
+              item.getCategoryId() != null));
+    }
+    return out;
+  }
+
+  private static List<ExpenseItem> itemDtos(List<eg.masroof.domain.expense.ExpenseItem> items) {
+    return items.stream()
+        .map(
+            i ->
+                new ExpenseItem()
+                    .id(i.id())
+                    .name(i.name())
+                    .qty(i.qty() == null ? null : i.qty().stripTrailingZeros().toPlainString())
+                    .total(i.total()))
+        .toList();
   }
 
   /** Absent or null tags on create mean no tags; a null element is a client error, not a 500. */
@@ -93,7 +124,8 @@ final class ExpenseMapper {
         convertOrNull(body.getPaymentMethod(), PaymentMethod.class),
         body.getMerchantRaw(),
         body.getNotes(),
-        createTags(body.getTags()));
+        createTags(body.getTags()),
+        drafts(body.getItems()));
   }
 
   static ExpenseService.PatchCommand toCommand(ExpensePatch body) {
@@ -108,16 +140,20 @@ final class ExpenseMapper {
         convertOrNull(body.getStatus(), ExpenseStatus.class),
         body.getMerchantRaw(),
         body.getNotes(),
-        tags(body.getTags()));
+        tags(body.getTags()),
+        drafts(body.getItems()));
   }
 
-  static Expense toDto(eg.masroof.domain.expense.Expense e) {
-    return toDto(e, null);
-  }
-
-  /** The expense with the redacted raw message that evidences it, if any. */
   static Expense toDto(
-      eg.masroof.domain.expense.Expense e, RawMessageRepository.@Nullable SourceView source) {
+      eg.masroof.domain.expense.Expense e, List<eg.masroof.domain.expense.ExpenseItem> items) {
+    return toDto(e, items, null);
+  }
+
+  /** The expense with its items and the redacted raw message that evidences it, if any. */
+  static Expense toDto(
+      eg.masroof.domain.expense.Expense e,
+      List<eg.masroof.domain.expense.ExpenseItem> items,
+      RawMessageRepository.@Nullable SourceView source) {
     return new Expense()
         .id(e.id())
         .householdId(e.householdId())
@@ -138,7 +174,7 @@ final class ExpenseMapper {
         .tags(e.tags())
         .isRecurring(false)
         .splitMode(SplitMode.NONE)
-        .items(List.of())
+        .items(itemDtos(items))
         .sources(source == null ? List.of() : List.of(sourceDto(source)))
         .splits(List.of())
         .createdAt(e.createdAt())
@@ -147,10 +183,15 @@ final class ExpenseMapper {
   }
 
   static ExpensePage toDto(
-      ExpenseService.Page page, Map<UUID, RawMessageRepository.SourceView> sources) {
+      ExpenseService.Page page,
+      Map<UUID, RawMessageRepository.SourceView> sources,
+      Map<UUID, List<eg.masroof.domain.expense.ExpenseItem>> items) {
     ExpensePage dto =
         new ExpensePage()
-            .items(page.items().stream().map(e -> toDto(e, sources.get(e.id()))).toList())
+            .items(
+                page.items().stream()
+                    .map(e -> toDto(e, items.getOrDefault(e.id(), List.of()), sources.get(e.id())))
+                    .toList())
             .totalAmount(page.total());
     String next = page.nextCursor();
     if (next != null) {

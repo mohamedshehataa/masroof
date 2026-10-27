@@ -137,7 +137,7 @@ schemas `Attachment`, `AttachmentList`, `AttachmentUploadForm`, parameter `Attac
 optional, `name.minLength 1`: breaking per oasdiff, accepted in ADR-0009 (no client ever saw a non-empty `items`).
 
 ## Data / migration impact
-New `V11__expense_attachment_item.sql`: tables `expense_attachment` and `expense_item` (FK to expense, household id
+New `V12__expense_attachment_item.sql`: tables `expense_attachment` and `expense_item` (FK to expense, household id
 for scoping, CHECKs on sizes, type, money). Additive only.
 
 ## Security / privacy / LLM-safety impact

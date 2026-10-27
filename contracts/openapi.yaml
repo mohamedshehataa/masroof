@@ -699,15 +699,15 @@ paths:
             image/jpeg:
               schema:
                 type: string
-                contentEncoding: binary
+                format: binary
             image/png:
               schema:
                 type: string
-                contentEncoding: binary
+                format: binary
             application/pdf:
               schema:
                 type: string
-                contentEncoding: binary
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2946,7 +2946,7 @@ components:
       properties:
         file:
           type: string
-          contentEncoding: binary
+          format: binary
           description: JPEG, PNG or PDF, at most 8 MiB.
 
     ExpenseSource:

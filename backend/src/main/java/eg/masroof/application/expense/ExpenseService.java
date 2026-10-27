@@ -6,6 +6,8 @@ import eg.masroof.application.household.CurrentHousehold;
 import eg.masroof.application.household.CurrentHousehold.Household;
 import eg.masroof.domain.expense.BusinessCalendar;
 import eg.masroof.domain.expense.Expense;
+import eg.masroof.domain.expense.ExpenseItem;
+import eg.masroof.domain.expense.ExpenseItemRules;
 import eg.masroof.domain.expense.ExpenseSource;
 import eg.masroof.domain.expense.ExpenseStatus;
 import eg.masroof.domain.expense.ExpenseType;
@@ -16,8 +18,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -48,7 +52,8 @@ public class ExpenseService {
       @Nullable PaymentMethod paymentMethod,
       @Nullable String merchantRaw,
       @Nullable String notes,
-      List<String> tags) {}
+      List<String> tags,
+      @Nullable List<ExpenseItemRules.Draft> items) {}
 
   /** Partial update: a null field means "leave unchanged". */
   public record PatchCommand(
@@ -62,7 +67,8 @@ public class ExpenseService {
       @Nullable ExpenseStatus status,
       @Nullable String merchantRaw,
       @Nullable String notes,
-      @Nullable List<String> tags) {}
+      @Nullable List<String> tags,
+      @Nullable List<ExpenseItemRules.Draft> items) {}
 
   /** Query parameters of the list endpoint after transport parsing. */
   public record ListQuery(
@@ -90,16 +96,19 @@ public class ExpenseService {
   public record Created(Expense expense, boolean replay) {}
 
   private final ExpenseRepository expenses;
+  private final ExpenseItemRepository itemRepository;
   private final ReferenceData reference;
   private final CurrentHousehold currentHousehold;
   private final Clock clock;
 
   ExpenseService(
       ExpenseRepository expenses,
+      ExpenseItemRepository itemRepository,
       ReferenceData reference,
       CurrentHousehold currentHousehold,
       Clock clock) {
     this.expenses = expenses;
+    this.itemRepository = itemRepository;
     this.reference = reference;
     this.currentHousehold = currentHousehold;
     this.clock = clock;
@@ -143,6 +152,7 @@ public class ExpenseService {
     validateOccurredAt(cmd.occurredAt(), now);
     validateText(cmd.notes(), cmd.merchantRaw(), cmd.tags());
     validateReferences(household, cmd.categoryId(), cmd.paidByMemberId(), cmd.paymentAccountId());
+    List<ExpenseItem> items = validateItems(cmd.items(), cmd.amount().currency());
     Expense row =
         new Expense(
             UUID.randomUUID(),
@@ -163,6 +173,9 @@ public class ExpenseService {
             now,
             now);
     Expense stored = expenses.insert(row);
+    if (items != null && !items.isEmpty()) {
+      itemRepository.replace(household.id(), stored.id(), items);
+    }
     if (idempotencyKey != null && fingerprint != null) {
       boolean won =
           expenses.claimIdempotency(
@@ -234,7 +247,34 @@ public class ExpenseService {
             null,
             current.createdAt(),
             now);
-    return expenses.update(next);
+    List<ExpenseItem> items = validateItems(patch.items(), next.amount().currency());
+    Expense stored = expenses.update(next);
+    if (items != null) {
+      itemRepository.replace(household.id(), stored.id(), items);
+    }
+    return stored;
+  }
+
+  /** Purchased items of the current household's expenses, keyed by expense id (one query). */
+  @Transactional(readOnly = true)
+  public Map<UUID, List<ExpenseItem>> itemsOf(Collection<UUID> expenseIds) {
+    return itemRepository.forExpenses(currentHousehold.get().id(), expenseIds);
+  }
+
+  private @Nullable List<ExpenseItem> validateItems(
+      @Nullable List<ExpenseItemRules.Draft> drafts, String currency) {
+    if (drafts == null) {
+      return null;
+    }
+    try {
+      return ExpenseItemRules.validate(drafts, currency, MAX_AMOUNT_MINOR, UUID::randomUUID);
+    } catch (ExpenseItemRules.InvalidItems e) {
+      throw new ExpenseException(
+          Kind.BAD_REQUEST,
+          "Bad Request",
+          "Validation failed",
+          e.violations().stream().map(v -> new Issue(v.field(), v.message())).toList());
+    }
   }
 
   /** Soft-deletes a live expense. */

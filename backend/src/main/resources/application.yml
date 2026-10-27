@@ -8,6 +8,11 @@ spring:
       allow-coercion-of-scalars: false # amountMinor: "20000" or true is a 400, never coerced
   main:
     banner-mode: "off"
+  servlet:
+    multipart:
+      max-file-size: 8MB # 8 MiB (REQ-RCPT-021)
+      max-request-size: 9MB # file plus multipart framing
+      file-size-threshold: 9MB # keep uploads in heap; nothing is spooled to the memory-backed /tmp (REQ-RCPT-027)
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:masroof}
     username: ${POSTGRES_USER:masroof}
@@ -28,6 +33,12 @@ masroof:
     key: ${MASROOF_AUDIT_KEY:} # optional, >= 32 bytes; else derived from the JWT secret (AuditConfiguration)
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:} # comma separated; '*' refused under prod
+  s3: # receipt attachments; empty endpoint/keys -> the attachment endpoints answer 503 (REQ-RCPT-023)
+    endpoint: ${S3_ENDPOINT:}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+    bucket: ${S3_BUCKET:masroof-media}
+    region: ${S3_REGION:us-east-1}
   bootstrap:
     admin-email: ${MASROOF_BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${MASROOF_BOOTSTRAP_ADMIN_PASSWORD:}
