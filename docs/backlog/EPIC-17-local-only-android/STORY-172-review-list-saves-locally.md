@@ -105,3 +105,5 @@ STORY-171
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D3), reuses STORY-067 review list |
+
+Carried from STORY-171 verify (2026-10-28): Review Save must (1) keep the parser's timeKnown (date-only review items are stored at Cairo noon with timeKnown = 0, today it is 1) and (2) run ChannelPairing.claimTwin before inserting, so a review-saved SMS whose notification twin was auto-recorded joins that entry as a second source instead of making a second entry.
