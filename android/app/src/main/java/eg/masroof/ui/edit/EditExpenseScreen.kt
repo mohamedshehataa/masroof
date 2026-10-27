@@ -1,5 +1,9 @@
 package eg.masroof.ui.edit
 
+import android.content.ActivityNotFoundException
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +58,8 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.AttachmentsUiState
+import eg.masroof.ui.viewmodel.AttachmentsViewModel
 import eg.masroof.ui.viewmodel.EditError
 import eg.masroof.ui.viewmodel.EditExpenseViewModel
 import eg.masroof.ui.viewmodel.EditUiState
@@ -68,8 +74,13 @@ import java.time.ZoneOffset
 fun EditExpenseRoute(
     onDone: () -> Unit,
     viewModel: EditExpenseViewModel = hiltViewModel(),
+    attachmentsViewModel: AttachmentsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val attachments by attachmentsViewModel.state.collectAsStateWithLifecycle()
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { attachmentsViewModel.onCameraResult(it) }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { attachmentsViewModel.onImagePicked(it) }
+    val pdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { attachmentsViewModel.onPdfPicked(it) }
     SecureWindow()
     LaunchedEffect(state.form.done) { if (state.form.done) onDone() }
     EditExpenseContent(
@@ -86,7 +97,33 @@ fun EditExpenseRoute(
             viewModel::askDelete,
             viewModel::delete,
             viewModel::dismissDelete,
+            viewModel::loadItems,
+            viewModel::addItem,
+            viewModel::onItemName,
+            viewModel::onItemQty,
+            viewModel::onItemAmount,
+            viewModel::removeItem,
         ),
+        attachments = attachments,
+        receiptActions =
+            ReceiptActions(
+                onCamera = {
+                    try {
+                        camera.launch(attachmentsViewModel.cameraTarget())
+                    } catch (_: ActivityNotFoundException) {
+                        attachmentsViewModel.onCameraResult(false)
+                    }
+                },
+                onGallery = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                onPdf = { pdf.launch(arrayOf("application/pdf")) },
+                onRetry = attachmentsViewModel::load,
+                onView = attachmentsViewModel::view,
+                onAskRemove = attachmentsViewModel::askRemove,
+                onConfirmRemove = attachmentsViewModel::confirmRemove,
+                onDismissRemove = attachmentsViewModel::dismissRemove,
+                onDismissMessage = attachmentsViewModel::dismissMessage,
+                onCloseViewer = attachmentsViewModel::closeViewer,
+            ),
     )
 }
 
@@ -95,6 +132,8 @@ fun EditExpenseContent(
     state: EditUiState,
     actions: EditActions,
     modifier: Modifier = Modifier,
+    attachments: AttachmentsUiState = AttachmentsUiState(),
+    receiptActions: ReceiptActions = ReceiptActions(),
 ) {
     val form = state.form
     Column(modifier.fillMaxSize().imePadding()) {
@@ -111,7 +150,7 @@ fun EditExpenseContent(
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.semantics { heading() },
             )
-            if (form.loaded) EditFields(state, actions)
+            if (form.loaded) EditFields(state, actions, attachments, receiptActions)
         }
         if (form.loaded) EditBar(state, actions)
     }
@@ -138,6 +177,8 @@ fun EditExpenseContent(
 private fun EditFields(
     state: EditUiState,
     actions: EditActions,
+    attachments: AttachmentsUiState,
+    receiptActions: ReceiptActions,
 ) {
     val form = state.form
     val arabic = LocalMoneyStyle.current.arabic
@@ -185,6 +226,7 @@ private fun EditFields(
         enabled = !form.busy,
         modifier = Modifier.fillMaxWidth(),
     )
+    ItemsTotalLine(form)
     DateField(form.date, form.dateInvalid, !form.busy, actions.onDate)
     Text(stringResource(R.string.add_category), style = MaterialTheme.typography.titleSmall)
     ChipRow(
@@ -209,6 +251,8 @@ private fun EditFields(
         enabled = !form.busy,
         modifier = Modifier.fillMaxWidth(),
     )
+    ReceiptSection(attachments, receiptActions, enabled = !form.busy)
+    ItemsSection(form, actions)
 }
 
 @Composable

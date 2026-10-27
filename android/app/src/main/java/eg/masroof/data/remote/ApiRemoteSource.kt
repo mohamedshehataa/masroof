@@ -150,6 +150,10 @@ val apiJson: Json =
                     eg.masroof.api.models.IngestAcceptedOutcome
                         .serializer(),
                 )
+                contextual(
+                    eg.masroof.api.models.AttachmentContentType
+                        .serializer(),
+                )
             }
     }
 
@@ -223,6 +227,15 @@ class ApiRemoteSource
         suspend fun authApi(): AuthApi = retrofit().create(AuthApi::class.java)
 
         suspend fun expensesApi(): ExpensesApi = retrofit().create(ExpensesApi::class.java)
+
+        /**
+         * A raw call on the authenticated client (bearer header, single-flight refresh on 401) for the two attachment
+         * operations the generated client cannot express: a multipart upload and a binary download. [build] gets the API base URL.
+         */
+        suspend fun authenticatedCall(build: (okhttp3.HttpUrl) -> okhttp3.Request): okhttp3.Call {
+            val retrofit = retrofit()
+            return client.newCall(build(retrofit.baseUrl()))
+        }
 
         fun entityOf(expense: Expense): ExpenseEntity = expense.toEntity()
 

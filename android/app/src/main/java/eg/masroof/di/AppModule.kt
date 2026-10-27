@@ -118,6 +118,10 @@ abstract class BindingsModule {
 
     @Binds abstract fun expenseEditor(impl: eg.masroof.data.edit.DefaultExpenseEditor): eg.masroof.data.edit.ExpenseEditor
 
+    @Binds abstract fun receiptRemote(impl: eg.masroof.data.receipts.ApiReceiptRemote): eg.masroof.data.receipts.ReceiptRemote
+
+    @Binds abstract fun receiptFiles(impl: eg.masroof.data.receipts.AndroidReceiptFiles): eg.masroof.data.receipts.ReceiptFiles
+
     @Binds abstract fun uploadedRecordsRefresher(impl: ExpenseListRefresher): UploadedRecordsRefresher
 
     @Binds abstract fun smsScheduler(impl: WorkManagerSmsScheduler): SmsWorkScheduler

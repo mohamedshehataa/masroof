@@ -71,6 +71,19 @@
             </intent-filter>
         </service>
 
+        <!-- The system camera writes a receipt photo into the app cache through this provider (TakePicture needs no CAMERA
+             permission as long as the manifest does not declare it). Not exported; only the cache subfolder "receipts/" is shared,
+             and access is granted per intent. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.receipts"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/receipt_paths" />
+        </provider>
+
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider
             android:name="androidx.startup.InitializationProvider"

@@ -25,12 +25,24 @@ data class ExpenseChanges(
     val merchantRaw: String? = null,
     val notes: String? = null,
     val status: String? = null,
+    /** The full purchased-items list that replaces the stored one (STORY-168); null = leave the items alone. */
+    val items: List<ItemInput>? = null,
 ) {
     val isEmpty: Boolean
         get() = this == ExpenseChanges()
 
     // Amount, merchant and notes are private: never printed.
     override fun toString() = "ExpenseChanges(type=$type, status=$status)"
+}
+
+/** One purchased item as sent: name, an optional quantity as a decimal string, an optional amount in the expense's currency. */
+data class ItemInput(
+    val name: String,
+    val qty: String?,
+    val total: eg.masroof.core.Money?,
+) {
+    // Item names and amounts are private: never printed.
+    override fun toString() = "ItemInput"
 }
 
 /** Thin seam over the generated ExpensesApi (get / patch / delete) so the repository is testable offline. */
