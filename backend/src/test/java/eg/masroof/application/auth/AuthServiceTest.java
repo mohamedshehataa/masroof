@@ -58,6 +58,9 @@ class AuthServiceTest {
   private final List<String> stored = new ArrayList<>();
   private final List<String> revoked = new ArrayList<>();
   private Outcome next = new Outcome.Invalid();
+  private Duration seenGrace = Duration.ZERO;
+  private int seenMaxReissues;
+  private Instant seenNow = Instant.EPOCH;
   private int hashChecks;
 
   private final AccountStore accounts =
@@ -86,7 +89,16 @@ class AuthServiceTest {
         }
 
         @Override
-        public Outcome rotate(String oldHash, String newHash, Instant newExpiresAt, Instant now) {
+        public Outcome rotate(
+            String oldHash,
+            String newHash,
+            Instant newExpiresAt,
+            Instant now,
+            Duration reuseGrace,
+            int maxGraceReissues) {
+          seenGrace = reuseGrace;
+          seenMaxReissues = maxGraceReissues;
+          seenNow = now;
           stored.add(newHash + "@" + newExpiresAt);
           return next;
         }
@@ -280,6 +292,18 @@ class AuthServiceTest {
                     AuthException.class, () -> fragile.login("m@example.com", "no", "1.1.1.1"))
                 .kind())
         .isEqualTo(Kind.INVALID_CREDENTIALS);
+  }
+
+  @Test
+  @Tag("REQ-SEC-063")
+  @DisplayName("REQ-SEC-063 refresh passes the 60 s grace window, the cap of 5 and the clock")
+  void refreshPassesGrace() {
+    next = new Outcome.Rotated(account.userId());
+    clock.now = T0.plusSeconds(7);
+    service.refresh("some-token");
+    assertThat(seenGrace).isEqualTo(Duration.ofSeconds(60));
+    assertThat(seenMaxReissues).isEqualTo(5);
+    assertThat(seenNow).isEqualTo(T0.plusSeconds(7));
   }
 
   @Test

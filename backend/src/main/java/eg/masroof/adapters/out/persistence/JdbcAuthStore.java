@@ -5,6 +5,7 @@ import eg.masroof.application.auth.AccountStore;
 import eg.masroof.application.auth.AuditLog;
 import eg.masroof.application.auth.RefreshTokenStore;
 import eg.masroof.domain.auth.Role;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -139,46 +140,69 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore, AuditLog {
 
   @Override
   @Transactional
-  public Outcome rotate(String oldHash, String newHash, Instant newExpiresAt, Instant now) {
+  public Outcome rotate(
+      String oldHash,
+      String newHash,
+      Instant newExpiresAt,
+      Instant now,
+      Duration reuseGrace,
+      int maxGraceReissues) {
     List<Row> rows =
         jdbc.query(
             """
-            select id, user_id, family_id, expires_at, revoked_at, rotated_at
+            select user_id, family_id, expires_at, revoked_at, rotated_at, grace_count
             from refresh_token where token_hash = ? for update
             """,
-            (rs, n) ->
-                new Row(
-                    rs.getObject("user_id", UUID.class),
-                    rs.getObject("family_id", UUID.class),
-                    rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
-                    rs.getObject("revoked_at") != null,
-                    rs.getObject("rotated_at") != null),
+            (rs, n) -> {
+              OffsetDateTime rotatedAt = rs.getObject("rotated_at", OffsetDateTime.class);
+              return new Row(
+                  rs.getObject("user_id", UUID.class),
+                  rs.getObject("family_id", UUID.class),
+                  rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
+                  rs.getObject("revoked_at") != null,
+                  rotatedAt == null ? null : rotatedAt.toInstant(),
+                  rs.getInt("grace_count"));
+            },
             oldHash);
     if (rows.isEmpty()) {
       return new Outcome.Invalid();
     }
     Row row = rows.get(0);
-    if (row.rotated()) {
-      revokeFamilyById(row.familyId(), now);
-      jdbc.update(
-          """
-          insert into audit_log (id, household_id, member_id, action)
-          select ?, m.household_id, m.id, 'REFRESH_REUSE'
-          from app_user u join member m on m.id = u.member_id where u.id = ?
-          """,
-          UUID.randomUUID(),
-          row.userId());
-      return new Outcome.Reuse();
-    }
     if (row.revoked()) {
       return new Outcome.Invalid();
     }
     if (!now.isBefore(row.expiresAt())) {
       return new Outcome.Expired();
     }
-    jdbc.update("update refresh_token set rotated_at = ? where token_hash = ?", utc(now), oldHash);
-    insertToken(UUID.randomUUID(), row.userId(), row.familyId(), newHash, newExpiresAt);
-    return new Outcome.Rotated(row.userId());
+    Instant rotatedAt = row.rotatedAt();
+    if (rotatedAt == null) {
+      jdbc.update(
+          "update refresh_token set rotated_at = ? where token_hash = ?", utc(now), oldHash);
+      insertToken(UUID.randomUUID(), row.userId(), row.familyId(), newHash, newExpiresAt);
+      return new Outcome.Rotated(row.userId());
+    }
+    if (now.isBefore(rotatedAt.plus(reuseGrace)) && row.graceCount() < maxGraceReissues) {
+      jdbc.update(
+          "update refresh_token set grace_count = grace_count + 1 where token_hash = ?", oldHash);
+      insertToken(UUID.randomUUID(), row.userId(), row.familyId(), newHash, newExpiresAt);
+      audit("REFRESH_GRACE", row.userId());
+      return new Outcome.Rotated(row.userId());
+    }
+    revokeFamilyById(row.familyId(), now);
+    audit("REFRESH_REUSE", row.userId());
+    return new Outcome.Reuse();
+  }
+
+  private void audit(String action, UUID userId) {
+    jdbc.update(
+        """
+        insert into audit_log (id, household_id, member_id, action)
+        select ?, m.household_id, m.id, ?
+        from app_user u join member m on m.id = u.member_id where u.id = ?
+        """,
+        UUID.randomUUID(),
+        action,
+        userId);
   }
 
   @Override
@@ -241,5 +265,10 @@ class JdbcAuthStore implements AccountStore, RefreshTokenStore, AuditLog {
   }
 
   private record Row(
-      UUID userId, UUID familyId, Instant expiresAt, boolean revoked, boolean rotated) {}
+      UUID userId,
+      UUID familyId,
+      Instant expiresAt,
+      boolean revoked,
+      @Nullable Instant rotatedAt,
+      int graceCount) {}
 }

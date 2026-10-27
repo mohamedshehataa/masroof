@@ -327,6 +327,7 @@ class AuthApiIT {
                 sha(r2)))
         .isEqualTo(1);
 
+    ageRotation(r1, 61); // replay outside the 60 s grace window is real reuse (REQ-SEC-063)
     MockHttpServletResponse replay = refresh(r1);
     assertThat(replay.getStatus()).isEqualTo(401);
     assertThat(replay.getContentType()).startsWith("application/problem+json");
@@ -344,6 +345,147 @@ class AuthApiIT {
                 Integer.class,
                 householdA))
         .isGreaterThanOrEqualTo(1);
+  }
+
+  // Shifts the stored rotation time (app clock) back, so the age never depends on the DB clock.
+  private void ageRotation(String token, int seconds) throws Exception {
+    jdbc.update(
+        "update refresh_token set rotated_at = rotated_at - make_interval(secs => ?) where"
+            + " token_hash = ?",
+        seconds,
+        sha(token));
+  }
+
+  private String rotatedAt(String token) throws Exception {
+    return String.valueOf(
+        jdbc.queryForObject(
+            "select rotated_at::text from refresh_token where token_hash = ?",
+            String.class,
+            sha(token)));
+  }
+
+  private String freshRefresh() throws Exception {
+    return ok(login(emailA, PASSWORD, freshIp())).path("refreshToken").asString();
+  }
+
+  private int liveInFamily(String token) throws Exception {
+    Integer n =
+        jdbc.queryForObject(
+            "select count(*) from refresh_token where revoked_at is null and family_id ="
+                + " (select family_id from refresh_token where token_hash = ?)",
+            Integer.class,
+            sha(token));
+    return n == null ? 0 : n;
+  }
+
+  private int audits(String action) {
+    Integer n =
+        jdbc.queryForObject(
+            "select count(*) from audit_log where action = ? and household_id = ?",
+            Integer.class,
+            action,
+            householdA);
+    return n == null ? 0 : n;
+  }
+
+  @Test
+  @Tag("REQ-SEC-063")
+  @DisplayName("REQ-SEC-063 a duplicate refresh at +1 s gets a fresh pair and revokes nothing")
+  void graceDuplicate() throws Exception {
+    String r1 = freshRefresh();
+    String r2 = ok(refresh(r1)).path("refreshToken").asString();
+    ageRotation(r1, 1);
+    String rotatedBefore = rotatedAt(r1);
+    int graceBefore = audits("REFRESH_GRACE");
+    int reuseBefore = audits("REFRESH_REUSE");
+    String r3 = ok(refresh(r1)).path("refreshToken").asString();
+    assertThat(r3).isNotEqualTo(r2).isNotEqualTo(r1);
+    assertThat(audits("REFRESH_GRACE")).isEqualTo(graceBefore + 1);
+    assertThat(audits("REFRESH_REUSE")).isEqualTo(reuseBefore);
+    assertThat(rotatedAt(r1)).isEqualTo(rotatedBefore); // rotated_at never slides
+    ok(refresh(r2)); // the first successor still works
+    ok(refresh(r3)); // and so does the second
+  }
+
+  @Test
+  @Tag("REQ-SEC-063")
+  @DisplayName("REQ-SEC-063 grace holds at +59 s; +60 s and +61 s are reuse and kill the family")
+  void graceBoundary() throws Exception {
+    String a1 = freshRefresh();
+    String a2 = ok(refresh(a1)).path("refreshToken").asString();
+    ageRotation(a1, 59);
+    ok(refresh(a1));
+    for (int secs : new int[] {60, 61}) {
+      String r1 = freshRefresh();
+      String r2 = ok(refresh(r1)).path("refreshToken").asString();
+      ageRotation(r1, secs);
+      int reuseBefore = audits("REFRESH_REUSE");
+      assertThat(refresh(r1).getStatus()).isEqualTo(401);
+      assertThat(audits("REFRESH_REUSE")).isEqualTo(reuseBefore + 1);
+      assertThat(liveInFamily(r1)).isZero();
+      assertThat(refresh(r2).getStatus()).isEqualTo(401);
+    }
+    assertThat(a2).isNotBlank();
+  }
+
+  @Test
+  @Tag("REQ-SEC-063")
+  @DisplayName("REQ-SEC-063 a logged-out token inside the window gets 401, never a grace token")
+  void graceNotAfterLogout() throws Exception {
+    JsonNode pair = ok(login(emailA, PASSWORD, freshIp()));
+    String r1 = pair.path("refreshToken").asString();
+    ok(refresh(r1));
+    ageRotation(r1, 1);
+    assertThat(logout(pair.path("accessToken").asString(), Map.of("refreshToken", r1)).getStatus())
+        .isEqualTo(204);
+    int graceBefore = audits("REFRESH_GRACE");
+    assertThat(refresh(r1).getStatus()).isEqualTo(401);
+    assertThat(audits("REFRESH_GRACE")).isEqualTo(graceBefore);
+    assertThat(liveInFamily(r1)).isZero();
+  }
+
+  @Test
+  @Tag("REQ-SEC-064")
+  @DisplayName("REQ-SEC-064 the 6th grace re-issue is reuse: family revoked and audited")
+  void graceCap() throws Exception {
+    String r1 = freshRefresh();
+    ok(refresh(r1));
+    ageRotation(r1, 1);
+    for (int i = 0; i < 5; i++) {
+      ok(refresh(r1));
+    }
+    int reuseBefore = audits("REFRESH_REUSE");
+    assertThat(refresh(r1).getStatus()).isEqualTo(401);
+    assertThat(audits("REFRESH_REUSE")).isEqualTo(reuseBefore + 1);
+    assertThat(liveInFamily(r1)).isZero();
+  }
+
+  @Test
+  @Tag("REQ-SEC-063")
+  @DisplayName("REQ-SEC-063 two parallel refreshes with the same token both succeed")
+  void graceParallel() throws Exception {
+    String r1 = freshRefresh();
+    java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      java.util.List<java.util.concurrent.Future<Integer>> calls = new java.util.ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        calls.add(
+            pool.submit(
+                () -> {
+                  go.await();
+                  return refresh(r1).getStatus();
+                }));
+      }
+      go.countDown();
+      for (java.util.concurrent.Future<Integer> call : calls) {
+        assertThat(call.get(30, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(200);
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+    assertThat(liveInFamily(r1)).isEqualTo(3); // r1 (rotated) + two successors
   }
 
   @Test
