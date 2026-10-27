@@ -87,7 +87,7 @@ object BudgetsFixtures {
     fun snapshot(): BudgetsSnapshot = apiJson.decodeFromString(BudgetsSnapshot.serializer(), json())
 }
 
-class FakeBudgetsRepository : BudgetsRepository {
+open class FakeBudgetsRepository : BudgetsRepository {
     val snapshot = MutableStateFlow<BudgetsSnapshot?>(null)
     var refreshOutcome: RefreshOutcome = RefreshOutcome.Ok
     var mutation: MutationOutcome = MutationOutcome.Ok

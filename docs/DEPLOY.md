@@ -97,3 +97,4 @@ prod-deployed v0.1.2 2026-10-26 backend=0.1.2 web=0.1.2 gitSha=2caf85d host=GCP 
 prod-deployed v0.1.3 2026-10-26 backend=0.1.3 web=0.1.3 gitSha=748f30c host=GCP e2-micro; adds budgets (PR #59), member invite (PR #61), Android dependency updates (PR #56); Flyway V9 budget + V10 invite applied
 prod-deployed v0.1.4 2026-10-27 backend=0.1.4 web=0.1.4 gitSha=ba4c57c host=GCP e2-micro; backup taken first (verified); /health now reports 0.1.4 (PR #64 bump); Android 0.1.4 (code 5) adds captured-record upload + one record per transfer (PR #63)
 app-released v0.1.5 2026-10-27 Android only (code 6): card purchases with a trailing store number auto-record (PR #65); server unchanged at 0.1.4
+app-released v0.1.6 2026-10-27 Android only (code 7): token-refresh deadlock fixed (PR #68; cold start with an expired token hung every request), captured records appear right after upload and a timed-out budget save is adopted safely (PR #69); server unchanged at 0.1.4

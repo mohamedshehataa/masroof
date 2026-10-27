@@ -7,7 +7,7 @@ status: IN_PROGRESS
 size: S
 modules: [android]
 depends_on: [STORY-038, STORY-056, STORY-054]
-reqs: [REQ-SMS-060, REQ-SMS-061, REQ-SMS-062, REQ-SMS-063, REQ-SMS-090, REQ-SMS-091, REQ-SMS-092, REQ-SMS-093]
+reqs: [REQ-SMS-060, REQ-SMS-061, REQ-SMS-062, REQ-SMS-063, REQ-SMS-090, REQ-SMS-091, REQ-SMS-092, REQ-SMS-093, REQ-SMS-094]
 implements: ["PROMPT.md §4.1 (Upload… idempotent; offline → Room outbox, retry with backoff)"]
 owner_agent: android-engineer
 ---
@@ -44,6 +44,9 @@ Given received money (income), transfers and expenses in the local list, when th
 
 ### REQ-SMS-093 — List rows say what kind of money movement they are
 Given list rows, when they are shown, then the label follows the type and not the review state alone: income reads as money received, a transfer reads as a transfer, and an expense held for review reads as needing review (never as received money).
+
+### REQ-SMS-094 — A record that just uploaded shows in the app at once
+Given an upload pass that sent at least one captured record, when it ends, then the expense list is refreshed once (not per record, and the refresh never starts another upload pass) and screens that derive figures from expenses are told; given a pass that sent nothing, then neither happens.
 
 ## UX states (UI stories only)
 N/A (no UI).

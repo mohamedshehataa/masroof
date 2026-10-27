@@ -113,3 +113,5 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-10-27 00:10 · P1 · STORY-067 · integrate · GREEN · PR #63 merged after 3 verify rounds (final PASS 5cb258d): captured records upload at once, one record per transfer, transfers listed, typed labels; Room 7->8
 2026-10-27 00:25 · P1 · SDLC · integrate · GREEN · release v0.1.4 on GCP: backup verified, SHIP_IMAGES=1 make deploy-prod -> smoke passed; /health version 0.1.4 gitSha ba4c57c; APK 0.1.4 sent to owner
 2026-10-27 03:30 · P1 · STORY-046 · integrate · GREEN · PR #65 merged after 4 verify rounds (final PASS 09e062c): store number after a card merchant; family amount must equal its own capture (amountAgrees removed)
+2026-10-27 05:30 · P1 · STORY-033 · integrate · GREEN · PR #68 merged (verify PASS 9898d81, security APPROVE, emulator 0.1.3->fix upgrade PASS): auth client with its own Dispatcher, proactive refresh, session generation guard, screen deadlines
+2026-10-27 06:00 · P1 · STORY-067 · integrate · GREEN · PR #69 (verify PASS round 2 f13b8e0, emulator PASS): list refresh after captured upload; budget 409 adopted only after our own unanswered create; Android 0.1.6

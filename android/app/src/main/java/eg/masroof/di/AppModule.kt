@@ -57,6 +57,7 @@ import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.CapturedAlertSettings
 import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.DeviceIdProvider
+import eg.masroof.ingest.ExpenseListRefresher
 import eg.masroof.ingest.KeystoreLocalIdKey
 import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.NotificationPermission
@@ -68,6 +69,7 @@ import eg.masroof.ingest.PrefsNotificationSettings
 import eg.masroof.ingest.PrefsSenderSettings
 import eg.masroof.ingest.SenderSettings
 import eg.masroof.ingest.SmsWorkScheduler
+import eg.masroof.ingest.UploadedRecordsRefresher
 import eg.masroof.ingest.WorkManagerSmsScheduler
 import eg.masroof.work.SyncScheduler
 import eg.masroof.work.WorkManagerSyncScheduler
@@ -111,6 +113,8 @@ abstract class BindingsModule {
     @Binds abstract fun capturedNotifier(impl: AndroidCapturedNotifier): CapturedNotifier
 
     @Binds abstract fun expenseDeleter(impl: ApiRemoteSource): ExpenseDeleter
+
+    @Binds abstract fun uploadedRecordsRefresher(impl: ExpenseListRefresher): UploadedRecordsRefresher
 
     @Binds abstract fun smsScheduler(impl: WorkManagerSmsScheduler): SmsWorkScheduler
 

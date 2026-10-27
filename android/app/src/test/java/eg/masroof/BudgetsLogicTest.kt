@@ -192,6 +192,148 @@ class BudgetsLogicTest {
             assertNull(vm.state.value.error)
         }
 
+    /** The server answers create with the given outcomes in order (then Duplicate) and update with Ok. */
+    private class ConflictRepo(
+        snapshotNow: eg.masroof.data.budgets.BudgetsSnapshot? = BudgetsFixtures.snapshot(),
+        vararg createAnswers: MutationOutcome,
+    ) : FakeBudgetsRepository() {
+        private val answers = ArrayDeque(createAnswers.toList())
+
+        init {
+            snapshot.value = snapshotNow
+        }
+
+        override suspend fun create(draft: BudgetDraft): MutationOutcome {
+            created += draft
+            return answers.removeFirstOrNull() ?: MutationOutcome.Duplicate
+        }
+
+        override suspend fun update(
+            id: String,
+            draft: BudgetDraft,
+        ): MutationOutcome {
+            updated += id to draft
+            return MutationOutcome.Ok
+        }
+    }
+
+    private fun kotlinx.coroutines.test.TestScope.vmOn(repo: ConflictRepo): BudgetsViewModel {
+        val vm = BudgetsViewModel(repo, FakeRepository())
+        backgroundScope.launch { vm.state.collect {} }
+        return vm
+    }
+
+    @Test
+    fun `REQ-AND-073 a timed-out create that went through counts as saved when the retry gets a duplicate`() =
+        runTest {
+            val repo = ConflictRepo(null, MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "500", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.OFFLINE, vm.state.value.error)
+            // the held request went through: the next refresh shows the budget
+            repo.snapshot.value = BudgetsFixtures.snapshot()
+            vm.save(null, BudgetsFixtures.CAR, "500", false) { saved++ }
+            runCurrent()
+            assertEquals(1, saved)
+            assertNull(vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+            assertTrue(
+                vm.state.value.rows
+                    .any { it.id == BudgetsFixtures.ID_CAR },
+            )
+        }
+
+    @Test
+    fun `REQ-AND-073 a timed-out create whose budget exists with other values is updated to what was entered`() =
+        runTest {
+            val repo = ConflictRepo(BudgetsFixtures.snapshot(), MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "900", true) { saved++ }
+            vm.save(null, BudgetsFixtures.CAR, "900", true) { saved++ }
+            runCurrent()
+            assertEquals(1, saved)
+            assertNull(vm.state.value.error)
+            val (id, draft) = repo.updated.single()
+            assertEquals(BudgetsFixtures.ID_CAR, id)
+            assertEquals(90_000L, draft.amountMinor)
+            assertEquals(true, draft.rollover)
+        }
+
+    @Test
+    fun `REQ-AND-073 a duplicate for a budget the user never tried to create before is an error and changes nothing`() =
+        runTest {
+            val repo = ConflictRepo()
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, null, "900", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.DUPLICATE, vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-073 after a timed-out create a duplicate with no matching budget in the fresh list stays an error`() =
+        runTest {
+            val repo = ConflictRepo(null, MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "500", false) { saved++ }
+            vm.save(null, BudgetsFixtures.CAR, "500", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.DUPLICATE, vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-073 a timed-out create never adopts a budget of a different category`() =
+        runTest {
+            val repo = ConflictRepo(BudgetsFixtures.snapshot(), MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, "99999999-9999-4999-8999-999999999999", "500", false) { saved++ }
+            // then another scope that exists on the server answers 409: it is not ours
+            vm.save(null, BudgetsFixtures.CAR, "900", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.DUPLICATE, vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-073 a timed-out monthly create never adopts a weekly budget of the same category`() =
+        runTest {
+            val repo = ConflictRepo(BudgetsFixtures.weeklyRollover(), MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, BudgetsFixtures.GROCERIES, "500", false) { saved++ }
+            vm.save(null, BudgetsFixtures.GROCERIES, "500", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.DUPLICATE, vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-073 a timed-out create is not adopted from a stale cache when the refresh fails`() =
+        runTest {
+            val repo = ConflictRepo(BudgetsFixtures.snapshot(), MutationOutcome.Offline)
+            val vm = vmOn(repo)
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "900", false) { saved++ }
+            repo.refreshOutcome = RefreshOutcome.Offline
+            vm.save(null, BudgetsFixtures.CAR, "900", false) { saved++ }
+            runCurrent()
+            assertEquals(0, saved)
+            assertEquals(BudgetError.DUPLICATE, vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+        }
+
     @Test
     fun `REQ-AND-073 delete closes on success and when the budget is already gone`() =
         runTest {
