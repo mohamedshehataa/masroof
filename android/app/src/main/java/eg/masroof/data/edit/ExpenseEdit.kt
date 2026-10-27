@@ -91,6 +91,8 @@ interface ExpenseEditor {
     suspend fun restore(id: String): Boolean
 }
 
+private const val DELETION_BUFFER = 16
+
 /** Edit, confirm, delete and Undo on Room only; no HTTP. Every write waits for a running erase and is one transaction. */
 @Singleton
 class DefaultExpenseEditor
@@ -101,7 +103,7 @@ class DefaultExpenseEditor
         private val clock: Clock,
         private val eraseLock: EraseLock,
     ) : ExpenseEditor {
-        private val deletions = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        private val deletions = MutableSharedFlow<String>(extraBufferCapacity = DELETION_BUFFER)
 
         override val deleted: SharedFlow<String> = deletions
 

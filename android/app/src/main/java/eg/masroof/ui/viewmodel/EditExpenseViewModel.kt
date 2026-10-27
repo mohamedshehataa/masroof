@@ -39,6 +39,8 @@ data class EditFormState(
     val reviewPending: Boolean = false,
     val amountInvalid: Boolean = false,
     val dateInvalid: Boolean = false,
+    /** Notes over 500 characters: the field shows its error and nothing is written. */
+    val notesInvalid: Boolean = false,
     /** A write is in flight: every button is disabled so a double tap cannot write twice. */
     val busy: Boolean = false,
     val error: EditError? = null,
@@ -47,7 +49,10 @@ data class EditFormState(
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
     val done: Boolean = false,
-)
+) {
+    /** Buttons and fields stay disabled while a write runs and after it succeeded, until the screen pops. */
+    val locked: Boolean get() = busy || done
+}
 
 data class EditUiState(
     val form: EditFormState = EditFormState(),
@@ -63,9 +68,6 @@ const val TYPE_REFUND = "REFUND"
 private const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
 private const val STATUS_CONFIRMED = "CONFIRMED"
 private const val MAX_NOTES = 500
-
-/** The ceiling for one amount in minor units (1,000,000,000,000 major), checked before writing. */
-internal const val MAX_AMOUNT_MINOR = 10_000_000_000_000L
 
 /** At most [n] Unicode code points: a surrogate pair (emoji) is never split. */
 internal fun String.takeCodePoints(n: Int): String =
@@ -139,7 +141,7 @@ class EditExpenseViewModel
 
         fun onMerchant(text: String) = edit { it.copy(merchant = text.takeCodePoints(MAX_MERCHANT)) }
 
-        fun onNotes(text: String) = edit { it.copy(notes = text.takeCodePoints(MAX_NOTES)) }
+        fun onNotes(text: String) = edit { it.copy(notes = text, notesInvalid = false) }
 
         fun onPaidBy(id: String?) = edit { it.copy(paidByMemberId = id) }
 
@@ -150,6 +152,7 @@ class EditExpenseViewModel
         /** One tap on a pending-review row: with no edits it only confirms; with typed edits it behaves like Save. */
         fun confirm() {
             val o = original ?: return
+            if (form.value.done) return
             if (o.status != STATUS_PENDING_REVIEW) return
             save()
         }
@@ -157,9 +160,13 @@ class EditExpenseViewModel
         /** Writes only what differs from the stored row; a pending-review row is confirmed by saving it. */
         fun save() {
             val o = original ?: return
-            if (inFlight) return
+            if (inFlight || form.value.done) return
             val f = form.value
-            val minor = MoneyFormat.parseMinor(f.amountText)?.takeIf { it in 1..MAX_AMOUNT_MINOR }
+            if (f.notes.trim().codePointCount(0, f.notes.trim().length) > MAX_NOTES) {
+                form.update { it.copy(notesInvalid = true) }
+                return
+            }
+            val minor = MoneyFormat.parseMinor(f.amountText)?.takeIf { it in 1..MoneyFormat.MAX_ENTRY_MINOR }
             if (minor == null) {
                 form.update { it.copy(amountInvalid = true) }
                 return
@@ -173,7 +180,7 @@ class EditExpenseViewModel
         }
 
         fun delete() {
-            if (original == null) return
+            if (original == null || inFlight || form.value.done) return
             form.update { it.copy(confirmDelete = false) }
             submit { editor.delete(id) }
         }

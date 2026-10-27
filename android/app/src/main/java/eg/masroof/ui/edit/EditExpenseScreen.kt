@@ -180,7 +180,7 @@ private fun EditFields(
             TYPE_REFUND to stringResource(R.string.edit_type_refund),
         ),
         selected = form.type,
-        enabled = !form.busy,
+        enabled = !form.locked,
         onSelect = { actions.onType(it) },
     )
     OutlinedTextField(
@@ -193,15 +193,15 @@ private fun EditFields(
         supportingText = { if (form.amountInvalid) Text(stringResource(R.string.add_amount_error)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
-        enabled = !form.busy,
+        enabled = !form.locked,
         modifier = Modifier.fillMaxWidth(),
     )
-    DateField(form.date, form.dateInvalid, !form.busy, actions.onDate)
+    DateField(form.date, form.dateInvalid, !form.locked, actions.onDate)
     Text(stringResource(R.string.add_category), style = MaterialTheme.typography.titleSmall)
     ChipRow(
         state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
         selected = form.categoryId,
-        enabled = !form.busy,
+        enabled = !form.locked,
         tinted = true,
         onSelect = { actions.onCategory(it) },
     )
@@ -211,7 +211,7 @@ private fun EditFields(
         ChipRow(
             listOf("" to stringResource(R.string.paid_by_not_set)) + state.members.map { it.id to it.displayName },
             selected = form.paidByMemberId.orEmpty(),
-            enabled = !form.busy,
+            enabled = !form.locked,
             onSelect = { actions.onPaidBy(it.ifEmpty { null }) },
         )
     }
@@ -220,14 +220,16 @@ private fun EditFields(
         onValueChange = actions.onMerchant,
         label = { Text(stringResource(R.string.edit_merchant)) },
         singleLine = true,
-        enabled = !form.busy,
+        enabled = !form.locked,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = form.notes,
         onValueChange = actions.onNotes,
         label = { Text(stringResource(R.string.add_note)) },
-        enabled = !form.busy,
+        isError = form.notesInvalid,
+        supportingText = { if (form.notesInvalid) Text(stringResource(R.string.edit_notes_error)) },
+        enabled = !form.locked,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -256,19 +258,19 @@ private fun EditBar(
             if (form.reviewPending) {
                 Button(
                     onClick = actions.onConfirm,
-                    enabled = !form.busy,
+                    enabled = !form.locked,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) { Text(stringResource(R.string.edit_confirm)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = actions.onSave,
-                    enabled = !form.busy,
+                    enabled = !form.locked,
                     modifier = Modifier.weight(1f).height(48.dp),
                 ) { Text(stringResource(R.string.edit_save)) }
                 OutlinedButton(
                     onClick = actions.onAskDelete,
-                    enabled = !form.busy,
+                    enabled = !form.locked,
                     modifier = Modifier.height(48.dp),
                 ) { Text(stringResource(R.string.edit_delete), color = MaterialTheme.colorScheme.error) }
             }

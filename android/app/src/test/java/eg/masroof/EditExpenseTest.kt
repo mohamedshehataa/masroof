@@ -451,28 +451,32 @@ class EditExpenseViewModelTest {
     fun `REQ-EXP-045 zero, empty, negative or too large amounts are flagged, edits kept, nothing written`() =
         runTest {
             val vm = vm()
-            for (bad in listOf("abc", "", "0", "-5", "100000000000.01")) {
+            for (bad in listOf("abc", "", "0", "-5", "10000000000.01")) {
                 vm.onAmount(bad)
                 vm.save()
                 assertTrue(bad, vm.state.value.form.amountInvalid)
                 assertEquals(bad, vm.state.value.form.amountText)
             }
             assertTrue(editor.updates.isEmpty())
-            vm.onAmount("100000000000")
+            vm.onAmount("10000000000")
             vm.save()
-            assertEquals(10_000_000_000_000L, editor.updates.single().amountMinor)
+            assertEquals(1_000_000_000_000L, editor.updates.single().amountMinor)
         }
 
     @Test
-    fun `REQ-EXP-045 a cleared note is written as empty and notes are capped at 500`() =
+    fun `REQ-EXP-045 a cleared note is written as empty and notes over 500 show the error, keep the text, write nothing`() =
         runTest {
             editor.stored = row(status = "CONFIRMED", notes = "old")
             val vm = vm()
             vm.onNotes("")
             vm.save()
             assertEquals("", editor.updates.single().notes)
-            vm.onNotes("x".repeat(900))
-            assertEquals(500, vm.state.value.form.notes.length)
+            val fresh = vm()
+            fresh.onNotes("x".repeat(900))
+            fresh.save()
+            assertTrue(fresh.state.value.form.notesInvalid)
+            assertEquals(900, fresh.state.value.form.notes.length)
+            assertEquals(1, editor.updates.size)
         }
 
     @Test
@@ -517,6 +521,25 @@ class EditExpenseViewModelTest {
             assertEquals(1, editor.deletes)
             editor.gate?.complete(Unit)
             assertTrue(vm.state.value.form.done)
+        }
+
+    @Test
+    fun `REQ-AND-134 a double tap after a fast successful write does not write again`() =
+        runTest {
+            val vm = vm()
+            vm.confirm()
+            vm.confirm()
+            assertEquals(1, editor.updates.size)
+            assertTrue(vm.state.value.form.locked)
+            val other = FakeEditor(row(status = "CONFIRMED"))
+            val vm2 = EditExpenseViewModel(other, SavedStateHandle(mapOf("id" to "e1")))
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm2.state.collect {} }
+            vm2.onNotes("a")
+            vm2.save()
+            vm2.save()
+            vm2.delete()
+            assertEquals(1, other.updates.size)
+            assertEquals(0, other.deletes)
         }
 
     @Test
