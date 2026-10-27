@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Masroof API
-  version: 0.1.4
+  version: 0.1.5
   summary: Household expense tracker for Egypt (WhatsApp, SMS, receipts, analytics).
   description: |
     **Contract-first.** This file is the single source of truth for the Masroof backend API.

@@ -46,7 +46,7 @@ plugins {
 }
 
 group = "eg.masroof"
-version = "0.1.4" // STORY-143 reads this for /health
+version = "0.1.5" // STORY-143 reads this for /health
 
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 
