@@ -7,7 +7,6 @@ import eg.masroof.data.auth.LoginResult
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
 import eg.masroof.data.remote.newAuthClient
-import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -95,9 +94,7 @@ class SessionLifecycleRaceTest {
             store,
             ApiAuthRemote(newAuthClient()),
             settings,
-            FakeWiper(),
             Dispatchers.Unconfined,
-            NoopCaptureGate,
             Clock.systemUTC(),
         )
     }

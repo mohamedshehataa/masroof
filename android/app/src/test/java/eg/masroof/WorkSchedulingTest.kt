@@ -10,12 +10,10 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import eg.masroof.data.ExpenseRepository
-import eg.masroof.data.SyncReport
 import eg.masroof.work.ForegroundSync
 import eg.masroof.work.OUTBOX_OPEN_WORK_NAME
 import eg.masroof.work.OUTBOX_RETRY_WORK_NAME
 import eg.masroof.work.OutboxSyncWorker
-import eg.masroof.work.SyncScheduler
 import eg.masroof.work.WorkManagerSyncScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -26,36 +24,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-private class RecordingScheduler : SyncScheduler {
-    var retries = mutableListOf<Pair<Long, Int>>()
-    var cancels = 0
-    var opens = 0
+private class StubRepository : ExpenseRepository by FakeRepository() {
+    var conversions = 0
 
-    override fun schedule() = Unit
-
-    override fun scheduleRetry(
-        delaySeconds: Long,
-        attempt: Int,
-    ) {
-        retries += delaySeconds to attempt
+    override suspend fun convertQueuedEntries(): Int {
+        conversions++
+        return 0
     }
-
-    override fun cancelRetry() {
-        cancels++
-    }
-
-    override fun scheduleOnOpen() {
-        opens++
-    }
-}
-
-private class StubRepository(
-    private val report: SyncReport = SyncReport(0, 0, false),
-    private val retryable: Boolean = false,
-) : ExpenseRepository by FakeRepository() {
-    override suspend fun syncOutbox() = report
-
-    override suspend fun hasRetryable() = retryable
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -79,21 +54,17 @@ class WorkSchedulingTest {
             .get()
             .filter { it.state == WorkInfo.State.ENQUEUED }
 
-    private fun worker(
-        repository: ExpenseRepository,
-        recorder: SyncScheduler,
-        attempt: Int = 0,
-    ) = TestListenableWorkerBuilder<OutboxSyncWorker>(context)
-        .setInputData(androidx.work.workDataOf("attempt" to attempt))
-        .setWorkerFactory(
-            object : WorkerFactory() {
-                override fun createWorker(
-                    appContext: Context,
-                    workerClassName: String,
-                    workerParameters: WorkerParameters,
-                ): ListenableWorker = OutboxSyncWorker(appContext, workerParameters, repository, recorder)
-            },
-        ).build()
+    private fun worker(repository: ExpenseRepository) =
+        TestListenableWorkerBuilder<OutboxSyncWorker>(context)
+            .setWorkerFactory(
+                object : WorkerFactory() {
+                    override fun createWorker(
+                        appContext: Context,
+                        workerClassName: String,
+                        workerParameters: WorkerParameters,
+                    ): ListenableWorker = OutboxSyncWorker(appContext, workerParameters, repository)
+                },
+            ).build()
 
     // ---- bounded retry chain
 
@@ -119,61 +90,23 @@ class WorkSchedulingTest {
         assertEquals(0, live(OUTBOX_RETRY_WORK_NAME).size)
     }
 
-    // ---- sync on open
+    // ---- foreground and worker only convert; nothing is uploaded or scheduled (REQ-AND-133)
 
     @Test
-    fun `REQ-AND-015 opening the app with retryable entries enqueues exactly one immediate sync`() =
+    fun `REQ-AND-133 opening the app converts the old queue and schedules no upload`() =
         runTest {
-            val sync = ForegroundSync(StubRepository(retryable = true), scheduler)
-            repeat(4) { sync.onForeground() }
-            assertEquals(1, live(OUTBOX_OPEN_WORK_NAME).size)
-        }
-
-    @Test
-    fun `REQ-AND-015 opening the app with nothing retryable enqueues nothing`() =
-        runTest {
-            ForegroundSync(StubRepository(retryable = false), scheduler).onForeground()
+            val repo = StubRepository()
+            ForegroundSync(repo).onForeground()
+            assertEquals(1, repo.conversions)
             assertEquals(0, live(OUTBOX_OPEN_WORK_NAME).size)
         }
 
     @Test
-    fun `REQ-AND-015 foreground sync asks the scheduler only when something can sync`() =
+    fun `REQ-AND-133 the old sync worker only converts and succeeds`() =
         runTest {
-            val rec = RecordingScheduler()
-            ForegroundSync(StubRepository(retryable = true), rec).onForeground()
-            ForegroundSync(StubRepository(retryable = false), rec).onForeground()
-            assertEquals(1, rec.opens)
-        }
-
-    // ---- worker: backoff reset on success
-
-    @Test
-    fun `REQ-AND-015 a successful sync cancels the pending retry`() =
-        runTest {
-            val rec = RecordingScheduler()
-            val result = worker(StubRepository(SyncReport(2, 0, false)), rec, attempt = 7).doWork()
+            val repo = StubRepository()
+            val result = worker(repo).doWork()
             assertEquals(ListenableWorker.Result.success(), result)
-            assertEquals(1, rec.cancels)
-            assertTrue(rec.retries.isEmpty())
-        }
-
-    @Test
-    fun `REQ-AND-015 a failing sync schedules one retry with the next attempt number and Retry-After`() =
-        runTest {
-            val rec = RecordingScheduler()
-            worker(StubRepository(SyncReport(0, 0, true, retryAfterSeconds = 900)), rec, attempt = 2).doWork()
-            assertEquals(1, rec.retries.size)
-            assertEquals(3, rec.retries.single().second)
-            assertTrue(rec.retries.single().first >= 900)
-            assertEquals(0, rec.cancels)
-        }
-
-    @Test
-    fun `REQ-AND-015 an unauthorized sync neither retries nor cancels`() =
-        runTest {
-            val rec = RecordingScheduler()
-            worker(StubRepository(SyncReport(0, 0, false, unauthorized = true)), rec).doWork()
-            assertTrue(rec.retries.isEmpty())
-            assertEquals(0, rec.cancels)
+            assertEquals(1, repo.conversions)
         }
 }

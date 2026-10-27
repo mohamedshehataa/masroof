@@ -97,16 +97,18 @@ class FakeAuthRemote : AuthRemote {
 }
 
 class FakeWiper(
-    var unsynced: Int = 0,
-    var retryable: Int? = null,
+    var entries: Int = 0,
+    var receipts: Int = 0,
 ) : LocalDataWiper {
     var wipes = 0
+    var failWith: Exception? = null
 
-    override suspend fun unsyncedCount() = unsynced
-
-    override suspend fun retryableCount() = retryable ?: unsynced
+    override suspend fun counts() =
+        eg.masroof.data.auth
+            .EraseCounts(entries, receipts)
 
     override suspend fun wipe() {
+        failWith?.let { throw it }
         wipes++
     }
 }
@@ -116,9 +118,7 @@ object TestAuth {
         store: SessionStore = FakeSessionStore(),
         remote: AuthRemote = FakeAuthRemote(),
         settings: SettingsRepository = FakeSettings(),
-        wiper: LocalDataWiper = FakeWiper(),
-        capture: eg.masroof.ingest.CaptureGate = eg.masroof.ingest.NoopCaptureGate,
-    ) = SessionManager(store, remote, settings, wiper, Dispatchers.Unconfined, capture)
+    ) = SessionManager(store, remote, settings, Dispatchers.Unconfined)
 }
 
 class FakeNetwork(

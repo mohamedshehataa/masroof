@@ -41,17 +41,16 @@ interface SyncScheduler {
     fun scheduleOnOpen() = Unit
 }
 
-/** Called when the app comes to the foreground: pushes retryable entries now instead of waiting out a long backoff. */
+/** Called when the app comes to the foreground: finishes converting entries left in the old upload queue (REQ-AND-133). */
 @Singleton
 class ForegroundSync
     @Inject
     constructor(
         private val repository: ExpenseRepository,
-        private val scheduler: SyncScheduler,
     ) {
         suspend fun onForeground() {
             if (DatabaseStartup.isBlocked()) return
-            if (repository.hasRetryable()) scheduler.scheduleOnOpen()
+            repository.convertQueuedEntries()
         }
     }
 
@@ -94,9 +93,8 @@ class WorkManagerSyncScheduler
     }
 
 /**
- * Uploads queued manual entries once the network is reachable. On a transient failure it schedules its own next run
- * with [OutboxBackoff] (exponential, jittered, 6 h ceiling, honouring Retry-After) instead of WorkManager's fixed
- * policy, so a long outage never gives up and never hammers the server.
+ * Frozen server-era worker (ADR-0009): it no longer uploads anything. It only converts entries that are still in the old
+ * queue into local entries, so work enqueued by a previous version finishes harmlessly.
  */
 @HiltWorker
 class OutboxSyncWorker
@@ -105,19 +103,11 @@ class OutboxSyncWorker
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         private val repository: ExpenseRepository,
-        private val scheduler: SyncScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             // Blocked start (REQ-AND-127/128): the database is not touched; WorkManager retries with its own backoff.
             if (DatabaseStartup.isBlocked()) return Result.retry()
-            val report = repository.syncOutbox()
-            if (report.retry) {
-                val attempt = inputData.getInt(KEY_ATTEMPT, 0)
-                scheduler.scheduleRetry(OutboxBackoff.delaySeconds(attempt, report.retryAfterSeconds), attempt + 1)
-            } else if (!report.unauthorized) {
-                // The outage is over: drop any pending long-delay retry so the next outage starts from the base delay.
-                scheduler.cancelRetry()
-            }
+            repository.convertQueuedEntries()
             return Result.success()
         }
     }

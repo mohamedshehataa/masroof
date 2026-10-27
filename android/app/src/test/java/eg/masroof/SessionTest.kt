@@ -73,9 +73,8 @@ private fun http(
 class SessionTest {
     private fun signedIn(
         remote: FakeAuthRemote = FakeAuthRemote(),
-        wiper: FakeWiper = FakeWiper(),
         store: FakeSessionStore = FakeSessionStore(LoadedSession.Found(session())),
-    ) = TestAuth.manager(store, remote, wiper = wiper)
+    ) = TestAuth.manager(store, remote)
 
     // ---- token store (REQ-AND-007)
 
@@ -143,16 +142,14 @@ class SessionTest {
         }
 
     @Test
-    fun `REQ-AND-006 signing in as a different member wipes the previous account's cache`() =
+    fun `REQ-AND-131 signing in as a different member only replaces the session`() =
         runTest {
-            val wiper = FakeWiper()
             val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
             val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
-            TestAuth.manager(store, remote, wiper = wiper).login("https://x.eg", "a@b.eg", "pw")
-            assertEquals(1, wiper.wipes)
-            // Same member again: queued entries are kept.
-            TestAuth.manager(store, remote, wiper = wiper).login("https://x.eg", "a@b.eg", "pw")
-            assertEquals(1, wiper.wipes)
+            val sm = TestAuth.manager(store, remote)
+            assertEquals(LoginResult.Success, sm.login("https://x.eg", "a@b.eg", "pw"))
+            assertEquals(SessionState.SignedIn("Mohamed"), sm.state.value)
+            assertEquals("member-1", store.lastMemberId)
         }
 
     @Test
@@ -187,13 +184,11 @@ class SessionTest {
     fun `REQ-AND-007 a rejected refresh wipes the session but keeps cached data`() =
         runTest {
             val remote = FakeAuthRemote().apply { refreshResult = { AuthResult.Rejected } }
-            val wiper = FakeWiper()
             val store = FakeSessionStore(LoadedSession.Found(session()))
-            val sm = TestAuth.manager(store, remote, wiper = wiper)
+            val sm = TestAuth.manager(store, remote)
             assertNull(sm.refreshAfter("access-1"))
             assertEquals(SessionState.SignedOut(SignedOutNotice.SESSION_EXPIRED), sm.state.value)
             assertEquals(1, store.clears)
-            assertEquals(0, wiper.wipes)
             assertNull(sm.accessToken())
         }
 
@@ -240,29 +235,25 @@ class SessionTest {
     // ---- logout
 
     @Test
-    fun `REQ-AND-007 logout revokes the refresh token then wipes tokens and cached data`() =
+    fun `REQ-AND-007 logout revokes the refresh token then clears the session only`() =
         runTest {
             val remote = FakeAuthRemote()
-            val wiper = FakeWiper()
             val store = FakeSessionStore(LoadedSession.Found(session())).apply { lastMemberId = "member-1" }
-            val sm = TestAuth.manager(store, remote, wiper = wiper)
+            val sm = TestAuth.manager(store, remote)
             sm.logout()
             assertEquals(listOf("refresh-1"), remote.logoutTokens)
             assertEquals(LoadedSession.Empty, store.stored)
             assertNull(store.lastMemberId)
-            assertEquals(1, wiper.wipes)
             assertEquals(SessionState.SignedOut(), sm.state.value)
             assertNull(sm.accessToken())
         }
 
     @Test
-    fun `REQ-AND-007 logout still wipes locally when the server cannot be reached`() =
+    fun `REQ-AND-007 logout still clears the session locally when the server cannot be reached`() =
         runTest {
             val remote = FakeAuthRemote().apply { logoutOk = false }
-            val wiper = FakeWiper()
-            val sm = TestAuth.manager(FakeSessionStore(LoadedSession.Found(session())), remote, wiper = wiper)
+            val sm = TestAuth.manager(FakeSessionStore(LoadedSession.Found(session())), remote)
             sm.logout()
-            assertEquals(1, wiper.wipes)
             assertEquals(SessionState.SignedOut(), sm.state.value)
         }
 
@@ -331,50 +322,5 @@ class SessionTest {
             assertEquals("access-2", sm.refreshAfter("access-1"))
             assertEquals("access-2", sm.accessToken())
             assertEquals(SessionState.SignedIn("Mohamed", persisted = false), sm.state.value)
-        }
-
-    // ---- account switch / logout confirmation data (REQ-AND-007)
-
-    @Test
-    fun `REQ-AND-007 a different member with unsynced entries needs confirmation before anything is wiped`() =
-        runTest {
-            val wiper = FakeWiper(unsynced = 3)
-            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
-            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
-            val sm = TestAuth.manager(store, remote, wiper = wiper)
-            assertEquals(LoginResult.AccountSwitch(3), sm.login("https://x.eg", "a@b.eg", "pw"))
-            assertEquals(0, wiper.wipes)
-            assertTrue(store.saves.isEmpty())
-            assertTrue(sm.state.value is SessionState.SignedOut)
-            sm.confirmAccountSwitch()
-            assertEquals(1, wiper.wipes)
-            assertEquals(SessionState.SignedIn("Mohamed"), sm.state.value)
-            assertEquals("member-1", store.lastMemberId)
-        }
-
-    @Test
-    fun `REQ-AND-007 cancelling an account switch revokes the new session and wipes nothing`() =
-        runTest {
-            val wiper = FakeWiper(unsynced = 2)
-            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
-            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
-            val sm = TestAuth.manager(store, remote, wiper = wiper)
-            sm.login("https://x.eg", "a@b.eg", "pw")
-            sm.cancelAccountSwitch()
-            assertEquals(listOf("refresh-1"), remote.logoutTokens)
-            assertEquals(0, wiper.wipes)
-            assertEquals("someone-else", store.lastMemberId)
-            assertNull(sm.accessToken())
-        }
-
-    @Test
-    fun `REQ-AND-007 a different member with nothing queued is wiped without asking`() =
-        runTest {
-            val wiper = FakeWiper(unsynced = 0)
-            val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
-            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
-            val sm = TestAuth.manager(store, remote, wiper = wiper)
-            assertEquals(LoginResult.Success, sm.login("https://x.eg", "a@b.eg", "pw"))
-            assertEquals(1, wiper.wipes)
         }
 }

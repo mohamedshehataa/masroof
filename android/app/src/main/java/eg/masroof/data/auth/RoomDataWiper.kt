@@ -1,5 +1,6 @@
 package eg.masroof.data.auth
 
+import androidx.room.withTransaction
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
@@ -7,10 +8,13 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.insights.InsightsCache
 import eg.masroof.di.IoDispatcher
+import eg.masroof.di.ReceiptsDir
 import eg.masroof.ingest.CaptureData
+import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.NoCaptureData
 import eg.masroof.ingest.NoCapturedNotifier
+import eg.masroof.ingest.NoopCaptureGate
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.SMS_UPLOAD_RETRY_WORK
 import eg.masroof.ingest.SMS_UPLOAD_WORK
@@ -18,6 +22,7 @@ import eg.masroof.work.OUTBOX_RETRY_WORK_NAME
 import eg.masroof.work.OUTBOX_WORK_NAME
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,30 +36,47 @@ class RoomDataWiper
         @IoDispatcher private val io: CoroutineDispatcher,
         private val capture: CaptureData = NoCaptureData,
         private val notifier: CapturedNotifier = NoCapturedNotifier,
+        private val gate: CaptureGate = NoopCaptureGate,
+        @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
     ) : LocalDataWiper {
-        override suspend fun unsyncedCount(): Int = withContext(io) { db.outbox().countAll() + db.parsedOutbox().countAll() }
+        override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
-        override suspend fun retryableCount(): Int = withContext(io) { db.outbox().countRetryable() + db.parsedOutbox().countPending() }
-
+        /**
+         * "Erase all data" (REQ-AND-132), the only caller. The erase-in-progress flag (the capture gate) is closed first, so a
+         * capture job that is still running re-checks it inside its write transaction and writes nothing. The database part is one
+         * transaction: if it throws, nothing was changed and the caller shows the error.
+         */
         override suspend fun wipe() {
-            workManager.cancelUniqueWork(OUTBOX_WORK_NAME).await()
-            workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME).await()
-            // Queued messages must never upload into the next account: cancel the jobs (their input data holds text)
-            // and WAIT for the cancellation, so no intake worker can insert after the tables are cleared.
-            workManager.cancelUniqueWork(SMS_UPLOAD_WORK).await()
-            workManager.cancelUniqueWork(SMS_UPLOAD_RETRY_WORK).await()
-            workManager.cancelAllWorkByTag(SMS_INTAKE_TAG).await()
-            withContext(io) { awaitIdle() }
-            workManager.pruneWork()
-            withContext(io) { capture.clear() }
-            // nothing of the old account stays on the lock screen: every "Recorded ... Undo" notification goes
-            notifier.cancelAll()
-            withContext(io) {
-                db.clearAllTables()
-                // The defaults (categories, "Me") are not session data: a wipe must not leave the phone without them.
-                DefaultSeed.seed(db.openHelper.writableDatabase)
+            gate.close()
+            try {
+                workManager.cancelUniqueWork(OUTBOX_WORK_NAME).await()
+                workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME).await()
+                // Queued messages' input data holds text: cancel the jobs and WAIT for the cancellation, so no intake worker can
+                // insert after the tables are cleared.
+                workManager.cancelUniqueWork(SMS_UPLOAD_WORK).await()
+                workManager.cancelUniqueWork(SMS_UPLOAD_RETRY_WORK).await()
+                workManager.cancelAllWorkByTag(SMS_INTAKE_TAG).await()
+                withContext(io) { awaitIdle() }
+                workManager.pruneWork()
+                withContext(io) {
+                    db.withTransaction {
+                        db.clearAllTables()
+                        // The defaults (categories, "Me") are not user data: the app must be as after a fresh install.
+                        DefaultSeed.seed(db.openHelper.writableDatabase)
+                    }
+                    deleteReceipts()
+                    capture.clear()
+                    insights.clear()
+                }
+                // nothing stays on the lock screen: every "Recorded ... Undo" notification goes
+                notifier.cancelAll()
+            } finally {
+                gate.open()
             }
-            withContext(io) { insights.clear() }
+        }
+
+        private fun deleteReceipts() {
+            receiptsDir.listFiles()?.forEach { it.deleteRecursively() }
         }
 
         /**

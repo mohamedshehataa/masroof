@@ -86,9 +86,16 @@ annotation class IoDispatcher
 @Retention(AnnotationRetention.BINARY)
 annotation class AuthHttp
 
+/** `filesDir/receipts`: emptied by "Erase all data". */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ReceiptsDir
+
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class BindingsModule {
+    @Binds abstract fun idFactory(impl: eg.masroof.data.UuidIdFactory): eg.masroof.data.IdFactory
+
     @Binds abstract fun repository(impl: DefaultExpenseRepository): ExpenseRepository
 
     @Binds abstract fun remote(impl: ApiRemoteSource): RemoteSource
@@ -150,6 +157,11 @@ object ProvidersModule {
     fun captureGate(
         @ApplicationContext context: Context,
     ): CaptureGate = PrefsCaptureGate(context.getSharedPreferences("masroof_capture", Context.MODE_PRIVATE))
+
+    @Provides @ReceiptsDir
+    fun receiptsDir(
+        @ApplicationContext context: Context,
+    ): File = File(context.filesDir, "receipts")
 
     @Provides @Singleton
     fun localIdKey(

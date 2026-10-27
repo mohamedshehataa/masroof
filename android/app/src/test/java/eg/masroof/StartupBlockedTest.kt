@@ -49,12 +49,7 @@ import java.time.Clock
 private class ForbiddenRepository : ExpenseRepository by FakeRepository() {
     var asked = 0
 
-    override suspend fun hasRetryable(): Boolean {
-        asked++
-        error("database touched while blocked")
-    }
-
-    override suspend fun syncOutbox(): Nothing {
+    override suspend fun convertQueuedEntries(): Int {
         asked++
         error("database touched while blocked")
     }
@@ -130,7 +125,7 @@ class StartupBlockedTest {
         runTest {
             val repository = ForbiddenRepository()
             val scheduler = NoopScheduler()
-            ForegroundSync(repository, scheduler).onForeground()
+            ForegroundSync(repository).onForeground()
             assertEquals(0, repository.asked)
             assertEquals(0, scheduler.calls)
         }
@@ -148,7 +143,7 @@ class StartupBlockedTest {
                                 appContext: Context,
                                 workerClassName: String,
                                 workerParameters: WorkerParameters,
-                            ): ListenableWorker = OutboxSyncWorker(appContext, workerParameters, repository, scheduler)
+                            ): ListenableWorker = OutboxSyncWorker(appContext, workerParameters, repository)
                         },
                     ).build()
             assertEquals(ListenableWorker.Result.retry(), worker.doWork())

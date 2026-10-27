@@ -11,9 +11,9 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Capture only runs while somebody is signed in. The receiver and the notification listener are system-started, so
- * the flag lives in SharedPreferences (readable synchronously and before the session is restored). Logout closes it
- * first, sign-in opens it, so a message arriving between two accounts is dropped instead of uploading into the next one.
+ * The erase-in-progress flag (ADR-0009 D3). Capture no longer depends on a session: it is open unless "Erase all data" is
+ * running, which closes it first and reopens it at the end. The receiver, the listener and the pipeline's write transaction all
+ * check it, so a job that was in flight during the erase writes nothing. STORY-171 turns this into the "capture enabled" setting.
  */
 interface CaptureGate {
     fun isOpen(): Boolean
@@ -35,14 +35,15 @@ object NoopCaptureGate : CaptureGate {
 class PrefsCaptureGate(
     private val prefs: SharedPreferences,
 ) : CaptureGate {
-    override fun isOpen() = prefs.getBoolean(OPEN, false)
+    override fun isOpen() = !prefs.getBoolean(CLOSED, false)
 
-    override fun open() = prefs.edit(commit = true) { putBoolean(OPEN, true) }
+    override fun open() = prefs.edit(commit = true) { putBoolean(CLOSED, false) }
 
-    override fun close() = prefs.edit(commit = true) { putBoolean(OPEN, false) }
+    override fun close() = prefs.edit(commit = true) { putBoolean(CLOSED, true) }
 
     private companion object {
-        const val OPEN = "capture_open"
+        // A new key: the old "capture_open" flag followed the session and must not decide anything any more.
+        const val CLOSED = "capture_closed"
     }
 }
 

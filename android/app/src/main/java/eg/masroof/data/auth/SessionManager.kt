@@ -3,8 +3,6 @@ package eg.masroof.data.auth
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.normalizeServerUrl
 import eg.masroof.di.IoDispatcher
-import eg.masroof.ingest.CaptureGate
-import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -35,9 +33,7 @@ class SessionManager
         private val store: SessionStore,
         private val remote: AuthRemote,
         private val settings: SettingsRepository,
-        private val wiper: LocalDataWiper,
         @IoDispatcher private val io: CoroutineDispatcher,
-        private val capture: CaptureGate = NoopCaptureGate,
         private val clock: Clock = Clock.systemUTC(),
     ) {
         private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
@@ -57,17 +53,10 @@ class SessionManager
                 when (val loaded = withContext(io) { safeLoad() }) {
                     is LoadedSession.Found -> {
                         current = loaded.session
-                        capture.open()
                         _state.value = SessionState.SignedIn(loaded.session.displayName)
                     }
-                    LoadedSession.Empty -> {
-                        capture.close()
-                        _state.value = SessionState.SignedOut()
-                    }
-                    LoadedSession.Invalidated -> {
-                        capture.close()
-                        _state.value = SessionState.SignedOut(SignedOutNotice.KEYSTORE_RESET)
-                    }
+                    LoadedSession.Empty -> _state.value = SessionState.SignedOut()
+                    LoadedSession.Invalidated -> _state.value = SessionState.SignedOut(SignedOutNotice.KEYSTORE_RESET)
                 }
                 restored = true
             }
@@ -131,47 +120,17 @@ class SessionManager
             }
         }
 
+        /**
+         * Data never follows the session (ADR-0009 D3): signing in as another member changes who the server knows, never what is
+         * on the phone. Only the session is replaced.
+         */
         private suspend fun onAuthenticated(
             base: String,
             session: Session,
         ): LoginResult {
-            val previous = withContext(io) { store.lastMemberId }
-            if (previous != null && previous != session.memberId) {
-                // Another account must never see (or upload) the previous account's cache and queued entries,
-                // but silently deleting unsynced entries is not acceptable: ask first.
-                val unsynced = wiper.unsyncedCount()
-                if (unsynced > 0) {
-                    pendingSwitch = base to session
-                    return LoginResult.AccountSwitch(unsynced)
-                }
-                capture.close()
-                wiper.wipe()
-            }
             finishSignIn(base, session)
             return LoginResult.Success
         }
-
-        private var pendingSwitch: Pair<String, Session>? = null
-
-        /** The user accepted losing the previous account's unsynced entries: wipe, then complete the sign-in. */
-        suspend fun confirmAccountSwitch() {
-            val (base, session) = pendingSwitch ?: return
-            pendingSwitch = null
-            capture.close()
-            wiper.wipe()
-            finishSignIn(base, session)
-        }
-
-        /** The user backed out: revoke the session the server just issued and keep everything as it was. */
-        suspend fun cancelAccountSwitch() {
-            val (base, session) = pendingSwitch ?: return
-            pendingSwitch = null
-            remote.logout(base, session.accessToken, session.refreshToken)
-        }
-
-        suspend fun unsyncedCount(): Int = wiper.unsyncedCount()
-
-        suspend fun retryableCount(): Int = wiper.retryableCount()
 
         private suspend fun finishSignIn(
             base: String,
@@ -184,7 +143,6 @@ class SessionManager
                 withContext(io) { runCatchingStore { store.lastMemberId = session.memberId } }
                 settings.update { it.copy(serverUrl = base) }
                 current = session
-                capture.open()
                 _state.value = SessionState.SignedIn(session.displayName, persisted)
             }
         }
@@ -286,17 +244,14 @@ class SessionManager
         /** The server no longer accepts this session. Queued entries upload after the next sign-in. Caller holds [commitLock]. */
         private suspend fun expire() {
             generation++
-            capture.close()
             withContext(io) { runCatchingStore { store.clear() } }
             current = null
             _state.value = SessionState.SignedOut(SignedOutNotice.SESSION_EXPIRED)
         }
 
-        /** Revokes the refresh token (best effort), then wipes tokens and all cached data for this account. */
+        /** Revokes the refresh token (best effort), then clears the session. Local data is untouched (REQ-AND-131). */
         suspend fun logout() {
             restore()
-            // First, before any network call: from now on no message is read or queued for this account.
-            capture.close()
             // End the session in memory BEFORE the revoke call: a refresh in flight can no longer commit (see generation).
             val session =
                 commitLock.withLock {
@@ -311,13 +266,12 @@ class SessionManager
                     }
                 }
             } finally {
-                // Even if the caller (a screen's scope) is cancelled during the revoke wait, the wipe completes.
+                // Even if the caller (a screen's scope) is cancelled during the revoke wait, the session is cleared.
                 withContext(NonCancellable) {
                     withContext(io) {
                         runCatchingStore { store.clear() }
                         runCatchingStore { store.lastMemberId = null }
                     }
-                    wiper.wipe()
                     _state.value = SessionState.SignedOut()
                 }
             }

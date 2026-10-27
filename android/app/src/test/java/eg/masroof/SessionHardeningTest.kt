@@ -12,7 +12,6 @@ import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
 import eg.masroof.data.auth.toAuthResult
 import eg.masroof.data.remote.newAuthClient
-import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -50,9 +49,8 @@ class SessionHardeningTest {
         remote: eg.masroof.data.auth.AuthRemote,
         store: FakeSessionStore,
         settings: FakeSettings = FakeSettings(),
-        wiper: FakeWiper = FakeWiper(),
         clock: Clock = Clock.systemUTC(),
-    ) = SessionManager(store, remote, settings, wiper, Dispatchers.Unconfined, NoopCaptureGate, clock)
+    ) = SessionManager(store, remote, settings, Dispatchers.Unconfined, clock)
 
     @Test(timeout = 30_000)
     fun `REQ-AND-007 a caller cancelled after the server rotated the token does not lose the rotation`() {
@@ -133,7 +131,7 @@ class SessionHardeningTest {
     }
 
     @Test
-    fun `REQ-AND-007 a logout cancelled during the revoke wait still wipes the device`() =
+    fun `REQ-AND-007 a logout cancelled during the revoke wait still clears the session`() =
         runTest {
             val remote =
                 object : eg.masroof.data.auth.AuthRemote by FakeAuthRemote() {
@@ -144,13 +142,11 @@ class SessionHardeningTest {
                     ): Boolean = awaitCancellation()
                 }
             val store = FakeSessionStore(LoadedSession.Found(session()))
-            val wiper = FakeWiper()
-            val sm = manager(remote, store, wiper = wiper)
+            val sm = manager(remote, store)
             val job = launch(start = CoroutineStart.UNDISPATCHED) { sm.logout() }
             job.cancel() // e.g. the user left Settings (viewModelScope cancelled)
             advanceUntilIdle()
             assertEquals(1, store.clears)
-            assertEquals(1, wiper.wipes)
             assertEquals(SessionState.SignedOut(), sm.state.value)
         }
 

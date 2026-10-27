@@ -7,11 +7,8 @@ import eg.masroof.ui.viewmodel.LoginViewModel
 import eg.masroof.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -29,7 +26,7 @@ class LoginViewModelTest {
     private val settings = FakeSettings()
     private val wiper = FakeWiper()
     private val network = FakeNetwork()
-    private val sm = TestAuth.manager(FakeSessionStore(), remote, settings, wiper)
+    private val sm = TestAuth.manager(FakeSessionStore(), remote, settings)
 
     @Before
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -123,105 +120,30 @@ class LoginViewModelTest {
         }
 
     @Test
-    fun `REQ-AND-007 settings logout calls the backend and wipes the account's data`() =
+    fun `REQ-AND-131 settings logout calls the backend and erases nothing`() =
         runTest {
             remote.loginResult = AuthResult.Success(session())
             sm.login("https://masroof.example", "a@b.eg", "pw")
-            val settingsVm = SettingsViewModel(settings, sm, scheduler)
+            val settingsVm = SettingsViewModel(settings, sm, wiper)
             settingsVm.logout()
             assertEquals(listOf("refresh-1"), remote.logoutTokens)
-            assertEquals(1, wiper.wipes)
+            assertEquals(0, wiper.wipes)
             assertEquals(SessionState.SignedOut(), sm.state.value)
         }
 
-    private suspend fun TestScope.signedInSettingsVm(unsynced: Int): SettingsViewModel {
-        wiper.unsynced = unsynced
-        remote.loginResult = AuthResult.Success(session())
-        sm.login("https://masroof.example", "a@b.eg", "pw")
-        val vm = SettingsViewModel(settings, sm, scheduler)
-        backgroundScope.launch { vm.state.collect {} }
-        runCurrent()
-        return vm
-    }
-
     @Test
-    fun `REQ-AND-007 logout with unsynced entries asks first and deletes nothing`() =
+    fun `REQ-AND-131 login as a different member goes straight through and erases nothing`() =
         runTest {
-            val vm = signedInSettingsVm(unsynced = 4)
-            vm.logout()
-            assertEquals(4, vm.state.value.confirmLogoutUnsynced)
-            assertEquals(0, wiper.wipes)
-            assertTrue(remote.logoutTokens.isEmpty())
-            assertTrue(sm.state.value is SessionState.SignedIn)
-        }
-
-    @Test
-    fun `REQ-AND-007 sync now from the logout dialog schedules the upload and keeps the session`() =
-        runTest {
-            val vm = signedInSettingsVm(unsynced = 4)
-            vm.logout()
-            val before = scheduler.calls
-            vm.syncNow()
-            assertEquals(before + 1, scheduler.calls)
-            assertNull(vm.state.value.confirmLogoutUnsynced)
-            assertEquals(0, wiper.wipes)
-            assertTrue(sm.state.value is SessionState.SignedIn)
-        }
-
-    @Test
-    fun `REQ-AND-007 the logout dialog knows how many entries can still sync`() =
-        runTest {
-            wiper.retryable = 1
-            val vm = signedInSettingsVm(unsynced = 3)
-            vm.logout()
-            assertEquals(3, vm.state.value.confirmLogoutUnsynced)
-            assertEquals(1, vm.state.value.confirmLogoutRetryable)
-        }
-
-    @Test
-    fun `REQ-AND-007 dismissing the logout dialog changes nothing`() =
-        runTest {
-            val vm = signedInSettingsVm(unsynced = 1)
-            vm.logout()
-            vm.dismissLogout()
-            assertNull(vm.state.value.confirmLogoutUnsynced)
-            assertEquals(0, wiper.wipes)
-            assertTrue(sm.state.value is SessionState.SignedIn)
-        }
-
-    @Test
-    fun `REQ-AND-007 sign out anyway wipes only after the confirmation`() =
-        runTest {
-            val vm = signedInSettingsVm(unsynced = 4)
-            vm.logout()
-            vm.confirmLogout()
-            assertEquals(1, wiper.wipes)
-            assertEquals(listOf("refresh-1"), remote.logoutTokens)
-            assertEquals(SessionState.SignedOut(), sm.state.value)
-            assertNull(vm.state.value.confirmLogoutUnsynced)
-        }
-
-    @Test
-    fun `REQ-AND-007 login as a different member with unsynced entries asks before wiping`() =
-        runTest {
-            wiper.unsynced = 2
             val store = FakeSessionStore().apply { lastMemberId = "someone-else" }
-            val manager = TestAuth.manager(store, remote, settings, wiper)
+            val manager = TestAuth.manager(store, remote, settings)
             remote.loginResult = AuthResult.Success(session())
             val vm = LoginViewModel(manager, settings, scheduler, network)
             vm.onServerUrl("https://masroof.example")
             vm.onEmail("a@b.eg")
             vm.onPassword("pw-123456")
             vm.submit()
-            assertEquals(2, vm.state.value.confirmSwitchUnsynced)
-            assertEquals(0, wiper.wipes)
-            vm.cancelSwitch()
             assertNull(vm.state.value.confirmSwitchUnsynced)
             assertEquals(0, wiper.wipes)
-            vm.onPassword("pw-123456")
-            vm.submit()
-            vm.confirmSwitch()
-            assertEquals(1, wiper.wipes)
             assertEquals(SessionState.SignedIn("Mohamed"), manager.state.value)
         }
 

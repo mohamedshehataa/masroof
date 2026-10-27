@@ -7,7 +7,6 @@ import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.newAuthClient
 import eg.masroof.data.remote.newBareClient
-import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -85,9 +84,7 @@ class AuthRefreshDeadlockTest {
                 store,
                 ApiAuthRemote(newAuthClient()),
                 settings,
-                FakeWiper(),
                 Dispatchers.IO,
-                NoopCaptureGate,
                 Clock.systemUTC(),
             )
         return ApiRemoteSource(settings, newBareClient(), manager)

@@ -10,7 +10,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.WorkManagerTestInitHelper
-import eg.masroof.data.auth.AuthResult
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
@@ -256,7 +255,7 @@ class RoomMigrationTest {
         }
 }
 
-private object NoInsightsCache : InsightsCache {
+internal object NoInsightsCache : InsightsCache {
     override fun read(key: String): String? = null
 
     override fun write(
@@ -317,8 +316,6 @@ class SignOutSmsTest {
                     }
                 }
             val wiper = RoomDataWiper(db, NoInsightsCache, workManager, Dispatchers.Unconfined, notifier = notifier)
-            assertEquals("the logout warning counts queued records", 1, wiper.unsyncedCount())
-            assertEquals(1, wiper.retryableCount())
             wiper.wipe()
 
             assertTrue(db.parsedOutbox().all().isEmpty())
@@ -335,57 +332,6 @@ class SignOutSmsTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CaptureLifecycleTest {
-    @Test
-    fun `REQ-SMS-062 sign-in opens capture, logout closes it first, and login as another account starts closed to old data`() =
-        runTest {
-            val remote = FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) }
-            val gate = MemoryGate(open = false)
-            val sm = TestAuth.manager(FakeSessionStore(), remote, capture = gate)
-            sm.login("https://masroof.example", "a@b.eg", "pw-123456")
-            assertTrue(gate.isOpen())
-            sm.logout()
-            assertFalse("closed by logout", gate.isOpen())
-        }
-
-    @Test
-    fun `REQ-SMS-062 an expired session (refresh rejected) closes capture and an account switch closes it before the wipe`() =
-        runTest {
-            val remote =
-                FakeAuthRemote().apply {
-                    loginResult = AuthResult.Success(session())
-                    refreshResult = { AuthResult.Rejected }
-                }
-            val gate = MemoryGate(open = false)
-            val sm = TestAuth.manager(FakeSessionStore(), remote, capture = gate)
-            sm.login("https://masroof.example", "a@b.eg", "pw-123456")
-            assertTrue(gate.isOpen())
-            sm.refreshAfter("access-1")
-            assertFalse("expired session: capture stops", gate.isOpen())
-
-            val seen = mutableListOf<Boolean>()
-            val spy =
-                object : eg.masroof.data.auth.LocalDataWiper {
-                    override suspend fun unsyncedCount() = 0
-
-                    override suspend fun retryableCount() = 0
-
-                    override suspend fun wipe() {
-                        seen += gate.isOpen()
-                    }
-                }
-            val store = FakeSessionStore().apply { lastMemberId = "member-other" }
-            val sm2 =
-                TestAuth.manager(
-                    store,
-                    FakeAuthRemote().apply { loginResult = AuthResult.Success(session()) },
-                    wiper = spy,
-                    capture = gate,
-                )
-            sm2.login("https://masroof.example", "a@b.eg", "pw-123456")
-            assertEquals("the gate was closed when the previous account's data was wiped", listOf(false), seen)
-            assertTrue("and open again for the new account", gate.isOpen())
-        }
-
     @Test
     fun `REQ-SMS-062 the wipe also clears sender, notification and device prefs and the id key`() {
         val context = ApplicationProvider.getApplicationContext<Context>()

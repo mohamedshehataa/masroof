@@ -85,6 +85,8 @@ object DatabaseStartup {
         Room
             .databaseBuilder(context, AppDatabase::class.java, name)
             .addMigrations(*migrations)
+            // Room is the only copy of the data: a corruption report must never delete the file (NeverDeleteOpenHelper).
+            .openHelperFactory(NeverDeleteOpenHelperFactory)
             // Only the pre-release v1 (no shipped APK has it) may be recreated; v2..v8 are always migrated.
             .fallbackToDestructiveMigrationFrom(true, 1)
             .addCallback(AppDatabaseCallback)
