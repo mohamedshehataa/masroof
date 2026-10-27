@@ -63,6 +63,7 @@ fun AddExpenseRoute(
         onDate = viewModel::onDate,
         onNotes = viewModel::onNotes,
         onSave = viewModel::save,
+        onPaidBy = viewModel::onPaidBy,
     )
 }
 
@@ -76,6 +77,7 @@ fun AddExpenseContent(
     onNotes: (String) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
+    onPaidBy: (String?) -> Unit = {},
 ) {
     val arabic = LocalMoneyStyle.current.arabic
     val form = state.form
@@ -90,7 +92,7 @@ fun AddExpenseContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes))
+            AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes, onPaidBy))
         }
         Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
             Button(
@@ -108,6 +110,7 @@ private class AddFieldActions(
     val onAccount: (String?) -> Unit,
     val onDate: (String) -> Unit,
     val onNotes: (String) -> Unit,
+    val onPaidBy: (String?) -> Unit,
 )
 
 @Composable
@@ -165,6 +168,16 @@ private fun ColumnScope.AddFields(
             selected = form.accountId,
             onSelect = onAccount,
         )
+        // Only with two or more members; one member means nothing to choose (REQ-EXP-047).
+        if (state.members.size >= 2) {
+            OptionGroup(
+                title = stringResource(R.string.paid_by),
+                options = state.members.map { it.id to it.displayName },
+                selected = form.paidByMemberId,
+                onSelect = actions.onPaidBy,
+                noneLabel = stringResource(R.string.paid_by_not_set),
+            )
+        }
         OutlinedTextField(
             value = form.notes,
             onValueChange = onNotes,
@@ -191,10 +204,11 @@ private fun OptionGroup(
     selected: String?,
     onSelect: (String?) -> Unit,
     tinted: Boolean = false,
+    noneLabel: String = stringResource(R.string.add_none),
 ) {
     Column {
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 4.dp))
-        val all = listOf<Pair<String?, String>>(null to stringResource(R.string.add_none)) + options
+        val all = listOf<Pair<String?, String>>(null to noneLabel) + options
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp),

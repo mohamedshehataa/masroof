@@ -8,6 +8,7 @@ import eg.masroof.core.CairoTime
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.MemberEntity
 import eg.masroof.data.edit.EditOutcome
 import eg.masroof.data.edit.ExpenseChanges
 import eg.masroof.data.edit.ExpenseEditor
@@ -22,7 +23,7 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 /** Why the last Save / Confirm / Delete did not go through; shown above the buttons. The user's edits stay as typed. */
-enum class EditError { OFFLINE, SIGN_IN, INVALID, FAILED }
+enum class EditError { FAILED, }
 
 data class EditFormState(
     val loaded: Boolean = false,
@@ -33,16 +34,17 @@ data class EditFormState(
     val categoryId: String? = null,
     val merchant: String = "",
     val notes: String = "",
+    val paidByMemberId: String? = null,
     val source: String? = null,
     val reviewPending: Boolean = false,
     val amountInvalid: Boolean = false,
     val dateInvalid: Boolean = false,
-    /** A call is in flight: every button is disabled so a double tap cannot send a second PATCH or DELETE. */
+    /** A write is in flight: every button is disabled so a double tap cannot write twice. */
     val busy: Boolean = false,
     val error: EditError? = null,
-    /** The server answered 409 and the form now shows its latest version. */
-    val changedElsewhere: Boolean = false,
     val confirmDelete: Boolean = false,
+    /** The entry was deleted while the screen was open: "This entry no longer exists", then the screen closes. */
+    val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
     val done: Boolean = false,
 )
@@ -50,16 +52,19 @@ data class EditFormState(
 data class EditUiState(
     val form: EditFormState = EditFormState(),
     val categories: List<CategoryEntity> = emptyList(),
+    /** Shown as the "Paid by" choice only with two or more members. */
+    val members: List<MemberEntity> = emptyList(),
 )
 
 const val TYPE_EXPENSE = "EXPENSE"
 const val TYPE_INCOME = "INCOME"
 const val TYPE_TRANSFER = "TRANSFER"
+const val TYPE_REFUND = "REFUND"
 private const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
 private const val STATUS_CONFIRMED = "CONFIRMED"
 private const val MAX_NOTES = 500
 
-/** The server's ceiling for one amount (ExpenseService.MAX_AMOUNT_MINOR), checked before sending. */
+/** The ceiling for one amount in minor units (1,000,000,000,000 major), checked before writing. */
 internal const val MAX_AMOUNT_MINOR = 10_000_000_000_000L
 
 /** At most [n] Unicode code points: a surrogate pair (emoji) is never split. */
@@ -87,6 +92,7 @@ private fun ExpenseEntity.toForm() =
         categoryId = categoryId,
         merchant = merchant.orEmpty(),
         notes = notes.orEmpty(),
+        paidByMemberId = paidByMemberId,
         source = source,
         reviewPending = status == STATUS_PENDING_REVIEW,
     )
@@ -104,14 +110,16 @@ class EditExpenseViewModel
         private var inFlight = false
 
         val state: StateFlow<EditUiState> =
-            combine(form, editor.observeCategories()) { f, c -> EditUiState(f, c) }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), EditUiState())
+            combine(form, editor.observeCategories(), editor.observeMembers()) { f, c, m ->
+                // A paid-by member that no longer exists shows as "Not set" (no chip selected).
+                EditUiState(f.copy(paidByMemberId = f.paidByMemberId?.takeIf { p -> m.any { it.id == p } }), c, m)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), EditUiState())
 
         init {
             viewModelScope.launch {
                 val found = editor.find(id)
                 if (found == null) {
-                    form.update { it.copy(done = true) } // not cached (any more): nothing to edit
+                    form.update { it.copy(done = true, gone = true) } // missing or deleted: nothing to edit
                 } else {
                     original = found
                     form.value = found.toForm()
@@ -133,32 +141,30 @@ class EditExpenseViewModel
 
         fun onNotes(text: String) = edit { it.copy(notes = text.takeCodePoints(MAX_NOTES)) }
 
+        fun onPaidBy(id: String?) = edit { it.copy(paidByMemberId = id) }
+
         fun askDelete() = form.update { if (it.busy) it else it.copy(confirmDelete = true) }
 
         fun dismissDelete() = form.update { it.copy(confirmDelete = false) }
 
-        /**
-         * One tap on a pending-review row. With no edits it sends status CONFIRMED only; with typed edits it behaves like
-         * Save (the edits plus CONFIRMED), so nothing the user typed is dropped.
-         */
+        /** One tap on a pending-review row: with no edits it only confirms; with typed edits it behaves like Save. */
         fun confirm() {
             val o = original ?: return
             if (o.status != STATUS_PENDING_REVIEW) return
             save()
         }
 
-        /** Sends only what differs from the server's copy; a pending-review row is confirmed by saving it. */
+        /** Writes only what differs from the stored row; a pending-review row is confirmed by saving it. */
         fun save() {
             val o = original ?: return
             if (inFlight) return
             val f = form.value
-            val minor = MoneyFormat.parseMinor(f.amountText)?.takeIf { it <= MAX_AMOUNT_MINOR }
+            val minor = MoneyFormat.parseMinor(f.amountText)?.takeIf { it in 1..MAX_AMOUNT_MINOR }
             if (minor == null) {
                 form.update { it.copy(amountInvalid = true) }
                 return
             }
-            val date = f.date
-            val changes = changesOf(o, f, minor, date)
+            val changes = changesOf(o, f, minor, f.date)
             if (changes.isEmpty) {
                 form.update { it.copy(done = true) }
                 return
@@ -180,6 +186,7 @@ class EditExpenseViewModel
         ): ExpenseChanges {
             val merchant = f.merchant.trim()
             val notes = f.notes.trim()
+            val paidBy = f.paidByMemberId
             return ExpenseChanges(
                 type = f.type.takeIf { it != o.type },
                 amountMinor = minor.takeIf { it != o.amountMinor },
@@ -193,14 +200,16 @@ class EditExpenseViewModel
                 merchantRaw = merchant.takeIf { it != o.merchant.orEmpty() },
                 notes = notes.takeIf { it != o.notes.orEmpty() },
                 status = STATUS_CONFIRMED.takeIf { o.status == STATUS_PENDING_REVIEW },
+                paidByMemberId = paidBy.takeIf { paidBy != o.paidByMemberId },
+                paidByChanged = paidBy != o.paidByMemberId,
             )
         }
 
-        /** One call at a time: [inFlight] is checked and set on the main thread before anything is launched. */
+        /** One write at a time: [inFlight] is checked and set on the main thread before anything is launched. */
         private fun submit(call: suspend () -> EditOutcome) {
             if (inFlight) return
             inFlight = true
-            form.update { it.copy(busy = true, error = null, changedElsewhere = false) }
+            form.update { it.copy(busy = true, error = null) }
             viewModelScope.launch {
                 try {
                     apply(call())
@@ -213,27 +222,9 @@ class EditExpenseViewModel
 
         private fun apply(outcome: EditOutcome) {
             when (outcome) {
-                is EditOutcome.Saved, EditOutcome.Deleted, EditOutcome.NotFound -> form.update { it.copy(done = true) }
-                EditOutcome.Offline -> form.update { it.copy(error = EditError.OFFLINE) }
-                EditOutcome.SignIn -> form.update { it.copy(error = EditError.SIGN_IN) }
+                is EditOutcome.Saved, EditOutcome.Deleted -> form.update { it.copy(done = true) }
+                EditOutcome.NotFound -> form.update { it.copy(done = true, gone = true) }
                 EditOutcome.Failed -> form.update { it.copy(error = EditError.FAILED) }
-                is EditOutcome.Conflict -> {
-                    val latest = outcome.latest
-                    if (latest == null) {
-                        form.update { it.copy(error = EditError.FAILED) }
-                    } else {
-                        original = latest
-                        form.value = latest.toForm().copy(changedElsewhere = true, busy = true)
-                    }
-                }
-                is EditOutcome.Invalid ->
-                    form.update {
-                        it.copy(
-                            error = EditError.INVALID,
-                            amountInvalid = outcome.field == "amount" || outcome.field?.startsWith("amount.") == true,
-                            dateInvalid = outcome.field == "occurredAt",
-                        )
-                    }
             }
         }
     }

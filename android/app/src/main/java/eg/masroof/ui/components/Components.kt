@@ -205,9 +205,9 @@ fun ExpenseListItem(
     val title =
         row.merchant?.takeIf { it.isNotBlank() } ?: row.notes?.takeIf { it.isNotBlank() } ?: stringResource(R.string.expense_fallback_title)
     val date = DateFormat.shortDate(row.date, style.arabic, style.digits)
-    // Only rows the server knows open the (server-based) edit screen; local entries do nothing on tap until STORY-170.
+    // Every row opens the edit screen, which works on Room (STORY-170).
     val openLabel = stringResource(R.string.edit_open)
-    val open = onOpen != null && row.serverId != null
+    val open = onOpen != null
     Card(
         (if (open) modifier.clickable(onClickLabel = openLabel) { onOpen(row.id) } else modifier).fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -247,6 +247,15 @@ fun ExpenseListItem(
                         stringResource(kindLabel),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                if (row.paidBy != null) {
+                    val paidByText = stringResource(R.string.paid_by_chip, row.paidBy)
+                    Text(
+                        paidByText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.semantics { contentDescription = paidByText },
                     )
                 }
                 if (capturedLocalId != null) {

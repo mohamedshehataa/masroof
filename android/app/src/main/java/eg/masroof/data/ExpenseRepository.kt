@@ -9,9 +9,11 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
+import eg.masroof.data.db.MemberEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
 import java.time.Clock
@@ -39,6 +41,8 @@ data class NewExpense(
     val categoryId: String?,
     val accountId: String?,
     val notes: String?,
+    /** Optional "paid by" label (ADR-0009 D1); null = not set. */
+    val paidByMemberId: String? = null,
 )
 
 /** New ids for rows. A seam so a test can make a write fail deterministically. */
@@ -71,6 +75,9 @@ interface ExpenseRepository {
     fun observePickerCategories(): Flow<List<CategoryEntity>>
 
     fun observeAccounts(): Flow<List<AccountEntity>>
+
+    /** The household members for the "Paid by" choice and the row chip. */
+    fun observeMembers(): Flow<List<MemberEntity>> = flowOf(emptyList())
 
     /** Saves the entry and its `MANUAL` source in one transaction; throws, with nothing written, if either insert fails. */
     suspend fun add(entry: NewExpense): String
@@ -112,6 +119,8 @@ class DefaultExpenseRepository
 
         override fun observeAccounts() = db.lookups().observeAccounts()
 
+        override fun observeMembers() = db.lookups().observeMembers()
+
         override suspend fun add(entry: NewExpense): String {
             val now = clock.millis()
             val id = ids.next()
@@ -132,6 +141,7 @@ class DefaultExpenseRepository
                             categoryId = entry.categoryId,
                             accountId = entry.accountId,
                             notes = entry.notes,
+                            paidByMemberId = entry.paidByMemberId,
                             pending = false,
                             source = CHANNEL_MANUAL,
                             createdAtMillis = now,

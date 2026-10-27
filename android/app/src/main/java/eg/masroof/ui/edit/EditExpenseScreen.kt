@@ -1,5 +1,6 @@
 package eg.masroof.ui.edit
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -59,6 +61,7 @@ import eg.masroof.ui.viewmodel.EditExpenseViewModel
 import eg.masroof.ui.viewmodel.EditUiState
 import eg.masroof.ui.viewmodel.TYPE_EXPENSE
 import eg.masroof.ui.viewmodel.TYPE_INCOME
+import eg.masroof.ui.viewmodel.TYPE_REFUND
 import eg.masroof.ui.viewmodel.TYPE_TRANSFER
 import java.time.Instant
 import java.time.LocalDate
@@ -71,7 +74,13 @@ fun EditExpenseRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     SecureWindow()
-    LaunchedEffect(state.form.done) { if (state.form.done) onDone() }
+    val context = LocalContext.current
+    LaunchedEffect(state.form.done) {
+        if (state.form.done) {
+            if (state.form.gone) Toast.makeText(context, R.string.edit_gone, Toast.LENGTH_SHORT).show()
+            onDone()
+        }
+    }
     EditExpenseContent(
         state,
         EditActions(
@@ -86,6 +95,7 @@ fun EditExpenseRoute(
             viewModel::askDelete,
             viewModel::delete,
             viewModel::dismissDelete,
+            viewModel::onPaidBy,
         ),
     )
 }
@@ -167,6 +177,7 @@ private fun EditFields(
             TYPE_EXPENSE to stringResource(R.string.edit_type_expense),
             TYPE_INCOME to stringResource(R.string.edit_type_income),
             TYPE_TRANSFER to stringResource(R.string.edit_type_transfer),
+            TYPE_REFUND to stringResource(R.string.edit_type_refund),
         ),
         selected = form.type,
         enabled = !form.busy,
@@ -194,6 +205,16 @@ private fun EditFields(
         tinted = true,
         onSelect = { actions.onCategory(it) },
     )
+    // Only with two or more members; a missing member shows as "Not set" (REQ-EXP-047).
+    if (state.members.size >= 2) {
+        Text(stringResource(R.string.paid_by), style = MaterialTheme.typography.titleSmall)
+        ChipRow(
+            listOf("" to stringResource(R.string.paid_by_not_set)) + state.members.map { it.id to it.displayName },
+            selected = form.paidByMemberId.orEmpty(),
+            enabled = !form.busy,
+            onSelect = { actions.onPaidBy(it.ifEmpty { null }) },
+        )
+    }
     OutlinedTextField(
         value = form.merchant,
         onValueChange = actions.onMerchant,
@@ -221,11 +242,7 @@ private fun EditBar(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val message =
                 when {
-                    form.error == EditError.OFFLINE -> R.string.edit_error_offline
-                    form.error == EditError.SIGN_IN -> R.string.edit_error_sign_in
-                    form.error == EditError.INVALID -> R.string.edit_error_invalid
                     form.error == EditError.FAILED -> R.string.edit_error_failed
-                    form.changedElsewhere -> R.string.edit_changed_elsewhere
                     form.busy -> R.string.edit_working
                     else -> null
                 }
