@@ -8,6 +8,8 @@ import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -174,12 +176,16 @@ class SessionManager
             base: String,
             session: Session,
         ) {
-            val persisted = persist(session)
-            withContext(io) { runCatchingStore { store.lastMemberId = session.memberId } }
-            settings.update { it.copy(serverUrl = base) }
-            current = session
-            capture.open()
-            _state.value = SessionState.SignedIn(session.displayName, persisted)
+            // A refresh that started for the previous session must not overwrite this one: bump the generation first.
+            commitLock.withLock {
+                generation++
+                val persisted = persist(session)
+                withContext(io) { runCatchingStore { store.lastMemberId = session.memberId } }
+                settings.update { it.copy(serverUrl = base) }
+                current = session
+                capture.open()
+                _state.value = SessionState.SignedIn(session.displayName, persisted)
+            }
         }
 
         /** Writing the encrypted store must never be fatal: on failure the session stays in memory only. */
@@ -208,34 +214,76 @@ class SessionManager
             // screen abandons only its WAIT. A cancelled refresh would lose the server's reply after the refresh token
             // was rotated, and the next refresh would replay the spent token (reuse detection ends the whole family).
             // The request itself is bounded by the auth client's call timeout.
-            return refreshScope.async { refreshExclusive(staleToken) }.await()
+            // ONE refresh per stale token is shared by every waiter (a failed refresh ends all their waits instead of
+            // starting N serial attempts, each of which after a lost reply would replay a spent refresh token).
+            val flight =
+                synchronized(flightLock) {
+                    inFlight?.takeIf { it.stale == staleToken && it.result.isActive }
+                        ?: Flight(staleToken, refreshScope.async(start = CoroutineStart.LAZY) { refreshExclusive(staleToken) })
+                            .also { inFlight = it }
+                }
+            flight.result.start()
+            return flight.result.await()
         }
+
+        private class Flight(
+            val stale: String?,
+            val result: Deferred<String?>,
+        )
+
+        private val flightLock = Any()
+
+        @Volatile private var inFlight: Flight? = null
 
         private val refreshScope = CoroutineScope(SupervisorJob() + io)
 
+        /** Bumped under [commitLock] whenever the session is replaced or ended; a refresh result commits only if unchanged. */
+        private var generation = 0
+        private val commitLock = Mutex()
+
         private suspend fun refreshExclusive(staleToken: String?): String? =
             refreshMutex.withLock {
+                val startGeneration = commitLock.withLock { generation }
                 val session = current ?: return@withLock null
                 if (staleToken != null && session.accessToken != staleToken) return@withLock session.accessToken
                 val base = settings.current().serverUrl
                 when (val result = remote.refresh(base, session.refreshToken)) {
-                    is AuthResult.Success -> {
-                        // Memory first: the rotated token must be the one used next even if persisting fails.
-                        current = result.session
-                        val persisted = persist(result.session)
-                        _state.value = SessionState.SignedIn(result.session.displayName, persisted)
-                        result.session.accessToken
-                    }
+                    is AuthResult.Success -> commitRefreshed(base, startGeneration, result.session)
                     AuthResult.Rejected -> {
-                        expire()
+                        commitLock.withLock { if (generation == startGeneration) expire() }
                         null
                     }
                     else -> null
                 }
             }
 
-        /** The server no longer accepts this session. Queued entries are kept; they upload after the next sign-in. */
+        /**
+         * Commits a rotated session only if nobody signed out or in meanwhile. Otherwise the result is discarded and its
+         * refresh token revoked (best effort), so a refresh in flight can never resurrect a logged-out session or
+         * overwrite another member's sign-in.
+         */
+        private suspend fun commitRefreshed(
+            base: String,
+            startGeneration: Int,
+            fresh: Session,
+        ): String? {
+            val committed =
+                commitLock.withLock {
+                    if (generation != startGeneration) return@withLock false
+                    // Memory first: the rotated token must be the one used next even if persisting fails.
+                    current = fresh
+                    val persisted = persist(fresh)
+                    _state.value = SessionState.SignedIn(fresh.displayName, persisted)
+                    true
+                }
+            if (committed) return fresh.accessToken
+            withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) { remote.logout(base, fresh.accessToken, fresh.refreshToken) }
+            return null
+        }
+
+        /** The server no longer accepts this session. Queued entries upload after the next sign-in. Caller holds [commitLock]. */
         private suspend fun expire() {
+            generation++
             capture.close()
             withContext(io) { runCatchingStore { store.clear() } }
             current = null
@@ -247,7 +295,12 @@ class SessionManager
             restore()
             // First, before any network call: from now on no message is read or queued for this account.
             capture.close()
-            val session = current
+            // End the session in memory BEFORE the revoke call: a refresh in flight can no longer commit (see generation).
+            val session =
+                commitLock.withLock {
+                    generation++
+                    current.also { current = null }
+                }
             try {
                 if (session != null) {
                     // Best effort and bounded: a stuck network must never keep the user from signing out locally.
@@ -263,7 +316,6 @@ class SessionManager
                         runCatchingStore { store.lastMemberId = null }
                     }
                     wiper.wipe()
-                    current = null
                     _state.value = SessionState.SignedOut()
                 }
             }
