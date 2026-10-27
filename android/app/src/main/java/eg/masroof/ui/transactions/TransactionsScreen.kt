@@ -36,9 +36,7 @@ fun TransactionsRoute(
     val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
     TransactionsContent(
         state,
-        onRetry = viewModel::refresh,
-        onRetryEntry = viewModel::retryEntry,
-        onDeleteEntry = viewModel::deleteEntry,
+        onRetry = {},
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
         onOpenExpense = onOpenExpense,

@@ -66,13 +66,10 @@ fun HomeRoute(
     HomeContent(
         state,
         onRetry = {
-            viewModel.refresh()
             insightsViewModel.refresh()
             budgetsViewModel.refresh()
         },
         onSeeAll = onSeeAll,
-        onRetryEntry = viewModel::retryEntry,
-        onDeleteEntry = viewModel::deleteEntry,
         insight = insight,
         onOpenInsights = onOpenInsights,
         budgets = budgets,
@@ -184,13 +181,6 @@ private fun SpentCard(
                         color = onContainer,
                     )
                 }
-            }
-            if (state.pendingCount > 0) {
-                Text(
-                    stringResource(R.string.pending_count, state.pendingCount),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
             }
         }
     }

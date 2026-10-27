@@ -294,6 +294,7 @@ class CapturedActions
         private val deleter: ExpenseDeleter,
         private val clock: Clock,
         private val locks: CapturedLocks = CapturedLocks(),
+        private val upload: UploadSession = AlwaysSignedIn,
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
@@ -308,6 +309,8 @@ class CapturedActions
                     queued -> if (removeUnsent(localId)) UndoResult(true, item.templateId) else remember(item)
                     // uploaded, but the server has not told us which expense it made: remembered, resolved by the next upload pass
                     item.expenseId == null -> remember(item)
+                    // no session: no request is made; the Undo is remembered and replayed when a session exists
+                    !upload.hasSession() -> remember(item)
                     !deleter.deleteExpense(item.expenseId) -> UndoResult(false, item.templateId)
                     else -> {
                         db.withTransaction {

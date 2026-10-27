@@ -1,15 +1,8 @@
 package eg.masroof
 
-import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
-import eg.masroof.core.Money
-import eg.masroof.data.DefaultExpenseRepository
-import eg.masroof.data.NewExpense
-import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.legacyTokenMigration
 import eg.masroof.data.remote.ProblemInfo
 import eg.masroof.data.remote.UploadResult
@@ -21,20 +14,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 
 /** The backend's three createExpense 409s (ExpenseService.create), as the app sees them. */
 private const val P = "https://masroof.app/problems/"
@@ -54,24 +42,6 @@ private fun problem(
 @Config(sdk = [34])
 class UploadConflictTest {
     @get:Rule val tmp = TemporaryFolder()
-
-    private lateinit var db: AppDatabase
-    private lateinit var remote: FakeRemote
-    private lateinit var repo: DefaultExpenseRepository
-    private val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
-
-    @Before
-    fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
-        remote = FakeRemote()
-        repo = DefaultExpenseRepository(db, remote, clock)
-    }
-
-    @After
-    fun tearDown() = db.close()
-
-    private fun entry() = NewExpense(Money(12_500), clock.millis(), null, null, "lunch")
 
     // ---- classification, one test per 409 cause
 
@@ -156,85 +126,6 @@ class UploadConflictTest {
         assertEquals(UploadResult.RetryAfter(30), classifyUploadStatus(503, false, retryAfterSeconds = 30))
         assertEquals(UploadResult.Retry, classifyUploadStatus(503, false, retryAfterSeconds = 0))
     }
-
-    @Test
-    fun `REQ-AND-015 a long outage never fails queued entries`() =
-        runTest {
-            val id = repo.add(entry())
-            for (code in listOf(502, 503, 429, 408, 500)) {
-                remote.uploadResult = { classifyUploadStatus(code, false) }
-                repeat(10) { assertTrue(repo.syncOutbox().retry) }
-            }
-            val row = repo.observeAll().first().single { it.id == id }
-            assertEquals(false, row.failed)
-            assertEquals(1, repo.observePendingCount().first())
-        }
-
-    @Test
-    fun `REQ-AND-015 the sync report carries the server's Retry-After`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(429, false, retryAfterSeconds = 900) }
-            val report = repo.syncOutbox()
-            assertTrue(report.retry)
-            assertEquals(900L, report.retryAfterSeconds)
-        }
-
-    @Test
-    fun `REQ-AND-015 a Retry-After outage then recovery uploads the entry`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(503, false, retryAfterSeconds = 60) }
-            repeat(8) { repo.syncOutbox() }
-            remote.uploadResult = { UploadResult.Created(expense("server-1", it.amountMinor)) }
-            assertEquals(1, repo.syncOutbox().uploaded)
-        }
-
-    // ---- outbox behaviour
-
-    @Test
-    fun `REQ-AND-015 a permanent 409 marks the entry failed at once`() =
-        runTest {
-            val id = repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(409, false, problem(T_REUSED)) }
-            val report = repo.syncOutbox()
-            assertEquals(1, report.rejected)
-            assertEquals(false, report.retry)
-            assertTrue(
-                repo
-                    .observeAll()
-                    .first()
-                    .single { it.id == id }
-                    .failed,
-            )
-        }
-
-    @Test
-    fun `REQ-AND-015 a concurrent 409 is retried up to the cap then marked failed`() =
-        runTest {
-            val id = repo.add(entry())
-            remote.uploadResult = { classifyUploadStatus(409, false, problem(T_PROGRESS)) }
-            repeat(4) { assertTrue(repo.syncOutbox().retry) }
-            val last = repo.syncOutbox()
-            assertEquals(false, last.retry)
-            assertEquals(1, last.rejected)
-            assertTrue(
-                repo
-                    .observeAll()
-                    .first()
-                    .single { it.id == id }
-                    .failed,
-            )
-        }
-
-    @Test
-    fun `REQ-AND-015 an unreachable network is never capped`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = { UploadResult.Retry }
-            repeat(12) { assertTrue(repo.syncOutbox().retry) }
-            assertEquals(1, repo.observePendingCount().first())
-        }
 
     // ---- legacy plaintext token (MINOR)
 

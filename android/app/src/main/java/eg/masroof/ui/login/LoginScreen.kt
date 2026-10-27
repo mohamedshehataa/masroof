@@ -62,8 +62,8 @@ fun LoginRoute(
         onToggleShow = viewModel::toggleShowPassword,
         onSubmit = viewModel::submit,
         onToggleLanguage = onToggleLanguage,
-        onConfirmSwitch = viewModel::confirmSwitch,
-        onCancelSwitch = viewModel::cancelSwitch,
+        onConfirmSwitch = {},
+        onCancelSwitch = {},
     )
 }
 

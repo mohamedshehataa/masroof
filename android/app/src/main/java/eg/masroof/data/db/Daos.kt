@@ -94,6 +94,9 @@ interface ExpenseDao {
         to: String,
     )
 
+    @Query("SELECT COUNT(*) FROM expense")
+    suspend fun count(): Int
+
     @Query("SELECT id FROM expense WHERE pending = 0")
     suspend fun syncedIds(): List<String>
 
@@ -116,6 +119,25 @@ interface ExpenseDao {
         deleteAll(syncedIds().filter { it !in keep })
         upsert(items)
     }
+}
+
+/** The dedup link of an entry to the message (or manual save) that made it. Inserts abort on a duplicate `localSourceId`. */
+@Dao
+interface ExpenseSourceDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(item: ExpenseSourceEntity)
+
+    @Query("SELECT COUNT(*) FROM expense_source WHERE localSourceId = :localSourceId")
+    suspend fun countByLocalSourceId(localSourceId: String): Int
+
+    @Query("SELECT * FROM expense_source")
+    suspend fun all(): List<ExpenseSourceEntity>
+}
+
+@Dao
+interface ReceiptDao {
+    @Query("SELECT COUNT(*) FROM receipt")
+    suspend fun count(): Int
 }
 
 @Dao
@@ -161,6 +183,9 @@ interface LookupDao {
      */
     @Query("SELECT * FROM category WHERE system = 0 ORDER BY sortOrder, nameEn")
     fun observeCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM category ORDER BY sortOrder, nameEn")
+    fun observeLabelCategories(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
     fun observeAllCategories(): Flow<List<CategoryEntity>>
@@ -392,6 +417,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun learnedTemplates(): LearnedTemplateDao
 
     abstract fun captured(): CapturedDao
+
+    abstract fun sources(): ExpenseSourceDao
+
+    abstract fun receipts(): ReceiptDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction

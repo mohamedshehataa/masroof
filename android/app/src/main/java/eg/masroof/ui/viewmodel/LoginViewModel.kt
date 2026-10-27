@@ -31,7 +31,7 @@ data class LoginUiState(
     val error: LoginError? = null,
     /** Whole minutes to wait after a 429, rounded up; null when the server did not say. */
     val retryMinutes: Int? = null,
-    /** Set when these credentials belong to another member and this many entries of the previous one are unsynced. */
+    /** Unused since ADR-0009 (data never follows the session); kept so the frozen dialog still compiles. */
     val confirmSwitchUnsynced: Int? = null,
 )
 
@@ -85,8 +85,6 @@ class LoginViewModel
             viewModelScope.launch {
                 when (val result = session.login(s.serverUrl, s.email, s.password)) {
                     LoginResult.Success -> signedIn()
-                    is LoginResult.AccountSwitch ->
-                        _state.update { it.copy(loading = false, confirmSwitchUnsynced = result.unsynced) }
                     LoginResult.InvalidUrl -> fail(urlInvalid = true)
                     LoginResult.InvalidCredentials -> fail(LoginError.INVALID_CREDENTIALS)
                     is LoginResult.RateLimited -> fail(LoginError.RATE_LIMITED, result.retryAfterSeconds?.let(::ceilMinutes))
@@ -94,20 +92,6 @@ class LoginViewModel
                     LoginResult.Server -> fail(LoginError.SERVER)
                 }
             }
-        }
-
-        /** The user accepts deleting the previous member's unsynced entries. */
-        fun confirmSwitch() {
-            _state.update { it.copy(confirmSwitchUnsynced = null, loading = true) }
-            viewModelScope.launch {
-                session.confirmAccountSwitch()
-                signedIn()
-            }
-        }
-
-        fun cancelSwitch() {
-            _state.update { it.copy(confirmSwitchUnsynced = null, password = "") }
-            viewModelScope.launch { session.cancelAccountSwitch() }
         }
 
         private fun signedIn() {

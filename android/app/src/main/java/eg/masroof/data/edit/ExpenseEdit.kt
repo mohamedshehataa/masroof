@@ -103,8 +103,8 @@ class DefaultExpenseEditor
             id: String,
             changes: ExpenseChanges,
         ): EditOutcome =
-            attempt(id) {
-                val updated = withDeadline { remote.patch(id, changes) }
+            attempt(id) { serverId ->
+                val updated = withDeadline { remote.patch(serverId, changes) }
                 // Cache first, so lists and totals are right before the screen closes; then tell Home and Insights.
                 db.expenses().upsert(updated)
                 signal.changed()
@@ -112,19 +112,32 @@ class DefaultExpenseEditor
             }
 
         override suspend fun delete(id: String): EditOutcome =
-            attempt(id) {
-                withDeadline { remote.delete(id) }
+            attempt(id) { serverId ->
+                withDeadline { remote.delete(serverId) }
                 db.expenses().delete(id)
                 signal.changed()
                 EditOutcome.Deleted
             }
 
+        /**
+         * Only a row the server knows ([ExpenseEntity.serverId]) may reach the server. A local entry never does, and no HTTP
+         * answer deletes a local row (STORY-170 builds local edit).
+         */
         private suspend fun attempt(
             id: String,
-            call: suspend () -> EditOutcome,
+            call: suspend (serverId: String) -> EditOutcome,
+        ): EditOutcome {
+            val serverId = db.expenses().find(id)?.serverId ?: return EditOutcome.Failed
+            return attemptRemote(id, serverId, call)
+        }
+
+        private suspend fun attemptRemote(
+            id: String,
+            serverId: String,
+            call: suspend (serverId: String) -> EditOutcome,
         ): EditOutcome =
             try {
-                call()
+                call(serverId)
             } catch (_: IOException) {
                 EditOutcome.Offline
             } catch (e: HttpFailure) {
@@ -135,7 +148,7 @@ class DefaultExpenseEditor
                         signal.changed()
                         EditOutcome.NotFound
                     }
-                    CONFLICT -> EditOutcome.Conflict(reload(id))
+                    CONFLICT -> EditOutcome.Conflict(reload(serverId))
                     BAD_REQUEST, UNPROCESSABLE -> EditOutcome.Invalid(e.field)
                     else -> EditOutcome.Failed
                 }

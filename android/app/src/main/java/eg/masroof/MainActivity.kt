@@ -18,7 +18,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -34,8 +33,6 @@ import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
-import eg.masroof.data.auth.SessionManager
-import eg.masroof.data.auth.SessionState
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
@@ -45,7 +42,6 @@ import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
-import eg.masroof.ui.login.LoginRoute
 import eg.masroof.ui.review.ReviewAddRoute
 import eg.masroof.ui.review.ReviewRoute
 import eg.masroof.ui.settings.SettingsRoute
@@ -56,12 +52,15 @@ import eg.masroof.work.ForegroundSync
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** The first destination, always Home (REQ-AND-130). */
+internal const val START_ROUTE = "home"
+
 private enum class Tab(
     val route: String,
     val label: Int,
     val icon: ImageVector,
 ) {
-    Home("home", R.string.nav_home, Icons.Filled.Home),
+    Home(START_ROUTE, R.string.nav_home, Icons.Filled.Home),
     Transactions("transactions", R.string.nav_transactions, Icons.AutoMirrored.Filled.List),
     Insights("insights", R.string.nav_insights, InsightsIcon),
     Settings("settings", R.string.nav_settings, Icons.Filled.Settings),
@@ -76,8 +75,6 @@ private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var settings: SettingsRepository
-
-    @Inject lateinit var session: SessionManager
 
     @Inject lateinit var foregroundSync: ForegroundSync
 
@@ -102,30 +99,15 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val current by settings.settings.collectAsState(initial = AppSettings())
-            val sessionState by session.state.collectAsState()
-            LaunchedEffect(Unit) { session.restore() }
             MasroofTheme(digitOverride = current.digitStyle) {
-                when (val s = sessionState) {
-                    SessionState.Restoring -> Unit
-                    is SessionState.SignedOut ->
-                        Scaffold { padding ->
-                            LoginRoute(
-                                s.notice,
-                                onToggleLanguage = {
-                                    AppLanguage.toggle(this@MainActivity)
-                                    recreate()
-                                },
-                                modifier = Modifier.padding(padding),
-                            )
-                        }
-                    is SessionState.SignedIn ->
-                        MasroofRoot(
-                            onToggleLanguage = {
-                                AppLanguage.toggle(this@MainActivity)
-                                recreate()
-                            },
-                        )
-                }
+                // No sign-in screen and no session check: the app is the whole product (REQ-AND-130). Home is the first screen
+                // whether or not a session exists, and a rejected or lost session never blocks it.
+                MasroofRoot(
+                    onToggleLanguage = {
+                        AppLanguage.toggle(this@MainActivity)
+                        recreate()
+                    },
+                )
             }
         }
     }

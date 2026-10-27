@@ -82,14 +82,6 @@ sealed interface AuthResult {
 sealed interface LoginResult {
     data object Success : LoginResult
 
-    /**
-     * The credentials are valid but belong to a different member than the one whose [unsynced] entries are queued
-     * on this device. Nothing is stored until [SessionManager.confirmAccountSwitch].
-     */
-    data class AccountSwitch(
-        val unsynced: Int,
-    ) : LoginResult
-
     data object InvalidUrl : LoginResult
 
     data object InvalidCredentials : LoginResult
@@ -124,13 +116,25 @@ interface AuthRemote {
     ): Boolean
 }
 
-/** Removes everything cached for the account: Room tables (expenses, outbox, lookups) and pending sync work. */
+/** What "Erase all data" is about to delete, for the confirmation dialog. */
+data class EraseCounts(
+    val entries: Int,
+    val receipts: Int,
+)
+
+/** The only way to delete local data (REQ-AND-132): user-initiated from Settings, never a session event. */
 interface LocalDataWiper {
-    /** Queued entries (pending or failed) that exist only on this device. */
-    suspend fun unsyncedCount(): Int
+    suspend fun counts(): EraseCounts
 
-    /** The part of [unsyncedCount] that can still sync (not permanently failed). */
-    suspend fun retryableCount(): Int
-
+    /** Cancels and awaits capture jobs, clears every table and the receipts folder, then seeds the defaults again. */
     suspend fun wipe()
+
+    /**
+     * Finishes an erase that was cut short. [eg.masroof.ingest.EraseStage.ERASING] reruns [wipe]; CLEANUP runs only the
+     * steps after the commit and never touches a table (entries added since must survive).
+     */
+    suspend fun recover(stage: eg.masroof.ingest.EraseStage)
 }
+
+/** The data is already gone but a clean-up step after the database commit failed; the next start finishes it. */
+class PartialEraseException : Exception("erase finished the database but not every clean-up step")

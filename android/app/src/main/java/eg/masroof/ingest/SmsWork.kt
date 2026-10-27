@@ -275,7 +275,26 @@ data class SmsSyncReport(
     val retryAfterSeconds: Long? = null,
 )
 
+/** Whether a server session exists. Without one the capture uploader sends nothing (ADR-0009: no anonymous or stale uploads). */
+interface UploadSession {
+    suspend fun hasSession(): Boolean
+}
+
+object AlwaysSignedIn : UploadSession {
+    override suspend fun hasSession() = true
+}
+
+@Singleton
+class SessionUploadCheck
+    @Inject
+    constructor(
+        private val session: eg.masroof.data.auth.SessionManager,
+    ) : UploadSession {
+        override suspend fun hasSession() = session.memberId() != null
+    }
+
 /** Uploads queued records one by one, in order. A row is deleted as soon as the server acknowledged it (REQ-SMS-061). */
+@Suppress("LongParameterList") // one collaborator per concern; all injected
 @Singleton
 class SmsUploader
     @Inject
@@ -289,6 +308,7 @@ class SmsUploader
         private val locks: CapturedLocks = CapturedLocks(),
         private val notifier: CapturedNotifier = NoCapturedNotifier,
         private val refresher: UploadedRecordsRefresher = NoUploadedRecordsRefresher,
+        private val upload: UploadSession = AlwaysSignedIn,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -300,6 +320,8 @@ class SmsUploader
             dao.purgeFailedBefore(clock.millis() - RETENTION_MILLIS)
             // Signed out (or between two accounts): rows are never sent; logout cleared them, this is the belt.
             if (!gate.isOpen()) return SmsSyncReport(0, 0, false)
+            // No session: nothing is sent and no Undo is replayed against the server. Rows stay queued (STORY-171 makes them local).
+            if (!upload.hasSession()) return SmsSyncReport(0, 0, false)
             var sent = 0
             var rejected = 0
             var retry = false

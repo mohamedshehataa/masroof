@@ -4,11 +4,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import eg.masroof.data.DefaultExpenseRepository
-import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.auth.LoadedSession
 import eg.masroof.data.db.AppDatabase
-import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MIGRATION_7_8
 import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.ParsedOutboxEntity
@@ -411,21 +408,5 @@ class CapturedPairingTest {
             assertEquals(listOf("EXPENSE", "INCOME", "TRANSFER"), asked)
             assertEquals(listOf("EXPENSE", "INCOME", "TRANSFER"), rows.map { it.type })
             assertEquals(75_000L, rows.last().amountMinor)
-        }
-
-    @Test
-    fun `REQ-SMS-092 a failed refresh leaves the cached list intact`() =
-        runTest {
-            db.expenses().upsert(listOf(ExpenseEntity("cached", 5_000, "EGP", 1_000L, "Shop", null, null, null, pending = false)))
-            val repo = DefaultExpenseRepository(db, remoteWith(mutableListOf(), failOn = "TRANSFER"), TickClock(start))
-            assertEquals(RefreshOutcome.Offline, repo.refresh())
-            assertEquals(
-                listOf("cached"),
-                db
-                    .expenses()
-                    .observeAll()
-                    .first()
-                    .map { it.id },
-            )
         }
 }

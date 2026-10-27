@@ -3,18 +3,17 @@ package eg.masroof
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import eg.masroof.core.Money
-import eg.masroof.data.DefaultExpenseRepository
-import eg.masroof.data.NewExpense
-import eg.masroof.data.RefreshOutcome
+import eg.masroof.data.OutboxConverter
+import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.db.AppDatabase
-import eg.masroof.data.remote.UploadResult
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.first
+import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.OutboxEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,191 +22,170 @@ import org.robolectric.annotation.Config
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicInteger
 
+// The old upload-queue tests lived here; REQ-AND-133 turns the queue into local entries (STORY-169).
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class OutboxTest {
     private lateinit var db: AppDatabase
-    private lateinit var remote: FakeRemote
-    private lateinit var repo: DefaultExpenseRepository
-    private val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
+    private val clock = Clock.fixed(Instant.parse("2026-10-27T09:00:00Z"), ZoneOffset.UTC)
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
-        remote = FakeRemote()
-        repo = DefaultExpenseRepository(db, remote, clock)
+        db.openHelper.writableDatabase.execSQL("PRAGMA foreign_keys=ON")
     }
 
     @After
     fun tearDown() = db.close()
 
-    private fun entry(minor: Long = 12_500) = NewExpense(Money(minor), clock.millis(), null, null, "lunch")
+    private suspend fun queue(
+        id: String,
+        minor: Long = 12_500,
+        currency: String = "EGP",
+        failed: Boolean = false,
+        at: Long = 1_000,
+    ) {
+        db.outbox().insert(
+            OutboxEntity(id, minor, currency, at, "cat-car.fuel", "acc-1", "lunch", attempts = 2, failed = failed, createdAtMillis = at),
+        )
+        db.expenses().insert(
+            ExpenseEntity(id, minor, currency, at, null, "cat-car.fuel", "acc-1", "lunch", pending = true, failed = failed),
+        )
+    }
+
+    private fun converter(clock: Clock = this.clock) = OutboxConverter(db, clock, UuidIdFactory())
 
     @Test
-    fun `REQ-AND-015 add is saved locally first and queued`() =
+    fun `REQ-AND-133 each queued entry becomes one local expense with a MANUAL source and the queue is emptied`() =
         runTest {
-            repo.add(entry())
-            val rows = repo.observeAll().first()
-            assertEquals(1, rows.size)
-            assertTrue(rows[0].pending)
-            assertEquals(1, repo.observePendingCount().first())
+            queue("c1")
+            queue("c2", failed = true, at = 2_000)
+            assertEquals(2, converter().convertAll())
+
+            assertTrue(db.outbox().all().isEmpty())
+            val rows = db.expenses().all()
+            assertEquals(2, rows.size)
+            assertTrue(rows.none { it.pending || it.failed })
+            assertNull("the old pending cache row is gone", db.expenses().find("c1"))
+            for (row in rows) {
+                assertEquals("CONFIRMED", row.status)
+                assertEquals("EXPENSE", row.type)
+                assertEquals(12_500L, row.amountMinor)
+                assertEquals("EGP", row.currency)
+                assertEquals("cat-car.fuel", row.categoryId)
+                assertEquals("acc-1", row.accountId)
+                assertEquals("lunch", row.notes)
+            }
+            val sources = db.sources().all()
+            assertEquals(setOf("c1", "c2"), sources.map { it.localSourceId }.toSet())
+            assertTrue(sources.all { it.channel == "MANUAL" })
+            assertEquals(rows.map { it.id }.toSet(), sources.map { it.expenseId }.toSet())
         }
 
     @Test
-    fun `REQ-AND-015 month total includes offline entries in Cairo month`() =
+    fun `REQ-AND-133 a second run converts nothing and duplicates nothing`() =
         runTest {
-            repo.add(entry(10_000))
-            repo.add(entry(2_500))
-            assertEquals(Money(12_500), repo.observeMonthTotal().first())
+            queue("c1")
+            assertEquals(1, converter().convertAll())
+            assertEquals(0, converter().convertAll())
+            assertEquals(1, db.expenses().count())
+            assertEquals(1, db.sources().all().size)
         }
 
     @Test
-    fun `REQ-AND-015 sync uploads with the client id as idempotency key and swaps in the server row`() =
+    fun `REQ-AND-133 a run interrupted between rows is finished by the next start without duplicates`() =
         runTest {
-            val id = repo.add(entry())
-            remote.uploadResult = { UploadResult.Created(expense("server-1", it.amountMinor)) }
+            queue("c1", at = 1_000)
+            queue("c2", at = 2_000)
+            queue("c3", at = 3_000)
+            // the process "dies" while converting the second row: its clock read throws, so its transaction rolls back
+            val calls = AtomicInteger()
+            val dying =
+                object : Clock() {
+                    override fun getZone() = clock.zone
 
-            val report = repo.syncOutbox()
+                    override fun withZone(zone: java.time.ZoneId?) = this
 
-            assertEquals(1, report.uploaded)
-            assertEquals(listOf(id), remote.uploadedKeys)
-            val rows = repo.observeAll().first()
-            assertEquals(listOf("server-1"), rows.map { it.id })
-            assertTrue(rows.none { it.pending })
-            assertEquals(0, repo.observePendingCount().first())
-        }
+                    override fun instant(): Instant = if (calls.incrementAndGet() == 2) error("killed") else clock.instant()
+                }
+            try {
+                converter(dying).convertAll()
+                fail("the interrupted run should have thrown")
+            } catch (expected: IllegalStateException) {
+                // process death
+            }
+            assertEquals(1, db.sources().all().size)
+            assertEquals(
+                listOf("c2", "c3"),
+                db
+                    .outbox()
+                    .all()
+                    .map { it.clientId }
+                    .sorted(),
+            )
 
-    @Test
-    fun `REQ-AND-015 unreachable server keeps the entry and asks for retry with backoff`() =
-        runTest {
-            repo.add(entry())
-            repo.add(entry(500))
-            remote.uploadResult = { UploadResult.Retry }
-
-            val report = repo.syncOutbox()
-
-            assertTrue(report.retry)
-            assertEquals("stops after the first failure", 1, remote.uploadedKeys.size)
-            assertEquals(2, repo.observePendingCount().first())
-            assertEquals(1, db.outbox().all().sumOf { it.attempts })
-        }
-
-    @Test
-    fun `REQ-AND-015 rejected entries leave the queue but stay visible`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = { UploadResult.Rejected }
-
-            val report = repo.syncOutbox()
-
-            assertEquals(1, report.rejected)
-            assertEquals(false, report.retry)
-            assertEquals(0, repo.observePendingCount().first())
-            assertEquals(1, repo.observeAll().first().size)
-        }
-
-    @Test
-    fun `REQ-AND-015 refresh reports offline and keeps cached rows`() =
-        runTest {
-            remote.expenses = listOf(expense("a", 100))
-            assertEquals(RefreshOutcome.Ok, repo.refresh())
-            remote.offline = true
-            assertEquals(RefreshOutcome.Offline, repo.refresh())
-            assertEquals(listOf("a"), repo.observeAll().first().map { it.id })
-        }
-
-    @Test
-    fun `REQ-AND-015 refresh never drops locally pending rows`() =
-        runTest {
-            val id = repo.add(entry())
-            remote.expenses = listOf(expense("a", 100))
-            remote.uploadResult = { UploadResult.Retry }
-            repo.refresh()
-            assertTrue(repo.observeAll().first().any { it.id == id && it.pending })
-        }
-
-    @Test
-    fun `REQ-AND-015 a rejected entry is marked failed and excluded from the month total`() =
-        runTest {
-            val id = repo.add(entry(10_000))
-            repo.add(entry(2_500))
-            remote.uploadResult = { if (it.clientId == id) UploadResult.Rejected else UploadResult.Retry }
-
-            repo.syncOutbox()
-
-            val failed = repo.observeAll().first().single { it.id == id }
-            assertTrue(failed.failed)
-            assertEquals(Money(2_500), repo.observeMonthTotal().first())
-        }
-
-    @Test
-    fun `REQ-AND-015 retrying a failed entry requeues it and deleting drops it`() =
-        runTest {
-            val id = repo.add(entry(10_000))
-            remote.uploadResult = { UploadResult.Rejected }
-            repo.syncOutbox()
-            assertEquals(0, repo.observePendingCount().first())
-
-            repo.retryFailed(id)
-            assertEquals(1, repo.observePendingCount().first())
-            assertEquals(Money(10_000), repo.observeMonthTotal().first())
-
-            repo.syncOutbox()
-            repo.deleteFailed(id)
-            assertTrue(repo.observeAll().first().isEmpty())
+            assertEquals(2, converter().convertAll())
+            assertEquals(3, db.expenses().count())
+            assertEquals(
+                setOf("c1", "c2", "c3"),
+                db
+                    .sources()
+                    .all()
+                    .map { it.localSourceId }
+                    .toSet(),
+            )
             assertTrue(db.outbox().all().isEmpty())
         }
 
     @Test
-    fun `REQ-AND-015 an undecodable response is retried a few times then marked failed`() =
+    fun `REQ-AND-133 a row already converted but still queued only loses its queue entry`() =
         runTest {
-            val id = repo.add(entry())
-            remote.uploadResult = { UploadResult.Unexpected }
+            queue("c1")
+            converter().convertAll()
+            db.outbox().insert(OutboxEntity("c1", 12_500, "EGP", 1_000, null, null, null, createdAtMillis = 1_000))
+            assertEquals(0, converter().convertAll())
+            assertTrue(db.outbox().all().isEmpty())
+            assertEquals(1, db.expenses().count())
+        }
 
-            repeat(4) { assertTrue(repo.syncOutbox().retry) }
-            val last = repo.syncOutbox()
+    @Test
+    fun `REQ-AND-133 a corrupt row with a zero amount or a bad currency becomes a review expense with its stored values`() =
+        runTest {
+            queue("zero", minor = 0, at = 1_000)
+            queue("bad", currency = "EG", at = 2_000)
+            queue("ok", at = 3_000)
+            assertEquals(3, converter().convertAll())
+            val bySource = db.sources().all().associate { it.localSourceId to db.expenses().find(it.expenseId)!! }
+            assertEquals("PENDING_REVIEW", bySource.getValue("zero").status)
+            assertEquals(0L, bySource.getValue("zero").amountMinor)
+            assertEquals("PENDING_REVIEW", bySource.getValue("bad").status)
+            assertEquals("EG", bySource.getValue("bad").currency)
+            assertEquals("CONFIRMED", bySource.getValue("ok").status)
+        }
 
-            assertEquals(false, last.retry)
-            assertEquals(1, last.rejected)
-            assertTrue(
-                repo
-                    .observeAll()
-                    .first()
-                    .single { it.id == id }
-                    .failed,
+    @Test
+    fun `REQ-AND-133 a receipt attached to the old pending row follows the new expense`() =
+        runTest {
+            queue("c1")
+            db.openHelper.writableDatabase.execSQL(
+                """
+                INSERT INTO receipt (id, expenseId, fileName, mimeType, sizeBytes, sha256, pageCount, createdAtMillis)
+                VALUES ('r1','c1','f','image/jpeg',1,'h',NULL,1)
+                """.trimIndent(),
             )
-            assertEquals(0, repo.observePendingCount().first())
-        }
-
-    @Test
-    fun `REQ-AND-015 unauthorized keeps the entry queued and does not ask for endless retries`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = { UploadResult.Unauthorized }
-
-            val report = repo.syncOutbox()
-
-            assertTrue(report.unauthorized)
-            assertEquals(false, report.retry)
-            assertEquals(1, repo.observePendingCount().first())
-        }
-
-    @Test
-    fun `REQ-AND-015 concurrent syncs never upload the same entry twice`() =
-        runTest {
-            repo.add(entry())
-            remote.uploadResult = {
-                kotlinx.coroutines.delay(50)
-                UploadResult.Created(expense("server-1", it.amountMinor))
+            converter().convertAll()
+            val newId =
+                db
+                    .sources()
+                    .all()
+                    .single()
+                    .expenseId
+            db.openHelper.writableDatabase.query("SELECT expenseId FROM receipt WHERE id = 'r1'").use {
+                it.moveToFirst()
+                assertEquals(newId, it.getString(0))
             }
-
-            val a = async(kotlinx.coroutines.Dispatchers.Default) { repo.syncOutbox() }
-            val b = async(kotlinx.coroutines.Dispatchers.Default) { repo.syncOutbox() }
-            a.await()
-            b.await()
-
-            assertEquals(1, remote.uploadedKeys.size)
         }
 }

@@ -29,13 +29,14 @@
     <string name="banner_offline">غير متصل - نعرض البيانات المحفوظة</string>
     <string name="banner_error">تعذر التحديث - نعرض البيانات المحفوظة</string>
     <string name="pending_sync">في انتظار المزامنة</string>
-    <string name="pending_count">في انتظار المزامنة: %1$d</string>
     <string name="uncategorized">بدون فئة</string>
     <string name="expense_fallback_title">مصروف</string>
 
     <string name="add_title">إضافة مصروف</string>
     <string name="add_amount">المبلغ (ج.م)</string>
-    <string name="add_amount_error">أدخل مبلغًا أكبر من صفر، مثل 125.50</string>
+    <string name="add_amount_error">اكتب المبلغ</string>
+    <string name="add_amount_too_large">المبلغ كبير قوي</string>
+    <string name="add_save_failed">مقدرناش نحفظ، جرّب تاني</string>
     <string name="add_category">الفئة</string>
     <string name="add_account">الحساب</string>
     <string name="add_none">بدون</string>
@@ -43,7 +44,6 @@
     <string name="add_date_error">استخدم الصيغة YYYY-MM-DD</string>
     <string name="add_note">ملاحظة</string>
     <string name="add_save">حفظ</string>
-    <string name="add_offline_hint">يُحفظ على هذا الجهاز أولًا ثم يُزامَن تلقائيًا.</string>
 
     <string name="settings_title">الإعدادات</string>
     <string name="settings_server_url">عنوان الخادم</string>
@@ -81,17 +81,7 @@
         <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
         <item quantity="other">سيتم حذف %1$d إدخال غير متزامن من الحساب السابق إذا سجلت الدخول بعضو مختلف.</item>
     </plurals>
-    <string name="logout_sync_now">زامن الآن</string>
-    <string name="logout_anyway">سجّل الخروج على أي حال</string>
     <string name="logout_cancel">إلغاء</string>
-    <plurals name="logout_unsynced_warning">
-        <item quantity="zero">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-        <item quantity="one">سيتم حذف إدخال غير متزامن واحد. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-        <item quantity="two">سيتم حذف إدخالين غير متزامنين. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-        <item quantity="few">سيتم حذف %1$d إدخالات غير متزامنة. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-        <item quantity="many">سيتم حذف %1$d إدخالًا غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-        <item quantity="other">سيتم حذف %1$d إدخال غير متزامن. زامن أولًا أو سجّل الخروج على أي حال؟</item>
-    </plurals>
     <string name="source_sms">رسالة</string>
     <string name="source_notification">إشعار</string>
     <string name="sms_title">تسجيل رسائل البنك</string>
@@ -219,6 +209,13 @@
 
     <string name="settings_section_server">الخادم</string>
     <string name="settings_section_display">العرض</string>
+    <string name="settings_section_data">بياناتك</string>
+    <string name="settings_erase">مسح كل البيانات</string>
+    <string name="settings_erase_body">ده هيمسح كل المصاريف والإيصالات والعناصر اللي محتاجة مراجعة والصيغ اللي اتعلمها التطبيق من الموبايل ده. مفيش رجوع بعد كده.</string>
+    <string name="settings_erase_counts">المصاريف: %1$s - الإيصالات: %2$s</string>
+    <string name="settings_erase_confirm">امسح</string>
+    <string name="settings_erase_incomplete">البيانات اتمسحت. آخر خطوة تنضيف هتخلص أول ما التطبيق يشتغل تاني.</string>
+    <string name="settings_erase_failed">مقدرناش نمسح، ومفيش حاجة اتغيرت</string>
     <string name="settings_language">اللغة</string>
     <string name="members_title">الأعضاء</string>
     <string name="members_row_admin">%1$s (مدير)</string>

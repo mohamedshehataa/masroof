@@ -10,12 +10,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import eg.masroof.data.auth.SignedOutNotice
 import eg.masroof.ui.login.LoginContent
-import eg.masroof.ui.settings.SettingsActions
-import eg.masroof.ui.settings.SettingsContent
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.viewmodel.LoginError
 import eg.masroof.ui.viewmodel.LoginUiState
-import eg.masroof.ui.viewmodel.SettingsUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -112,53 +109,5 @@ class LoginScreenTest {
     fun `REQ-AND-007 a session expired notice is shown above the form`() {
         show(LoginUiState(), SignedOutNotice.SESSION_EXPIRED)
         compose.onNodeWithText("Your session expired. Sign in again; your saved entries are kept.").assertIsDisplayed()
-    }
-
-    @Test
-    fun `REQ-AND-007 the logout dialog has an explicit Cancel`() {
-        var dismissed = 0
-        compose.setContent {
-            MasroofTheme {
-                SettingsContent(
-                    SettingsUiState(confirmLogoutUnsynced = 2, confirmLogoutRetryable = 2),
-                    SettingsActions({}, {}, {}, {}, {}, { dismissed++ }, {}),
-                )
-            }
-        }
-        compose.onNodeWithText("Cancel").performClick()
-        assertEquals(1, dismissed)
-    }
-
-    @Test
-    fun `REQ-AND-007 Sync now is hidden when every unsynced entry is permanently failed`() {
-        compose.setContent {
-            MasroofTheme {
-                SettingsContent(
-                    SettingsUiState(confirmLogoutUnsynced = 2, confirmLogoutRetryable = 0),
-                    SettingsActions({}, {}, {}, {}, {}, {}, {}),
-                )
-            }
-        }
-        compose.onNodeWithText("Sign out anyway").assertIsDisplayed()
-        compose.onNodeWithText("Sync now").assertDoesNotExist()
-    }
-
-    @Test
-    fun `REQ-AND-007 the logout confirmation names the count and offers sync now and sign out anyway`() {
-        var synced = 0
-        var confirmed = 0
-        compose.setContent {
-            MasroofTheme {
-                SettingsContent(
-                    SettingsUiState(confirmLogoutUnsynced = 3, confirmLogoutRetryable = 3),
-                    SettingsActions({}, {}, {}, {}, { confirmed++ }, {}, { synced++ }),
-                )
-            }
-        }
-        compose.onNodeWithText("3 unsynced expenses will be deleted. Sync first or sign out anyway?").assertIsDisplayed()
-        compose.onNodeWithText("Sync now").performClick()
-        assertEquals(1, synced)
-        compose.onNodeWithText("Sign out anyway").performClick()
-        assertEquals(1, confirmed)
     }
 }

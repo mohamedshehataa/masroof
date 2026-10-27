@@ -76,6 +76,7 @@ private fun row(
     source = "PUSH",
     type = type,
     status = status,
+    serverId = id,
 )
 
 /** A scripted server: every call is recorded; [reply] decides the answer. */

@@ -86,7 +86,7 @@ class ServerUrlTest {
 
     private fun loginVm(remote: AuthRemote): LoginViewModel {
         val settings = FakeSettings()
-        val sm = TestAuth.manager(FakeSessionStore(), remote, settings, FakeWiper())
+        val sm = TestAuth.manager(FakeSessionStore(), remote, settings)
         return LoginViewModel(sm, settings, FakeScheduler(), FakeNetwork())
     }
 
@@ -121,7 +121,7 @@ class ServerUrlTest {
     @Test
     fun `REQ-AND-006 the session maps a rejected base url to InvalidUrl`() =
         runTest {
-            val sm = TestAuth.manager(FakeSessionStore(), RecordingRemote(AuthResult.InvalidUrl), FakeSettings(), FakeWiper())
+            val sm = TestAuth.manager(FakeSessionStore(), RecordingRemote(AuthResult.InvalidUrl), FakeSettings())
             assertEquals(LoginResult.InvalidUrl, sm.login("https://masroof.example", "a@b.eg", "pw"))
         }
 

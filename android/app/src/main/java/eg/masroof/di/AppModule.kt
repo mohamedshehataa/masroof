@@ -86,9 +86,28 @@ annotation class IoDispatcher
 @Retention(AnnotationRetention.BINARY)
 annotation class AuthHttp
 
+/** `filesDir/receipts`: emptied by "Erase all data". */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ReceiptsDir
+
+/** `noBackupFilesDir`: holds the pre-migration safety copy of the database. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SafetyCopyDir
+
+/** A scope that outlives screens, for work that must finish once started (the erase). */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AppScope
+
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class BindingsModule {
+    @Binds abstract fun uploadSession(impl: eg.masroof.ingest.SessionUploadCheck): eg.masroof.ingest.UploadSession
+
+    @Binds abstract fun idFactory(impl: eg.masroof.data.UuidIdFactory): eg.masroof.data.IdFactory
+
     @Binds abstract fun repository(impl: DefaultExpenseRepository): ExpenseRepository
 
     @Binds abstract fun remote(impl: ApiRemoteSource): RemoteSource
@@ -150,6 +169,22 @@ object ProvidersModule {
     fun captureGate(
         @ApplicationContext context: Context,
     ): CaptureGate = PrefsCaptureGate(context.getSharedPreferences("masroof_capture", Context.MODE_PRIVATE))
+
+    @Provides @ReceiptsDir
+    fun receiptsDir(
+        @ApplicationContext context: Context,
+    ): File = File(context.filesDir, "receipts")
+
+    @Provides @SafetyCopyDir
+    fun safetyCopyDir(
+        @ApplicationContext context: Context,
+    ): File = context.noBackupFilesDir
+
+    @Provides @Singleton @AppScope
+    fun appScope(): kotlinx.coroutines.CoroutineScope =
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + Dispatchers.Default,
+        )
 
     @Provides @Singleton
     fun localIdKey(

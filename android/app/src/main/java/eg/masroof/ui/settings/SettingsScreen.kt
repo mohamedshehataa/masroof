@@ -23,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -32,9 +31,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
+import eg.masroof.core.DateFormat
 import eg.masroof.core.DigitStyle
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.viewmodel.EraseState
 import eg.masroof.ui.viewmodel.SettingsUiState
 import eg.masroof.ui.viewmodel.SettingsViewModel
 
@@ -52,9 +53,9 @@ fun SettingsRoute(
             viewModel::onDigits,
             viewModel::save,
             viewModel::logout,
-            viewModel::confirmLogout,
-            viewModel::dismissLogout,
-            viewModel::syncNow,
+            viewModel::askErase,
+            viewModel::confirmErase,
+            viewModel::dismissErase,
             onToggleLanguage,
         ),
         extra = {
@@ -69,9 +70,9 @@ class SettingsActions(
     val onDigits: (DigitStyle) -> Unit,
     val onSave: () -> Unit,
     val onLogout: () -> Unit,
-    val onConfirmLogout: () -> Unit,
-    val onDismissLogout: () -> Unit,
-    val onSyncNow: () -> Unit,
+    val onErase: () -> Unit,
+    val onConfirmErase: () -> Unit,
+    val onDismissErase: () -> Unit,
     val onToggleLanguage: () -> Unit = {},
 )
 
@@ -86,33 +87,10 @@ fun SettingsContent(
     val onDigits = actions.onDigits
     val onSave = actions.onSave
     val onLogout = actions.onLogout
-    state.confirmLogoutUnsynced?.let { count ->
-        AlertDialog(
-            onDismissRequest = actions.onDismissLogout,
-            text = {
-                Text(pluralStringResource(R.plurals.logout_unsynced_warning, count, count))
-            },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    // Nothing left that can sync (all permanently failed): offering "Sync now" would do nothing.
-                    if (state.confirmLogoutRetryable > 0) {
-                        TextButton(onClick = actions.onSyncNow, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.logout_sync_now))
-                        }
-                    }
-                    TextButton(onClick = actions.onConfirmLogout, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(stringResource(R.string.logout_anyway))
-                    }
-                    TextButton(onClick = actions.onDismissLogout, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(stringResource(R.string.logout_cancel))
-                    }
-                }
-            },
-        )
-    }
+    EraseDialog(state.erase, actions)
     val effectiveDigits = state.digitStyle ?: LocalMoneyStyle.current.digits
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -160,6 +138,22 @@ fun SettingsContent(
         }
         if (state.saved) Text(stringResource(R.string.settings_saved), color = MaterialTheme.colorScheme.primary)
         extra()
+        SectionCard(stringResource(R.string.settings_section_data)) {
+            OutlinedButton(
+                onClick = actions.onErase,
+                enabled = state.erase !is EraseState.Erasing,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                Text(stringResource(R.string.settings_erase))
+            }
+            if (state.erase is EraseState.Incomplete) {
+                Text(stringResource(R.string.settings_erase_incomplete), color = MaterialTheme.colorScheme.error)
+            }
+            if (state.erase is EraseState.Failed) {
+                Text(stringResource(R.string.settings_erase_failed), color = MaterialTheme.colorScheme.error)
+            }
+        }
         OutlinedButton(
             onClick = onLogout,
             enabled = !state.loggingOut,
@@ -169,4 +163,40 @@ fun SettingsContent(
             Text(stringResource(R.string.settings_logout))
         }
     }
+}
+
+/** Two steps: the button opens this dialog with the counts, and only its red "Erase" deletes anything (REQ-AND-132). */
+@Composable
+private fun EraseDialog(
+    erase: EraseState,
+    actions: SettingsActions,
+) {
+    val confirm = erase as? EraseState.Confirm ?: return
+    val digits = LocalMoneyStyle.current.digits
+    AlertDialog(
+        onDismissRequest = actions.onDismissErase,
+        title = { Text(stringResource(R.string.settings_erase)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.settings_erase_body))
+                Text(
+                    stringResource(
+                        R.string.settings_erase_counts,
+                        DateFormat.number(confirm.counts.entries, digits),
+                        DateFormat.number(confirm.counts.receipts, digits),
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = actions.onConfirmErase, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.settings_erase_confirm), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = actions.onDismissErase, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.logout_cancel))
+            }
+        },
+    )
 }

@@ -10,14 +10,15 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.data.AppSettings
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
-import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.DataEraser
+import eg.masroof.data.auth.EraseCounts
+import eg.masroof.data.auth.PartialEraseException
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.normalizeServerUrl
-import eg.masroof.work.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import javax.inject.Inject
 
-/** Where the last server refresh stands. Lists always render from Room regardless of this. */
+/** Where a list stands. Expense lists read only Room, so they are always READY; Insights and Budgets still use the rest. */
 enum class LoadStatus { LOADING, READY, OFFLINE, ERROR, SIGN_IN }
 
 data class ExpenseRow(
@@ -45,6 +46,8 @@ data class ExpenseRow(
     val income: Boolean = false,
     val reviewPending: Boolean = false,
     val transfer: Boolean = false,
+    /** Null for an entry made on this phone: it has no server copy, so it does not open the server-based edit screen. */
+    val serverId: String? = null,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -62,59 +65,23 @@ internal fun toRows(
             merchant = it.merchant,
             money = Money(it.amountMinor, it.currency),
             date = CairoTime.dateOf(it.occurredAtMillis),
-            pending = it.pending && !it.failed,
-            failed = it.failed,
+            // Nothing waits for an upload any more (ADR-0009): no "Waiting to sync", "Couldn't sync" or Retry on a row.
+            pending = false,
+            failed = false,
             category = it.categoryId?.let(byId::get),
             notes = it.notes,
             source = it.source,
             income = it.type == "INCOME",
             transfer = it.type == "TRANSFER",
             reviewPending = it.status == "PENDING_REVIEW",
+            serverId = it.serverId,
         )
-    }
-}
-
-abstract class RefreshingViewModel(
-    private val repository: ExpenseRepository,
-    private val scheduler: SyncScheduler,
-) : ViewModel() {
-    protected val status = MutableStateFlow(LoadStatus.LOADING)
-
-    /** "Retry" on a row the server rejected: re-queue it and let WorkManager upload it. */
-    fun retryEntry(id: String) {
-        viewModelScope.launch {
-            repository.retryFailed(id)
-            scheduler.schedule()
-        }
-    }
-
-    /** "Delete" on a row that could not be synced. */
-    fun deleteEntry(id: String) {
-        viewModelScope.launch { repository.deleteFailed(id) }
-    }
-
-    fun refresh() {
-        status.value = LoadStatus.LOADING
-        viewModelScope.launch {
-            status.value =
-                when (repository.refresh()) {
-                    RefreshOutcome.Ok -> {
-                        // Server reachable and nothing left to push: a stale long-delay retry is no longer needed.
-                        if (!repository.hasRetryable()) scheduler.cancelRetry()
-                        LoadStatus.READY
-                    }
-                    RefreshOutcome.Offline -> LoadStatus.OFFLINE
-                    RefreshOutcome.Failed -> LoadStatus.ERROR
-                    RefreshOutcome.SignIn -> LoadStatus.SIGN_IN
-                }
-        }
     }
 }
 
 data class HomeUiState(
     val total: Money = Money.zero(),
     val recent: List<ExpenseRow> = emptyList(),
-    val pendingCount: Int = 0,
     val status: LoadStatus = LoadStatus.LOADING,
 )
 
@@ -123,22 +90,15 @@ class HomeViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
-        scheduler: SyncScheduler,
-    ) : RefreshingViewModel(repository, scheduler) {
+    ) : ViewModel() {
         val state: StateFlow<HomeUiState> =
             combine(
                 repository.observeMonthTotal(),
                 repository.observeRecent(RECENT_LIMIT),
-                repository.observeCategories(),
-                repository.observePendingCount(),
-                status,
-            ) { total, recent, categories, pending, st ->
-                HomeUiState(total, toRows(recent, categories), pending, st)
+                repository.observeLabelCategories(),
+            ) { total, recent, categories ->
+                HomeUiState(total, toRows(recent, categories), LoadStatus.READY)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeUiState())
-
-        init {
-            refresh()
-        }
     }
 
 data class TransactionsUiState(
@@ -151,20 +111,14 @@ class TransactionsViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
-        scheduler: SyncScheduler,
-    ) : RefreshingViewModel(repository, scheduler) {
+    ) : ViewModel() {
         val state: StateFlow<TransactionsUiState> =
             combine(
                 repository.observeAll(),
-                repository.observeCategories(),
-                status,
-            ) { all, categories, st ->
-                TransactionsUiState(toRows(all, categories), st)
+                repository.observeLabelCategories(),
+            ) { all, categories ->
+                TransactionsUiState(toRows(all, categories), LoadStatus.READY)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), TransactionsUiState())
-
-        init {
-            refresh()
-        }
     }
 
 data class AddFormState(
@@ -173,8 +127,15 @@ data class AddFormState(
     val accountId: String? = null,
     val dateText: String = "",
     val notes: String = "",
+    /** "Enter an amount": empty, zero, negative or not a number. */
     val amountInvalid: Boolean = false,
+    /** "Amount is too large": above 1,000,000,000,000 minor units. */
+    val amountTooLarge: Boolean = false,
     val dateInvalid: Boolean = false,
+    /** The write is running: Save is disabled. */
+    val saving: Boolean = false,
+    /** The write threw: the sheet stays open with the input kept and "Couldn't save, try again". */
+    val saveFailed: Boolean = false,
     val saved: Boolean = false,
 )
 
@@ -189,21 +150,19 @@ class AddExpenseViewModel
     @Inject
     constructor(
         private val repository: ExpenseRepository,
-        private val scheduler: SyncScheduler,
         private val clock: java.time.Clock,
     ) : ViewModel() {
-        private var saving = false
         private val form = MutableStateFlow(AddFormState(dateText = CairoTime.today(clock.instant()).toString()))
 
         val state: StateFlow<AddUiState> =
             combine(
                 form,
-                repository.observeCategories(),
+                repository.observePickerCategories(),
                 repository.observeAccounts(),
             ) { f, c, a -> AddUiState(f, c, a) }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AddUiState(form.value))
 
-        fun onAmount(text: String) = form.update { it.copy(amountText = text, amountInvalid = false) }
+        fun onAmount(text: String) = form.update { it.copy(amountText = text, amountInvalid = false, amountTooLarge = false) }
 
         fun onCategory(id: String?) = form.update { it.copy(categoryId = id) }
 
@@ -217,44 +176,69 @@ class AddExpenseViewModel
             notes: String,
         ) = form.update { it.copy(amountText = amountText, notes = notes.take(MAX_NOTES)) }
 
-        // The contract caps notes at 500 characters (ADR-0007); the form cannot exceed it.
+        // The note is capped at 500 characters (ADR-0007); the form cannot exceed it.
         fun onNotes(text: String) = form.update { it.copy(notes = text.take(MAX_NOTES)) }
 
-        /** Validates, writes to Room + outbox, then asks WorkManager to sync. Never touches the network itself. */
+        /** Validates, then writes to Room in one transaction. Never touches the network. */
         fun save() {
             val f = form.value
-            if (saving || f.saved) return // double tap: one entry only
-            val minor = MoneyFormat.parseMinor(f.amountText)
+            if (f.saving || f.saved) return // double tap: one entry only
+            val amount = MoneyFormat.parseEntry(f.amountText)
             val date =
                 try {
                     LocalDate.parse(f.dateText.trim())
                 } catch (_: DateTimeParseException) {
                     null
                 }
-            if (minor == null || date == null) {
-                form.update { it.copy(amountInvalid = minor == null, dateInvalid = date == null) }
+            if (amount !is MoneyFormat.EntryAmount.Valid || date == null) {
+                form.update {
+                    it.copy(
+                        amountInvalid = amount == MoneyFormat.EntryAmount.Invalid,
+                        amountTooLarge = amount == MoneyFormat.EntryAmount.TooLarge,
+                        dateInvalid = date == null,
+                        saveFailed = false,
+                    )
+                }
                 return
             }
-            saving = true
+            form.update { it.copy(saving = true, saveFailed = false) }
             viewModelScope.launch {
-                try {
-                    repository.add(
-                        NewExpense(
-                            amount = Money(minor, Money.EGP),
-                            occurredAtMillis = CairoTime.noonOf(date).toEpochMilli(),
-                            categoryId = f.categoryId,
-                            accountId = f.accountId,
-                            notes = f.notes.trim().ifEmpty { null },
-                        ),
-                    )
-                    scheduler.schedule()
-                    form.update { it.copy(saved = true) }
-                } finally {
-                    saving = false
-                }
+                val result =
+                    runCatching {
+                        repository.add(
+                            NewExpense(
+                                amount = Money(amount.minor, Money.EGP),
+                                date = date,
+                                categoryId = f.categoryId,
+                                accountId = f.accountId,
+                                notes = f.notes.trim().ifEmpty { null },
+                            ),
+                        )
+                    }
+                result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+                // On failure the input is kept and nothing was written (the repository's transaction rolled back). Nothing is logged.
+                form.update { it.copy(saving = false, saved = result.isSuccess, saveFailed = result.isFailure) }
             }
         }
     }
+
+/** The "Erase all data" flow in Settings. */
+sealed interface EraseState {
+    data object Idle : EraseState
+
+    /** The dialog is open with what would be deleted. Nothing is deleted until [SettingsViewModel.confirmErase]. */
+    data class Confirm(
+        val counts: EraseCounts,
+    ) : EraseState
+
+    data object Erasing : EraseState
+
+    /** The erase transaction rolled back: nothing was changed. */
+    data object Failed : EraseState
+
+    /** The data is erased but a clean-up step failed; it is finished at the next start. */
+    data object Incomplete : EraseState
+}
 
 data class SettingsUiState(
     val serverUrl: String = AppSettings.DEFAULT_SERVER_URL,
@@ -262,10 +246,7 @@ data class SettingsUiState(
     val urlInvalid: Boolean = false,
     val saved: Boolean = false,
     val loggingOut: Boolean = false,
-    /** Non-null while the "N unsynced expenses will be deleted" confirmation is showing. */
-    val confirmLogoutUnsynced: Int? = null,
-    /** Of those, how many can still sync. When 0, "Sync now" is pointless and hidden. */
-    val confirmLogoutRetryable: Int = 0,
+    val erase: EraseState = EraseState.Idle,
 )
 
 @HiltViewModel
@@ -274,7 +255,7 @@ class SettingsViewModel
     constructor(
         private val settings: SettingsRepository,
         private val session: SessionManager,
-        private val scheduler: SyncScheduler,
+        private val eraser: DataEraser,
     ) : ViewModel() {
         private val draft = MutableStateFlow<SettingsUiState?>(null)
 
@@ -291,42 +272,40 @@ class SettingsViewModel
 
         fun onDigits(style: DigitStyle) = edit { it.copy(digitStyle = style) }
 
-        /**
-         * Log out. When entries exist only on this device the user is asked first (they would be deleted with the
-         * account's cache); otherwise it goes straight through.
-         */
+        /** Log out ends the session only. Entries, categories, receipts and the rest stay on the phone (REQ-AND-131). */
         fun logout() {
             if (state.value.loggingOut) return
             viewModelScope.launch {
-                val unsynced = session.unsyncedCount()
-                if (unsynced > 0) {
-                    draft.value = state.value.copy(confirmLogoutUnsynced = unsynced, confirmLogoutRetryable = session.retryableCount())
-                } else {
-                    performLogout()
-                }
+                draft.value = state.value.copy(loggingOut = true)
+                session.logout()
+                draft.value = null
             }
         }
 
-        /** "Sign out anyway" in the confirmation: revoke the session, then wipe tokens and all cached data. */
-        fun confirmLogout() {
-            if (state.value.loggingOut) return
-            viewModelScope.launch { performLogout() }
+        /** "Erase all data": shows what would be deleted and waits for the second, explicit confirmation. */
+        fun askErase() {
+            viewModelScope.launch { draft.value = state.value.copy(erase = EraseState.Confirm(eraser.counts())) }
         }
 
-        fun dismissLogout() {
-            draft.value = state.value.copy(confirmLogoutUnsynced = null, confirmLogoutRetryable = 0)
+        /** Cancel or Back in the dialog: nothing is deleted. */
+        fun dismissErase() {
+            draft.value = state.value.copy(erase = EraseState.Idle)
         }
 
-        /** "Sync now": leave the dialog and let WorkManager upload the queue; the user can log out again afterwards. */
-        fun syncNow() {
-            scheduler.schedule()
-            dismissLogout()
-        }
-
-        private suspend fun performLogout() {
-            draft.value = state.value.copy(loggingOut = true, confirmLogoutUnsynced = null, confirmLogoutRetryable = 0)
-            session.logout()
-            draft.value = null
+        fun confirmErase() {
+            if (state.value.erase !is EraseState.Confirm) return
+            draft.value = state.value.copy(erase = EraseState.Erasing)
+            viewModelScope.launch {
+                val result = runCatching { eraser.erase() }
+                result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+                val outcome =
+                    when (result.exceptionOrNull()) {
+                        null -> EraseState.Idle
+                        is PartialEraseException -> EraseState.Incomplete
+                        else -> EraseState.Failed
+                    }
+                draft.value = state.value.copy(erase = outcome)
+            }
         }
 
         fun save() {

@@ -3,8 +3,6 @@ package eg.masroof
 import eg.masroof.core.Money
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
-import eg.masroof.data.RefreshOutcome
-import eg.masroof.data.SyncReport
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
@@ -47,10 +45,9 @@ class FakeScheduler : SyncScheduler {
 class FakeRepository : ExpenseRepository {
     val all = MutableStateFlow<List<ExpenseEntity>>(emptyList())
     val categories = MutableStateFlow<List<CategoryEntity>>(emptyList())
-    val pending = MutableStateFlow(0)
-    var outcome: RefreshOutcome = RefreshOutcome.Ok
-    var refreshCalls = 0
     val added = mutableListOf<NewExpense>()
+    var failAdd: Exception? = null
+    var converted = 0
 
     override fun observeAll() = all
 
@@ -60,32 +57,19 @@ class FakeRepository : ExpenseRepository {
 
     override fun observeCategories() = categories
 
+    override fun observeLabelCategories() = categories
+
+    override fun observePickerCategories() = categories
+
     override fun observeAccounts() = MutableStateFlow<List<AccountEntity>>(emptyList())
 
-    override fun observePendingCount() = pending
-
-    override suspend fun refresh(): RefreshOutcome {
-        refreshCalls++
-        return outcome
-    }
-
     override suspend fun add(entry: NewExpense): String {
+        failAdd?.let { throw it }
         added += entry
         return "id-${added.size}"
     }
 
-    override suspend fun syncOutbox() = SyncReport(0, 0, false)
-
-    val retried = mutableListOf<String>()
-    val deleted = mutableListOf<String>()
-
-    override suspend fun retryFailed(id: String) {
-        retried += id
-    }
-
-    override suspend fun deleteFailed(id: String) {
-        deleted += id
-    }
+    override suspend fun convertQueuedEntries(): Int = converted
 }
 
 fun expense(

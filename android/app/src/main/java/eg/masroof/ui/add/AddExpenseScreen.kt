@@ -30,7 +30,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -93,6 +95,7 @@ fun AddExpenseContent(
         Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = onSave,
+                enabled = !form.saving,
                 modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
             ) { Text(stringResource(R.string.add_save)) }
         }
@@ -131,8 +134,11 @@ private fun ColumnScope.AddFields(
             label = { Text(stringResource(R.string.add_amount)) },
             prefix = { Text(MoneyFormat.symbol(Money.EGP, arabic)) },
             textStyle = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
-            isError = form.amountInvalid,
-            supportingText = { if (form.amountInvalid) Text(stringResource(R.string.add_amount_error)) },
+            isError = form.amountInvalid || form.amountTooLarge,
+            supportingText = {
+                if (form.amountInvalid) Text(stringResource(R.string.add_amount_error))
+                if (form.amountTooLarge) Text(stringResource(R.string.add_amount_too_large))
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -165,11 +171,14 @@ private fun ColumnScope.AddFields(
             label = { Text(stringResource(R.string.add_note)) },
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(
-            stringResource(R.string.add_offline_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (form.saveFailed) {
+            Text(
+                stringResource(R.string.add_save_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
     }
 }
 
