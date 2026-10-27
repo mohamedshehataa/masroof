@@ -215,6 +215,8 @@ integrationTest {
     finalizedBy(tasks.jacocoTestReport)
     // The analytics parity test reads this folder; without it as an input an edited oracle stays UP-TO-DATE / cached.
     inputs.dir("../fixtures/analytics").withPathSensitivity(PathSensitivity.RELATIVE)
+    // A generate run must never be a cache hit (STORY-177): the switch is an input too.
+    inputs.property("parityGenerate", System.getenv("MASROOF_PARITY_GENERATE") ?: "")
 }
 taggedTest("archTest", "arch", "ArchUnit rules over main classes (tag arch)")
     .configure { extensions.configure<JacocoTaskExtension> { isEnabled = false } }
