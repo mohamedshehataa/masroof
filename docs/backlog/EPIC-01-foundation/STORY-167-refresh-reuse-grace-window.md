@@ -3,7 +3,7 @@ id: STORY-167
 epic: EPIC-01
 title: Refresh-token reuse grace window (60 s) so a duplicate refresh does not sign the user out
 phase: 1
-status: IN_PROGRESS
+status: DONE
 size: S
 modules: [backend]
 depends_on: [STORY-009]

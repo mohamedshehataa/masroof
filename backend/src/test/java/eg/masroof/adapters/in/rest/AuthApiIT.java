@@ -347,9 +347,10 @@ class AuthApiIT {
         .isGreaterThanOrEqualTo(1);
   }
 
+  // Shifts the stored rotation time (app clock) back, so the age never depends on the DB clock.
   private void ageRotation(String token, int seconds) throws Exception {
     jdbc.update(
-        "update refresh_token set rotated_at = now() - make_interval(secs => ?) where"
+        "update refresh_token set rotated_at = rotated_at - make_interval(secs => ?) where"
             + " token_hash = ?",
         seconds,
         sha(token));
