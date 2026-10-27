@@ -42,6 +42,14 @@ object DatabaseStartup {
     @Synchronized
     fun run(context: Context): DbStartup = current ?: open(context.applicationContext ?: context).also { current = it }
 
+    /** True when the startup did not produce a usable database; nothing may touch the database then. */
+    fun isBlocked(): Boolean = current != null && current !is DbStartup.Ready
+
+    /** Test seam: sets the startup result without opening a database. */
+    internal fun setForTest(state: DbStartup?) {
+        current = state
+    }
+
     /** The result of [run], or a blocked placeholder database if it did not run (never a silent migration). */
     fun state(): DbStartup = checkNotNull(current) { "DatabaseStartup.run was not called" }
 
@@ -90,7 +98,7 @@ object DatabaseStartup {
             .build()
 
     private object BlockedHelper : SupportSQLiteOpenHelper {
-        override val databaseName: String = "blocked"
+        override val databaseName: String = "blocked-never-opened.db"
         override val writableDatabase: SupportSQLiteDatabase get() = error("database blocked at startup")
         override val readableDatabase: SupportSQLiteDatabase get() = error("database blocked at startup")
 

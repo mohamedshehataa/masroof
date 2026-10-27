@@ -16,6 +16,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
+import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.REVIEW_RETENTION_DAYS
 import eg.masroof.data.db.ReviewItemEntity
@@ -484,6 +485,8 @@ class SmsIntakeWorker
         private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
+            // Blocked start: keep the captured message in the job (not lost) and try again later.
+            if (DatabaseStartup.isBlocked()) return Result.retry()
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
@@ -508,6 +511,7 @@ class SmsUploadWorker
         private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
+            if (DatabaseStartup.isBlocked()) return Result.retry()
             val report = uploader.uploadPending()
             if (report.retry) {
                 val attempt = inputData.getInt(KEY_ATTEMPT, 0)

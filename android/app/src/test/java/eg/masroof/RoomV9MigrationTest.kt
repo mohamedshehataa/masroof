@@ -164,7 +164,7 @@ class RoomV9MigrationTest {
     }
 
     @Test
-    fun `REQ-AND-127 the exported v9 schema adds no REAL column and the older schema files are the ones that shipped`() {
+    fun `REQ-AND-129 the exported v9 schema adds no REAL column and is at version 9`() {
         val schema = Json.parseToJsonElement(File("schemas/eg.masroof.data.db.AppDatabase/9.json").readText()).jsonObject["database"]!!
         assertEquals(
             9,

@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // App start or return to foreground: do not wait out a long backoff once the server may be back.
+        if (DatabaseStartup.isBlocked()) return
         lifecycleScope.launch { foregroundSync.onForeground() }
     }
 

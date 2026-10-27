@@ -7,9 +7,25 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
+
+private const val DELETE_BATCH = 500
+
+/** Fields the server does not know are kept from the stored row; fields the new row sets win. */
+internal fun ExpenseEntity.keepLocalFrom(old: ExpenseEntity): ExpenseEntity =
+    copy(
+        serverId = serverId ?: old.serverId,
+        createdAtMillis = if (old.createdAtMillis != 0L) old.createdAtMillis else createdAtMillis,
+        updatedAtMillis = if (updatedAtMillis != 0L) updatedAtMillis else old.updatedAtMillis,
+        deletedAtMillis = deletedAtMillis ?: old.deletedAtMillis,
+        timeKnown = old.timeKnown,
+        paymentMethod = paymentMethod ?: old.paymentMethod,
+        instrumentLast4 = instrumentLast4 ?: old.instrumentLast4,
+        paidByMemberId = paidByMemberId ?: old.paidByMemberId,
+    )
 
 @Dao
 interface ExpenseDao {
@@ -28,11 +44,31 @@ interface ExpenseDao {
         to: Long,
     ): Flow<Long>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(items: List<ExpenseEntity>)
+    // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
+    // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(item: ExpenseEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(item: ExpenseEntity)
+    @Update
+    suspend fun update(item: ExpenseEntity)
+
+    @Query("SELECT * FROM expense")
+    suspend fun all(): List<ExpenseEntity>
+
+    @Transaction
+    suspend fun upsert(items: List<ExpenseEntity>) {
+        val existing = all().associateBy { it.id }
+        for (item in items) {
+            val old = existing[item.id]
+            if (old == null) insert(item) else update(item.keepLocalFrom(old))
+        }
+    }
+
+    @Transaction
+    suspend fun upsert(item: ExpenseEntity) {
+        val old = find(item.id)
+        if (old == null) insert(item) else update(item.keepLocalFrom(old))
+    }
 
     @Query("SELECT * FROM expense WHERE id = :id")
     suspend fun find(id: String): ExpenseEntity?
@@ -46,13 +82,38 @@ interface ExpenseDao {
         failed: Boolean,
     )
 
-    /** Replace the server-known rows; local pending rows are never touched by a refresh. */
-    @Query("DELETE FROM expense WHERE pending = 0")
-    suspend fun deleteSynced()
+    @Query("UPDATE expense_source SET expenseId = :to WHERE expenseId = :from")
+    suspend fun moveSources(
+        from: String,
+        to: String,
+    )
 
+    @Query("UPDATE receipt SET expenseId = :to WHERE expenseId = :from")
+    suspend fun moveReceipts(
+        from: String,
+        to: String,
+    )
+
+    @Query("SELECT id FROM expense WHERE pending = 0")
+    suspend fun syncedIds(): List<String>
+
+    /** Rows the server no longer lists are removed in small batches (SQLite allows few bound variables on old Android). */
+    @Transaction
+    suspend fun deleteAll(ids: List<String>) {
+        ids.chunked(DELETE_BATCH).forEach { deleteBatch(it) }
+    }
+
+    @Query("DELETE FROM expense WHERE id IN (:ids)")
+    suspend fun deleteBatch(ids: List<String>)
+
+    /**
+     * Refresh from the server: rows it lists are inserted or updated in place (local-only columns, `expense_source` and
+     * receipts stay), rows it no longer lists are deleted; local pending rows are never touched by a refresh.
+     */
     @Transaction
     suspend fun replaceSynced(items: List<ExpenseEntity>) {
-        deleteSynced()
+        val keep = items.mapTo(HashSet()) { it.id }
+        deleteAll(syncedIds().filter { it !in keep })
         upsert(items)
     }
 }
@@ -94,8 +155,15 @@ interface OutboxDao {
 
 @Dao
 interface LookupDao {
-    @Query("SELECT * FROM category ORDER BY sortOrder, nameEn")
+    /**
+     * The categories the server knows (pickers, uploads). The phone's own defaults (`system = 1`, ids `cat-...`) are not
+     * server ids and are hidden here until the local-only screens use [observeAllCategories] (STORY-169+).
+     */
+    @Query("SELECT * FROM category WHERE system = 0 ORDER BY sortOrder, nameEn")
     fun observeCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
+    fun observeAllCategories(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM account ORDER BY label")
     fun observeAccounts(): Flow<List<AccountEntity>>
@@ -341,8 +409,15 @@ abstract class AppDatabase : RoomDatabase() {
         clientId: String,
         serverRow: ExpenseEntity,
     ) {
-        expenses().delete(clientId)
-        expenses().upsert(serverRow)
+        val pending = expenses().find(clientId)
+        // No delete-and-reinsert of data: the server row is written first (local-only columns carried over), the pending row's
+        // sources and receipts are re-pointed to it, and only then is the emptied pending row removed.
+        expenses().upsert(if (pending != null) serverRow.keepLocalFrom(pending) else serverRow)
+        if (pending != null && clientId != serverRow.id) {
+            expenses().moveSources(clientId, serverRow.id)
+            expenses().moveReceipts(clientId, serverRow.id)
+            expenses().delete(clientId)
+        }
         outbox().delete(clientId)
     }
 
