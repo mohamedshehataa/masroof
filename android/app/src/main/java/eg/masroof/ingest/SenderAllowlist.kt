@@ -73,6 +73,11 @@ class SenderPolicy(
 
 /** Settings the receiver can read synchronously and cheaply (SharedPreferences, no database). */
 interface SenderSettings {
+    /** The "SMS capture" switch in Settings (ADR-0009 D3/D7): on by default; without RECEIVE_SMS the system delivers nothing anyway. */
+    fun smsCaptureEnabled(): Boolean
+
+    fun setSmsCaptureEnabled(on: Boolean)
+
     fun policy(): SenderPolicy
 
     fun addSender(sender: String)
@@ -94,6 +99,10 @@ interface SenderSettings {
 class PrefsSenderSettings(
     private val prefs: SharedPreferences,
 ) : SenderSettings {
+    override fun smsCaptureEnabled() = prefs.getBoolean(SMS_ENABLED, true)
+
+    override fun setSmsCaptureEnabled(on: Boolean) = prefs.edit { putBoolean(SMS_ENABLED, on) }
+
     override fun policy() = SenderPolicy(set(ADDED), set(DISABLED))
 
     private fun set(key: String): Set<String> = prefs.getStringSet(key, emptySet()).orEmpty().toSet()
@@ -129,6 +138,7 @@ class PrefsSenderSettings(
     override fun dismissSuggestion(sender: String) = edit(SUGGESTED) { it.removeAll { s -> senderKey(s) == senderKey(sender) } }
 
     private companion object {
+        const val SMS_ENABLED = "sms_capture_enabled"
         const val ADDED = "added"
         const val DISABLED = "disabled_defaults"
         const val SUGGESTED = "suggested"

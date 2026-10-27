@@ -3,7 +3,7 @@ id: STORY-171
 epic: EPIC-17
 title: Bank SMS and app notifications become local entries with no upload
 phase: 4
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -136,3 +136,4 @@ Carried from STORY-169 security review: no capture may upload under a member oth
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D3), reuses STORY-064..069 capture |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - local capture write path, pairing on local rows, soft-delete Undo, capture switch + permission state; check-fast android GREEN |

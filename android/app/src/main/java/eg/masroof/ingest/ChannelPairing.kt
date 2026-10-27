@@ -3,6 +3,7 @@ package eg.masroof.ingest
 import androidx.room.withTransaction
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
+import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.ingest.parse.ParsedRecord
 import eg.masroof.ingest.parse.TxKind
@@ -11,13 +12,10 @@ import java.time.Clock
 /** An upload that started longer ago than this is taken to have died; its row may be sent again by another uploader. */
 const val UPLOAD_CLAIM_TTL_MILLIS = 5L * 60 * 1000
 
-/** What to do with a record that may be the second announcement of a transfer. */
-internal enum class Pairing { STORE, STORE_PAIRED, SKIP }
-
-/** [twinId]: the queued record that a [Pairing.STORE_PAIRED] newcomer replaced (remembered, so its message is never taken twice). */
-internal data class PairingMatch(
-    val pairing: Pairing,
-    val twinId: String? = null,
+/** The other channel's already recorded twin of a new message: its `captured_tx` row (now matched) and the local entry it made. */
+internal data class LocalTwin(
+    val captured: CapturedTxEntity,
+    val expense: ExpenseEntity,
 )
 
 /**
@@ -31,24 +29,23 @@ internal class ChannelPairing(
     private val clock: Clock,
     private val notifier: CapturedNotifier,
 ) {
-    /** A new message [r] (local id [id], received [receivedAt]) against what the other channel already recorded. */
-    suspend fun matchIncoming(
+    /**
+     * A new message [r] (local id [id], received [receivedAt]) against what the other channel already recorded on this phone. The
+     * twin is claimed in the same statement that checks it is unmatched, so of two racing messages exactly one pairs; its entry
+     * is not changed here. Null: this message is a new transfer.
+     */
+    suspend fun claimTwin(
         r: ParsedRecord,
         id: String,
         receivedAt: Long,
-    ): PairingMatch {
-        val kinds = directionKinds(r.kind) ?: return PairingMatch(Pairing.STORE)
+    ): LocalTwin? {
+        val kinds = directionKinds(r.kind) ?: return null
         for (twin in twinsOf(r.source.name, r.currency, r.amountMinor, kinds, receivedAt)) {
-            if (db.captured().claimPair(twin.localId, id) == 0) continue
-            val richer = twin.instrumentLast4 == null && r.instrumentLast4 != null && id != twin.localId
-            if (richer && db.parsedOutbox().deleteIfUnclaimed(twin.localId, staleBefore()) == 1) {
-                db.captured().delete(twin.localId)
-                notifier.cancel(twin.localId)
-                return PairingMatch(Pairing.STORE_PAIRED, twin.localId)
-            }
-            return PairingMatch(Pairing.SKIP)
+            // a row of the server era points at a server id, not at a local entry: it is no twin
+            val expense = twin.expenseId?.let { db.expenses().find(it) }
+            if (expense != null && db.captured().claimPair(twin.localId, id) == 1) return LocalTwin(twin, expense)
         }
-        return PairingMatch(Pairing.STORE)
+        return null
     }
 
     /**

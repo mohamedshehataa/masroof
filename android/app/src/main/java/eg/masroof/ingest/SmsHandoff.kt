@@ -21,6 +21,7 @@ interface SmsWorkScheduler {
     /** Hand one allowlisted, non-OTP message (SMS or notification) to the background pipeline. */
     fun enqueueIntake(message: IncomingMessage)
 
+    /** Only the review list's Save uses this until STORY-172 makes it local; no capture ever schedules an upload. */
     fun scheduleUpload()
 
     fun scheduleUploadRetry(
@@ -40,8 +41,8 @@ class SmsHandoff(
     private val gate: CaptureGate,
 ) {
     fun handOff(messages: List<IncomingSms>) {
-        // Nobody signed in: read nothing, suggest nothing, queue nothing.
-        if (messages.isEmpty() || !gate.isOpen()) return
+        // Capture switched off (or an erase running): read nothing, suggest nothing, queue nothing. No session is involved.
+        if (messages.isEmpty() || !gate.isOpen() || !settings.smsCaptureEnabled()) return
         val policy = settings.policy()
         for (sms in messages) {
             if (policy.isAllowed(sms.sender)) {

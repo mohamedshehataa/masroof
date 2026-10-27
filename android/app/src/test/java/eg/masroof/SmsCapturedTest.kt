@@ -2,28 +2,23 @@ package eg.masroof
 
 import android.app.NotificationManager
 import android.content.Context
+import android.database.sqlite.SQLiteFullException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.ListenableWorker
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
-import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.LearnedTemplateEntity
-import eg.masroof.data.db.ParsedOutboxEntity
-import eg.masroof.data.remote.ExpenseDeleter
-import eg.masroof.data.remote.ParsedRemote
-import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.ingest.AndroidCapturedNotifier
 import eg.masroof.ingest.CAPTURED_CHANNEL_ID
 import eg.masroof.ingest.CapturedActions
 import eg.masroof.ingest.CapturedAlertSettings
-import eg.masroof.ingest.CapturedLocks
 import eg.masroof.ingest.CapturedNotifier
-import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.NotificationPermission
 import eg.masroof.ingest.PrefsCapturedAlertSettings
 import eg.masroof.ingest.SmsPipeline
-import eg.masroof.ingest.SmsUploader
+import eg.masroof.ingest.intakeResult
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ui.viewmodel.SmsCaptureViewModel
@@ -45,17 +40,6 @@ import org.robolectric.annotation.Config
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-
-private class FakeDeleter(
-    var ok: Boolean = true,
-) : ExpenseDeleter {
-    val deleted = mutableListOf<String>()
-
-    override suspend fun deleteExpense(id: String): Boolean {
-        if (ok) deleted += id
-        return ok
-    }
-}
 
 private class MemoryAlerts(
     var on: Boolean = true,
@@ -94,9 +78,7 @@ private class FakePermission(
 class SmsCapturedTest {
     private lateinit var db: AppDatabase
     private val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
-    private val scheduler = FakeSmsScheduler()
     private val notifier = RecordingNotifier()
-    private val deleter = FakeDeleter()
     private val family = "Your card ending 4512 was charged EGP 500.00 at AMAZON"
 
     @Before
@@ -113,13 +95,12 @@ class SmsCapturedTest {
             db,
             MemorySettings(),
             MemoryNotifications(),
-            scheduler,
             clock,
             MemoryGate(),
             FixedKey,
             notifier,
         )
-    private val actions get() = CapturedActions(db, deleter, clock)
+    private val actions get() = CapturedActions(db, clock)
 
     private fun sms(
         body: String,
@@ -129,7 +110,7 @@ class SmsCapturedTest {
     @Test
     fun `REQ-SMS-080 an automatic record is remembered for Undo and announced with typed fields only`() =
         runTest {
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms(family)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(family)))
             val item = db.captured().all().single()
             assertEquals(50_000L, item.amountMinor)
             assertEquals("EGP", item.currency)
@@ -176,83 +157,78 @@ class SmsCapturedTest {
                     1L,
                 ),
             )
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms("Purchase of EGP 45.00 at BAKERY", at = 2_000L)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms("Purchase of EGP 45.00 at BAKERY", at = 2_000L)))
             assertNotNull(notifier.items.single().templateId)
         }
 
     @Test
-    fun `REQ-SMS-081 Undo of a record still in the outbox removes it from the outbox`() =
+    fun `REQ-SMS-097 Undo soft deletes the local entry - it leaves the lists and totals and its source stays`() =
         runTest {
             pipeline.accept(sms(family))
-            val localId =
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .localId
-            val result = actions.undo(localId)
+            val captured = db.captured().all().single()
+            val entryId = captured.expenseId!!
+            assertEquals(50_000L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+            val result = actions.undo(captured.localId)
             assertTrue(result.removed)
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertTrue(db.captured().all().isEmpty())
-            assertTrue("nothing was uploaded, so nothing is deleted", deleter.deleted.isEmpty())
-        }
-
-    @Test
-    fun `REQ-SMS-081 Undo of an uploaded record deletes the expense through the API`() =
-        runTest {
-            pipeline.accept(sms(family))
-            val localId =
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .localId
-            // the upload happened and the server said which expense it created
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ) = SmsUploadResult.Sent("3f2b1c64-1111-4222-8333-444455556666")
-                }
-            val device =
-                object : DeviceIdProvider {
-                    override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertEquals("3f2b1c64-1111-4222-8333-444455556666", db.captured().find(localId)!!.expenseId)
-            db.expenses().upsert(
-                ExpenseEntity("3f2b1c64-1111-4222-8333-444455556666", 50_000, "EGP", 1L, "AMAZON", null, null, null, false),
-            )
-            val result = actions.undo(localId)
-            assertTrue(result.removed)
-            assertEquals(listOf("3f2b1c64-1111-4222-8333-444455556666"), deleter.deleted)
-            assertTrue(db.captured().all().isEmpty())
+            val row = db.expenses().find(entryId)!!
+            assertEquals(clock.millis(), row.deletedAtMillis)
             assertTrue(
-                "the cached row goes too",
                 db
                     .expenses()
                     .observeAll()
                     .first()
                     .isEmpty(),
             )
+            assertTrue(
+                db
+                    .expenses()
+                    .observeRecent(10)
+                    .first()
+                    .isEmpty(),
+            )
+            assertEquals(0L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+            assertEquals("the source row stays, so the same message is never recorded again", 1, db.sources().all().size)
+            assertTrue(
+                "hidden from the chips",
+                db
+                    .captured()
+                    .observeRecent(0L)
+                    .first()
+                    .isEmpty(),
+            )
+            assertTrue(db.parsedOutbox().all().isEmpty())
         }
 
     @Test
-    fun `REQ-SMS-081 a failed delete (offline) leaves everything as it was so Undo can be tried again`() =
+    fun `REQ-SMS-097 Undo of an entry the user already deleted stays deleted without an error, an edited entry is deleted too`() =
         runTest {
-            db.captured().insert(CapturedTxEntity("c1", "e-1", 50_000, "EGP", "AMAZON", "SMS", null, 1L))
-            deleter.ok = false
-            val result = actions.undo("c1")
-            assertFalse(result.removed)
-            assertNotNull(db.captured().find("c1"))
-            deleter.ok = true
-            assertTrue(actions.undo("c1").removed)
+            pipeline.accept(sms(family))
+            val captured = db.captured().all().single()
+            val entryId = captured.expenseId!!
+            db.expenses().softDelete(entryId, 5_000L)
+            assertTrue(actions.undo(captured.localId).removed)
+            assertEquals("the first deletion time is kept", 5_000L, db.expenses().find(entryId)!!.deletedAtMillis)
+
+            pipeline.accept(sms("Your card ending 4512 was charged EGP 75.00 at NOON", at = 2_000L))
+            val second = db.captured().all().single { it.amountMinor == 7_500L }
+            val edited = db.expenses().find(second.expenseId!!)!!
+            db.expenses().update(edited.copy(notes = "gift", updatedAtMillis = edited.updatedAtMillis + 1))
+            assertTrue(actions.undo(second.localId).removed)
+            assertNotNull(db.expenses().find(second.expenseId)!!.deletedAtMillis)
         }
 
     @Test
-    fun `REQ-SMS-081 Undo of a record a learned format made offers to stop learning it, and yes forgets the format`() =
+    fun `REQ-SMS-097 Undo of an unknown notice changes nothing and a capture older than seven days has no chip`() =
+        runTest {
+            assertFalse(actions.undo("nothing").removed)
+            pipeline.accept(sms(family))
+            val later = Clock.fixed(Instant.parse("2026-10-23T09:00:01Z"), ZoneOffset.UTC)
+            assertTrue(CapturedActions(db, later).observeRecent().first().isEmpty())
+            assertEquals(1, CapturedActions(db, clock).observeRecent().first().size)
+        }
+
+    @Test
+    fun `REQ-SMS-097 Undo of a record a learned format made offers to stop learning it, and yes forgets the format`() =
         runTest {
             db.learnedTemplates().upsert(LearnedTemplateEntity("t1", "CIB", "shape", "PURCHASE", -1, -1, 1L))
             db.captured().insert(CapturedTxEntity("c1", "e-1", 50_000, "EGP", "AMAZON", "SMS", "t1", 1L))
@@ -319,13 +295,8 @@ class SmsCapturedTest {
         assertTrue(shadowOf(manager).allNotifications.isEmpty())
     }
 
-    private val device =
-        object : DeviceIdProvider {
-            override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
-        }
-
     @Test
-    fun `REQ-SMS-081 Undo while the upload is in flight is remembered and the expense is deleted when the server answers`() =
+    fun `REQ-SMS-096 REQ-SMS-097 an undone entry and the same SMS again - nothing is recorded, no notice`() =
         runTest {
             pipeline.accept(sms(family))
             val localId =
@@ -334,120 +305,100 @@ class SmsCapturedTest {
                     .all()
                     .single()
                     .localId
-            val locks = CapturedLocks()
-            val racing = CapturedActions(db, deleter, clock, locks)
-            var undoDuringUpload: eg.masroof.ingest.UndoResult? = null
-            var serverReceived = 0
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ): SmsUploadResult {
-                        // the user taps Undo while this request is on the wire
-                        undoDuringUpload = racing.undo(localId)
-                        serverReceived++
-                        return SmsUploadResult.Sent("3f2b1c64-1111-4222-8333-000000000005")
-                    }
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate(), deleter, locks).uploadPending()
-            assertTrue(undoDuringUpload!!.removed)
-            assertTrue("remembered, not half applied", undoDuringUpload.deferred)
-            assertEquals(1, serverReceived)
-            assertEquals("the expense the server made is deleted", listOf("3f2b1c64-1111-4222-8333-000000000005"), deleter.deleted)
-            assertTrue(db.captured().all().isEmpty())
-            assertTrue(db.parsedOutbox().all().isEmpty())
-        }
-
-    @Test
-    fun `REQ-SMS-081 an Undo with no server id yet stays remembered and is finished by a later pass`() =
-        runTest {
-            db.captured().insert(CapturedTxEntity("c1", null, 50_000, "EGP", "AMAZON", "SMS", null, clock.millis()))
-            val result = actions.undo("c1")
-            assertTrue(result.removed && result.deferred)
+            actions.undo(localId)
+            val noticesBefore = notifier.items.size
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(family)))
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(1, db.sources().all().size)
+            assertEquals(noticesBefore, notifier.items.size)
             assertTrue(
-                "hidden from the chips at once",
+                "still deleted",
                 db
-                    .captured()
-                    .observeRecent(0L)
+                    .expenses()
+                    .observeAll()
                     .first()
                     .isEmpty(),
             )
-            assertEquals(1, db.captured().undoRequests().size)
-            // the id arrives later (a retry of the upload told us)
-            db.captured().setExpenseId("c1", "e-77")
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ) = SmsUploadResult.Sent()
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate(), deleter).uploadPending()
-            assertEquals(listOf("e-77"), deleter.deleted)
-            assertTrue(db.captured().all().isEmpty())
-        }
-
-    @Test
-    fun `REQ-SMS-081 a lost answer then a retry learns the expense id from the duplicate answer and Undo works`() =
-        runTest {
-            pipeline.accept(sms(family))
-            val localId =
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .localId
-            var calls = 0
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ): SmsUploadResult {
-                        calls++
-                        // the first answer is lost; the retry gets DUPLICATE, which now carries the id of the expense
-                        return if (calls == 1) SmsUploadResult.Retry(null) else SmsUploadResult.Sent("3f2b1c64-1111-4222-8333-000000000010")
-                    }
-                }
-            val uploader = SmsUploader(db, remote, device, clock, MemoryGate(), deleter)
-            assertTrue(uploader.uploadPending().retry)
-            uploader.uploadPending()
-            assertEquals("3f2b1c64-1111-4222-8333-000000000010", db.captured().find(localId)!!.expenseId)
-            assertTrue(actions.undo(localId).removed)
-            assertEquals(listOf("3f2b1c64-1111-4222-8333-000000000010"), deleter.deleted)
-        }
-
-    @Test
-    fun `REQ-SMS-081 the same message accepted again after its upload keeps the expense id and is announced once`() =
-        runTest {
-            pipeline.accept(sms(family))
-            val localId =
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .localId
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ) = SmsUploadResult.Sent("e-9")
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            assertEquals("e-9", db.captured().find(localId)!!.expenseId)
-            pipeline.accept(sms(family))
-            assertEquals("e-9", db.captured().find(localId)!!.expenseId)
+            // even after the 7-day chip row is purged, the source row still refuses it (within 30 days)
+            val inAWeek = Clock.fixed(Instant.parse("2026-10-23T09:00:01Z"), ZoneOffset.UTC)
+            val later = SmsPipeline(db, MemorySettings(), MemoryNotifications(), inAWeek, MemoryGate(), FixedKey, notifier)
+            later.accept(sms(family))
+            assertEquals(1, db.expenses().all().size)
             assertEquals(1, notifier.items.size)
-            assertTrue("nothing is queued a second time", db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-097 the notification twin of an undone transfer adds its source and does not bring the entry back`() =
+        runTest {
+            val bank = "تم إستقبال تحويل لحظي إلى حسابكم 1094 بمبلغ 1.00 جم من MOHAMED MAHMOUD AHMED"
+            pipeline.accept(IncomingMessage(CaptureSource.SMS, "BDC", bank, 10_000L))
+            val smsRow = db.captured().all().single()
+            actions.undo(smsRow.localId)
+            val text = "InstaPay\nYou have received  1.00 EGP from mohamed.shehataaaaa@instapay"
+            pipeline.accept(IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", text, 13_000L))
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(2, db.sources().all().size)
+            assertTrue(
+                db
+                    .expenses()
+                    .observeAll()
+                    .first()
+                    .isEmpty(),
+            )
+            assertEquals(1, notifier.items.size)
+        }
+
+    @Test
+    fun `REQ-SMS-095 the database refusing the write leaves no row and no notice and the intake is tried again`() =
+        runTest {
+            // a trigger makes the LAST insert of the transaction (captured_tx) fail: everything before it must roll back
+            db.openHelper.writableDatabase.execSQL(
+                "CREATE TRIGGER no_room BEFORE INSERT ON captured_tx BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END",
+            )
+            val failed = runCatching { pipeline.accept(sms(family)) }
+            assertTrue(failed.isFailure)
+            assertTrue(db.expenses().all().isEmpty())
+            assertTrue(db.sources().all().isEmpty())
+            assertTrue(db.captured().all().isEmpty())
+            assertTrue(notifier.items.isEmpty())
+            // the job result for a full database is retry, with the message still in the job input
+            assertEquals(ListenableWorker.Result.retry(), intakeResultFor(SQLiteFullException("full"), attempt = 1))
+            assertEquals(ListenableWorker.Result.failure(), intakeResultFor(SQLiteFullException("full"), attempt = 10))
+            // space is back: the retried job records it
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER no_room")
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(family)))
+            assertEquals(1, db.expenses().all().size)
+        }
+
+    private suspend fun intakeResultFor(
+        error: Exception,
+        attempt: Int,
+    ) = intakeResult(attempt) { throw error }
+
+    @Test
+    fun `REQ-SMS-096 the same message accepted again keeps the same entry and is announced once`() =
+        runTest {
+            pipeline.accept(sms(family))
+            val first = db.captured().all().single()
+            pipeline.accept(sms(family))
+            assertEquals(
+                first.expenseId,
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .expenseId,
+            )
+            assertEquals(1, notifier.items.size)
+            assertEquals(1, db.expenses().all().size)
+            assertTrue("nothing is queued", db.parsedOutbox().all().isEmpty())
         }
 
     @Test
     fun `REQ-SMS-082 a transfer is announced with the institution only, never the counterparty's name`() =
         runTest {
             val incoming = "تم إستقبال تحويل لحظي إلى حسابكم 7781 بمبلغ 900.00 جم من MONA ADEL"
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms(incoming)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(incoming)))
             val label =
                 db
                     .captured()

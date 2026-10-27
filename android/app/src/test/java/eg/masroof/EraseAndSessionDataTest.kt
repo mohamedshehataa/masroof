@@ -250,7 +250,7 @@ class EraseAndSessionDataTest {
                     override fun wipe() = Unit
                 }
             val pipeline =
-                SmsPipeline(db, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, gate, key)
+                SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, gate, key)
             val message =
                 IncomingMessage(
                     CaptureSource.SMS,
@@ -264,8 +264,8 @@ class EraseAndSessionDataTest {
             assertTrue(db.captured().all().isEmpty())
             // control: with the flag open the same message is kept
             gate.open()
-            val fresh = SmsPipeline(db, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, gate, FixedKey)
-            assertEquals(Disposition.QUEUED, fresh.accept(message))
+            val fresh = SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, gate, FixedKey)
+            assertEquals(Disposition.RECORDED, fresh.accept(message))
         }
 
     // ---- REQ-AND-132 (the Settings flow)

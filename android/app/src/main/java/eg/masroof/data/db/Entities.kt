@@ -239,7 +239,8 @@ data class CapturedTxEntity(
     val source: String,
     val templateId: String?,
     val capturedAtMillis: Long,
-    // The user pressed Undo while the upload was (or may have been) in flight: the expense is deleted as soon as its id is known.
+    // The user pressed Undo: the expense is soft deleted and this row stays (hidden from the chip) until it is purged, so a late twin
+    // of the same transfer finds it and does not bring the entry back.
     @ColumnInfo(defaultValue = "0") val undoRequested: Boolean = false,
     // What the record was (a TxKind name), when the phone RECEIVED the message and the account tail: lets the pipeline see that a
     // second channel (bank SMS + app notification) announced the same transfer. Rows made before version 8 get them from the outbox.

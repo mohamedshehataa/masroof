@@ -157,7 +157,7 @@ class StartupBlockedTest {
             val blockedDb: AppDatabase = DatabaseStartup.blocked(context)
             val clock = Clock.systemUTC()
             val pipeline =
-                SmsPipeline(blockedDb, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, MemoryGate(), FixedKey)
+                SmsPipeline(blockedDb, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey)
             val device =
                 object : DeviceIdProvider {
                     override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
@@ -171,7 +171,7 @@ class StartupBlockedTest {
                         workerParameters: WorkerParameters,
                     ): ListenableWorker =
                         if (workerClassName == SmsIntakeWorker::class.java.name) {
-                            SmsIntakeWorker(appContext, workerParameters, pipeline, uploader, FakeSmsScheduler())
+                            SmsIntakeWorker(appContext, workerParameters, pipeline)
                         } else {
                             SmsUploadWorker(appContext, workerParameters, uploader, FakeSmsScheduler())
                         }

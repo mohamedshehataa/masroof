@@ -29,15 +29,15 @@ internal fun ExpenseEntity.keepLocalFrom(old: ExpenseEntity): ExpenseEntity =
 
 @Dao
 interface ExpenseDao {
-    @Query("SELECT * FROM expense ORDER BY occurredAtMillis DESC, id")
+    @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id")
     fun observeAll(): Flow<List<ExpenseEntity>>
 
-    @Query("SELECT * FROM expense ORDER BY occurredAtMillis DESC, id LIMIT :limit")
+    @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE'
-            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND deletedAtMillis IS NULL AND type = 'EXPENSE'
+            AND status = 'CONFIRMED' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
@@ -72,6 +72,27 @@ interface ExpenseDao {
 
     @Query("SELECT * FROM expense WHERE id = :id")
     suspend fun find(id: String): ExpenseEntity?
+
+    /** Soft delete for Undo (ADR-0009 D3): the row and its sources stay until the 30-day purge. Returns the rows changed. */
+    @Query("UPDATE expense SET deletedAtMillis = :nowMillis, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun softDelete(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    /**
+     * The second channel of one transfer knew more (the account tail, a name): an entry nobody edited takes it. One statement, so
+     * an edit made meanwhile wins; `updatedAtMillis` is left alone (the pairing is not an edit). Returns the rows changed.
+     */
+    @Query(
+        """UPDATE expense SET instrumentLast4 = :last4, merchant = COALESCE(:merchant, merchant)
+            WHERE id = :id AND deletedAtMillis IS NULL AND updatedAtMillis = createdAtMillis""",
+    )
+    suspend fun enrichFromTwin(
+        id: String,
+        last4: String?,
+        merchant: String?,
+    ): Int
 
     @Query("DELETE FROM expense WHERE id = :id")
     suspend fun delete(id: String)

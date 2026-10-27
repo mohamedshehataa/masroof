@@ -36,6 +36,16 @@ class SmsCaptureViewModel
         private val mutableSuggestions = MutableStateFlow(senders.suggestions())
         val suggestions: StateFlow<List<String>> = mutableSuggestions
 
+        private val mutableSmsCapture = MutableStateFlow(senders.smsCaptureEnabled())
+
+        /** The "SMS capture" switch the user set (the permission is read separately by the screen). */
+        val smsCaptureEnabled: StateFlow<Boolean> = mutableSmsCapture
+
+        fun setSmsCapture(on: Boolean) {
+            senders.setSmsCaptureEnabled(on)
+            mutableSmsCapture.value = on
+        }
+
         private val mutableNotifications = MutableStateFlow(notifications.enabled())
         val notificationsEnabled: StateFlow<Boolean> = mutableNotifications
 

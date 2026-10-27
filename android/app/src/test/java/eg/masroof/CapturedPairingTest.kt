@@ -10,8 +10,6 @@ import eg.masroof.data.db.MIGRATION_7_8
 import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.remote.ApiRemoteSource
-import eg.masroof.data.remote.ExpenseDeleter
-import eg.masroof.data.remote.NoExpenseDeleter
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.ingest.CapturedActions
@@ -32,7 +30,8 @@ import okhttp3.OkHttpClient
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -105,7 +104,6 @@ class CapturedPairingTest {
             db,
             MemorySettings(),
             MemoryNotifications(),
-            FakeSmsScheduler(),
             clock,
             MemoryGate(),
             FixedKey,
@@ -138,102 +136,131 @@ class CapturedPairingTest {
         val serverRecords get() = requests.map { it.localId }.distinct().size
     }
 
+    private suspend fun channelsOf(expenseId: String) =
+        db
+            .sources()
+            .all()
+            .filter { it.expenseId == expenseId }
+            .map { it.channel }
+            .sorted()
+
     @Test
-    fun `REQ-SMS-090 a lost server answer does not let the SMS twin replace the push - the server still holds one record`() =
+    fun `REQ-SMS-090 REQ-NTF-021 the push first, the SMS 30 seconds later - one entry, two sources, the richer SMS fills in the tail`() =
         runTest {
             val clock = TickClock(start)
             val p = pipelineOn(clock)
             p.accept(appPush())
-            val lost = RecordingRemote { SmsUploadResult.Retry(null) }
-            assertTrue(SmsUploader(db, lost, device, clock, MemoryGate()).uploadPending().retry)
-            clock.now = clock.now.plusSeconds(30)
-            assertEquals(Disposition.QUEUED, p.accept(bankSms()))
-            val retried = RecordingRemote { SmsUploadResult.Sent("expense-1") }
-            SmsUploader(db, retried, device, clock, MemoryGate()).uploadPending()
-            assertEquals(
-                "the retry is the same local id, idempotent on the server",
-                lost.requests.single().localId,
-                retried.requests.single().localId,
+            assertNull(
+                db
+                    .expenses()
+                    .all()
+                    .single()
+                    .instrumentLast4,
             )
+            clock.now = clock.now.plusSeconds(30)
+            assertEquals(Disposition.RECORDED, p.accept(bankSms()))
+            val entry = db.expenses().all().single()
+            assertEquals("1094", entry.instrumentLast4)
+            assertEquals(listOf("PUSH", "SMS"), channelsOf(entry.id))
             assertEquals(1, db.captured().all().size)
             assertEquals(
-                "expense-1",
+                entry.id,
                 db
                     .captured()
                     .all()
                     .single()
                     .expenseId,
             )
+            assertTrue("nothing was queued or uploaded", db.parsedOutbox().all().isEmpty())
         }
 
     @Test
-    fun `REQ-SMS-090 a request that outlives the claim time still cannot be replaced by the twin`() =
+    fun `REQ-NTF-021 an entry the user already edited only gets the second source`() =
         runTest {
             val clock = TickClock(start)
             val p = pipelineOn(clock)
             p.accept(appPush())
-            val remote =
-                RecordingRemote {
-                    clock.now = clock.now.plusSeconds(400) // longer than the claim time
-                    assertEquals(Disposition.QUEUED, p.accept(bankSms()))
-                    SmsUploadResult.Sent("expense-1")
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            assertEquals(1, remote.serverRecords)
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertEquals(
-                "expense-1",
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .expenseId,
-            )
-        }
-
-    @Test
-    fun `REQ-SMS-090 the reverse race - the push accepted while the SMS upload is on the wire - leaves one record`() =
-        runTest {
-            val clock = TickClock(start)
-            val p = pipelineOn(clock)
+            val first = db.expenses().all().single()
+            db.expenses().update(first.copy(merchant = "My own label", updatedAtMillis = first.updatedAtMillis + 1))
+            clock.now = clock.now.plusSeconds(30)
             p.accept(bankSms())
-            val remote =
-                RecordingRemote {
-                    p.accept(appPush())
-                    SmsUploadResult.Sent("expense-1")
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            assertEquals(1, remote.serverRecords)
-            assertEquals(
-                "expense-1",
-                db
-                    .captured()
-                    .all()
-                    .single()
-                    .expenseId,
-            )
+            val entry = db.expenses().all().single()
+            assertEquals("My own label", entry.merchant)
+            assertNull("the edited entry is left alone", entry.instrumentLast4)
+            assertEquals(listOf("PUSH", "SMS"), channelsOf(entry.id))
         }
 
     @Test
-    fun `REQ-SMS-090 accepting the same message again after it was skipped as the duplicate makes no second record`() =
+    fun `REQ-NTF-021 the SMS first, then the push 3 seconds later - one entry, two sources, one notice`() =
+        runTest {
+            val p = pipelineOn(TickClock(start))
+            p.accept(bankSms())
+            p.accept(appPush())
+            val entry = db.expenses().all().single()
+            assertEquals("1094", entry.instrumentLast4)
+            assertEquals(listOf("PUSH", "SMS"), channelsOf(entry.id))
+            assertEquals(1, db.captured().all().size)
+        }
+
+    @Test
+    fun `REQ-NTF-021 5 minutes 1 second apart, different amounts and the same channel are separate entries`() =
+        runTest {
+            val p = pipelineOn(TickClock(start))
+            p.accept(bankSms())
+            p.accept(appPush(at + 5 * 60_000 + 1_000))
+            assertEquals(2, db.expenses().all().size)
+            db.clearAllTables()
+            p.accept(bankSms())
+            p.accept(appPush().copy(text = push.replace("1.00", "2.00")))
+            assertEquals(2, db.expenses().all().size)
+            db.clearAllTables()
+            p.accept(bankSms())
+            p.accept(bankSms().copy(receivedAtMillis = at + 60_000, text = sms.replace("bda86be1", "cda86be2")))
+            assertEquals(2, db.expenses().all().size)
+        }
+
+    @Test
+    fun `REQ-NTF-021 exactly 5 minutes apart still pairs`() =
+        runTest {
+            val p = pipelineOn(TickClock(start))
+            p.accept(bankSms())
+            p.accept(appPush(at + 5 * 60_000))
+            assertEquals(1, db.expenses().all().size)
+        }
+
+    @Test
+    fun `REQ-SMS-096 accepting the same message again after it was paired as the twin makes nothing new`() =
         runTest {
             val p = pipelineOn(TickClock(start))
             p.accept(bankSms())
             p.accept(appPush())
             p.accept(appPush()) // WorkManager runs the same intake job again
-            assertEquals(1, db.parsedOutbox().all().size)
+            p.accept(bankSms())
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(2, db.sources().all().size)
             assertEquals(1, db.captured().all().size)
+            assertTrue(db.parsedOutbox().all().isEmpty())
         }
 
     @Test
-    fun `REQ-SMS-090 accepting the replaced message again after the richer one took its place makes no second record`() =
+    fun `REQ-SMS-096 accepting the replaced message again after the richer one took its place makes nothing new`() =
         runTest {
             val p = pipelineOn(TickClock(start))
             p.accept(appPush())
             p.accept(bankSms())
             p.accept(appPush())
             p.accept(bankSms())
-            assertEquals(listOf("SMS"), db.parsedOutbox().all().map { it.source })
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(
+                listOf("PUSH", "SMS"),
+                channelsOf(
+                    db
+                        .expenses()
+                        .all()
+                        .single()
+                        .id,
+                ),
+            )
             assertEquals(1, db.captured().all().size)
         }
 
@@ -298,16 +325,11 @@ class CapturedPairingTest {
         }
 
     @Test
-    fun `REQ-SMS-090 a row held by a live claim is not skipped silently - a retry is scheduled for when the claim runs out`() =
+    fun `REQ-SMS-090 a leftover row held by a live claim is not skipped silently - a retry is scheduled for when the claim runs out`() =
         runTest {
             val clock = TickClock(start)
-            pipelineOn(clock).accept(appPush())
-            val id =
-                db
-                    .parsedOutbox()
-                    .all()
-                    .single()
-                    .localId
+            db.parsedOutbox().insert(legacyOutboxRow("old-1", source = "NOTIFICATION", kind = "INCOME", createdAt = clock.millis()))
+            val id = "old-1"
             // an upload killed 10 seconds ago left its claim
             db.parsedOutbox().claim(id, clock.millis() - 10_000, clock.millis())
             val remote = RecordingRemote { SmsUploadResult.Sent("expense-1") }
@@ -321,48 +343,55 @@ class CapturedPairingTest {
         }
 
     @Test
-    fun `REQ-SMS-090 Undo of a queued row that an upload already started is remembered and goes through the server`() =
+    fun `REQ-SMS-097 Undo of a paired entry deletes the one entry and the late twin does not bring it back`() =
         runTest {
             val clock = TickClock(start)
-            pipelineOn(clock).accept(appPush())
+            val p = pipelineOn(clock)
+            p.accept(appPush())
             val id =
                 db
-                    .parsedOutbox()
+                    .captured()
                     .all()
                     .single()
                     .localId
-            SmsUploader(db, RecordingRemote { SmsUploadResult.Retry(null) }, device, clock, MemoryGate()).uploadPending()
-            val deleted = mutableListOf<String>()
-            val deleter =
-                object : ExpenseDeleter {
-                    override suspend fun deleteExpense(id: String): Boolean {
-                        deleted += id
-                        return true
-                    }
-                }
-            val result = CapturedActions(db, deleter, clock).undo(id)
-            assertTrue(result.deferred)
-            assertEquals("the row stays, so the retry is idempotent", 1, db.parsedOutbox().all().size)
-            SmsUploader(db, RecordingRemote { SmsUploadResult.Sent("expense-1") }, device, clock, MemoryGate(), deleter).uploadPending()
-            assertEquals(listOf("expense-1"), deleted)
-        }
-
-    @Test
-    fun `REQ-SMS-090 Undo of a queued row that was never sent just forgets it`() =
-        runTest {
-            val clock = TickClock(start)
-            pipelineOn(clock).accept(appPush())
-            val id =
-                db
-                    .parsedOutbox()
-                    .all()
-                    .single()
-                    .localId
-            val result = CapturedActions(db, NoExpenseDeleter, clock).undo(id)
+            val result = CapturedActions(db, clock).undo(id)
             assertTrue(result.removed)
-            assertFalse(result.deferred)
+            assertNotNull(
+                db
+                    .expenses()
+                    .all()
+                    .single()
+                    .deletedAtMillis,
+            )
+            assertTrue(
+                db
+                    .expenses()
+                    .observeAll()
+                    .first()
+                    .isEmpty(),
+            )
+            clock.now = clock.now.plusSeconds(30)
+            p.accept(bankSms())
+            assertEquals("still one entry, still deleted", 1, db.expenses().all().size)
+            assertNotNull(
+                db
+                    .expenses()
+                    .all()
+                    .single()
+                    .deletedAtMillis,
+            )
+            assertEquals(
+                "the SMS only added its source",
+                listOf("PUSH", "SMS"),
+                channelsOf(
+                    db
+                        .expenses()
+                        .all()
+                        .single()
+                        .id,
+                ),
+            )
             assertTrue(db.parsedOutbox().all().isEmpty())
-            assertTrue(db.captured().all().isEmpty())
         }
 
     private fun expensePage(

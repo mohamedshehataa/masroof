@@ -54,7 +54,7 @@ class SmsLearningTest {
     @After
     fun tearDown() = db.close()
 
-    private val pipeline get() = SmsPipeline(db, settings, notifications, scheduler, clock, gate, FixedKey)
+    private val pipeline get() = SmsPipeline(db, settings, notifications, clock, gate, FixedKey)
     private val viewModel get() = ReviewViewModel(db, Dispatchers.Unconfined, scheduler, clock)
 
     private fun sms(
@@ -108,10 +108,13 @@ class SmsLearningTest {
             pipeline.accept(sms("Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05"))
             saveFirstReview()
             val next = pipeline.accept(sms("Purchase of EGP 45.50 at BAKERY on 13/03/2026 09:30", at = 2_000L))
-            assertEquals(Disposition.QUEUED, next)
-            val rows = db.parsedOutbox().all().sortedBy { it.createdAtMillis }
-            assertEquals(2, rows.size)
-            assertEquals(listOf(9_900L, 4_550L), rows.map { it.amountMinor }.sortedByDescending { it })
+            assertEquals(Disposition.RECORDED, next)
+            // the one-tap Save is the review list's own path (STORY-172); the learned format records locally at once
+            assertEquals(listOf(9_900L), db.parsedOutbox().all().map { it.amountMinor })
+            val entry = db.expenses().all().single()
+            assertEquals(4_550L, entry.amountMinor)
+            assertEquals("BAKERY", entry.merchant)
+            assertEquals(1, db.sources().all().size)
             assertTrue(db.reviews().all().isEmpty())
         }
 
@@ -153,14 +156,16 @@ class SmsLearningTest {
                     .kind,
             )
             val again = pipeline.accept(sms("Sent EGP 80.00 to OMAR via bank app on 14/03/2026 10:00", sender = "QNB", at = 2_000L))
-            assertEquals(Disposition.QUEUED, again)
+            assertEquals(Disposition.RECORDED, again)
+            assertEquals("TRANSFER_OUT", item.sugKind)
             assertEquals(
-                item.sugKind,
+                "a transfer kind is a TRANSFER entry",
+                "TRANSFER",
                 db
-                    .parsedOutbox()
+                    .expenses()
                     .all()
-                    .maxByOrNull { it.createdAtMillis }!!
-                    .kind,
+                    .single()
+                    .type,
             )
         }
 
@@ -253,7 +258,7 @@ class SmsLearningTest {
                 Disposition.REVIEW,
                 pipeline.accept(sms("Acct ***7781 Cr EGP 500.00 on 13/03/2026 POS AMAZON", at = 2_000L)),
             )
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms("Acct ***7781 Dr EGP 80.00 on 14/03/2026 POS UBER", at = 3_000L)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms("Acct ***7781 Dr EGP 80.00 on 14/03/2026 POS UBER", at = 3_000L)))
             val debit = TemplateShape.of("EGP 2,000.00- balance EGP 650.00")!!
             val credit = TemplateShape.of("EGP 3,000.00+ balance EGP 3,650.00")!!
             assertTrue("the sign is literal", debit.signature != credit.signature)
@@ -294,7 +299,7 @@ class SmsLearningTest {
             assertEquals("one token is not two", Disposition.REVIEW, pipeline.accept(sms("Transfer of EGP 300.00 to MONA", at = at)))
             assertEquals(
                 "a name of the same length is the format",
-                Disposition.QUEUED,
+                Disposition.RECORDED,
                 pipeline.accept(sms("Transfer of EGP 300.00 to MONA ADEL", at = at + 1_000L)),
             )
         }
@@ -313,7 +318,7 @@ class SmsLearningTest {
                 )
                 at += 1_000L
             }
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms("تم تحويل 300 جنيه الى منى عادل", sender = "NBE", at = at)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms("تم تحويل 300 جنيه الى منى عادل", sender = "NBE", at = at)))
         }
 
     @Test
@@ -323,7 +328,7 @@ class SmsLearningTest {
             saveFirstReview()
             assertEquals(Disposition.REVIEW, pipeline.accept(sms("Purchase of EGP 45.00 at CASHBACK", at = 2_000L)))
             assertEquals(Disposition.REVIEW, pipeline.accept(sms("Purchase of EGP 45.00 at RETURN", at = 3_000L)))
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms("Purchase of EGP 45.00 at CAFE", at = 4_000L)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms("Purchase of EGP 45.00 at CAFE", at = 4_000L)))
         }
 
     @Test
@@ -429,7 +434,7 @@ class SmsLearningTest {
     fun `REQ-SMS-075 a proven family is recorded without any confirmation and never learned from`() =
         runTest {
             val family = "Your card ending 4512 was charged EGP 560.00 at ZOOBA ZAMALEK"
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms(family)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(family)))
             assertTrue(db.reviews().all().isEmpty())
             assertTrue(db.learnedTemplates().all().isEmpty())
         }

@@ -1,12 +1,14 @@
 package eg.masroof.ingest
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import androidx.hilt.work.HiltWorker
 import androidx.room.withTransaction
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -14,9 +16,16 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import eg.masroof.core.CairoTime
+import eg.masroof.data.IdFactory
+import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.UuidIdFactory
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.ExpenseSourceEntity
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.REVIEW_RETENTION_DAYS
 import eg.masroof.data.db.ReviewItemEntity
@@ -33,7 +42,10 @@ import eg.masroof.ingest.parse.ParsedRecord
 import eg.masroof.ingest.parse.TemplateShape
 import eg.masroof.ingest.parse.TxKind
 import eg.masroof.work.OutboxBackoff
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
+import java.time.Instant
+import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -96,14 +108,24 @@ class WorkManagerSmsScheduler
         }
     }
 
-/** What the pipeline did with one message. */
-enum class Disposition { QUEUED, REVIEW, DROPPED }
+/** What the pipeline did with one message. [RECORDED] is also the answer for a message that was recorded before. */
+enum class Disposition { RECORDED, REVIEW, DROPPED }
+
+/** What one write transaction decided; the notices are shown after it committed, never inside it. */
+private data class Stored(
+    val disposition: Disposition,
+    val notice: CapturedTxEntity? = null,
+    val withdraw: String? = null,
+    val changed: Boolean = false,
+)
 
 /**
  * Background half of the receiver and the notification listener: parses on the device and decides (REQ-SMS-030,
- * REQ-SMS-060). A record goes to the upload outbox; anything unclear or secret goes to the local review list; the rest is
- * forgotten. The message text is never written anywhere except the review list.
+ * REQ-SMS-060). A record becomes a local entry in Room at once (ADR-0009 D3: `expense` + `expense_source` + `captured_tx` in one
+ * transaction, nothing is queued or uploaded); anything unclear or secret goes to the local review list; the rest is forgotten.
+ * The message text is never written anywhere except the review list.
  */
+@Suppress("LongParameterList") // one collaborator per concern; all injected
 @Singleton
 class SmsPipeline
     @Inject
@@ -111,16 +133,18 @@ class SmsPipeline
         private val db: AppDatabase,
         private val settings: SenderSettings,
         private val notifications: NotificationSettings,
-        private val scheduler: SmsWorkScheduler,
         private val clock: Clock,
         private val gate: CaptureGate,
         private val idKey: LocalIdKey,
         private val notifier: CapturedNotifier = NoCapturedNotifier,
+        private val ids: IdFactory = UuidIdFactory(),
+        private val signal: LocalDataSignal = LocalDataSignal(),
+        private val eraseLock: EraseLock = EraseLock(),
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
         suspend fun accept(message: IncomingMessage): Disposition {
-            // No session (logged out, between two accounts): nothing is read, queued or kept.
+            // Capture switched off (or an erase running): nothing is read, recorded or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
             val id = LocalIdHasher.id(idKey.get(), message)
             if (!gate.isOpen()) {
@@ -131,9 +155,25 @@ class SmsPipeline
             // A message in a format the user confirmed on this phone is recorded like a proven family
             val applied = TemplateLearning.apply(db, message, MessageParser.parse(message))
             val outcome = applied.outcome
-            // The gate is checked once more inside the transaction, right before anything is written, so an intake
-            // that was in flight during logout cannot insert after the wipe.
-            return db.withTransaction { if (gate.isOpen()) store(message, id, outcome, applied.templateId) else Disposition.DROPPED }
+            // Waits for a running erase or recovery, like a manual save. The gate and the setting are checked once more inside the
+            // transaction, right before anything is written, so an intake that was in flight when capture was switched off (or an
+            // erase began) writes nothing.
+            val stored =
+                eraseLock.mutex.withLock {
+                    db.withTransaction {
+                        if (gate.isOpen() &&
+                            isAllowed(message)
+                        ) {
+                            store(message, id, outcome, applied.templateId)
+                        } else {
+                            Stored(Disposition.DROPPED)
+                        }
+                    }
+                }
+            stored.withdraw?.let(notifier::cancel)
+            stored.notice?.let(notifier::captured)
+            if (stored.changed) signal.changed()
+            return stored.disposition
         }
 
         private suspend fun store(
@@ -141,7 +181,7 @@ class SmsPipeline
             id: String,
             outcome: ParseOutcome,
             templateId: String?,
-        ): Disposition =
+        ): Stored =
             when (outcome) {
                 is ParseOutcome.Record ->
                     storeRecord(outcome.record, id, templateId, message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis())
@@ -162,71 +202,152 @@ class SmsPipeline
                             outcome.reason.takeIf { it == "unconfirmed" }?.let { TemplateShape.of(message.text) },
                         ),
                     )
-                    Disposition.REVIEW
+                    Stored(Disposition.REVIEW)
                 }
-                is ParseOutcome.Ignore -> Disposition.DROPPED
+                is ParseOutcome.Ignore -> Stored(Disposition.DROPPED)
             }
 
-        /** An automatic record: queued for upload, remembered for Undo and announced (once per message). */
+        /** An automatic record: a local entry with its source, remembered for Undo and announced (once per message). */
         private suspend fun storeRecord(
             r: ParsedRecord,
             id: String,
             templateId: String?,
             receivedAt: Long,
-        ): Disposition {
-            // the same message accepted again after its upload is the same record: no second row, no second notice
-            // (also when this message was the dropped or replaced twin of a pair: its id is remembered on the other record)
-            if (db.captured().knows(id) > 0) {
-                scheduler.scheduleUpload()
-                return Disposition.QUEUED
-            }
-            // the same transfer announced by the other channel (bank SMS + app notification): one record, one notice
-            val match = pairing.matchIncoming(r, id, receivedAt)
-            if (match.pairing == Pairing.SKIP) {
-                scheduler.scheduleUpload()
-                return Disposition.QUEUED
-            }
-            val inserted =
-                db.parsedOutbox().insert(
-                    ParsedOutboxEntity(
-                        localId = id,
-                        source = r.source.name,
-                        kind = r.kind.name,
-                        amountMinor = r.amountMinor,
-                        currency = r.currency,
-                        occurredAtMillis = r.occurredAtMillis,
-                        instrumentLast4 = r.instrumentLast4,
-                        senderId = r.senderId,
-                        institution = r.institution,
-                        paymentMethod = r.paymentMethod,
-                        merchant = r.merchant,
-                        createdAtMillis = clock.millis(),
-                    ),
-                ) != NOT_INSERTED
-            scheduler.scheduleUpload()
-            // the safety net: a record the phone made by itself can be undone for a while (the same message seen twice: once)
-            if (inserted) {
-                val item =
-                    CapturedTxEntity(
-                        localId = id,
-                        expenseId = null,
-                        amountMinor = r.amountMinor,
-                        currency = r.currency,
-                        label = noticeLabel(r),
-                        source = r.source.name,
-                        templateId = templateId,
-                        capturedAtMillis = clock.millis(),
-                        kind = r.kind.name,
-                        receivedAtMillis = receivedAt,
-                        paired = match.pairing == Pairing.STORE_PAIRED,
-                        pairedLocalId = match.twinId,
-                        instrumentLast4 = r.instrumentLast4,
-                    )
-                db.captured().insert(item)
-                notifier.captured(item)
-            }
-            return Disposition.QUEUED
+        ): Stored {
+            val now = clock.millis()
+            db.captured().purgeBefore(capturedCutoff(now))
+            db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
+            // The same message again (a re-run job, a double delivery) is the same record: no second entry, row or notice. The source
+            // row outlives an Undo, and a paired twin has its own source row, so this also holds for an undone entry (30 days).
+            if (db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0) return Stored(Disposition.RECORDED)
+            // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
+            val twin = pairing.claimTwin(r, id, receivedAt)
+            if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
+            val expenseId = ids.next()
+            db.expenses().insert(newExpense(expenseId, r, receivedAt, now))
+            db.sources().insert(source(expenseId, r, id, receivedAt))
+            // the safety net: a record the phone made by itself can be undone for a while
+            val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
+            db.captured().insert(item)
+            return Stored(Disposition.RECORDED, notice = item, changed = true)
         }
+
+        /**
+         * The other channel already made the entry: this message only adds its source. When it knows more (the account tail) and
+         * nobody edited the entry, the entry takes that and the first notice is replaced by one notice; otherwise the old notice
+         * stays. An entry that was undone or deleted gets the source and nothing else.
+         */
+        private suspend fun addToTwin(
+            twin: LocalTwin,
+            r: ParsedRecord,
+            id: String,
+            templateId: String?,
+            receivedAt: Long,
+            now: Long,
+        ): Stored {
+            val expenseId = twin.expense.id
+            db.sources().insert(source(expenseId, r, id, receivedAt))
+            val richer = twin.captured.instrumentLast4 == null && r.instrumentLast4 != null
+            val replace =
+                richer && !twin.captured.undoRequested && db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, label(r)) == 1
+            if (!replace) return Stored(Disposition.RECORDED, changed = true)
+            db.captured().delete(twin.captured.localId)
+            val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = twin.captured.localId)
+            db.captured().insert(item)
+            return Stored(Disposition.RECORDED, notice = item, withdraw = twin.captured.localId, changed = true)
+        }
+
+        private fun newExpense(
+            expenseId: String,
+            r: ParsedRecord,
+            receivedAt: Long,
+            now: Long,
+        ) = ExpenseEntity(
+            id = expenseId,
+            amountMinor = r.amountMinor,
+            currency = r.currency,
+            occurredAtMillis = r.occurredAtMillis,
+            merchant = label(r),
+            categoryId = null,
+            accountId = null,
+            notes = null,
+            pending = false,
+            source = channel(r),
+            type = typeOf(r.kind),
+            status = if (needsReview(r)) STATUS_PENDING_REVIEW else STATUS_CONFIRMED,
+            createdAtMillis = now,
+            updatedAtMillis = now,
+            timeKnown = timeKnown(r.occurredAtMillis, receivedAt),
+            paymentMethod = r.paymentMethod,
+            instrumentLast4 = r.instrumentLast4,
+        )
+
+        private fun source(
+            expenseId: String,
+            r: ParsedRecord,
+            localId: String,
+            receivedAt: Long,
+        ) = ExpenseSourceEntity(
+            id = ids.next(),
+            expenseId = expenseId,
+            channel = channel(r),
+            localSourceId = localId,
+            receivedAtMillis = receivedAt,
+            senderId = r.senderId,
+            instrumentLast4 = r.instrumentLast4,
+        )
+
+        @Suppress("LongParameterList") // typed fields of one row
+        private fun captured(
+            id: String,
+            expenseId: String,
+            r: ParsedRecord,
+            templateId: String?,
+            receivedAt: Long,
+            now: Long,
+            twinId: String?,
+        ) = CapturedTxEntity(
+            localId = id,
+            expenseId = expenseId,
+            amountMinor = r.amountMinor,
+            currency = r.currency,
+            label = noticeLabel(r),
+            source = r.source.name,
+            templateId = templateId,
+            capturedAtMillis = now,
+            kind = r.kind.name,
+            receivedAtMillis = receivedAt,
+            paired = twinId != null,
+            pairedLocalId = twinId,
+            instrumentLast4 = r.instrumentLast4,
+        )
+
+        /** The name an entry shows: the merchant or counterparty label, else the institution (typed, digit-free values only). */
+        private fun label(r: ParsedRecord): String? = r.merchant ?: r.institution
+
+        private fun channel(r: ParsedRecord) = if (r.source == CaptureSource.SMS) CHANNEL_SMS else CHANNEL_PUSH
+
+        /** The server's old mapping: money in is INCOME, money out to a person is a TRANSFER, the rest by what it is. */
+        private fun typeOf(kind: TxKind): String =
+            when (kind) {
+                TxKind.PURCHASE, TxKind.FEE -> "EXPENSE"
+                TxKind.TRANSFER_OUT -> "TRANSFER"
+                TxKind.TRANSFER_IN, TxKind.INCOME -> "INCOME"
+                TxKind.REFUND -> "REFUND"
+                TxKind.CASH_WITHDRAWAL -> "CASH_WITHDRAWAL"
+            }
+
+        /** Incoming money (a spoofed sender id could claim it) and unusually large amounts wait for the user. */
+        private fun needsReview(r: ParsedRecord) =
+            r.kind in setOf(TxKind.INCOME, TxKind.TRANSFER_IN, TxKind.REFUND) || r.amountMinor > REVIEW_CEILING_MINOR
+
+        /** A date-only message is stored at Cairo noon of that day (as a manual entry for another day): its time is not known. */
+        private fun timeKnown(
+            occurredAt: Long,
+            receivedAt: Long,
+        ): Boolean =
+            occurredAt == receivedAt ||
+                Instant.ofEpochMilli(occurredAt).atZone(CairoTime.zone).toLocalTime() != LocalTime.NOON
 
         private fun ReviewItemEntity.withSuggestion(
             suggestion: ParsedRecord?,
@@ -255,7 +376,7 @@ class SmsPipeline
 
         private fun isAllowed(message: IncomingMessage): Boolean =
             when (message.source) {
-                CaptureSource.SMS -> settings.policy().isAllowed(message.sender)
+                CaptureSource.SMS -> settings.smsCaptureEnabled() && settings.policy().isAllowed(message.sender)
                 CaptureSource.NOTIFICATION -> notifications.enabled() && notifications.isMonitored(message.sender)
             }
 
@@ -264,6 +385,11 @@ class SmsPipeline
             const val MAX_SENDER = 60
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
+            const val REVIEW_CEILING_MINOR = 5_000_000L
+            const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
+            const val STATUS_CONFIRMED = "CONFIRMED"
+            const val CHANNEL_SMS = "SMS"
+            const val CHANNEL_PUSH = "PUSH"
         }
     }
 
@@ -496,6 +622,28 @@ class SmsUploader
         }
     }
 
+/** After this many tries a message the database keeps refusing is given up on (its text leaves the WorkManager input with the job). */
+internal const val MAX_INTAKE_ATTEMPTS = 10
+
+/**
+ * Turns the outcome of one intake into the job result: a database that cannot write (full disk, locked) wrote nothing, so the job
+ * is tried again later with its input intact; any other failure is final. Nothing here touches the network.
+ */
+internal suspend fun intakeResult(
+    attempt: Int,
+    accept: suspend () -> Disposition,
+): ListenableWorker.Result =
+    try {
+        accept()
+        ListenableWorker.Result.success()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (
+        @Suppress("SwallowedException") _: SQLiteException,
+    ) {
+        if (attempt < MAX_INTAKE_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+    }
+
 @HiltWorker
 class SmsIntakeWorker
     @AssistedInject
@@ -503,8 +651,6 @@ class SmsIntakeWorker
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         private val pipeline: SmsPipeline,
-        private val uploader: SmsUploader,
-        private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             // Blocked start: keep the captured message in the job (not lost) and try again later.
@@ -512,14 +658,8 @@ class SmsIntakeWorker
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
-            val disposition = pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
-            // This job is already running, so the phone is awake: send the record now instead of hoping that a second job
-            // (some vendors hold those back for apps that are not in the foreground) runs soon. A failure schedules the retry.
-            if (disposition == Disposition.QUEUED) {
-                val report = uploader.uploadPending()
-                if (report.retry) scheduler.scheduleUploadRetry(OutboxBackoff.delaySeconds(0, report.retryAfterSeconds), 1)
-            }
-            return Result.success()
+            // The entry is in Room when this returns: nothing is queued, scheduled or sent (ADR-0009 D3/D7).
+            return intakeResult(runAttemptCount) { pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L))) }
         }
     }
 

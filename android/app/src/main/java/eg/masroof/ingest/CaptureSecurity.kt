@@ -25,7 +25,8 @@ enum class EraseStage {
 /**
  * The erase-in-progress flag (ADR-0009 D3). Capture no longer depends on a session: it is open unless "Erase all data" is
  * running ([EraseStage] is not NONE). The receiver, the listener and the pipeline's write transaction all check it, so a job
- * that was in flight during the erase writes nothing. STORY-171 turns this into the "capture enabled" setting.
+ * that was in flight during the erase writes nothing. The per-channel "capture enabled" switches (SMS in
+ * [SenderSettings], notifications in [NotificationSettings]) are separate and are re-checked in the write transaction too.
  */
 interface CaptureGate {
     fun isOpen(): Boolean

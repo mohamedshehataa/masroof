@@ -88,7 +88,7 @@ class CapturedUploadTest {
                     .build()
             }.build()
 
-    private fun pipeline() = SmsPipeline(db, MemorySettings(), MemoryNotifications(), scheduler, clock, MemoryGate(), FixedKey)
+    private fun pipeline() = SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey)
 
     private fun uploader(): SmsUploader {
         val settings = FakeSettings()
@@ -105,18 +105,32 @@ class CapturedUploadTest {
     }
 
     @Test
-    fun `REQ-SMS-003 a received InstaPay transfer announced by the bank SMS and by the app lands on the server`() =
+    fun `REQ-SMS-003 REQ-AND-135 an InstaPay transfer announced by the SMS and by the app becomes local entries and no request is made`() =
         runTest {
             val p = pipeline()
             p.accept(IncomingMessage(CaptureSource.SMS, "BDC", sms, at))
-            // received more than five minutes apart (pairing is by receive time): two records, both must be accepted
+            // received more than five minutes apart (pairing is by receive time): two entries
             p.accept(IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, at + 6 * 60_000))
-            assertEquals(2, db.parsedOutbox().all().size)
+            assertEquals(2, db.expenses().all().size)
+            assertEquals(2, db.sources().all().size)
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            assertTrue(db.captured().all().all { it.expenseId != null })
+            // the same real client that the frozen uploader would use saw nothing: no bytes were sent
+            assertTrue("a request was made: ${bodies.size}", bodies.isEmpty())
+            assertEquals(0, scheduler.uploads)
+        }
+
+    @Test
+    fun `REQ-SMS-003 the frozen uploader still sends leftover rows exactly as the server accepts them`() =
+        runTest {
+            db.parsedOutbox().insert(legacyOutboxRow("a".repeat(64), source = "SMS", kind = "INCOME", last4 = "1094", merchant = null))
+            db.parsedOutbox().insert(
+                legacyOutboxRow("b".repeat(64), source = "NOTIFICATION", kind = "INCOME", last4 = null, merchant = null),
+            )
             val report = uploader().uploadPending()
             assertTrue("server refused: $problems", problems.isEmpty())
             assertEquals(2, report.sent)
             assertTrue(db.parsedOutbox().all().isEmpty())
-            assertTrue(db.captured().all().all { it.expenseId != null })
         }
 }
 

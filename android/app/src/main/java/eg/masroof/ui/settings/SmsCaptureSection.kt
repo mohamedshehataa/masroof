@@ -3,6 +3,7 @@ package eg.masroof.ui.settings
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,10 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.ui.viewmodel.SmsCaptureViewModel
@@ -49,31 +54,38 @@ fun SmsCaptureSection(
 
     fun granted() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-    var enabled by remember { mutableStateOf(granted()) }
+    var permitted by remember { mutableStateOf(granted()) }
     var denied by remember { mutableStateOf(false) }
+    // coming back from the system settings page: the permission may have been given or taken away there
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { permitted = granted() }
     // the quiet "Recorded ... Undo" notification needs its own permission on Android 13+: asked right when capture is turned on
     val askNotifications = rememberNotificationRequester(viewModel)
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-            enabled = ok
+            permitted = ok
             denied = !ok
             viewModel.refresh()
             if (ok) askNotifications()
         }
+    val wanted by viewModel.smsCaptureEnabled.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val reviewCount by viewModel.reviewCount.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.sms_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.sms_rationale), style = MaterialTheme.typography.bodySmall)
-        if (enabled) {
-            Text(stringResource(R.string.sms_on), color = MaterialTheme.colorScheme.primary)
-        } else {
-            Button(
-                onClick = { launcher.launch(Manifest.permission.RECEIVE_SMS) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.sms_enable)) }
-        }
-        if (denied) Text(stringResource(R.string.sms_denied), color = MaterialTheme.colorScheme.error)
+        SmsCaptureSwitch(
+            wanted = wanted,
+            permitted = permitted,
+            denied = denied,
+            onToggle = { on ->
+                viewModel.setSmsCapture(on)
+                if (on && !permitted) launcher.launch(Manifest.permission.RECEIVE_SMS)
+            },
+            onOpenSettings = {
+                val uri = Uri.fromParts("package", context.packageName, null)
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },
+        )
         if (suggestions.isNotEmpty()) {
             Text(stringResource(R.string.sms_suggested_title), style = MaterialTheme.typography.titleSmall)
             Text(stringResource(R.string.sms_suggested_body), style = MaterialTheme.typography.bodySmall)
@@ -105,6 +117,45 @@ fun SmsCaptureSection(
         OutlinedButton(onClick = onOpenReview, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(R.string.review_open, reviewCount))
         }
+    }
+}
+
+/**
+ * The SMS capture switch (REQ-AND-135). It is on only when the user wants capture AND the system permission is granted. A
+ * switch that is wanted but whose permission was taken away in the system settings shows off with "Permission needed" and a
+ * button to the app's system settings page.
+ */
+@Composable
+internal fun SmsCaptureSwitch(
+    wanted: Boolean,
+    permitted: Boolean,
+    denied: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val on = wanted && permitted
+    val description = stringResource(R.string.sms_switch_description)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(if (on) R.string.sms_on else R.string.sms_off),
+                color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = on, onCheckedChange = onToggle, modifier = Modifier.semantics { contentDescription = description })
+        }
+        if (!permitted) {
+            Text(stringResource(R.string.sms_permission_needed), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.sms_permission_needed_body), style = MaterialTheme.typography.bodySmall)
+            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.sms_open_settings))
+            }
+        }
+        if (denied) Text(stringResource(R.string.sms_denied), color = MaterialTheme.colorScheme.error)
     }
 }
 
