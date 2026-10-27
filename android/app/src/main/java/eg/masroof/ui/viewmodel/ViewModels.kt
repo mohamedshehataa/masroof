@@ -18,6 +18,7 @@ import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.MemberEntity
 import eg.masroof.data.normalizeServerUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,6 +49,8 @@ data class ExpenseRow(
     val transfer: Boolean = false,
     /** Null for an entry made on this phone: it has no server copy, so it does not open the server-based edit screen. */
     val serverId: String? = null,
+    /** Display name of the member who paid; null = not set or the member no longer exists (no chip). */
+    val paidBy: String? = null,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -57,8 +60,10 @@ private const val MAX_NOTES = 500
 internal fun toRows(
     expenses: List<ExpenseEntity>,
     categories: List<CategoryEntity>,
+    members: List<MemberEntity> = emptyList(),
 ): List<ExpenseRow> {
     val byId = categories.associateBy { it.id }
+    val memberNames = members.associate { it.id to it.displayName }
     return expenses.map {
         ExpenseRow(
             id = it.id,
@@ -75,6 +80,7 @@ internal fun toRows(
             transfer = it.type == "TRANSFER",
             reviewPending = it.status == "PENDING_REVIEW",
             serverId = it.serverId,
+            paidBy = it.paidByMemberId?.let(memberNames::get),
         )
     }
 }
@@ -96,8 +102,9 @@ class HomeViewModel
                 repository.observeMonthTotal(),
                 repository.observeRecent(RECENT_LIMIT),
                 repository.observeLabelCategories(),
-            ) { total, recent, categories ->
-                HomeUiState(total, toRows(recent, categories), LoadStatus.READY)
+                repository.observeMembers(),
+            ) { total, recent, categories, members ->
+                HomeUiState(total, toRows(recent, categories, members), LoadStatus.READY)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeUiState())
     }
 
@@ -116,8 +123,9 @@ class TransactionsViewModel
             combine(
                 repository.observeAll(),
                 repository.observeLabelCategories(),
-            ) { all, categories ->
-                TransactionsUiState(toRows(all, categories), LoadStatus.READY)
+                repository.observeMembers(),
+            ) { all, categories, members ->
+                TransactionsUiState(toRows(all, categories, members), LoadStatus.READY)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), TransactionsUiState())
     }
 
@@ -125,6 +133,7 @@ data class AddFormState(
     val amountText: String = "",
     val categoryId: String? = null,
     val accountId: String? = null,
+    val paidByMemberId: String? = null,
     val dateText: String = "",
     val notes: String = "",
     /** "Enter an amount": empty, zero, negative or not a number. */
@@ -143,6 +152,7 @@ data class AddUiState(
     val form: AddFormState = AddFormState(),
     val categories: List<CategoryEntity> = emptyList(),
     val accounts: List<AccountEntity> = emptyList(),
+    val members: List<MemberEntity> = emptyList(),
 )
 
 @HiltViewModel
@@ -159,7 +169,8 @@ class AddExpenseViewModel
                 form,
                 repository.observePickerCategories(),
                 repository.observeAccounts(),
-            ) { f, c, a -> AddUiState(f, c, a) }
+                repository.observeMembers(),
+            ) { f, c, a, m -> AddUiState(f, c, a, m) }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AddUiState(form.value))
 
         fun onAmount(text: String) = form.update { it.copy(amountText = text, amountInvalid = false, amountTooLarge = false) }
@@ -167,6 +178,8 @@ class AddExpenseViewModel
         fun onCategory(id: String?) = form.update { it.copy(categoryId = id) }
 
         fun onAccount(id: String?) = form.update { it.copy(accountId = id) }
+
+        fun onPaidBy(id: String?) = form.update { it.copy(paidByMemberId = id) }
 
         fun onDate(text: String) = form.update { it.copy(dateText = text, dateInvalid = false) }
 
@@ -211,6 +224,7 @@ class AddExpenseViewModel
                                 date = date,
                                 categoryId = f.categoryId,
                                 accountId = f.accountId,
+                                paidByMemberId = f.paidByMemberId,
                                 notes = f.notes.trim().ifEmpty { null },
                             ),
                         )

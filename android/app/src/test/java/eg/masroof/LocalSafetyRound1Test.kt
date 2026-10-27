@@ -15,6 +15,7 @@ import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.NewExpense
 import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.auth.DataEraser
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.auth.LoadedSession
 import eg.masroof.data.auth.PartialEraseException
 import eg.masroof.data.auth.RoomDataWiper
@@ -27,10 +28,8 @@ import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.edit.DefaultExpenseEditor
 import eg.masroof.data.edit.EditOutcome
 import eg.masroof.data.edit.ExpenseChanges
-import eg.masroof.data.edit.ExpenseEditRemote
 import eg.masroof.data.insights.FileInsightsCache
 import eg.masroof.data.remote.ApiRemoteSource
-import eg.masroof.data.remote.HttpFailure
 import eg.masroof.data.remote.newBareClient
 import eg.masroof.ingest.AlwaysSignedIn
 import eg.masroof.ingest.CaptureData
@@ -118,55 +117,31 @@ class LocalSafetyRound1Test {
 
     // ---- item 1: a local entry never reaches the server editor, and no HTTP answer deletes a local row
 
-    private class RecordingEditRemote(
-        val failWith: Exception? = HttpFailure(404),
-    ) : ExpenseEditRemote {
-        val calls = mutableListOf<String>()
-
-        override suspend fun get(id: String): ExpenseEntity {
-            calls += "get $id"
-            throw failWith!!
-        }
-
-        override suspend fun patch(
-            id: String,
-            changes: ExpenseChanges,
-        ): ExpenseEntity {
-            calls += "patch $id"
-            throw failWith!!
-        }
-
-        override suspend fun delete(id: String) {
-            calls += "delete $id"
-            throw failWith!!
-        }
-    }
+    private fun editor() = DefaultExpenseEditor(db, LocalDataSignal(), clock, EraseLock())
 
     @Test
-    fun `REQ-AND-133 saving or deleting a local entry never calls the server and a 404 never deletes it`() =
+    fun `REQ-AND-133 saving or deleting a local entry works on Room only and never reaches a server`() =
         runTest {
             db.expenses().insert(ExpenseEntity("local-1", 100, "EGP", 1, null, null, null, null, pending = false))
-            val remote = RecordingEditRemote()
-            val editor = DefaultExpenseEditor(db, remote, LocalDataSignal())
-            assertEquals(EditOutcome.Failed, editor.update("local-1", ExpenseChanges(notes = "x")))
-            assertEquals(EditOutcome.Failed, editor.delete("local-1"))
-            assertTrue("no request for a local entry", remote.calls.isEmpty())
-            assertNotNull(db.expenses().find("local-1"))
+            val editor = editor()
+            assertTrue(editor.update("local-1", ExpenseChanges(notes = "x")) is EditOutcome.Saved)
+            assertEquals("x", db.expenses().find("local-1")?.notes)
+            assertEquals(EditOutcome.Deleted, editor.delete("local-1"))
+            assertNotNull("soft deleted, still there for Undo", db.expenses().find("local-1"))
         }
 
     @Test
-    fun `REQ-AND-133 a server row addressed by its serverId still gets the 404 clean-up`() =
+    fun `REQ-AND-133 a row cached from the server is edited locally too, and a missing row is NotFound`() =
         runTest {
             db.expenses().insert(ExpenseEntity("srv-1", 100, "EGP", 1, null, null, null, null, pending = false, serverId = "srv-1"))
-            val remote = RecordingEditRemote()
-            val outcome = DefaultExpenseEditor(db, remote, LocalDataSignal()).update("srv-1", ExpenseChanges(notes = "x"))
-            assertEquals(EditOutcome.NotFound, outcome)
-            assertEquals(listOf("patch srv-1"), remote.calls)
-            assertNull(db.expenses().find("srv-1"))
+            val editor = editor()
+            assertTrue(editor.update("srv-1", ExpenseChanges(notes = "x")) is EditOutcome.Saved)
+            assertEquals(EditOutcome.NotFound, editor.update("nope", ExpenseChanges(notes = "x")))
+            assertNull(db.expenses().find("nope"))
         }
 
     @Test
-    fun `REQ-AND-133 tapping a local row does not open the editor and a server row does`() {
+    fun `REQ-AND-133 tapping a local row opens the editor and so does a server row`() {
         val opened = mutableListOf<String>()
         val local = ExpenseRow("L", null, Money(100), LocalDate.of(2026, 10, 1), false, false, null, null, "MANUAL")
         val server = local.copy(id = "S", serverId = "S", merchant = "Server shop")
@@ -179,9 +154,9 @@ class LocalSafetyRound1Test {
             }
         }
         compose.onNodeWithText("Local shop").performClick()
-        assertTrue(opened.isEmpty())
+        assertEquals(listOf("L"), opened)
         compose.onNodeWithText("Server shop").performClick()
-        assertEquals(listOf("S"), opened)
+        assertEquals(listOf("L", "S"), opened)
     }
 
     // ---- items 2, 3, 4, 6: the erase

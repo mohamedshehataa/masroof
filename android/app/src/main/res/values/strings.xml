@@ -262,6 +262,7 @@
     <string name="edit_type_expense">Expense</string>
     <string name="edit_type_income">Income</string>
     <string name="edit_type_transfer">Transfer</string>
+    <string name="edit_type_refund">Refund</string>
     <string name="edit_merchant">Merchant or label</string>
     <string name="edit_source">Source: %1$s</string>
     <string name="source_manual">Manual</string>
@@ -279,12 +280,15 @@
     <string name="edit_cancel">Cancel</string>
     <string name="edit_delete_title">Delete this transaction?</string>
     <string name="edit_delete_body">It is removed from your list and totals.</string>
-    <string name="edit_error_offline">Couldn\'t save, check your connection. Your changes are still here.</string>
-    <string name="edit_error_failed">Couldn\'t save. Try again.</string>
-    <string name="edit_error_invalid">The server did not accept these values. Check them and try again.</string>
-    <string name="edit_error_sign_in">Sign in again - your session expired. Your changes are still here.</string>
-    <string name="edit_changed_elsewhere">This transaction was changed elsewhere. Showing the latest version; check it and save again.</string>
+    <string name="edit_error_failed">Couldn\'t save, try again</string>
     <string name="edit_working">Working…</string>
     <string name="startup_could_not_finish">The update could not finish. Your data is safe; please contact support.</string>
     <string name="startup_free_up_storage">Free up storage to finish the update. About %1$d MB are needed.</string>
+    <string name="edit_gone">This entry no longer exists</string>
+    <string name="edit_deleted">Deleted</string>
+    <string name="edit_undo">Undo</string>
+    <string name="paid_by">Paid by</string>
+    <string name="paid_by_not_set">Not set</string>
+    <string name="paid_by_chip">Paid by %1$s</string>
+    <string name="edit_notes_error">Notes can be at most 500 characters</string>
 </resources>

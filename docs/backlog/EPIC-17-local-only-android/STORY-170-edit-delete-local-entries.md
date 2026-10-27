@@ -3,7 +3,7 @@ id: STORY-170
 epic: EPIC-17
 title: Confirm, edit and delete any entry on the phone, with Undo and a paid-by label
 phase: 2
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -109,3 +109,5 @@ STORY-169
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D3), reuses STORY-166 |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - edit/confirm/delete(soft)+Undo/paid-by on Room, purge worker; PR open |
+| 2026-10-28 | 6+7 verify | qa-verifier | PASS loop 2 (round 1 fixed amount limit, double tap, notes error, undo buffer); merged |

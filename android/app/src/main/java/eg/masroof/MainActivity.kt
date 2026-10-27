@@ -16,13 +16,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -48,6 +55,7 @@ import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
+import eg.masroof.ui.viewmodel.UndoDeleteViewModel
 import eg.masroof.work.ForegroundSync
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -118,7 +126,19 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val destination = entry?.destination
+    val snackbars = remember { SnackbarHostState() }
+    val undo: UndoDeleteViewModel = hiltViewModel()
+    val deletedText = stringResource(R.string.edit_deleted)
+    val undoText = stringResource(R.string.edit_undo)
+    // "Deleted - Undo" stays for the Long duration (about 10 s, at least 5 s). Undo restores the soft-deleted entry.
+    LaunchedEffect(Unit) {
+        undo.deleted.collect { id ->
+            val result = snackbars.showSnackbar(deletedText, undoText, duration = SnackbarDuration.Long)
+            if (result == SnackbarResult.ActionPerformed) undo.undo(id)
+        }
+    }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEach { tab ->

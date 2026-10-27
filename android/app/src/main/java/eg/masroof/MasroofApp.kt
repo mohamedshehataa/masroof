@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.edit.PurgeScheduler
 import eg.masroof.ingest.SmsWorkScheduler
 import javax.inject.Inject
 
@@ -19,6 +20,8 @@ class MasroofApp :
     @Inject lateinit var smsScheduler: SmsWorkScheduler
 
     @Inject lateinit var eraser: DataEraser
+
+    @Inject lateinit var purgeScheduler: PurgeScheduler
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -35,5 +38,7 @@ class MasroofApp :
         smsScheduler.scheduleUpload()
         // An erase that was cut short (process died) is finished before anything else is captured.
         eraser.recoverInterrupted()
+        // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
+        purgeScheduler.schedule()
     }
 }

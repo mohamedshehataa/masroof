@@ -29,14 +29,14 @@ internal fun ExpenseEntity.keepLocalFrom(old: ExpenseEntity): ExpenseEntity =
 
 @Dao
 interface ExpenseDao {
-    @Query("SELECT * FROM expense ORDER BY occurredAtMillis DESC, id")
+    @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id")
     fun observeAll(): Flow<List<ExpenseEntity>>
 
-    @Query("SELECT * FROM expense ORDER BY occurredAtMillis DESC, id LIMIT :limit")
+    @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
     @Query(
-        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND type = 'EXPENSE'
+        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND deletedAtMillis IS NULL AND type = 'EXPENSE'
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
@@ -72,6 +72,33 @@ interface ExpenseDao {
 
     @Query("SELECT * FROM expense WHERE id = :id")
     suspend fun find(id: String): ExpenseEntity?
+
+    /** Soft delete for Undo (ADR-0009 D3): the row and its sources stay until the 30-day purge. Returns the rows changed. */
+    @Query("UPDATE expense SET deletedAtMillis = :nowMillis, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun softDelete(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    /** Undo of a soft delete. Returns the rows changed (0 when the row is gone or was never deleted). */
+    @Query("UPDATE expense SET deletedAtMillis = NULL, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NOT NULL")
+    suspend fun restore(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    @Query("DELETE FROM expense_source WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis < :cutoffMillis)")
+    suspend fun purgeSourcesDeletedBefore(cutoffMillis: Long): Int
+
+    @Query("DELETE FROM expense WHERE deletedAtMillis < :cutoffMillis")
+    suspend fun purgeRowsDeletedBefore(cutoffMillis: Long): Int
+
+    /** Removes entries soft-deleted before [cutoffMillis] with their sources (receipts: STORY-174). Returns the entries removed. */
+    @Transaction
+    suspend fun purgeDeletedBefore(cutoffMillis: Long): Int {
+        purgeSourcesDeletedBefore(cutoffMillis)
+        return purgeRowsDeletedBefore(cutoffMillis)
+    }
 
     @Query("DELETE FROM expense WHERE id = :id")
     suspend fun delete(id: String)
@@ -189,6 +216,9 @@ interface LookupDao {
 
     @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
     fun observeAllCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM member ORDER BY sortOrder, displayName")
+    fun observeMembers(): Flow<List<MemberEntity>>
 
     @Query("SELECT * FROM account ORDER BY label")
     fun observeAccounts(): Flow<List<AccountEntity>>
