@@ -211,7 +211,11 @@ fun taggedTest(name: String, tag: String, what: String) = tasks.register<Test>(n
 }
 
 val integrationTest = taggedTest("integrationTest", "integration", "Testcontainers tests (tag integration)")
-integrationTest { finalizedBy(tasks.jacocoTestReport) }
+integrationTest {
+    finalizedBy(tasks.jacocoTestReport)
+    // The analytics parity test reads this folder; without it as an input an edited oracle stays UP-TO-DATE / cached.
+    inputs.dir("../fixtures/analytics").withPathSensitivity(PathSensitivity.RELATIVE)
+}
 taggedTest("archTest", "arch", "ArchUnit rules over main classes (tag arch)")
     .configure { extensions.configure<JacocoTaskExtension> { isEnabled = false } }
 taggedTest("migrationTest", "migration", "Flyway from empty (previous-snapshot case arrives with STORY-004)")

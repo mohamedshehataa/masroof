@@ -120,7 +120,10 @@
     {"id":"r093","type":"INCOME","amountMinor":2200000,"currency":"EGP","occurredAt":"2026-11-10T09:00:00Z","categoryKey":null,"merchant":null,"status":"CONFIRMED","deleted":false},
     {"id":"r094","type":"EXPENSE","amountMinor":17000,"currency":"EGP","occurredAt":"2026-11-20T09:00:00Z","categoryKey":"groceries","merchant":"Fresh Basket","status":"CONFIRMED","deleted":false},
     {"id":"r095","type":"EXPENSE","amountMinor":505,"currency":"EGP","occurredAt":"2026-11-24T21:59:59Z","categoryKey":"dining","merchant":"Palm Cafe","status":"CONFIRMED","deleted":false},
-    {"id":"r096","type":"EXPENSE","amountMinor":707,"currency":"EGP","occurredAt":"2026-11-24T22:00:00Z","categoryKey":"dining","merchant":"Palm Cafe","status":"CONFIRMED","deleted":false}
+    {"id":"r096","type":"EXPENSE","amountMinor":707,"currency":"EGP","occurredAt":"2026-11-24T22:00:00Z","categoryKey":"dining","merchant":"Palm Cafe","status":"CONFIRMED","deleted":false},
+    {"id":"r097","type":"EXPENSE","amountMinor":2500,"currency":"EGP","occurredAt":"2026-04-26T10:00:00Z","categoryKey":null,"merchant":"Split Shop","status":"CONFIRMED","deleted":false},
+    {"id":"r098","type":"EXPENSE","amountMinor":2600,"currency":"EGP","occurredAt":"2026-04-26T10:10:00Z","categoryKey":null,"merchant":"Split Shop","status":"CONFIRMED","deleted":false},
+    {"id":"r099","type":"EXPENSE","amountMinor":1000,"currency":"EGP","occurredAt":"2026-04-26T10:20:00Z","categoryKey":"groceries","merchant":"Split Shop","status":"CONFIRMED","deleted":false}
   ],
   "scenarios": [
     {
@@ -129,74 +132,74 @@
       "outputs": {
         "summary": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "previousTotal": 297125,
-          "deltaBps": -3724,
-          "dailyAverage": 186472,
-          "projectedTotal": 5594160,
+          "deltaBps": -3519,
+          "dailyAverage": 192572,
+          "projectedTotal": 5777160,
           "projectedWeekdayAware": 180000,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null}
           ],
           "daysLeft": 29,
           "pendingReviewCount": 4
         },
         "summaryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "previousTotal": 597125,
-          "deltaBps": -3528,
-          "dailyAverage": 386472,
-          "projectedTotal": 11594160,
+          "deltaBps": -3426,
+          "dailyAverage": 392572,
+          "projectedTotal": 11777160,
           "projectedWeekdayAware": 180000,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null}
           ],
           "daysLeft": 29,
           "pendingReviewCount": 4
         },
         "forecast": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "spentSoFar": 186472,
-          "linear": 5594160,
+          "spentSoFar": 192572,
+          "linear": 5777160,
           "weekdayAware": 180000
         },
         "byCategory": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "items": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":416,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":404,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
           ]
         },
         "byCategoryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "items": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":216,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":213,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
           ]
         },
         "merchants": {
@@ -211,7 +214,8 @@
             {"name":"Alpha Kiosk","total":9000,"visits":1,"averageTicket":9000,"categoryKey":null},
             {"name":"Metro Ride","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"transport"},
             {"name":"Water Co","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"bills"},
-            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"}
+            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"},
+            {"name":"Split Shop","total":6100,"visits":3,"averageTicket":2033,"categoryKey":"groceries"}
           ]
         },
         "heatmap": {
@@ -242,7 +246,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -250,7 +254,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -286,7 +290,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -294,7 +298,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -353,18 +357,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -420,18 +424,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -528,18 +532,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -637,18 +641,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ]
@@ -660,74 +664,74 @@
       "outputs": {
         "summary": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "previousTotal": 297125,
-          "deltaBps": -3724,
-          "dailyAverage": 12431,
-          "projectedTotal": 372944,
+          "deltaBps": -3519,
+          "dailyAverage": 12838,
+          "projectedTotal": 385144,
           "projectedWeekdayAware": 252750,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null}
           ],
           "daysLeft": 15,
           "pendingReviewCount": 4
         },
         "summaryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "previousTotal": 597125,
-          "deltaBps": -3528,
-          "dailyAverage": 25765,
-          "projectedTotal": 772944,
+          "deltaBps": -3426,
+          "dailyAverage": 26171,
+          "projectedTotal": 785144,
           "projectedWeekdayAware": 252750,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null}
           ],
           "daysLeft": 15,
           "pendingReviewCount": 4
         },
         "forecast": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "spentSoFar": 186472,
-          "linear": 372944,
+          "spentSoFar": 192572,
+          "linear": 385144,
           "weekdayAware": 252750
         },
         "byCategory": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "items": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":416,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":404,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
           ]
         },
         "byCategoryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "items": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":216,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":213,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
           ]
         },
         "merchants": {
@@ -742,7 +746,8 @@
             {"name":"Alpha Kiosk","total":9000,"visits":1,"averageTicket":9000,"categoryKey":null},
             {"name":"Metro Ride","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"transport"},
             {"name":"Water Co","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"bills"},
-            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"}
+            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"},
+            {"name":"Split Shop","total":6100,"visits":3,"averageTicket":2033,"categoryKey":"groceries"}
           ]
         },
         "heatmap": {
@@ -773,7 +778,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -781,7 +786,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -817,7 +822,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -825,7 +830,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -884,18 +889,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -951,18 +956,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -1059,18 +1064,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -1168,18 +1173,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ]
@@ -1191,74 +1196,74 @@
       "outputs": {
         "summary": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "previousTotal": 297125,
-          "deltaBps": -3724,
-          "dailyAverage": 6216,
-          "projectedTotal": 186472,
-          "projectedWeekdayAware": 186472,
+          "deltaBps": -3519,
+          "dailyAverage": 6419,
+          "projectedTotal": 192572,
+          "projectedWeekdayAware": 192572,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null}
           ],
           "daysLeft": 0,
           "pendingReviewCount": 4
         },
         "summaryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "previousTotal": 597125,
-          "deltaBps": -3528,
-          "dailyAverage": 12882,
-          "projectedTotal": 386472,
-          "projectedWeekdayAware": 386472,
+          "deltaBps": -3426,
+          "dailyAverage": 13086,
+          "projectedTotal": 392572,
+          "projectedWeekdayAware": 392572,
           "income": 2050000,
           "topCategories": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null}
           ],
           "daysLeft": 0,
           "pendingReviewCount": 4
         },
         "forecast": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "spentSoFar": 186472,
-          "linear": 186472,
-          "weekdayAware": 186472
+          "spentSoFar": 192572,
+          "linear": 192572,
+          "weekdayAware": 192572
         },
         "byCategory": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 186472,
+          "total": 192572,
           "items": [
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":2235,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2217,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1722,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":416,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":2219,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":2157,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":1675,"count":5,"deltaBps":357},
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":404,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
           ]
         },
         "byCategoryWithCash": {
           "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-          "total": 386472,
+          "total": 392572,
           "items": [
-            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":300000,"shareBps":5326,"count":4,"deltaBps":-2607},
-            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":48125,"shareBps":1162,"count":8,"deltaBps":55},
-            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1153,"count":1,"deltaBps":-7257},
-            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":895,"count":5,"deltaBps":357},
-            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":216,"count":1,"deltaBps":-7632},
-            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+            {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":300000,"shareBps":5369,"count":6,"deltaBps":-2437},
+            {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":48125,"shareBps":1169,"count":9,"deltaBps":262},
+            {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":175000,"shareBps":1136,"count":1,"deltaBps":-7257},
+            {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":36000,"shareBps":882,"count":5,"deltaBps":357},
+            {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+            {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+            {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":38000,"shareBps":213,"count":1,"deltaBps":-7632},
+            {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
           ]
         },
         "merchants": {
@@ -1273,7 +1278,8 @@
             {"name":"Alpha Kiosk","total":9000,"visits":1,"averageTicket":9000,"categoryKey":null},
             {"name":"Metro Ride","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"transport"},
             {"name":"Water Co","total":9000,"visits":1,"averageTicket":9000,"categoryKey":"bills"},
-            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"}
+            {"name":"Mixed Mart","total":8500,"visits":3,"averageTicket":2833,"categoryKey":"groceries"},
+            {"name":"Split Shop","total":6100,"visits":3,"averageTicket":2033,"categoryKey":"groceries"}
           ]
         },
         "heatmap": {
@@ -1304,7 +1310,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -1312,7 +1318,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -1348,7 +1354,7 @@
             {"date":"2026-04-23","total":1111,"count":1},
             {"date":"2026-04-24","total":5555,"count":2},
             {"date":"2026-04-25","total":4444,"count":1},
-            {"date":"2026-04-26","total":0,"count":0},
+            {"date":"2026-04-26","total":6100,"count":3},
             {"date":"2026-04-27","total":0,"count":0},
             {"date":"2026-04-28","total":7,"count":1},
             {"date":"2026-04-29","total":0,"count":0},
@@ -1356,7 +1362,7 @@
           ],
           "weekdayHour": [
             [4444,0,0,0,0,0,0,0,0,0,0,0,0,0,27500,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,6100,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-30000,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,18007,0,0,0,0,0,0,0,0,0,0,0],
             [6000,0,0,0,0,0,0,0,0,0,0,0,30800,34000,0,0,0,0,0,0,0,0,0,0],
@@ -1415,18 +1421,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -1482,18 +1488,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -1590,18 +1596,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           }
         ],
@@ -1699,18 +1705,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           }
         ]
@@ -2072,18 +2078,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -2202,18 +2208,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -2638,18 +2644,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -2768,18 +2774,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -3204,18 +3210,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 186472,
+            "total": 192572,
             "income": 2050000,
-            "savingsRateBps": 9090,
+            "savingsRateBps": 9061,
             "byCategory": [
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":2235,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2217,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1722,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1155,"count":1,"deltaBps":null},
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":21800,"previousTotal":0,"shareBps":1007,"count":3,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":832,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":416,"count":1,"deltaBps":null}
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":2219,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":2157,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":1675,"count":5,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":26900,"previousTotal":0,"shareBps":1209,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":1123,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":809,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":404,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -3334,18 +3340,18 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-01","to":"2026-04-30"},
-            "total": 386472,
+            "total": 392572,
             "income": 2050000,
-            "savingsRateBps": 8115,
+            "savingsRateBps": 8085,
             "byCategory": [
-              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":221800,"previousTotal":0,"shareBps":5326,"count":4,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":48388,"previousTotal":0,"shareBps":1162,"count":8,"deltaBps":null},
-              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1153,"count":1,"deltaBps":null},
-              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":895,"count":5,"deltaBps":null},
-              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":600,"count":1,"deltaBps":null},
-              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":432,"count":1,"deltaBps":null},
-              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null},
-              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":216,"count":1,"deltaBps":null}
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":226900,"previousTotal":0,"shareBps":5369,"count":6,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":49388,"previousTotal":0,"shareBps":1169,"count":9,"deltaBps":null},
+              {"categoryKey":"car","nameEn":"Car","nameAr":"السيارة","color":"#F59E0B","total":48000,"previousTotal":0,"shareBps":1136,"count":1,"deltaBps":null},
+              {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":37284,"previousTotal":0,"shareBps":882,"count":5,"deltaBps":null},
+              {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":25000,"previousTotal":0,"shareBps":592,"count":1,"deltaBps":null},
+              {"categoryKey":"entertainment","nameEn":"Entertainment","nameAr":"ترفيه","color":"#D946EF","total":18000,"previousTotal":0,"shareBps":426,"count":1,"deltaBps":null},
+              {"categoryKey":"bills","nameEn":"Bills","nameAr":"فواتير","color":"#6366F1","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null},
+              {"categoryKey":"transport","nameEn":"Transport","nameAr":"مواصلات","color":"#0EA5E9","total":9000,"previousTotal":0,"shareBps":213,"count":1,"deltaBps":null}
             ]
           },
           {
@@ -5376,12 +5382,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },
@@ -5512,12 +5519,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },
@@ -5949,12 +5957,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },
@@ -6085,12 +6094,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },
@@ -6522,12 +6532,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },
@@ -6658,12 +6669,13 @@
           },
           {
             "period": {"label":"2026-04","from":"2026-04-25","to":"2026-05-24"},
-            "total": 123513461,
+            "total": 123519561,
             "income": 2000000,
-            "savingsRateBps": -607567,
+            "savingsRateBps": -607598,
             "byCategory": [
               {"categoryKey":"health","nameEn":"Health","nameAr":"صحة","color":"#EF4444","total":123456789,"previousTotal":0,"shareBps":9995,"count":1,"deltaBps":null},
-              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":52221,"previousTotal":0,"shareBps":4,"count":3,"deltaBps":null},
+              {"categoryKey":"groceries","nameEn":"Groceries","nameAr":"بقالة","color":"#16A34A","total":53221,"previousTotal":0,"shareBps":4,"count":4,"deltaBps":null},
+              {"categoryKey":null,"nameEn":"Uncategorised","nameAr":"غير مصنف","color":null,"total":5100,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null},
               {"categoryKey":"dining","nameEn":"Dining out","nameAr":"مطاعم","color":"#F97316","total":4451,"previousTotal":0,"shareBps":0,"count":2,"deltaBps":null}
             ]
           },

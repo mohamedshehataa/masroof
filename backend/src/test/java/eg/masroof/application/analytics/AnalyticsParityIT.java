@@ -78,12 +78,12 @@ class AnalyticsParityIT {
   private static final int MERCHANT_LIMIT = 50;
 
   /** The two sides of both 2026 Cairo DST changes (spring forward 24 Apr, fall back 29 Oct). */
-  private static final List<String> DST_INSTANTS =
-      List.of(
-          "2026-04-23T21:59:59Z",
-          "2026-04-23T22:00:00Z",
-          "2026-10-29T20:59:59Z",
-          "2026-10-29T21:00:00Z");
+  private static final Map<String, String> DST_INSTANTS =
+      Map.of(
+          "dst-april-before", "2026-04-23T21:59:59Z", // 23:59:59 on 23 Apr, EET
+          "dst-april-after", "2026-04-23T22:00:00Z", // 01:00 on 24 Apr, EEST (midnight is skipped)
+          "dst-october-before", "2026-10-29T20:59:59Z", // 23:59:59 on 29 Oct, EEST
+          "dst-october-after", "2026-10-29T22:00:00Z"); // 00:00 on 30 Oct, EET
 
   /** A clock the test moves to each {@code today}. */
   static final class MovableClock extends Clock {
@@ -162,7 +162,8 @@ class AnalyticsParityIT {
     if (System.getenv("MASROOF_PARITY_GENERATE") != null) {
       ((ObjectNode) file).set("scenarios", computed);
       Files.writeString(FILE, render(file) + "\n", StandardCharsets.UTF_8);
-      return;
+      throw new AssertionError(
+          "parity file regenerated; review the diff and re-run without MASROOF_PARITY_GENERATE");
     }
     List<String> problems = compare(file.get("scenarios"), computed);
     assertThat(problems).as("differences between parity-v1.json and AnalyticsService").isEmpty();
@@ -247,31 +248,32 @@ class AnalyticsParityIT {
   void missingCaseIsNamed() throws IOException {
     JsonNode file = JSON.readTree(Files.readString(FILE, StandardCharsets.UTF_8));
     checkCoverage(file);
-    Map<String, Predicate<JsonNode>> removals = new LinkedHashMap<>();
-    removals.put("transfer", r -> "TRANSFER".equals(text(r, "type")));
-    removals.put("cash-withdrawal", r -> "CASH_WITHDRAWAL".equals(text(r, "type")));
-    removals.put("refund", r -> "REFUND".equals(text(r, "type")));
-    removals.put("foreign-currency", r -> !"EGP".equals(text(r, "currency")));
-    removals.put("soft-deleted", r -> r.get("deleted").asBoolean());
-    removals.put("income", r -> "INCOME".equals(text(r, "type")));
-    removals.put(
-        "child-category",
-        r ->
-            text(r, "categoryKey") != null && String.valueOf(text(r, "categoryKey")).contains("."));
-    removals.put("dst-april-before", r -> "2026-04-23T21:59:59Z".equals(text(r, "occurredAt")));
-    for (Map.Entry<String, Predicate<JsonNode>> removal : removals.entrySet()) {
+    List<JsonNode> all = new ArrayList<>();
+    file.get("expenses").forEach(all::add);
+    Set<String> names = coverage(all).keySet();
+    assertThat(names).hasSize(20);
+    for (String name : names) {
+      // Remove witnesses of the case until no row set satisfies it any more.
+      List<JsonNode> rows = new ArrayList<>(all);
+      while (Boolean.TRUE.equals(coverage(rows).get(name))) {
+        List<JsonNode> witness = new ArrayList<>(rows);
+        for (JsonNode row : rows) {
+          List<JsonNode> without = new ArrayList<>(witness);
+          without.remove(row);
+          if (Boolean.TRUE.equals(coverage(without).get(name))) {
+            witness = without;
+          }
+        }
+        rows.removeAll(witness);
+      }
       ObjectNode copy = (ObjectNode) file.deepCopy();
       ArrayNode kept = JSON.createArrayNode();
-      for (JsonNode row : copy.get("expenses")) {
-        if (!removal.getValue().test(row)) {
-          kept.add(row);
-        }
-      }
+      rows.forEach(kept::add);
       copy.set("expenses", kept);
       assertThatThrownBy(() -> checkCoverage(copy))
-          .as("without %s", removal.getKey())
+          .as("without %s", name)
           .isInstanceOf(IllegalStateException.class)
-          .hasMessageContaining("'" + removal.getKey() + "'");
+          .hasMessageContaining("'" + name + "'");
     }
   }
 
@@ -345,6 +347,20 @@ class AnalyticsParityIT {
   static void checkCoverage(JsonNode root) {
     List<JsonNode> rows = new ArrayList<>();
     root.get("expenses").forEach(rows::add);
+    List<String> missing = new ArrayList<>();
+    coverage(rows)
+        .forEach(
+            (name, present) -> {
+              if (!present) {
+                missing.add("'" + name + "'");
+              }
+            });
+    if (!missing.isEmpty()) {
+      throw new IllegalStateException("seed is missing the case " + String.join(", ", missing));
+    }
+  }
+
+  static Map<String, Boolean> coverage(List<JsonNode> rows) {
     Map<String, Boolean> cases = new LinkedHashMap<>();
     cases.put("transfer", any(rows, r -> "TRANSFER".equals(text(r, "type"))));
     cases.put("cash-withdrawal", any(rows, r -> "CASH_WITHDRAWAL".equals(text(r, "type"))));
@@ -390,17 +406,23 @@ class AnalyticsParityIT {
                 isSpend(r)
                     && (text(r, "merchant") == null
                         || String.valueOf(text(r, "merchant")).isBlank())));
-    for (String instant : DST_INSTANTS) {
-      String name =
-          (instant.startsWith("2026-04") ? "dst-april-" : "dst-october-")
-              + (instant.endsWith(":59Z") ? "before" : "after");
-      cases.put(name, any(rows, r -> instant.equals(text(r, "occurredAt"))));
+    cases.put("merchant-mixed-null-category", mixedNullCategoryMerchant(rows));
+    for (Map.Entry<String, String> dst : DST_INSTANTS.entrySet()) {
+      cases.put(dst.getKey(), any(rows, r -> dst.getValue().equals(text(r, "occurredAt"))));
     }
-    for (Map.Entry<String, Boolean> c : cases.entrySet()) {
-      if (!c.getValue()) {
-        throw new IllegalStateException("seed is missing the case '" + c.getKey() + "'");
+    return cases;
+  }
+
+  private static boolean mixedNullCategoryMerchant(List<JsonNode> rows) {
+    Map<String, Set<Boolean>> byMerchant = new HashMap<>();
+    for (JsonNode r : rows) {
+      if (isSpend(r) && !merchantKey(r).isEmpty()) {
+        byMerchant
+            .computeIfAbsent(merchantKey(r), k -> new LinkedHashSet<>())
+            .add(text(r, "categoryKey") == null);
       }
     }
+    return byMerchant.values().stream().anyMatch(s -> s.size() == 2);
   }
 
   private static boolean any(List<JsonNode> rows, Predicate<JsonNode> p) {

@@ -3,7 +3,7 @@ id: STORY-177
 epic: EPIC-17
 title: A golden analytics file, checked against the live server code, pins the expected numbers
 phase: 7
-status: IN_PROGRESS
+status: DONE
 risk_tier: high
 size: M
 modules: [backend]
