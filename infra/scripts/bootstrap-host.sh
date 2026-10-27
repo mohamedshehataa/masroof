@@ -8,12 +8,16 @@
 #        repeated or sequential runs and common passwords (top-10k list) at first start.
 #   HOST=... bash infra/scripts/bootstrap-host.sh admin-clear
 #     -> removes those lines again once the first login exists (docs/HOSTING.md, First login).
+#   HOST=... [SINCE=3h] bash infra/scripts/bootstrap-host.sh logs
+#     -> read-only: backend WARN/ERROR lines and the latest log lines (e-mails and long digit runs masked), container status.
+#   HOST=... bash infra/scripts/bootstrap-host.sh db-recent
+#     -> read-only: typed columns of the latest expenses, raw messages (no body), refresh tokens (no values), budgets.
 # Secrets are read from local files and streamed over stdin; nothing secret is printed or put in argv.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 . infra/scripts/validate.sh
 
-cmd="${1:?setup|admin-add|admin-clear}"
+cmd="${1:?setup|admin-add|admin-clear|logs|db-recent}"
 host="${HOST:-${PROD_HOST:-}}"
 [ -n "$host" ] || die_input "HOST is required"
 validate_host "$host"
@@ -57,5 +61,52 @@ case "$cmd" in
     ssh "${ssh_opts[@]}" -- "$host" \
       'f=~/masroof/infra/.env; grep -v "^MASROOF_BOOTSTRAP_ADMIN_" "$f" > "$f.tmp" || true; chmod 600 "$f.tmp"; mv "$f.tmp" "$f"'
     echo "bootstrap-host: bootstrap admin lines removed" ;;
+  logs)
+    # Read-only diagnostics: backend WARN/ERROR lines (first lines of each, plus "Caused by"), with e-mail addresses and
+    # long digit runs masked on the server before anything is printed. Never request headers or bodies.
+    since="${SINCE:-3h}"
+    [[ "$since" =~ ^[0-9]{1,3}[mh]$ ]] || die_input "SINCE must look like 90m or 3h"
+    # shellcheck disable=SC2029  # since was validated above
+    ssh "${ssh_opts[@]}" -- "$host" "SINCE=$since bash -s" <<'REMOTE'
+set -euo pipefail
+backend="$(docker ps --format '{{.Names}}' | grep -E '^masroof-backend-[0-9]+$' | head -1)"
+[ -n "$backend" ] || { echo "no backend container running" >&2; exit 1; }
+echo "== $backend: WARN/ERROR since $SINCE =="
+docker logs --since "$SINCE" "$backend" 2>&1 \
+  | grep -E ' (WARN|ERROR) |^Caused by:|"level":"(WARN|ERROR)"' \
+  | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/<email>/g; s/[0-9]{6,}/<digits>/g' \
+  | cut -c1-400 | tail -n 150 || true
+echo "== $backend: last lines, any level (masked) =="
+docker logs --since "$SINCE" "$backend" 2>&1 \
+  | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/<email>/g; s/[0-9]{6,}/<digits>/g' \
+  | cut -c1-300 | tail -n 40 || true
+echo "== container status =="
+docker ps --format '{{.Names}} {{.Status}}' | grep '^masroof-'
+REMOTE
+    ;;
+  db-recent)
+    # Read-only diagnostics: the latest rows' typed columns only (never message bodies, notes or merchant text),
+    # in a read-only transaction.
+    ssh "${ssh_opts[@]}" -- "$host" 'bash -s' <<'REMOTE'
+set -euo pipefail
+pg="$(docker ps --format '{{.Names}}' | grep -E '^masroof-postgres-[0-9]+$' | head -1)"
+[ -n "$pg" ] || { echo "no postgres container running" >&2; exit 1; }
+docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' "$pg" sh -c 'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off' <<'SQL'
+\echo == latest expenses ==
+SELECT type, status, source, amount_minor, currency, occurred_at, created_at, deleted_at IS NOT NULL AS deleted,
+       category_id IS NOT NULL AS has_category
+  FROM expense ORDER BY created_at DESC LIMIT 15;
+\echo == latest raw messages (no body) ==
+SELECT source, processing_status, error_code, received_at, created_at, expense_id IS NOT NULL AS has_expense
+  FROM raw_message ORDER BY created_at DESC LIMIT 10;
+\echo == refresh tokens (no token values) ==
+SELECT created_at, rotated_at, revoked_at, expires_at FROM refresh_token ORDER BY created_at DESC LIMIT 8;
+\echo == audit log ==
+SELECT action, created_at FROM audit_log ORDER BY created_at DESC LIMIT 12;
+\echo == budgets ==
+SELECT period, category_id IS NOT NULL AS has_category, amount_minor, currency, rollover, created_at FROM budget;
+SQL
+REMOTE
+    ;;
   *) die_input "unknown command '$cmd'" ;;
 esac
