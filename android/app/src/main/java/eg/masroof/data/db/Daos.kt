@@ -37,7 +37,7 @@ interface ExpenseDao {
 
     @Query(
         """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND deletedAtMillis IS NULL AND type = 'EXPENSE'
-            AND status = 'CONFIRMED' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+            AND status = 'CONFIRMED' AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,

@@ -4,19 +4,14 @@ import android.content.Context
 import android.database.sqlite.SQLiteException
 import androidx.hilt.work.HiltWorker
 import androidx.room.withTransaction
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ListenableWorker
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import eg.masroof.core.CairoTime
 import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.UuidIdFactory
@@ -24,8 +19,6 @@ import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.DatabaseStartup
-import eg.masroof.data.db.ExpenseEntity
-import eg.masroof.data.db.ExpenseSourceEntity
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.REVIEW_RETENTION_DAYS
 import eg.masroof.data.db.ReviewItemEntity
@@ -41,12 +34,8 @@ import eg.masroof.ingest.parse.ParseOutcome
 import eg.masroof.ingest.parse.ParsedRecord
 import eg.masroof.ingest.parse.TemplateShape
 import eg.masroof.ingest.parse.TxKind
-import eg.masroof.work.OutboxBackoff
 import kotlinx.coroutines.sync.withLock
 import java.time.Clock
-import java.time.Instant
-import java.time.LocalTime
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -58,7 +47,6 @@ private const val KEY_SOURCE = "source"
 private const val KEY_SENDER = "sender"
 private const val KEY_TEXT = "text"
 private const val KEY_TS = "ts"
-private const val KEY_ATTEMPT = "attempt"
 
 /** Where the app keeps a random id for this installation, sent with every record (idempotency key part). */
 interface DeviceIdProvider {
@@ -71,8 +59,6 @@ class WorkManagerSmsScheduler
     constructor(
         private val workManager: WorkManager,
     ) : SmsWorkScheduler {
-        private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-
         override fun enqueueIntake(message: IncomingMessage) {
             val request =
                 OneTimeWorkRequestBuilder<SmsIntakeWorker>()
@@ -87,24 +73,6 @@ class WorkManagerSmsScheduler
                     ).build()
             // Not unique by name: every message is its own job; the outbox insert dedups on the local id.
             workManager.enqueue(request)
-        }
-
-        override fun scheduleUpload() {
-            val request = OneTimeWorkRequestBuilder<SmsUploadWorker>().setConstraints(network).build()
-            workManager.enqueueUniqueWork(SMS_UPLOAD_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
-        }
-
-        override fun scheduleUploadRetry(
-            delaySeconds: Long,
-            attempt: Int,
-        ) {
-            val request =
-                OneTimeWorkRequestBuilder<SmsUploadWorker>()
-                    .setConstraints(network)
-                    .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
-                    .setInputData(Data.Builder().putInt(KEY_ATTEMPT, attempt).build())
-                    .build()
-            workManager.enqueueUniqueWork(SMS_UPLOAD_RETRY_WORK, ExistingWorkPolicy.REPLACE, request)
         }
     }
 
@@ -224,8 +192,8 @@ class SmsPipeline
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
             val expenseId = ids.next()
-            db.expenses().insert(newExpense(expenseId, r, receivedAt, now))
-            db.sources().insert(source(expenseId, r, id, receivedAt))
+            db.expenses().insert(CaptureRows.expense(expenseId, r, now))
+            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             // the safety net: a record the phone made by itself can be undone for a while
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
             db.captured().insert(item)
@@ -246,56 +214,18 @@ class SmsPipeline
             now: Long,
         ): Stored {
             val expenseId = twin.expense.id
-            db.sources().insert(source(expenseId, r, id, receivedAt))
+            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             val richer = twin.captured.instrumentLast4 == null && r.instrumentLast4 != null
             val replace =
-                richer && !twin.captured.undoRequested && db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, label(r)) == 1
+                richer &&
+                    !twin.captured.undoRequested &&
+                    db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r)) == 1
             if (!replace) return Stored(Disposition.RECORDED, changed = true)
             db.captured().delete(twin.captured.localId)
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = twin.captured.localId)
             db.captured().insert(item)
             return Stored(Disposition.RECORDED, notice = item, withdraw = twin.captured.localId, changed = true)
         }
-
-        private fun newExpense(
-            expenseId: String,
-            r: ParsedRecord,
-            receivedAt: Long,
-            now: Long,
-        ) = ExpenseEntity(
-            id = expenseId,
-            amountMinor = r.amountMinor,
-            currency = r.currency,
-            occurredAtMillis = r.occurredAtMillis,
-            merchant = label(r),
-            categoryId = null,
-            accountId = null,
-            notes = null,
-            pending = false,
-            source = channel(r),
-            type = typeOf(r.kind),
-            status = if (needsReview(r)) STATUS_PENDING_REVIEW else STATUS_CONFIRMED,
-            createdAtMillis = now,
-            updatedAtMillis = now,
-            timeKnown = timeKnown(r.occurredAtMillis, receivedAt),
-            paymentMethod = r.paymentMethod,
-            instrumentLast4 = r.instrumentLast4,
-        )
-
-        private fun source(
-            expenseId: String,
-            r: ParsedRecord,
-            localId: String,
-            receivedAt: Long,
-        ) = ExpenseSourceEntity(
-            id = ids.next(),
-            expenseId = expenseId,
-            channel = channel(r),
-            localSourceId = localId,
-            receivedAtMillis = receivedAt,
-            senderId = r.senderId,
-            instrumentLast4 = r.instrumentLast4,
-        )
 
         @Suppress("LongParameterList") // typed fields of one row
         private fun captured(
@@ -321,33 +251,6 @@ class SmsPipeline
             pairedLocalId = twinId,
             instrumentLast4 = r.instrumentLast4,
         )
-
-        /** The name an entry shows: the merchant or counterparty label, else the institution (typed, digit-free values only). */
-        private fun label(r: ParsedRecord): String? = r.merchant ?: r.institution
-
-        private fun channel(r: ParsedRecord) = if (r.source == CaptureSource.SMS) CHANNEL_SMS else CHANNEL_PUSH
-
-        /** The server's old mapping: money in is INCOME, money out to a person is a TRANSFER, the rest by what it is. */
-        private fun typeOf(kind: TxKind): String =
-            when (kind) {
-                TxKind.PURCHASE, TxKind.FEE -> "EXPENSE"
-                TxKind.TRANSFER_OUT -> "TRANSFER"
-                TxKind.TRANSFER_IN, TxKind.INCOME -> "INCOME"
-                TxKind.REFUND -> "REFUND"
-                TxKind.CASH_WITHDRAWAL -> "CASH_WITHDRAWAL"
-            }
-
-        /** Incoming money (a spoofed sender id could claim it) and unusually large amounts wait for the user. */
-        private fun needsReview(r: ParsedRecord) =
-            r.kind in setOf(TxKind.INCOME, TxKind.TRANSFER_IN, TxKind.REFUND) || r.amountMinor > REVIEW_CEILING_MINOR
-
-        /** A date-only message is stored at Cairo noon of that day (as a manual entry for another day): its time is not known. */
-        private fun timeKnown(
-            occurredAt: Long,
-            receivedAt: Long,
-        ): Boolean =
-            occurredAt == receivedAt ||
-                Instant.ofEpochMilli(occurredAt).atZone(CairoTime.zone).toLocalTime() != LocalTime.NOON
 
         private fun ReviewItemEntity.withSuggestion(
             suggestion: ParsedRecord?,
@@ -385,11 +288,6 @@ class SmsPipeline
             const val MAX_SENDER = 60
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
-            const val REVIEW_CEILING_MINOR = 5_000_000L
-            const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
-            const val STATUS_CONFIRMED = "CONFIRMED"
-            const val CHANNEL_SMS = "SMS"
-            const val CHANNEL_PUSH = "PUSH"
         }
     }
 
@@ -663,22 +561,22 @@ class SmsIntakeWorker
         }
     }
 
+/**
+ * Left over from the server era: a job that an older version enqueued may still run once. It uploads nothing and succeeds (ADR-0009
+ * D7); app start cancels the unique work names ([cancelLeftoverUploadWork]).
+ */
 @HiltWorker
 class SmsUploadWorker
     @AssistedInject
     constructor(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
-        private val uploader: SmsUploader,
-        private val scheduler: SmsWorkScheduler,
     ) : CoroutineWorker(context, params) {
-        override suspend fun doWork(): Result {
-            if (DatabaseStartup.isBlocked()) return Result.retry()
-            val report = uploader.uploadPending()
-            if (report.retry) {
-                val attempt = inputData.getInt(KEY_ATTEMPT, 0)
-                scheduler.scheduleUploadRetry(OutboxBackoff.delaySeconds(attempt, report.retryAfterSeconds), attempt + 1)
-            }
-            return Result.success()
-        }
+        override suspend fun doWork(): Result = Result.success()
     }
+
+/** Upload jobs that an older version of the app left in WorkManager are cancelled at every start. */
+fun cancelLeftoverUploadWork(workManager: WorkManager) {
+    workManager.cancelUniqueWork(SMS_UPLOAD_WORK)
+    workManager.cancelUniqueWork(SMS_UPLOAD_RETRY_WORK)
+}

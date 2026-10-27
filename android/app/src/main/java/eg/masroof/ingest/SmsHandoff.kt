@@ -20,14 +20,6 @@ data class IncomingSms(
 interface SmsWorkScheduler {
     /** Hand one allowlisted, non-OTP message (SMS or notification) to the background pipeline. */
     fun enqueueIntake(message: IncomingMessage)
-
-    /** Only the review list's Save uses this until STORY-172 makes it local; no capture ever schedules an upload. */
-    fun scheduleUpload()
-
-    fun scheduleUploadRetry(
-        delaySeconds: Long,
-        attempt: Int,
-    )
 }
 
 /**

@@ -331,6 +331,154 @@ class LocalCaptureTest {
         }
     }
 
+    // ---- fix round 1
+
+    @Test
+    fun `REQ-AND-135 Review Save writes a local entry and enqueues no upload work`() =
+        runTest {
+            WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().build())
+            val workManager = WorkManager.getInstance(context)
+            pipeline().accept(sms("Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05"))
+            val item = db.reviews().all().single()
+            eg.masroof.ui.viewmodel
+                .ReviewViewModel(db, Dispatchers.Unconfined, clock)
+                .saveNow(item.id)
+            val entry = db.expenses().all().single()
+            assertEquals(9_900L, entry.amountMinor)
+            assertEquals(
+                item.id,
+                db
+                    .sources()
+                    .all()
+                    .single()
+                    .localSourceId,
+            )
+            assertTrue(db.reviews().all().isEmpty())
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            for (name in listOf(SMS_UPLOAD_WORK, SMS_UPLOAD_RETRY_WORK)) {
+                assertTrue(name, workManager.getWorkInfosForUniqueWork(name).get().isEmpty())
+            }
+            assertTrue(workManager.getWorkInfosByTag(SMS_INTAKE_TAG).get().isEmpty())
+        }
+
+    @Test
+    fun `REQ-AND-135 app start cancels upload jobs that an older version left in WorkManager`() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().build())
+        val workManager = WorkManager.getInstance(context)
+        val request = androidx.work.OneTimeWorkRequestBuilder<eg.masroof.ingest.SmsUploadWorker>()
+        for (name in listOf(SMS_UPLOAD_WORK, SMS_UPLOAD_RETRY_WORK)) {
+            workManager.enqueueUniqueWork(
+                name,
+                androidx.work.ExistingWorkPolicy.REPLACE,
+                request.setInitialDelay(1, java.util.concurrent.TimeUnit.HOURS).build(),
+            )
+        }
+        eg.masroof.ingest.cancelLeftoverUploadWork(workManager)
+        for (name in listOf(SMS_UPLOAD_WORK, SMS_UPLOAD_RETRY_WORK)) {
+            assertTrue(name, workManager.getWorkInfosForUniqueWork(name).get().all { it.state.isFinished })
+        }
+    }
+
+    @Test
+    fun `REQ-AND-135 an old upload job succeeds without opening the database or sending anything`() =
+        runTest {
+            val worker = TestListenableWorkerBuilder<eg.masroof.ingest.SmsUploadWorker>(context).build()
+            assertEquals(ListenableWorker.Result.success(), worker.doWork())
+        }
+
+    @Test
+    fun `REQ-SMS-010 the USD fixture is never a confirmed entry and never counts in the total`() =
+        runTest {
+            val body = "Dear Customer, your card ending with 1234 was used for USD 20.00 at NETFLIX.COM on 12/03/2026 14:05."
+            pipeline().accept(sms(body, at = Instant.parse("2026-03-12T12:10:00Z").toEpochMilli()))
+            assertTrue(db.expenses().all().none { it.status == "CONFIRMED" })
+            assertEquals(0L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+            // whatever path leads here, a foreign currency waits for review and is not added to EGP spending
+            val usd =
+                eg.masroof.ingest.parse.ParsedRecord(
+                    "",
+                    CaptureSource.SMS,
+                    eg.masroof.ingest.parse.TxKind.PURCHASE,
+                    2_000L,
+                    "USD",
+                    1L,
+                    "1234",
+                    "CIB",
+                    "CIB",
+                    "CARD",
+                    "NETFLIX.COM",
+                )
+            assertTrue(
+                eg.masroof.ingest.CaptureRows
+                    .needsReview(usd),
+            )
+            db.expenses().insert(
+                eg.masroof.ingest.CaptureRows
+                    .expense("u1", usd.copy(currency = "USD"), 1L)
+                    .copy(status = "CONFIRMED"),
+            )
+            assertEquals("a confirmed USD row is not EGP spending", 0L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+        }
+
+    @Test
+    fun `REQ-SMS-095 a message stating exactly 12 00 has a known time, a date-only message does not`() =
+        runTest {
+            val at = Instant.parse("2026-10-15T08:30:00Z").toEpochMilli()
+            pipeline().accept(sms("Your card ending 4512 was charged EGP 5.00 at KIOSK on 12/10/2026 12:00", at = at))
+            assertTrue(
+                db
+                    .expenses()
+                    .all()
+                    .single()
+                    .timeKnown,
+            )
+        }
+
+    @Test
+    fun `REQ-SMS-097 Undo on a notice whose row is gone still takes the notice down`() =
+        runTest {
+            val withdrawn = mutableListOf<String>()
+            val sink =
+                object : eg.masroof.ingest.CapturedNotifier {
+                    override fun captured(item: eg.masroof.data.db.CapturedTxEntity) = Unit
+
+                    override fun cancel(localId: String) {
+                        withdrawn += localId
+                    }
+
+                    override fun cancelAll() = Unit
+                }
+            val bank = "تم إستقبال تحويل لحظي إلى حسابكم 1094 بمبلغ 1.00 جم من MOHAMED MAHMOUD AHMED"
+            val push = "InstaPay\nYou have received  1.00 EGP from mohamed.shehataaaaa@instapay"
+            val p = pipeline()
+            p.accept(IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, 13_000L))
+            val pushRow = db.captured().all().single()
+            p.accept(IncomingMessage(CaptureSource.SMS, "BDC", bank, 10_000L))
+            val result =
+                eg.masroof.ingest
+                    .CapturedActions(db, clock, notifier = sink)
+                    .undo(pushRow.localId)
+            assertFalse(result.removed)
+            assertEquals(listOf(pushRow.localId), withdrawn)
+        }
+
+    @Test
+    fun `REQ-AND-135 signed in, then logged out - a bank SMS is still recorded`() =
+        runTest {
+            val store =
+                FakeSessionStore(
+                    eg.masroof.data.auth.LoadedSession
+                        .Found(session()),
+                )
+            val manager =
+                eg.masroof.data.auth
+                    .SessionManager(store, FakeAuthRemote(), FakeSettings(), Dispatchers.Unconfined)
+            manager.logout()
+            assertEquals(Disposition.RECORDED, pipeline().accept(sms(purchase)))
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(1, db.sources().all().size)
+        }
+
     // ---- Settings
 
     @Test

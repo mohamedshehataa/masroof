@@ -15,17 +15,12 @@ import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
-import eg.masroof.data.db.ParsedOutboxEntity
-import eg.masroof.data.remote.ParsedRemote
-import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.ingest.ACTION_UNDO_CAPTURED
 import eg.masroof.ingest.CapturedActionReceiver
-import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.EXTRA_LOCAL_ID
 import eg.masroof.ingest.SmsIntakeWorker
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.SmsUploadWorker
-import eg.masroof.ingest.SmsUploader
 import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.work.ForegroundSync
@@ -76,13 +71,6 @@ private class NoopScheduler : SyncScheduler {
     override fun scheduleOnOpen() {
         calls++
     }
-}
-
-private class NeverRemote : ParsedRemote {
-    override suspend fun uploadParsed(
-        deviceId: String,
-        item: ParsedOutboxEntity,
-    ): SmsUploadResult = error("network touched while blocked")
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -158,11 +146,6 @@ class StartupBlockedTest {
             val clock = Clock.systemUTC()
             val pipeline =
                 SmsPipeline(blockedDb, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey)
-            val device =
-                object : DeviceIdProvider {
-                    override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
-                }
-            val uploader = SmsUploader(blockedDb, NeverRemote(), device, clock, MemoryGate())
             val factory =
                 object : WorkerFactory() {
                     override fun createWorker(
@@ -173,7 +156,7 @@ class StartupBlockedTest {
                         if (workerClassName == SmsIntakeWorker::class.java.name) {
                             SmsIntakeWorker(appContext, workerParameters, pipeline)
                         } else {
-                            SmsUploadWorker(appContext, workerParameters, uploader, FakeSmsScheduler())
+                            SmsUploadWorker(appContext, workerParameters)
                         }
                 }
             val intake =
@@ -183,7 +166,8 @@ class StartupBlockedTest {
                     .build()
             assertEquals(ListenableWorker.Result.retry(), intake.doWork())
             val upload = TestListenableWorkerBuilder<SmsUploadWorker>(context).setWorkerFactory(factory).build()
-            assertEquals(ListenableWorker.Result.retry(), upload.doWork())
+            // an old upload job uploads nothing any more and does not open the database
+            assertEquals(ListenableWorker.Result.success(), upload.doWork())
         }
 
     @Test

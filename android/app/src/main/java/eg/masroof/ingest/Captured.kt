@@ -290,6 +290,7 @@ class CapturedActions
         private val clock: Clock,
         private val signal: LocalDataSignal = LocalDataSignal(),
         private val eraseLock: EraseLock = EraseLock(),
+        private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
@@ -304,7 +305,10 @@ class CapturedActions
                         }
                         found
                     }
-                } ?: return UndoResult(false, null)
+                }
+            // The notice goes away whatever happened: its row may be gone already (purged, or replaced by the twin's notice).
+            notifier.cancel(localId)
+            if (item == null) return UndoResult(false, null)
             signal.changed()
             return UndoResult(removed = true, templateId = item.templateId)
         }
@@ -358,8 +362,9 @@ class CapturedActionReceiver : BroadcastReceiver() {
         localId: String,
     ) {
         val result = graph.actions().undo(localId)
-        if (!result.removed) return
+        // the notice goes away whatever happened: its row may be gone already (purged, or replaced by the twin's notice)
         graph.notifier().cancel(localId)
+        if (!result.removed) return
         result.templateId?.let { graph.notifier().promptStopLearning(it) }
     }
 

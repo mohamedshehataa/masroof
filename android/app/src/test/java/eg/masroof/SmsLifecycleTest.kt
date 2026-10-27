@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
@@ -27,6 +29,7 @@ import eg.masroof.data.insights.InsightsCache
 import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.PrefsCaptureData
 import eg.masroof.ingest.SMS_INTAKE_TAG
+import eg.masroof.ingest.SmsUploadWorker
 import eg.masroof.ingest.WorkManagerSmsScheduler
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
@@ -295,8 +298,13 @@ class SignOutSmsTest {
             val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
             val scheduler = WorkManagerSmsScheduler(workManager)
             scheduler.enqueueIntake(IncomingMessage(CaptureSource.SMS, "CIB", "Purchase of EGP 99.00 at X", 1_000L))
-            scheduler.scheduleUpload()
-            scheduler.scheduleUploadRetry(60, 1)
+            // jobs an older version left behind
+            workManager.enqueueUniqueWork("sms-upload", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<SmsUploadWorker>().build())
+            workManager.enqueueUniqueWork(
+                "sms-upload-retry",
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<SmsUploadWorker>().build(),
+            )
             db.parsedOutbox().insert(
                 ParsedOutboxEntity("l1", "SMS", "PURCHASE", 9900, "EGP", 1, null, "CIB", "CIB", null, "X", createdAtMillis = 2),
             )

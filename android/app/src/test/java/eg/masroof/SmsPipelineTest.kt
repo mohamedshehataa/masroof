@@ -48,20 +48,10 @@ import java.time.ZoneOffset
 
 internal class FakeSmsScheduler : SmsWorkScheduler {
     val intake = mutableListOf<IncomingMessage>()
-    var uploads = 0
 
     override fun enqueueIntake(message: IncomingMessage) {
         intake += message
     }
-
-    override fun scheduleUpload() {
-        uploads++
-    }
-
-    override fun scheduleUploadRetry(
-        delaySeconds: Long,
-        attempt: Int,
-    ) = Unit
 }
 
 internal class MemorySettings(

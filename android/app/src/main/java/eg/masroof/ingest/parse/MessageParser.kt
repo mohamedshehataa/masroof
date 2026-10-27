@@ -668,6 +668,7 @@ object MessageParser {
         if (hasUnexplainedNumber(t, amounts)) return review("unexplained_number")
         val sender = msg.sender
         val institution = institutionOf(sender)
+        val (occurredAtMillis, timeKnown) = occurredAt(t, msg.receivedAtMillis)
         val record =
             ParsedRecord(
                 localId = "", // keyed by LocalIdHasher in the pipeline, never by the parser
@@ -675,7 +676,8 @@ object MessageParser {
                 kind = kind,
                 amountMinor = amount.minor,
                 currency = currency,
-                occurredAtMillis = occurredAt(t, msg.receivedAtMillis),
+                occurredAtMillis = occurredAtMillis,
+                timeKnown = timeKnown,
                 instrumentLast4 = last4(t, kind, direction),
                 senderId = uploadSenderId(sender, institution),
                 institution = institution,
@@ -1188,10 +1190,11 @@ object MessageParser {
         val dates: List<LocalDate>,
     )
 
+    /** When it happened, and whether that instant carries a time of day (false: a date-only message, stored at Cairo noon). */
     private fun occurredAt(
         t: String,
         receivedMillis: Long,
-    ): Long {
+    ): Pair<Long, Boolean> {
         val received = Instant.ofEpochMilli(receivedMillis)
         val receivedDate = received.atZone(cairo).toLocalDate()
         val earliest = received.minusSeconds(MAX_DATE_AGE_DAYS * SECONDS_PER_DAY)
@@ -1244,12 +1247,12 @@ object MessageParser {
             val inWindow =
                 c.dates
                     .mapNotNull { date -> instantOf(t, c.range, date, received, receivedDate) }
-                    .filter { !it.isBefore(earliest) && !it.isAfter(latest) }
-                    .distinct()
+                    .filter { !it.first.isBefore(earliest) && !it.first.isAfter(latest) }
+                    .distinctBy { it.first }
             // Exactly one reading inside the window decides; two (or none) leave the received time.
-            if (inWindow.size == 1) return inWindow.first().toEpochMilli()
+            if (inWindow.size == 1) return inWindow.first().first.toEpochMilli() to inWindow.first().second
         }
-        return receivedMillis
+        return receivedMillis to true
     }
 
     private fun instantOf(
@@ -1258,13 +1261,13 @@ object MessageParser {
         date: LocalDate,
         received: Instant,
         receivedDate: LocalDate,
-    ): Instant? {
+    ): Pair<Instant, Boolean>? {
         val after = timeAfter.find(t.substring(range.last + 1, minOf(t.length, range.last + 1 + TIME_WINDOW)))
         val time = after ?: timeBefore.find(t.substring(maxOf(0, range.first - TIME_BEFORE_WINDOW), range.first))
         return when {
-            time != null -> toInstant(date, time)
-            date == receivedDate -> received
-            else -> date.atTime(LocalTime.of(NOON, 0)).atZone(cairo).toInstant()
+            time != null -> toInstant(date, time)?.let { it to true }
+            date == receivedDate -> received to true
+            else -> date.atTime(LocalTime.of(NOON, 0)).atZone(cairo).toInstant() to false
         }
     }
 

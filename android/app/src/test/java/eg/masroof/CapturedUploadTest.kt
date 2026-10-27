@@ -117,7 +117,7 @@ class CapturedUploadTest {
             assertTrue(db.captured().all().all { it.expenseId != null })
             // the same real client that the frozen uploader would use saw nothing: no bytes were sent
             assertTrue("a request was made: ${bodies.size}", bodies.isEmpty())
-            assertEquals(0, scheduler.uploads)
+            assertTrue("no intake job is left over", scheduler.intake.isEmpty())
         }
 
     @Test

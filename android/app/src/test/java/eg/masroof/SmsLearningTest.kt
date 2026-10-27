@@ -40,7 +40,6 @@ import java.time.ZoneOffset
 class SmsLearningTest {
     private lateinit var db: AppDatabase
     private val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
-    private val scheduler = FakeSmsScheduler()
     private val settings = MemorySettings()
     private val notifications = MemoryNotifications()
     private val gate = MemoryGate()
@@ -55,7 +54,7 @@ class SmsLearningTest {
     fun tearDown() = db.close()
 
     private val pipeline get() = SmsPipeline(db, settings, notifications, clock, gate, FixedKey)
-    private val viewModel get() = ReviewViewModel(db, Dispatchers.Unconfined, scheduler, clock)
+    private val viewModel get() = ReviewViewModel(db, Dispatchers.Unconfined, clock)
 
     private fun sms(
         body: String,
@@ -90,15 +89,23 @@ class SmsLearningTest {
         }
 
     @Test
-    fun `REQ-SMS-070 saving a review item uploads the suggestion once as a normal expense and learns the format`() =
+    fun `REQ-SMS-070 saving a review item writes the suggestion once as a local entry, queues nothing, and learns the format`() =
         runTest {
             pipeline.accept(sms("Purchase of EGP 99.00 at PHARMACY on 12/03/2026 14:05"))
             val id = saveFirstReview()
-            val queued = db.parsedOutbox().all().single()
-            assertEquals(id, queued.localId)
-            assertEquals(9_900L, queued.amountMinor)
-            assertEquals("SMS", queued.source)
-            assertEquals(1, scheduler.uploads)
+            val entry = db.expenses().all().single()
+            assertEquals(9_900L, entry.amountMinor)
+            assertEquals("CONFIRMED", entry.status)
+            assertEquals("SMS", entry.source)
+            assertEquals(
+                id,
+                db
+                    .sources()
+                    .all()
+                    .single()
+                    .localSourceId,
+            )
+            assertTrue("nothing is queued for upload", db.parsedOutbox().all().isEmpty())
             assertEquals(1, db.learnedTemplates().all().size)
         }
 
@@ -110,11 +117,11 @@ class SmsLearningTest {
             val next = pipeline.accept(sms("Purchase of EGP 45.50 at BAKERY on 13/03/2026 09:30", at = 2_000L))
             assertEquals(Disposition.RECORDED, next)
             // the one-tap Save is the review list's own path (STORY-172); the learned format records locally at once
-            assertEquals(listOf(9_900L), db.parsedOutbox().all().map { it.amountMinor })
-            val entry = db.expenses().all().single()
-            assertEquals(4_550L, entry.amountMinor)
-            assertEquals("BAKERY", entry.merchant)
-            assertEquals(1, db.sources().all().size)
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            val byAmount = db.expenses().all().associateBy { it.amountMinor }
+            assertEquals(setOf(9_900L, 4_550L), byAmount.keys)
+            assertEquals("BAKERY", byAmount.getValue(4_550L).merchant)
+            assertEquals(2, db.sources().all().size)
             assertTrue(db.reviews().all().isEmpty())
         }
 
@@ -164,7 +171,7 @@ class SmsLearningTest {
                 db
                     .expenses()
                     .all()
-                    .single()
+                    .single { it.amountMinor == 8_000L }
                     .type,
             )
         }
@@ -245,7 +252,7 @@ class SmsLearningTest {
                     pipeline.accept(sms("Transfer of EGP 300.00 to MONA ADEL $suffix", at = 2_000L)),
                 )
             }
-            assertTrue(db.parsedOutbox().all().size == 1)
+            assertTrue(db.expenses().all().size == 1)
         }
 
     @Test
