@@ -27,6 +27,8 @@ buildscript {
                     requested.group == "com.github.jknack" && requested.name == "handlebars" ->
                         useVersion("4.5.2")
                     requested.group == "org.mozilla" && requested.name == "rhino" -> useVersion("1.7.14.1")
+                    // GHSA-xxph-c9ww-hj94 (guava < 33.7.2, via openapi-generator)
+                    requested.group == "com.google.guava" && requested.name == "guava" -> useVersion("33.7.2-jre")
                 }
             }
         }
@@ -55,6 +57,27 @@ repositories { mavenCentral() }
 // Lock every resolvable configuration so SCA (osv-scanner, Dependabot) sees the full graph (CWE-1104, ASVS 15.1.2).
 // Refresh with: ./gradlew dependencies buildEnvironment --write-locks
 dependencyLocking { lockAllConfigurations() }
+
+// GHSA-xxph-c9ww-hj94: guava < 33.7.2 (checkstyle pulls 33.7.1, spotless's google-java-format 32.1.3).
+// A metadata rule also reaches detached configurations (spotless), which configurations.all does not.
+abstract class GuavaFixedVersion : ComponentMetadataRule {
+    override fun execute(context: ComponentMetadataContext) {
+        context.details.allVariants {
+            withDependencies {
+                filter { it.group == "com.google.guava" && it.name == "guava" }
+                    .forEach { it.version { require("33.7.2-jre") } }
+            }
+        }
+    }
+}
+
+dependencies { components { all(GuavaFixedVersion::class.java) } }
+
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "com.google.guava" && requested.name == "guava") useVersion("33.7.2-jre")
+    }
+}
 
 dependencies {
     implementation(platform(SpringBootPlugin.BOM_COORDINATES))
