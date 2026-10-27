@@ -2,10 +2,15 @@ package eg.masroof.data.db
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** Cached expense. [pending] rows were created on this device and are still waiting in the outbox. */
-@Entity(tableName = "expense")
+@Entity(
+    tableName = "expense",
+    indices = [Index("occurredAtMillis"), Index("categoryId"), Index(value = ["serverId"], unique = true)],
+)
 data class ExpenseEntity(
     @PrimaryKey val id: String,
     val amountMinor: Long,
@@ -23,6 +28,18 @@ data class ExpenseEntity(
     @ColumnInfo(defaultValue = "'EXPENSE'") val type: String = "EXPENSE",
     /** The server's review state: "PENDING_REVIEW" for received money that waits for the household's OK. */
     @ColumnInfo(defaultValue = "'CONFIRMED'") val status: String = "CONFIRMED",
+    // v9 (ADR-0009 D3): the local-only fields. Epoch millis; business dates are derived in Cairo, never stored.
+    @ColumnInfo(defaultValue = "0") val createdAtMillis: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val updatedAtMillis: Long = 0L,
+    /** Soft delete (Undo); purged after 30 days. */
+    val deletedAtMillis: Long? = null,
+    /** 0 for a date-only manual entry stored at Cairo noon. */
+    @ColumnInfo(defaultValue = "1") val timeKnown: Boolean = true,
+    val paymentMethod: String? = null,
+    val instrumentLast4: String? = null,
+    val paidByMemberId: String? = null,
+    /** The server's id for a row cached from (or imported from) the server; unique, so the import is idempotent. */
+    val serverId: String? = null,
 )
 
 @Entity(tableName = "category")
@@ -31,6 +48,10 @@ data class CategoryEntity(
     val nameEn: String,
     val nameAr: String,
     val sortOrder: Int,
+    val parentId: String? = null,
+    val color: String? = null,
+    @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val system: Boolean = false,
 )
 
 @Entity(tableName = "account")
@@ -38,7 +59,74 @@ data class AccountEntity(
     @PrimaryKey val id: String,
     val label: String,
     val currency: String,
+    val kind: String? = null,
+    val institution: String? = null,
+    val last4: String? = null,
+    @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
 )
+
+/** A household member. A phone without a server starts with one row "Me" (ADR-0009 D3). */
+@Entity(tableName = "member")
+data class MemberEntity(
+    @PrimaryKey val id: String,
+    val displayName: String,
+    val sortOrder: Int,
+)
+
+/** A stored receipt file's metadata. [expenseId] is null for an unattached receipt; [sha256] detects the same file twice. */
+@Entity(
+    tableName = "receipt",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = ExpenseEntity::class,
+                parentColumns = ["id"],
+                childColumns = ["expenseId"],
+                onDelete = ForeignKey.SET_NULL,
+            ),
+        ],
+    indices = [Index("expenseId"), Index(value = ["sha256"], unique = true)],
+)
+data class ReceiptEntity(
+    @PrimaryKey val id: String,
+    val expenseId: String?,
+    val fileName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val sha256: String,
+    val pageCount: Int?,
+    val createdAtMillis: Long,
+)
+
+/**
+ * The dedup link between an expense and the message (or entry) that produced it. [localSourceId] is the HMAC local id and is
+ * unique: the same message reaching the phone twice is dropped on the second insert.
+ */
+@Entity(
+    tableName = "expense_source",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = ExpenseEntity::class,
+                parentColumns = ["id"],
+                childColumns = ["expenseId"],
+                onDelete = ForeignKey.CASCADE,
+            ),
+        ],
+    indices = [Index("expenseId"), Index(value = ["localSourceId"], unique = true)],
+)
+data class ExpenseSourceEntity(
+    @PrimaryKey val id: String,
+    val expenseId: String,
+    /** SMS | PUSH | MANUAL | BACKFILL | SERVER_IMPORT */
+    val channel: String,
+    val localSourceId: String,
+    val receivedAtMillis: Long,
+    val senderId: String?,
+    val instrumentLast4: String?,
+) {
+    override fun toString() = "ExpenseSourceEntity(id=$id, channel=$channel)"
+}
 
 /** One manual entry waiting to be uploaded. [clientId] doubles as the idempotency key. */
 @Entity(tableName = "outbox")

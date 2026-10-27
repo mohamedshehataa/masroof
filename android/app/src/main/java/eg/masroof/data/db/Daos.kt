@@ -303,8 +303,11 @@ interface CapturedDao {
             ReviewItemEntity::class,
             LearnedTemplateEntity::class,
             CapturedTxEntity::class,
+            MemberEntity::class,
+            ReceiptEntity::class,
+            ExpenseSourceEntity::class,
         ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

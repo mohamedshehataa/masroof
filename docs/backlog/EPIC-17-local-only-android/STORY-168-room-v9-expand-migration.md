@@ -3,7 +3,7 @@ id: STORY-168
 epic: EPIC-17
 title: Updating the app to the local-only schema keeps every row and a safety copy
 phase: 2
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]

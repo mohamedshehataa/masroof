@@ -1,11 +1,13 @@
 package eg.masroof
 
 import android.app.Application
+import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
+import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.ingest.SmsWorkScheduler
 import eg.masroof.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +33,12 @@ class MasroofApp :
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        // Before Hilt builds anything: safety copy, migration and seeding (a blocked result shows a message in MainActivity).
+        DatabaseStartup.run(this)
+    }
 
     override fun onCreate() {
         super.onCreate()

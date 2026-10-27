@@ -304,4 +304,6 @@
     <string name="edit_error_sign_in">سجّل الدخول مجددًا - انتهت جلستك. تعديلاتك لسه موجودة.</string>
     <string name="edit_changed_elsewhere">العملية دي اتغيّرت من مكان تاني. بنعرض آخر نسخة، راجعها واحفظ تاني.</string>
     <string name="edit_working">جارٍ التنفيذ…</string>
+    <string name="startup_could_not_finish">التحديث ماخلصش. بياناتك في أمان، من فضلك تواصل مع الدعم.</string>
+    <string name="startup_free_up_storage">أفرغ مساحة تخزين لإكمال التحديث. المطلوب حوالي %1$d ميجابايت.</string>
 </resources>

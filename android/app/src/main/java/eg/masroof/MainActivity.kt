@@ -36,6 +36,8 @@ import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
+import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.budgets.BudgetsRoute
@@ -47,6 +49,7 @@ import eg.masroof.ui.login.LoginRoute
 import eg.masroof.ui.review.ReviewAddRoute
 import eg.masroof.ui.review.ReviewRoute
 import eg.masroof.ui.settings.SettingsRoute
+import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.work.ForegroundSync
@@ -91,6 +94,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val startup = DatabaseStartup.state()
+        if (startup !is DbStartup.Ready) {
+            setContent { MasroofTheme { StartupBlockedScreen(startup) } }
+            return
+        }
         setContent {
             val current by settings.settings.collectAsState(initial = AppSettings())
             val sessionState by session.state.collectAsState()

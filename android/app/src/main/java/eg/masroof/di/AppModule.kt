@@ -2,7 +2,6 @@ package eg.masroof.di
 
 import android.content.Context
 import androidx.core.content.edit
-import androidx.room.Room
 import androidx.work.WorkManager
 import dagger.Binds
 import dagger.Module
@@ -30,12 +29,8 @@ import eg.masroof.data.budgets.BudgetsRemote
 import eg.masroof.data.budgets.BudgetsRepository
 import eg.masroof.data.budgets.DefaultBudgetsRepository
 import eg.masroof.data.db.AppDatabase
-import eg.masroof.data.db.MIGRATION_2_3
-import eg.masroof.data.db.MIGRATION_3_4
-import eg.masroof.data.db.MIGRATION_4_5
-import eg.masroof.data.db.MIGRATION_5_6
-import eg.masroof.data.db.MIGRATION_6_7
-import eg.masroof.data.db.MIGRATION_7_8
+import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.db.DbStartup
 import eg.masroof.data.insights.ApiInsightsRemote
 import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.FileInsightsCache
@@ -140,12 +135,11 @@ object ProvidersModule {
     fun database(
         @ApplicationContext context: Context,
     ): AppDatabase =
-        Room
-            .databaseBuilder(context, AppDatabase::class.java, "masroof.db")
-            // Cache + a pre-release outbox only: v1 -> v2 (failed flag) is not worth a migration yet.
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
-            .fallbackToDestructiveMigrationFrom(true, 1)
-            .build()
+        // Opened (safety copy, migration, seed) once in MasroofApp.attachBaseContext; a blocked start gets a database that refuses access.
+        when (val s = DatabaseStartup.state()) {
+            is DbStartup.Ready -> s.db
+            else -> DatabaseStartup.blocked(context)
+        }
 
     @Provides @Singleton
     fun workManager(
