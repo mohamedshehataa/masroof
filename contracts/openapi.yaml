@@ -613,6 +613,124 @@ paths:
         '501':
           $ref: '#/components/responses/NotImplemented'
 
+  /api/expenses/{expenseId}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+    get:
+      tags: [Expenses]
+      summary: List an expense's attachments
+      description: Receipt photos and PDFs attached to the expense, oldest first. Metadata only; fetch the bytes with `getExpenseAttachmentContent`.
+      operationId: listExpenseAttachments
+      x-req: [REQ-RCPT-020]
+      responses:
+        '200':
+          description: The attachments (possibly empty).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Expenses]
+      summary: Attach a receipt photo or PDF to an expense
+      description: |
+        Multipart upload of one file, at most 8 MiB. The type is decided by sniffing the bytes, not the declared
+        content type or file name: only JPEG, PNG and PDF are accepted. EXIF, XMP, IPTC, comments and text chunks are
+        removed from images before storage, so the stored and served bytes carry no location or camera metadata.
+        At most 5 attachments per expense.
+      operationId: uploadExpenseAttachment
+      x-req: [REQ-RCPT-021, REQ-RCPT-022, REQ-RCPT-023]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttachmentUploadForm'
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, application/pdf
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          description: Not a JPEG, PNG or PDF after sniffing.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Attachment storage is not configured or not reachable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/expenses/{expenseId}/attachments/{attachmentId}:
+    parameters:
+      - $ref: '#/components/parameters/ExpenseId'
+      - $ref: '#/components/parameters/AttachmentId'
+    get:
+      tags: [Expenses]
+      summary: Download an attachment
+      description: The stored (metadata-stripped) bytes, served as a download (`Content-Disposition` attachment, `nosniff`, private cache).
+      operationId: getExpenseAttachmentContent
+      x-req: [REQ-RCPT-024]
+      responses:
+        '200':
+          description: The file.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                contentEncoding: binary
+            image/png:
+              schema:
+                type: string
+                contentEncoding: binary
+            application/pdf:
+              schema:
+                type: string
+                contentEncoding: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Attachment storage is not configured or not reachable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags: [Expenses]
+      summary: Remove an attachment
+      operationId: deleteExpenseAttachment
+      x-req: [REQ-RCPT-025]
+      responses:
+        '204':
+          description: Removed (the stored file is deleted too).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ---------------------------------------------------------------- Review
   /api/review:
     get:
@@ -2159,6 +2277,13 @@ components:
       schema:
         type: string
         format: uuid
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Cursor:
       name: cursor
       in: query
@@ -2752,25 +2877,77 @@ components:
 
     ExpenseItem:
       type: object
-      description: A receipt line item.
-      required: [name, total]
+      description: |
+        A purchased item on the expense (typed by the user; receipt OCR is a later story). Sent as the whole list on
+        create or patch (the list replaces the stored one; `id` is assigned by the server and ignored on input).
+        Item amounts use the expense's currency and do not have to add up to the expense amount.
+      required: [name]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+          minLength: 1
           maxLength: 200
+          description: Trimmed; 1 to 200 characters, no NUL.
         qty:
           $ref: '#/components/schemas/DecimalString'
-          description: Quantity; may be fractional (e.g. `1.5` kg).
+          description: Optional quantity, greater than 0, at most 3 decimals and at most 999999 (e.g. `2`, `1.5` kg).
         unitPrice:
           $ref: '#/components/schemas/Money'
+          description: Not supported yet; must be absent.
         total:
           $ref: '#/components/schemas/Money'
+          description: Optional amount for this line, 0 or more, in the expense's currency.
         categoryId:
           type: [string, 'null']
           format: uuid
+
+    Attachment:
+      type: object
+      description: A receipt photo or PDF attached to an expense (metadata only; no file name is kept).
+      required: [id, expenseId, contentType, sizeBytes, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        expenseId:
+          type: string
+          format: uuid
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, application/pdf]
+          description: Sniffed from the bytes at upload.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Size of the stored (metadata-stripped) file.
+        uploadedByMemberId:
+          type: [string, 'null']
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    AttachmentList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/Attachment'
+
+    AttachmentUploadForm:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          contentEncoding: binary
+          description: JPEG, PNG or PDF, at most 8 MiB.
 
     ExpenseSource:
       type: object
