@@ -13,6 +13,7 @@ import eg.masroof.di.SafetyCopyDir
 import eg.masroof.ingest.CaptureData
 import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.CapturedNotifier
+import eg.masroof.ingest.EraseStage
 import eg.masroof.ingest.NoCaptureData
 import eg.masroof.ingest.NoCapturedNotifier
 import eg.masroof.ingest.NoopCaptureGate
@@ -44,15 +45,15 @@ class RoomDataWiper
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
         /**
-         * "Erase all data" (REQ-AND-132) and the recovery of an interrupted one. The erase-in-progress flag (the capture gate) is
-         * closed first and stays closed until the erase is complete, so a capture job still running re-checks it inside its write
-         * transaction and writes nothing, and a crash mid-erase is visible at the next start (flag still closed): the caller then
-         * runs this again. Every step is idempotent. If the database transaction throws, nothing was changed and the flag is
-         * reopened. If a later step throws, the data is already gone: the flag stays closed and [PartialEraseException] says so.
+         * "Erase all data" (REQ-AND-132). The persisted stage goes ERASING before the database transaction and CLEANUP right
+         * after the commit; capture stays dropped while it is not NONE. A crash is recognised at the next start by the stage:
+         * ERASING reruns this (the user confirmed it, and the commit may or may not have happened), CLEANUP only finishes the
+         * clean-up ([recover]). If the transaction throws, nothing changed and the stage returns to NONE. If a later step throws,
+         * the data is already gone: the stage stays CLEANUP and [PartialEraseException] says so.
          */
-        @Suppress("TooGenericExceptionCaught") // rethrown: only decides whether the capture flag reopens
+        @Suppress("TooGenericExceptionCaught") // rethrown: only decides whether the stage returns to NONE
         override suspend fun wipe() {
-            gate.close()
+            check(gate.setStage(EraseStage.ERASING)) { "could not record the erase" }
             var committed = false
             try {
                 workManager.cancelUniqueWork(OUTBOX_WORK_NAME).await()
@@ -72,17 +73,28 @@ class RoomDataWiper
                     }
                 }
                 committed = true
-                finishAfterCommit()
-                gate.open()
+                // Without a recorded CLEANUP a restart would rerun the table wipe over entries added meanwhile: give up loudly.
+                if (!gate.setStage(EraseStage.CLEANUP) && !gate.setStage(EraseStage.CLEANUP)) throw PartialEraseException()
+                finishCleanup()
             } catch (e: Throwable) {
-                if (!committed) gate.open()
+                if (!committed && !gate.setStage(EraseStage.NONE)) {
+                    e.addSuppressed(IllegalStateException("could not reopen capture"))
+                }
                 throw e
             }
         }
 
-        /** Everything outside the database transaction. Each step runs even if an earlier one failed. */
+        override suspend fun recover(stage: EraseStage) {
+            when (stage) {
+                EraseStage.NONE -> Unit
+                EraseStage.ERASING -> wipe()
+                EraseStage.CLEANUP -> finishCleanup()
+            }
+        }
+
+        /** Everything outside the database transaction, then the stage returns to NONE. Each step runs even if one failed. */
         @Suppress("TooGenericExceptionCaught")
-        private suspend fun finishAfterCommit() {
+        private suspend fun finishCleanup() {
             var failed = false
             val steps: List<suspend () -> Unit> =
                 listOf(
@@ -104,22 +116,27 @@ class RoomDataWiper
             }
             // Shrink the file so deleted rows do not linger in free pages or the WAL (best effort, not part of "failed").
             withContext(io) { runCatching { compact() } }
-            if (failed) throw PartialEraseException()
+            if (failed || !gate.setStage(EraseStage.NONE)) throw PartialEraseException()
         }
 
         private fun compact() {
             val raw = db.openHelper.writableDatabase
             raw.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
             raw.execSQL("VACUUM")
+            // VACUUM itself writes through the WAL: truncate again so the freed pages do not stay in the -wal file.
+            raw.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
         }
 
         /** The pre-migration safety copy is a full copy of the old database (REQ-AND-132): the copy, its `.part`, `-wal`, `-shm`. */
         private fun deleteSafetyCopies() {
-            safetyCopyDir.listFiles { f -> f.name.startsWith("pre-migration-") }?.forEach { it.delete() }
+            val failed = safetyCopyDir.listFiles { f -> f.name.startsWith("pre-migration-") }?.filterNot { it.delete() }.orEmpty()
+            check(failed.isEmpty()) { "${failed.size} safety copy files could not be deleted" }
         }
 
         private fun deleteReceipts() {
-            receiptsDir.listFiles()?.forEach { it.deleteRecursively() }
+            // a delete that returns false is a failure: the erase is Incomplete and stays in CLEANUP
+            val failed = receiptsDir.listFiles()?.filterNot { it.deleteRecursively() }.orEmpty()
+            check(failed.isEmpty()) { "${failed.size} receipt files could not be deleted" }
         }
 
         /**

@@ -3,10 +3,12 @@ package eg.masroof.data.auth
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.di.AppScope
 import eg.masroof.ingest.CaptureGate
+import eg.masroof.ingest.EraseStage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +26,7 @@ class DataEraser
         private val session: SessionManager,
         private val gate: CaptureGate,
         @AppScope private val scope: CoroutineScope,
+        private val lock: EraseLock = EraseLock(),
     ) {
         suspend fun counts(): EraseCounts = wiper.counts()
 
@@ -33,8 +36,11 @@ class DataEraser
             val done = CompletableDeferred<Unit>()
             scope.launch {
                 try {
-                    runCatching { withTimeoutOrNull(SIGN_OUT_WAIT_MILLIS) { session.logout() } }
-                    wiper.wipe()
+                    lock.mutex.withLock {
+                        // The server-side revoke may be cut off by the cap; the local session is cleared either way (logout's finally).
+                        runCatching { withTimeoutOrNull(SIGN_OUT_WAIT_MILLIS) { session.logout() } }
+                        wiper.wipe()
+                    }
                     done.complete(Unit)
                 } catch (e: Throwable) {
                     done.completeExceptionally(e)
@@ -43,10 +49,22 @@ class DataEraser
             done.await()
         }
 
-        /** The capture flag is only closed while an erase runs: closed at app start means the last erase was cut short. */
+        /**
+         * A persisted stage other than NONE at app start means the last erase was cut short. ERASING reruns the whole wipe;
+         * CLEANUP only finishes the clean-up and never touches tables, so entries added since survive. The lock is taken here,
+         * before the UI can save anything, and released when recovery ends: a save in that window waits and lands afterwards.
+         */
         fun recoverInterrupted(): Job? {
-            if (DatabaseStartup.isBlocked() || gate.isOpen()) return null
-            return scope.launch { runCatching { wiper.wipe() } }
+            if (DatabaseStartup.isBlocked()) return null
+            val stage = gate.stage()
+            if (stage == EraseStage.NONE || !lock.mutex.tryLock()) return null
+            return scope.launch {
+                try {
+                    runCatching { wiper.recover(stage) }
+                } finally {
+                    lock.mutex.unlock()
+                }
+            }
         }
 
         private companion object {

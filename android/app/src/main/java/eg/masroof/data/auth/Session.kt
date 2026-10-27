@@ -128,6 +128,12 @@ interface LocalDataWiper {
 
     /** Cancels and awaits capture jobs, clears every table and the receipts folder, then seeds the defaults again. */
     suspend fun wipe()
+
+    /**
+     * Finishes an erase that was cut short. [eg.masroof.ingest.EraseStage.ERASING] reruns [wipe]; CLEANUP runs only the
+     * steps after the commit and never touches a table (entries added since must survive).
+     */
+    suspend fun recover(stage: eg.masroof.ingest.EraseStage)
 }
 
 /** The data is already gone but a clean-up step after the database commit failed; the next start finishes it. */

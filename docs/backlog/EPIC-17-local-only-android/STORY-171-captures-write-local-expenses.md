@@ -119,6 +119,8 @@ scheduled once the local write path ships).
 ## Dependencies
 STORY-169
 
+Carried from STORY-169 security review: no capture may upload under a member other than the one who captured it; STORY-171 must remove capture uploads or enforce this.
+
 ## Definition of Ready checklist
 - [x] Goal + Part I links
 - [x] Numbered REQs with Given/When/Then incl. unhappy paths

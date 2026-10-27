@@ -3,7 +3,7 @@ id: STORY-169
 epic: EPIC-17
 title: Manual entries are saved on the phone and no sign-in or sign-out can erase them
 phase: 2
-status: IN_PROGRESS
+status: DONE
 risk_tier: high
 size: M
 modules: [android]

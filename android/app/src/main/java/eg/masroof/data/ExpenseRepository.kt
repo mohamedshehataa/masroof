@@ -3,6 +3,7 @@ package eg.masroof.data
 import androidx.room.withTransaction
 import eg.masroof.core.CairoTime
 import eg.masroof.core.Money
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -87,6 +89,7 @@ class DefaultExpenseRepository
         private val clock: Clock,
         private val ids: IdFactory,
         private val signal: LocalDataSignal,
+        private val eraseLock: EraseLock = EraseLock(),
     ) : ExpenseRepository {
         private val converter = OutboxConverter(db, clock, ids)
 
@@ -116,35 +119,38 @@ class DefaultExpenseRepository
             // Today: the save instant. Another day: Cairo noon of that day, and the time is not known (REQ-EXP-043).
             val today = entry.date == CairoTime.today(clock.instant())
             val occurredAt = if (today) now else CairoTime.noonOf(entry.date).toEpochMilli()
-            db.withTransaction {
-                db.expenses().insert(
-                    ExpenseEntity(
-                        id = id,
-                        amountMinor = entry.amount.amountMinor,
-                        currency = entry.amount.currency,
-                        occurredAtMillis = occurredAt,
-                        merchant = null,
-                        categoryId = entry.categoryId,
-                        accountId = entry.accountId,
-                        notes = entry.notes,
-                        pending = false,
-                        source = CHANNEL_MANUAL,
-                        createdAtMillis = now,
-                        updatedAtMillis = now,
-                        timeKnown = today,
-                    ),
-                )
-                db.sources().insert(
-                    ExpenseSourceEntity(
-                        id = sourceId,
-                        expenseId = id,
-                        channel = CHANNEL_MANUAL,
-                        localSourceId = id,
-                        receivedAtMillis = now,
-                        senderId = null,
-                        instrumentLast4 = null,
-                    ),
-                )
+            // Waits for a running erase or start-up recovery, so the entry lands after it and is never wiped by it.
+            eraseLock.mutex.withLock {
+                db.withTransaction {
+                    db.expenses().insert(
+                        ExpenseEntity(
+                            id = id,
+                            amountMinor = entry.amount.amountMinor,
+                            currency = entry.amount.currency,
+                            occurredAtMillis = occurredAt,
+                            merchant = null,
+                            categoryId = entry.categoryId,
+                            accountId = entry.accountId,
+                            notes = entry.notes,
+                            pending = false,
+                            source = CHANNEL_MANUAL,
+                            createdAtMillis = now,
+                            updatedAtMillis = now,
+                            timeKnown = today,
+                        ),
+                    )
+                    db.sources().insert(
+                        ExpenseSourceEntity(
+                            id = sourceId,
+                            expenseId = id,
+                            channel = CHANNEL_MANUAL,
+                            localSourceId = id,
+                            receivedAtMillis = now,
+                            senderId = null,
+                            instrumentLast4 = null,
+                        ),
+                    )
+                }
             }
             signal.changed()
             return id

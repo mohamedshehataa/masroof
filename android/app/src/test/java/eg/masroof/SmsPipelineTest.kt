@@ -92,14 +92,26 @@ internal class MemorySettings(
 internal class MemoryGate(
     var open: Boolean = true,
 ) : CaptureGate {
+    var current: eg.masroof.ingest.EraseStage? = null
+
     override fun isOpen() = open
 
     override fun open() {
         open = true
+        current = null
     }
 
     override fun close() {
         open = false
+        current = null
+    }
+
+    override fun stage() = current ?: if (open) eg.masroof.ingest.EraseStage.NONE else eg.masroof.ingest.EraseStage.ERASING
+
+    override fun setStage(stage: eg.masroof.ingest.EraseStage): Boolean {
+        current = stage
+        open = stage == eg.masroof.ingest.EraseStage.NONE
+        return true
     }
 }
 

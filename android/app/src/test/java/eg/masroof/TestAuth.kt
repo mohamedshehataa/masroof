@@ -102,6 +102,13 @@ class FakeWiper(
 ) : LocalDataWiper {
     var wipes = 0
     var failWith: Exception? = null
+    val recovered = mutableListOf<eg.masroof.ingest.EraseStage>()
+    var recoverGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    override suspend fun recover(stage: eg.masroof.ingest.EraseStage) {
+        recoverGate?.await()
+        recovered += stage
+    }
 
     override suspend fun counts() =
         eg.masroof.data.auth

@@ -1,5 +1,6 @@
 package eg.masroof.ingest
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
@@ -10,10 +11,21 @@ import java.security.SecureRandom
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+/** Where "Erase all data" stands. Persisted, so a crash mid-erase is recognised at the next start. */
+enum class EraseStage {
+    NONE,
+
+    /** Set before the database transaction: it may or may not have committed. Recovery reruns the whole (idempotent) wipe. */
+    ERASING,
+
+    /** Set right after the commit: the tables are final. Recovery runs the clean-up only and never touches tables. */
+    CLEANUP,
+}
+
 /**
  * The erase-in-progress flag (ADR-0009 D3). Capture no longer depends on a session: it is open unless "Erase all data" is
- * running, which closes it first and reopens it at the end. The receiver, the listener and the pipeline's write transaction all
- * check it, so a job that was in flight during the erase writes nothing. STORY-171 turns this into the "capture enabled" setting.
+ * running ([EraseStage] is not NONE). The receiver, the listener and the pipeline's write transaction all check it, so a job
+ * that was in flight during the erase writes nothing. STORY-171 turns this into the "capture enabled" setting.
  */
 interface CaptureGate {
     fun isOpen(): Boolean
@@ -21,6 +33,14 @@ interface CaptureGate {
     fun open()
 
     fun close()
+
+    fun stage(): EraseStage = if (isOpen()) EraseStage.NONE else EraseStage.ERASING
+
+    /** Persists the stage; false when the write failed (the caller treats that as an error). */
+    fun setStage(stage: EraseStage): Boolean {
+        if (stage == EraseStage.NONE) open() else close()
+        return true
+    }
 }
 
 /** Used where no capture exists (unit tests of the session). */
@@ -35,15 +55,29 @@ object NoopCaptureGate : CaptureGate {
 class PrefsCaptureGate(
     private val prefs: SharedPreferences,
 ) : CaptureGate {
-    override fun isOpen() = !prefs.getBoolean(CLOSED, false)
+    override fun isOpen() = stage() == EraseStage.NONE
 
-    override fun open() = prefs.edit(commit = true) { putBoolean(CLOSED, false) }
+    override fun stage(): EraseStage =
+        prefs.getString(STAGE, null)?.let { name -> EraseStage.entries.firstOrNull { it.name == name } } ?: EraseStage.NONE
 
-    override fun close() = prefs.edit(commit = true) { putBoolean(CLOSED, true) }
+    @SuppressLint("UseKtx") // the KTX edit() hides the commit() result, which this must return
+    override fun setStage(stage: EraseStage): Boolean =
+        prefs
+            .edit()
+            .putString(STAGE, stage.name)
+            .commit()
+
+    override fun open() {
+        setStage(EraseStage.NONE)
+    }
+
+    override fun close() {
+        setStage(EraseStage.ERASING)
+    }
 
     private companion object {
         // A new key: the old "capture_open" flag followed the session and must not decide anything any more.
-        const val CLOSED = "capture_closed"
+        const val STAGE = "erase_stage"
     }
 }
 

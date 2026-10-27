@@ -37,6 +37,7 @@ import eg.masroof.ingest.CaptureData
 import eg.masroof.ingest.CapturedActions
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
+import eg.masroof.ingest.EraseStage
 import eg.masroof.ingest.ExpenseListRefresher
 import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.PrefsCaptureData
@@ -246,7 +247,7 @@ class LocalSafetyRound1Test {
         }
 
     @Test
-    fun `REQ-AND-132 a clean-up step that fails after the commit keeps capture closed and reports Incomplete, the next start finishes`() =
+    fun `REQ-AND-132 after a partial erase an entry added later survives the restart and only the clean-up is finished`() =
         runTest {
             db.expenses().insert(ExpenseEntity("e1", 100, "EGP", 1, null, null, null, null, pending = false))
             val gate = MemoryGate()
@@ -255,14 +256,76 @@ class LocalSafetyRound1Test {
                 wiper(gate, capture).wipe()
                 fail("expected PartialEraseException")
             } catch (expected: PartialEraseException) {
-                // data is gone, flag stays closed
+                // data is gone, stage stays CLEANUP
             }
             assertEquals(0, db.expenses().count())
+            assertEquals(EraseStage.CLEANUP, gate.stage())
             assertFalse(gate.isOpen())
+            // the user adds an entry before the next start
+            db.expenses().insert(ExpenseEntity("later", 500, "EGP", 2, null, null, null, null, pending = false))
             capture.failClear = false
             DataEraser(wiper(gate, capture), sessionManager(), gate, CoroutineScope(Dispatchers.Unconfined)).recoverInterrupted()!!.join()
-            assertTrue(gate.isOpen())
+            assertEquals("the entry survives", listOf("later"), db.expenses().all().map { it.id })
             assertEquals(1, capture.cleared)
+            assertEquals(EraseStage.NONE, gate.stage())
+            assertTrue(gate.isOpen())
+        }
+
+    @Test
+    fun `REQ-AND-132 a stage that cannot be saved stops the erase before anything is deleted`() =
+        runTest {
+            db.expenses().insert(ExpenseEntity("e1", 100, "EGP", 1, null, null, null, null, pending = false))
+            val gate =
+                object : eg.masroof.ingest.CaptureGate {
+                    override fun isOpen() = true
+
+                    override fun open() = Unit
+
+                    override fun close() = Unit
+
+                    override fun setStage(stage: EraseStage) = false
+                }
+            val memory = MemoryGate()
+            try {
+                RoomDataWiper(
+                    db,
+                    NoInsightsCache,
+                    androidx.work.WorkManager.getInstance(context),
+                    Dispatchers.Unconfined,
+                    Probe(),
+                    eg.masroof.ingest.NoCapturedNotifier,
+                    gate,
+                    tmp.newFolder(),
+                    tmp.newFolder(),
+                ).wipe()
+                fail("expected the failed write to be an error")
+            } catch (expected: IllegalStateException) {
+                // nothing was changed
+            }
+            assertEquals(1, db.expenses().count())
+            assertTrue(memory.isOpen())
+        }
+
+    @Test
+    fun `REQ-AND-132 a save made while the start-up recovery runs waits for it and is not wiped`() =
+        runTest {
+            val wipe = FakeWiper().apply { recoverGate = kotlinx.coroutines.CompletableDeferred() }
+            val gate = MemoryGate(open = false) // stage ERASING: the last erase was cut short
+            val lock =
+                eg.masroof.data.auth
+                    .EraseLock()
+            val eraser = DataEraser(wipe, sessionManager(), gate, CoroutineScope(Dispatchers.Unconfined), lock)
+            val job = eraser.recoverInterrupted()!!
+            val repo = DefaultExpenseRepository(db, clock, UuidIdFactory(), LocalDataSignal(), lock)
+            val saving = launch { repo.add(NewExpense(Money(500), LocalDate.of(2026, 10, 27), null, null, null)) }
+            runCurrent()
+            assertTrue("the save waits for recovery", saving.isActive)
+            assertEquals(0, db.expenses().count())
+            wipe.recoverGate!!.complete(Unit)
+            job.join()
+            saving.join()
+            assertEquals(listOf(EraseStage.ERASING), wipe.recovered)
+            assertEquals("the entry is saved after the recovery and stays", 1, db.expenses().count())
         }
 
     @Test
