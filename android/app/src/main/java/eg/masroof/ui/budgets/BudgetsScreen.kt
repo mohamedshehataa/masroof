@@ -252,7 +252,12 @@ private fun BudgetDialog(
     onDismiss: () -> Unit,
 ) {
     val style = LocalMoneyStyle.current
-    var categoryId by rememberSaveable { mutableStateOf(editing?.categoryId) }
+    // a new budget starts on a scope that has none yet, never on "All spending" when that already exists
+    var categoryId by rememberSaveable {
+        mutableStateOf(
+            editing?.categoryId ?: if (editing == null && hasTotal) categories.firstOrNull { it.id !in takenCategoryIds }?.id else null,
+        )
+    }
     var amount by rememberSaveable {
         mutableStateOf(editing?.limit?.let { plainAmount(it) }.orEmpty())
     }

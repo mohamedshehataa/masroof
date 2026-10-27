@@ -7,6 +7,7 @@ import eg.masroof.api.models.BudgetPeriod
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.ExpenseRepository
+import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.budgets.BudgetDraft
 import eg.masroof.data.budgets.BudgetsRepository
 import eg.masroof.data.budgets.MutationOutcome
@@ -60,6 +61,9 @@ class BudgetsViewModel
         private val status = MutableStateFlow(LoadStatus.LOADING)
         private val form = MutableStateFlow(Form())
 
+        /** Scopes (category + period) whose last create ended without an answer (offline or timed out). */
+        private val unansweredScopes = mutableSetOf<Pair<String?, BudgetPeriod>>()
+
         private data class Form(
             val saving: Boolean = false,
             val error: BudgetError? = null,
@@ -101,26 +105,43 @@ class BudgetsViewModel
                 val rows = state.value.rows
                 val period = rows.firstOrNull { it.id == editingId }?.period ?: BudgetPeriod.MONTHLY
                 val draft = BudgetDraft(categoryId, minor, householdCurrency(rows), rollover, period)
+                val scope = draft.categoryId to draft.period
                 var outcome = if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
-                if (editingId == null && outcome == MutationOutcome.Duplicate) outcome = adoptExisting(draft)
+                if (editingId == null) {
+                    // a create that got no answer may still have gone through; a later 409 for that scope is then ours
+                    val unanswered = outcome == MutationOutcome.Offline
+                    if (outcome == MutationOutcome.Duplicate && scope in unansweredScopes) outcome = adoptExisting(draft)
+                    if (unanswered) {
+                        unansweredScopes += scope
+                    } else if (outcome != MutationOutcome.Duplicate) {
+                        unansweredScopes -= scope
+                    }
+                }
                 form.value = Form(error = outcome.toError())
                 if (outcome == MutationOutcome.Ok) onSaved()
             }
         }
 
         /**
-         * A create the server refused as a duplicate usually means an earlier attempt (one that timed out on this side) did
-         * go through. Look at the fresh list: when that budget exists, bring it to what the user entered and call it saved.
+         * A create the server refused as a duplicate, for a scope whose earlier create from this app got no answer, most likely
+         * did go through. Look at the fresh list: when that budget exists, bring it to what the user entered and call it saved.
+         * Any other duplicate is a budget the user did not mean to touch and stays an error.
          */
         private suspend fun adoptExisting(draft: BudgetDraft): MutationOutcome {
-            repository.refresh()
+            // only a fresh list counts: a stale cached row must never be taken for the server's budget
+            if (repository.refresh() != RefreshOutcome.Ok) return MutationOutcome.Duplicate
             val rows =
                 repository
                     .observe()
                     .first()
                     ?.toRows(state.value.categories)
                     .orEmpty()
-            val existing = rows.firstOrNull { it.categoryId == draft.categoryId && it.period == draft.period }
+            val existing =
+                rows.firstOrNull {
+                    it.categoryId == draft.categoryId &&
+                        it.period == draft.period &&
+                        it.limit.currency == draft.currency
+                }
             return when {
                 existing == null -> MutationOutcome.Duplicate
                 existing.limit.amountMinor == draft.amountMinor && existing.rollover == draft.rollover -> MutationOutcome.Ok
