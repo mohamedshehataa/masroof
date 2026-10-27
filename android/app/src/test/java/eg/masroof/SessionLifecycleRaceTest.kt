@@ -8,12 +8,14 @@ import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.auth.SessionState
 import eg.masroof.data.remote.newAuthClient
 import eg.masroof.ingest.NoopCaptureGate
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -100,6 +102,15 @@ class SessionLifecycleRaceTest {
         )
     }
 
+    /** The discarded session is revoked in the background, so wait (bounded) for the server to see it. */
+    private fun awaitRevoked(token: String): Boolean =
+        runBlocking(Dispatchers.Default) {
+            withTimeoutOrNull(10_000) {
+                while (revoked.none { it.contains(token) }) delay(20)
+                true
+            } ?: false
+        }
+
     @Test(timeout = 30_000)
     fun `REQ-AND-007 a refresh still in flight when the user logs out cannot bring the session back`() {
         val store = FakeSessionStore(LoadedSession.Found(session()))
@@ -115,7 +126,7 @@ class SessionLifecycleRaceTest {
         assertEquals(SessionState.SignedOut(), sm.state.value)
         runBlocking { assertNull(sm.accessToken()) }
         assertTrue(revoked.any { it.contains("refresh-1") })
-        assertTrue("the session the late reply created is revoked", revoked.any { it.contains("refresh-2") })
+        assertTrue("the session the late reply created is revoked", awaitRevoked("refresh-2"))
     }
 
     @Test(timeout = 30_000)
@@ -132,7 +143,7 @@ class SessionLifecycleRaceTest {
         }
         assertEquals(SessionState.SignedIn("Other"), sm.state.value)
         assertEquals("other-refresh", (store.stored as LoadedSession.Found).session.refreshToken)
-        assertTrue(revoked.any { it.contains("refresh-2") })
+        assertTrue(awaitRevoked("refresh-2"))
     }
 
     @Test
@@ -150,4 +161,34 @@ class SessionLifecycleRaceTest {
             assertEquals(1, remote.refreshes)
             assertTrue(results.all { it == null })
         }
+
+    @Test(timeout = 60_000)
+    fun `REQ-AND-007 ten threads asking at once while a failing refresh is in flight send exactly one refresh`() {
+        repeat(40) {
+            val gate = CompletableDeferred<Unit>()
+            val remote =
+                FakeAuthRemote().apply {
+                    refreshResult = {
+                        gate.await()
+                        AuthResult.Network
+                    }
+                }
+            val sm = TestAuth.manager(FakeSessionStore(LoadedSession.Found(session())), remote)
+            runBlocking(Dispatchers.Default) {
+                val go = CompletableDeferred<Unit>()
+                val callers =
+                    (1..10).map {
+                        async {
+                            go.await()
+                            sm.refreshAfter("access-1")
+                        }
+                    }
+                go.complete(Unit)
+                delay(30) // every caller is now waiting on the in-flight refresh
+                gate.complete(Unit)
+                assertTrue(callers.awaitAll().all { it == null })
+            }
+            assertEquals(1, remote.refreshes)
+        }
+    }
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -218,7 +219,7 @@ class SessionManager
             // starting N serial attempts, each of which after a lost reply would replay a spent refresh token).
             val flight =
                 synchronized(flightLock) {
-                    inFlight?.takeIf { it.stale == staleToken && it.result.isActive }
+                    inFlight?.takeIf { it.stale == staleToken && !it.result.isCompleted }
                         ?: Flight(staleToken, refreshScope.async(start = CoroutineStart.LAZY) { refreshExclusive(staleToken) })
                             .also { inFlight = it }
                 }
@@ -243,8 +244,8 @@ class SessionManager
 
         private suspend fun refreshExclusive(staleToken: String?): String? =
             refreshMutex.withLock {
-                val startGeneration = commitLock.withLock { generation }
-                val session = current ?: return@withLock null
+                val (startGeneration, session) = commitLock.withLock { generation to current }
+                if (session == null) return@withLock null
                 if (staleToken != null && session.accessToken != staleToken) return@withLock session.accessToken
                 val base = settings.current().serverUrl
                 when (val result = remote.refresh(base, session.refreshToken)) {
@@ -277,7 +278,8 @@ class SessionManager
                     true
                 }
             if (committed) return fresh.accessToken
-            withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) { remote.logout(base, fresh.accessToken, fresh.refreshToken) }
+            // Revoked in the background, after refreshMutex is released: a fresh sign-in's first refresh must not wait for it.
+            refreshScope.launch { withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) { remote.logout(base, fresh.accessToken, fresh.refreshToken) } }
             return null
         }
 
