@@ -57,6 +57,7 @@ fun HomeRoute(
     onOpenBudgets: () -> Unit = {},
     budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
     captured: CapturedViewModel = hiltViewModel(),
+    onOpenExpense: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val insight by insightsViewModel.state.collectAsStateWithLifecycle()
@@ -78,6 +79,7 @@ fun HomeRoute(
         onOpenBudgets = onOpenBudgets,
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
+        onOpenExpense = onOpenExpense,
     )
     StopLearningDialog(captured)
 }
@@ -96,6 +98,7 @@ fun HomeContent(
     onOpenBudgets: () -> Unit = {},
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
+    onOpenExpense: ((String) -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SpentCard(state, insight)
@@ -122,6 +125,7 @@ fun HomeContent(
                         onDeleteEntry = onDeleteEntry,
                         capturedLocalId = capturedIds[it.id],
                         onUndoCaptured = onUndoCaptured,
+                        onOpen = onOpenExpense,
                     )
                 }
             }

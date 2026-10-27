@@ -222,6 +222,10 @@ class ApiRemoteSource
         /** The generated auth API (invites) on the authenticated client. */
         suspend fun authApi(): AuthApi = retrofit().create(AuthApi::class.java)
 
+        suspend fun expensesApi(): ExpensesApi = retrofit().create(ExpensesApi::class.java)
+
+        fun entityOf(expense: Expense): ExpenseEntity = expense.toEntity()
+
         suspend fun membersApi(): MembersApi = retrofit().create(MembersApi::class.java)
 
         /** The generated budgets API on the authenticated client. */

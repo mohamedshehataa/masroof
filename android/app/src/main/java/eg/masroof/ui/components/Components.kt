@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -196,14 +197,18 @@ fun ExpenseListItem(
     onDeleteEntry: (String) -> Unit = {},
     capturedLocalId: String? = null,
     onUndoCaptured: (String) -> Unit = {},
+    onOpen: ((String) -> Unit)? = null,
 ) {
     val style = LocalMoneyStyle.current
     val categoryName =
         row.category?.let { if (style.arabic) it.nameAr else it.nameEn } ?: stringResource(R.string.uncategorized)
     val title = row.merchant ?: row.notes ?: stringResource(R.string.expense_fallback_title)
     val date = DateFormat.shortDate(row.date, style.arabic, style.digits)
+    // Only rows the server knows open the edit screen; queued or failed local rows keep Retry / Delete.
+    val openLabel = stringResource(R.string.edit_open)
+    val open = onOpen != null && !row.pending && !row.failed
     Card(
-        modifier.fillMaxWidth(),
+        (if (open) modifier.clickable(onClickLabel = openLabel) { onOpen(row.id) } else modifier).fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {

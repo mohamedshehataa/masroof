@@ -34,6 +34,9 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ExpenseEntity)
 
+    @Query("SELECT * FROM expense WHERE id = :id")
+    suspend fun find(id: String): ExpenseEntity?
+
     @Query("DELETE FROM expense WHERE id = :id")
     suspend fun delete(id: String)
 

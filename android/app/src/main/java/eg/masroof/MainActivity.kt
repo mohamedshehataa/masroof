@@ -39,6 +39,7 @@ import eg.masroof.data.auth.SessionState
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.budgets.BudgetsRoute
+import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
@@ -65,6 +66,7 @@ private enum class Tab(
 
 private const val ADD_ROUTE = "add"
 private const val BUDGETS_ROUTE = "budgets"
+private const val EDIT_ROUTE = "edit/{id}"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 
@@ -145,7 +147,7 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
             }
         },
         floatingActionButton = {
-            if (destination?.route != ADD_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
+            if (destination?.route != ADD_ROUTE && destination?.route != EDIT_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
                 FloatingActionButton(onClick = { nav.navigate(ADD_ROUTE) }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
@@ -158,11 +160,13 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
                     onSeeAll = { nav.navigate(Tab.Transactions.route) },
                     onOpenInsights = { nav.navigate(Tab.Insights.route) },
                     onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
+                    onOpenExpense = { id -> nav.navigate("edit/$id") },
                 )
             }
             composable(Tab.Insights.route) { InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }) }
             composable(BUDGETS_ROUTE) { BudgetsRoute() }
-            composable(Tab.Transactions.route) { TransactionsRoute() }
+            composable(Tab.Transactions.route) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
+            composable(EDIT_ROUTE) { EditExpenseRoute(onDone = { nav.popBackStack() }) }
             composable(Tab.Settings.route) {
                 SettingsRoute(onToggleLanguage = onToggleLanguage, onOpenReview = { nav.navigate(REVIEW_ROUTE) })
             }

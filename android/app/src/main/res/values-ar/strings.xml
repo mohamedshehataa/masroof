@@ -274,4 +274,28 @@
         <item quantity="many">%1$s يومًا متبقيًا</item>
         <item quantity="other">%1$s يوم متبقٍ</item>
     </plurals>
+
+    <string name="edit_open">افتح للتأكيد أو التعديل</string>
+    <string name="edit_title">تعديل العملية</string>
+    <string name="edit_type">النوع</string>
+    <string name="edit_type_expense">مصروف</string>
+    <string name="edit_type_income">دخل</string>
+    <string name="edit_type_transfer">تحويل</string>
+    <string name="edit_merchant">التاجر أو الوصف</string>
+    <string name="edit_source">المصدر: %1$s</string>
+    <string name="source_manual">يدوي</string>
+    <string name="edit_status_pending">في انتظار المراجعة</string>
+    <string name="edit_status_confirmed">مؤكدة</string>
+    <string name="edit_confirm">تأكيد</string>
+    <string name="edit_save">حفظ التعديلات</string>
+    <string name="edit_delete">حذف</string>
+    <string name="edit_cancel">إلغاء</string>
+    <string name="edit_delete_title">تحذف العملية دي؟</string>
+    <string name="edit_delete_body">هتتشال من القايمة والإجماليات.</string>
+    <string name="edit_error_offline">ماقدرناش نحفظ، اتأكد من الاتصال. تعديلاتك لسه موجودة.</string>
+    <string name="edit_error_failed">ماقدرناش نحفظ. حاول تاني.</string>
+    <string name="edit_error_invalid">السيرفر ماقبلش القيم دي. راجعها وحاول تاني.</string>
+    <string name="edit_error_sign_in">سجّل الدخول مجددًا - انتهت جلستك. تعديلاتك لسه موجودة.</string>
+    <string name="edit_changed_elsewhere">العملية دي اتغيّرت من مكان تاني. بنعرض آخر نسخة، راجعها واحفظ تاني.</string>
+    <string name="edit_working">جارٍ التنفيذ…</string>
 </resources>
