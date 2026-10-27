@@ -52,7 +52,8 @@ data class AnalyticsPeriod(
     fun daysLeft(today: LocalDate): Int = lengthDays() - elapsedDays(today)
 
     companion object {
-        private val SPEC = Regex("^(\\d{4})-(?:(\\d{2})|W(\\d{2}))$")
+        // [0-9], not \d: Android's ICU regex counts Arabic-Indic digits as \d, the server does not.
+        private val SPEC = Regex("^([0-9]{4})-(?:([0-9]{2})|W([0-9]{2}))$")
 
         /**
          * Resolves `current`, `previous`, `YYYY-MM` or `YYYY-Www`.

@@ -69,7 +69,7 @@ class AnalyticsPeriodTest {
 
     @Test
     fun `REQ-AN-140 malformed or non-existent periods are rejected`() {
-        for (spec in listOf("", "now", "2026-13", "2026-00", "2026-W00", "2026-W54", "2025-W53", "26-10", "abc")) {
+        for (spec in listOf("", "now", "2026-13", "2026-00", "2026-W00", "2026-W54", "2025-W53", "26-10", "abc", "٢٠٢٦-١٠")) {
             assertThrows(spec, IllegalArgumentException::class.java) {
                 AnalyticsPeriod.parse(spec, d(2026, 10, 1), 1)
             }
