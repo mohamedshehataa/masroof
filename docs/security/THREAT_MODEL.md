@@ -134,7 +134,7 @@ In STORY-143 the endpoint is reachable only from the compose network and, throug
 
 | STRIDE | Threat | Mitigation | REQ | Status |
 |---|---|---|---|---|
-| S | Session theft (XSS, token in localStorage) | Access JWT 15 min in memory; refresh token in `HttpOnly; Secure; SameSite=Strict` cookie with rotation + reuse detection | REQ-SEC-015 | Planned |
+| S | Session theft (XSS, token in localStorage) | Access JWT 15 min in memory; refresh token in `HttpOnly; Secure; SameSite=Strict` cookie with rotation + reuse detection (60 s, max 5 grace for duplicate refreshes: REQ-SEC-063/064) | REQ-SEC-015 | Planned |
 | S | CSRF on cookie-based refresh | SameSite=Strict + Origin check; CORS allowlist = `WEB_BASE_URL` only | REQ-SEC-016 | Planned |
 | T | IDOR: member A edits household B's expense | Every repository query scoped by `household_id` from the token; ArchUnit rule + integration tests with two households | REQ-SEC-023 | Planned |
 | I | XSS via merchant names / notes from WhatsApp | React escaping, strict CSP (no inline scripts), DOMPurify for any rich text | REQ-SEC-001 | Planned |

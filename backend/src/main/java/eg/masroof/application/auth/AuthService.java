@@ -32,6 +32,13 @@ public class AuthService {
 
   private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
   private static final Duration REFRESH_TTL = Duration.ofDays(30);
+
+  /** A rotated token re-presented within this long of its first rotation is a retry, not theft. */
+  static final Duration REFRESH_REUSE_GRACE = Duration.ofSeconds(60);
+
+  /** Grace re-issues allowed per rotated token before it counts as reuse. */
+  static final int REFRESH_GRACE_MAX_REISSUES = 5;
+
   private static final int MAX_TOKEN_CHARS = 128;
   private static final int MAX_FAILURES = 10;
   private static final Duration WINDOW = Duration.ofMinutes(15);
@@ -135,7 +142,13 @@ public class AuthService {
     }
     String next = newRefreshToken();
     Outcome outcome =
-        refreshTokens.rotate(sha256(presented), sha256(next), now.plus(REFRESH_TTL), now);
+        refreshTokens.rotate(
+            sha256(presented),
+            sha256(next),
+            now.plus(REFRESH_TTL),
+            now,
+            REFRESH_REUSE_GRACE,
+            REFRESH_GRACE_MAX_REISSUES);
     if (outcome instanceof Outcome.Rotated rotated) {
       Account account =
           accounts

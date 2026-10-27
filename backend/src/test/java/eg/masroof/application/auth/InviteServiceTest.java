@@ -136,7 +136,13 @@ class InviteServiceTest {
         public void insertNewFamily(UUID userId, String tokenHash, Instant expiresAt) {}
 
         @Override
-        public Outcome rotate(String oldHash, String newHash, Instant newExpiresAt, Instant now) {
+        public Outcome rotate(
+            String oldHash,
+            String newHash,
+            Instant newExpiresAt,
+            Instant now,
+            Duration reuseGrace,
+            int maxGraceReissues) {
           return new Outcome.Invalid();
         }
 

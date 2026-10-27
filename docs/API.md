@@ -82,7 +82,7 @@ Request body (`application/json`): `LoginRequest`
 - Requirements: REQ-SEC-001
 - Auth: none
 
-Exchanges a valid refresh token for a new token pair. The old refresh token is revoked (rotation); reuse of a rotated token revokes the whole family.
+Exchanges a valid refresh token for a new token pair. The old refresh token is revoked (rotation); reuse of a rotated token revokes the whole family, except that a token rotated less than 60 s ago (at most 5 times) gets a fresh pair instead, so duplicate or retried refreshes do not sign the user out.
 
 Request body (`application/json`): `RefreshRequest`
 
