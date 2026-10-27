@@ -21,6 +21,7 @@ import eg.masroof.data.db.MIGRATION_4_5
 import eg.masroof.data.db.MIGRATION_5_6
 import eg.masroof.data.db.MIGRATION_6_7
 import eg.masroof.data.db.MIGRATION_7_8
+import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.insights.InsightsCache
@@ -94,7 +95,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration24.db")
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -131,7 +132,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration34.db")
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -172,7 +173,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration45.db")
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -201,7 +202,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration56.db")
-                    .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {
@@ -241,7 +242,7 @@ class RoomMigrationTest {
             val db =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration67.db")
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {

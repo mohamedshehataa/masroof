@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MIGRATION_7_8
+import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.SmsUploadResult
@@ -243,7 +244,7 @@ class CapturedRaceTest {
             val migrated =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration78.db")
-                    .addMigrations(MIGRATION_7_8)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
                     .allowMainThreadQueries()
                     .build()
             try {

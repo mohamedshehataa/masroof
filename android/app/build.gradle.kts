@@ -85,6 +85,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // MigrationTestHelper (Robolectric) reads the exported schema JSONs as assets. Debug builds only: the release APK does not carry them.
+    sourceSets {
+        getByName("debug").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 // Robolectric Compose tests need the debug-only ui-test-manifest (it registers ComponentActivity), so they cannot run
@@ -152,6 +157,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(libs.room.testing)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.work.testing)
     testImplementation(libs.snakeyaml)

@@ -25,6 +25,7 @@ import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
+import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.capturedCutoff
 import eg.masroof.data.remote.ExpenseDeleter
 import eg.masroof.ingest.parse.TxKind
@@ -348,6 +349,8 @@ class CapturedActionReceiver : BroadcastReceiver() {
         context: Context,
         intent: Intent,
     ) {
+        // Blocked start: an old notification's button does nothing (no database access, no crash).
+        if (DatabaseStartup.isBlocked()) return
         val graph = EntryPointAccessors.fromApplication(context.applicationContext, CapturedEntryPoint::class.java)
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

@@ -14,6 +14,7 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import eg.masroof.data.ExpenseRepository
+import eg.masroof.data.db.DatabaseStartup
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,6 +50,7 @@ class ForegroundSync
         private val scheduler: SyncScheduler,
     ) {
         suspend fun onForeground() {
+            if (DatabaseStartup.isBlocked()) return
             if (repository.hasRetryable()) scheduler.scheduleOnOpen()
         }
     }
@@ -106,6 +108,8 @@ class OutboxSyncWorker
         private val scheduler: SyncScheduler,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
+            // Blocked start (REQ-AND-127/128): the database is not touched; WorkManager retries with its own backoff.
+            if (DatabaseStartup.isBlocked()) return Result.retry()
             val report = repository.syncOutbox()
             if (report.retry) {
                 val attempt = inputData.getInt(KEY_ATTEMPT, 0)

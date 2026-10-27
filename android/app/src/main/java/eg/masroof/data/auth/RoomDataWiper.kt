@@ -4,6 +4,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.insights.InsightsCache
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.CaptureData
@@ -48,7 +49,11 @@ class RoomDataWiper
             withContext(io) { capture.clear() }
             // nothing of the old account stays on the lock screen: every "Recorded ... Undo" notification goes
             notifier.cancelAll()
-            withContext(io) { db.clearAllTables() }
+            withContext(io) {
+                db.clearAllTables()
+                // The defaults (categories, "Me") are not session data: a wipe must not leave the phone without them.
+                DefaultSeed.seed(db.openHelper.writableDatabase)
+            }
             withContext(io) { insights.clear() }
         }
 

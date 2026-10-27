@@ -10,6 +10,7 @@ import eg.masroof.data.auth.LoadedSession
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MIGRATION_7_8
+import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.ExpenseDeleter
@@ -273,7 +274,7 @@ class CapturedPairingTest {
         db =
             Room
                 .databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_7_8)
+                .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
                 .allowMainThreadQueries()
                 .build()
     }

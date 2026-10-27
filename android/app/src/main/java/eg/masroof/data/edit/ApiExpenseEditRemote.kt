@@ -7,6 +7,7 @@ import eg.masroof.api.models.TransactionType
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.HttpFailure
+import eg.masroof.data.remote.serverUuidOrNull
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -58,7 +59,7 @@ internal fun ExpenseChanges.toPatch() =
         type = type?.let { v -> TransactionType.entries.first { it.value == v } },
         amount = amountMinor?.let { Money(it, currency ?: eg.masroof.core.Money.EGP) },
         occurredAt = occurredAtMillis?.let(Instant::fromEpochMilliseconds),
-        categoryId = categoryId?.let(UUID::fromString),
+        categoryId = serverUuidOrNull(categoryId),
         status = status?.let { v -> ExpenseStatus.entries.first { it.value == v } },
         merchantRaw = merchantRaw,
         notes = notes,

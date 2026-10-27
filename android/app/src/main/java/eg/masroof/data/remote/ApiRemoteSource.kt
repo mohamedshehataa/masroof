@@ -57,6 +57,12 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
+/**
+ * A category id is sent to the server only if it is a server UUID. The phone's own default categories (`cat-...`, ADR-0009)
+ * never reach the server: they become "no category".
+ */
+internal fun serverUuidOrNull(id: String?): UUID? = id?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+
 object UuidSerializer : KSerializer<UUID> {
     override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
 
@@ -270,7 +276,7 @@ class ApiRemoteSource
                     type = TransactionType.EXPENSE,
                     amount = Money(item.amountMinor, item.currency),
                     occurredAt = Instant.fromEpochMilliseconds(item.occurredAtMillis),
-                    categoryId = item.categoryId?.let(UUID::fromString),
+                    categoryId = serverUuidOrNull(item.categoryId),
                     paymentAccountId = item.accountId?.let(UUID::fromString),
                     paymentMethod = PaymentMethod.UNKNOWN,
                     notes = item.notes,
@@ -356,6 +362,10 @@ class ApiRemoteSource
                         ?.value,
                 type = type.value,
                 status = status.value,
+                // A row from the server keeps the server's id (ADR-0009 D3); the server sends no creation time here.
+                serverId = id.toString(),
+                createdAtMillis = occurredAt.toEpochMilliseconds(),
+                updatedAtMillis = occurredAt.toEpochMilliseconds(),
             )
 
         private fun PaymentAccount.toEntity(): AccountEntity {
