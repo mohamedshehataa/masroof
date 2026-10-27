@@ -36,17 +36,18 @@ class NeverDeleteCallback(
 
 /** The framework open helper with [NeverDeleteCallback] in front of Room's callback. */
 object NeverDeleteOpenHelperFactory : SupportSQLiteOpenHelper.Factory {
-    override fun create(configuration: SupportSQLiteOpenHelper.Configuration): SupportSQLiteOpenHelper {
-        val guarded =
-            SupportSQLiteOpenHelper.Configuration
-                .builder(configuration.context)
-                .name(configuration.name)
-                .callback(NeverDeleteCallback(configuration.callback))
-                .noBackupDirectory(configuration.useNoBackupDirectory)
-                .allowDataLossOnRecovery(configuration.allowDataLossOnRecovery)
-                .build()
-        return NeverDeleteOpenHelper(FrameworkSQLiteOpenHelperFactory().create(guarded))
-    }
+    override fun create(configuration: SupportSQLiteOpenHelper.Configuration): SupportSQLiteOpenHelper =
+        NeverDeleteOpenHelper(FrameworkSQLiteOpenHelperFactory().create(guardedConfiguration(configuration)))
+
+    /** Room's callback behind [NeverDeleteCallback], and recovery that may lose data is never allowed (Room is the only copy). */
+    internal fun guardedConfiguration(configuration: SupportSQLiteOpenHelper.Configuration): SupportSQLiteOpenHelper.Configuration =
+        SupportSQLiteOpenHelper.Configuration
+            .builder(configuration.context)
+            .name(configuration.name)
+            .callback(NeverDeleteCallback(configuration.callback))
+            .noBackupDirectory(configuration.useNoBackupDirectory)
+            .allowDataLossOnRecovery(false)
+            .build()
 }
 
 /** Marker type so a test can tell that the database was built through [NeverDeleteOpenHelperFactory]. */

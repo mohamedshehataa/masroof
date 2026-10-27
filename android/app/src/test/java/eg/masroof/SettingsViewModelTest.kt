@@ -44,7 +44,7 @@ class SettingsViewModelTest {
     @Test
     fun `REQ-AND-017 an invalid server url is flagged and not stored`() =
         runTest {
-            val vm = SettingsViewModel(store, TestAuth.manager(settings = store), FakeWiper())
+            val vm = SettingsViewModel(store, TestAuth.manager(settings = store), TestAuth.eraser())
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             vm.onUrl("masroof.example")
@@ -57,7 +57,7 @@ class SettingsViewModelTest {
     @Test
     fun `REQ-AND-017 a valid url and digit style are stored and reported saved`() =
         runTest {
-            val vm = SettingsViewModel(store, TestAuth.manager(settings = store), FakeWiper())
+            val vm = SettingsViewModel(store, TestAuth.manager(settings = store), TestAuth.eraser())
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             vm.onUrl("https://masroof.example")

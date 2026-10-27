@@ -214,6 +214,7 @@
     <string name="settings_erase_body">ده هيمسح كل المصاريف والإيصالات والعناصر اللي محتاجة مراجعة والصيغ اللي اتعلمها التطبيق من الموبايل ده. مفيش رجوع بعد كده.</string>
     <string name="settings_erase_counts">المصاريف: %1$s - الإيصالات: %2$s</string>
     <string name="settings_erase_confirm">امسح</string>
+    <string name="settings_erase_incomplete">البيانات اتمسحت. آخر خطوة تنضيف هتخلص أول ما التطبيق يشتغل تاني.</string>
     <string name="settings_erase_failed">مقدرناش نمسح، ومفيش حاجة اتغيرت</string>
     <string name="settings_language">اللغة</string>
     <string name="members_title">الأعضاء</string>

@@ -124,7 +124,7 @@ class LoginViewModelTest {
         runTest {
             remote.loginResult = AuthResult.Success(session())
             sm.login("https://masroof.example", "a@b.eg", "pw")
-            val settingsVm = SettingsViewModel(settings, sm, wiper)
+            val settingsVm = SettingsViewModel(settings, sm, TestAuth.eraser(wiper))
             settingsVm.logout()
             assertEquals(listOf("refresh-1"), remote.logoutTokens)
             assertEquals(0, wiper.wipes)

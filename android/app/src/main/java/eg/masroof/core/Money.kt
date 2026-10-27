@@ -120,7 +120,7 @@ object MoneyFormat {
         when (c) {
             in '٠'..'٩' -> '0' + (c - ARABIC_ZERO)
             '٫' -> '.'
-            '٬' -> ','
+            '٬', '،' -> ','
             else -> c
         }
 }

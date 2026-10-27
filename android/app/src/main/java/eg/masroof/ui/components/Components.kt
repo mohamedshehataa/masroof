@@ -205,9 +205,9 @@ fun ExpenseListItem(
     val title =
         row.merchant?.takeIf { it.isNotBlank() } ?: row.notes?.takeIf { it.isNotBlank() } ?: stringResource(R.string.expense_fallback_title)
     val date = DateFormat.shortDate(row.date, style.arabic, style.digits)
-    // Only rows the server knows open the edit screen; queued or failed local rows keep Retry / Delete.
+    // Only rows the server knows open the (server-based) edit screen; local entries do nothing on tap until STORY-170.
     val openLabel = stringResource(R.string.edit_open)
-    val open = onOpen != null && !row.pending && !row.failed
+    val open = onOpen != null && row.serverId != null
     Card(
         (if (open) modifier.clickable(onClickLabel = openLabel) { onOpen(row.id) } else modifier).fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),

@@ -202,6 +202,7 @@
     <string name="settings_erase_body">This deletes every entry, receipt, review item and learned format from this phone. It cannot be undone.</string>
     <string name="settings_erase_counts">Entries: %1$s - Receipts: %2$s</string>
     <string name="settings_erase_confirm">Erase</string>
+    <string name="settings_erase_incomplete">The data was erased. A last clean-up will finish the next time the app starts.</string>
     <string name="settings_erase_failed">Couldn\'t erase, nothing was changed</string>
     <string name="settings_language">Language</string>
     <string name="members_title">Members</string>

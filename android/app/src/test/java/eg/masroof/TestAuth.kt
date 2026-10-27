@@ -114,6 +114,12 @@ class FakeWiper(
 }
 
 object TestAuth {
+    fun eraser(
+        wiper: LocalDataWiper = FakeWiper(),
+        session: SessionManager = manager(),
+    ) = eg.masroof.data.auth
+        .DataEraser(wiper, session, MemoryGate(), kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined))
+
     fun manager(
         store: SessionStore = FakeSessionStore(),
         remote: AuthRemote = FakeAuthRemote(),

@@ -129,3 +129,6 @@ interface LocalDataWiper {
     /** Cancels and awaits capture jobs, clears every table and the receipts folder, then seeds the defaults again. */
     suspend fun wipe()
 }
+
+/** The data is already gone but a clean-up step after the database commit failed; the next start finishes it. */
+class PartialEraseException : Exception("erase finished the database but not every clean-up step")

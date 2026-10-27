@@ -270,7 +270,12 @@ class EraseAndSessionDataTest {
 
     // ---- REQ-AND-132 (the Settings flow)
 
-    private fun settingsVm(wiper: FakeWiper) = SettingsViewModel(FakeSettings(), TestAuth.manager(settings = FakeSettings()), wiper)
+    private fun settingsVm(wiper: FakeWiper) =
+        SettingsViewModel(
+            FakeSettings(),
+            TestAuth.manager(settings = FakeSettings()),
+            TestAuth.eraser(wiper),
+        )
 
     @Test
     fun `REQ-AND-132 the dialog shows the counts and nothing is deleted until the second confirmation`() =

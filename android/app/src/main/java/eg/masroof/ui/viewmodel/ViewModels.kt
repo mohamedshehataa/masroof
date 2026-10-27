@@ -11,8 +11,9 @@ import eg.masroof.data.AppSettings
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.auth.EraseCounts
-import eg.masroof.data.auth.LocalDataWiper
+import eg.masroof.data.auth.PartialEraseException
 import eg.masroof.data.auth.SessionManager
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
@@ -45,6 +46,8 @@ data class ExpenseRow(
     val income: Boolean = false,
     val reviewPending: Boolean = false,
     val transfer: Boolean = false,
+    /** Null for an entry made on this phone: it has no server copy, so it does not open the server-based edit screen. */
+    val serverId: String? = null,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -71,6 +74,7 @@ internal fun toRows(
             income = it.type == "INCOME",
             transfer = it.type == "TRANSFER",
             reviewPending = it.status == "PENDING_REVIEW",
+            serverId = it.serverId,
         )
     }
 }
@@ -231,6 +235,9 @@ sealed interface EraseState {
 
     /** The erase transaction rolled back: nothing was changed. */
     data object Failed : EraseState
+
+    /** The data is erased but a clean-up step failed; it is finished at the next start. */
+    data object Incomplete : EraseState
 }
 
 data class SettingsUiState(
@@ -248,7 +255,7 @@ class SettingsViewModel
     constructor(
         private val settings: SettingsRepository,
         private val session: SessionManager,
-        private val eraser: LocalDataWiper,
+        private val eraser: DataEraser,
     ) : ViewModel() {
         private val draft = MutableStateFlow<SettingsUiState?>(null)
 
@@ -289,9 +296,14 @@ class SettingsViewModel
             if (state.value.erase !is EraseState.Confirm) return
             draft.value = state.value.copy(erase = EraseState.Erasing)
             viewModelScope.launch {
-                val result = runCatching { eraser.wipe() }
+                val result = runCatching { eraser.erase() }
                 result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
-                val outcome = if (result.isSuccess) EraseState.Idle else EraseState.Failed
+                val outcome =
+                    when (result.exceptionOrNull()) {
+                        null -> EraseState.Idle
+                        is PartialEraseException -> EraseState.Incomplete
+                        else -> EraseState.Failed
+                    }
                 draft.value = state.value.copy(erase = outcome)
             }
         }

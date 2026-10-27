@@ -90,7 +90,7 @@ fun SettingsContent(
     EraseDialog(state.erase, actions)
     val effectiveDigits = state.digitStyle ?: LocalMoneyStyle.current.digits
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -141,11 +141,14 @@ fun SettingsContent(
         SectionCard(stringResource(R.string.settings_section_data)) {
             OutlinedButton(
                 onClick = actions.onErase,
-                enabled = state.erase is EraseState.Idle || state.erase is EraseState.Failed,
+                enabled = state.erase !is EraseState.Erasing,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 Text(stringResource(R.string.settings_erase))
+            }
+            if (state.erase is EraseState.Incomplete) {
+                Text(stringResource(R.string.settings_erase_incomplete), color = MaterialTheme.colorScheme.error)
             }
             if (state.erase is EraseState.Failed) {
                 Text(stringResource(R.string.settings_erase_failed), color = MaterialTheme.colorScheme.error)
