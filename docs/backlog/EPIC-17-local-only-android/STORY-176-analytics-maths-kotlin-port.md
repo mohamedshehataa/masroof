@@ -3,7 +3,7 @@ id: STORY-176
 epic: EPIC-17
 title: The phone computes periods and projections exactly like the server did
 phase: 7
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
