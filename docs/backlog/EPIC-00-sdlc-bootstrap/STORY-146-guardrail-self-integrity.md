@@ -22,7 +22,7 @@ A single write to a hook file can no longer silently disable the guardrails (PRO
 |---|---|---|---|
 | F-01 backstop sources `lib.sh` | F-03 | BLOCKER | this story, REQ-OPS-168 |
 | F-02 shared snapshot | F-04 | MAJOR | this story, REQ-OPS-169 |
-| F-03 B13 case-sensitive | F-01 | MAJOR | STORY-148, REQ-OPS-173 |
+| F-03 B13 case-sensitive | F-01 | MAJOR | STORY-148, REQ-OPS-170 |
 | F-04 backtick delete targets | F-02 | MAJOR | STORY-148, REQ-OPS-171 |
 
 **Starting point.** The unverified commit `f54c33a` on local branch `story-001-loop4` (ref present in `.git/packed-refs`) was written for all four findings: a HEAD-anchored self-integrity check that fails closed, per-call snapshots, case-insensitive B13, and command-substitution delete targets. The implementer starts with `git show --stat f54c33a` and takes only the F-01/F-02 parts. Its tests are re-checked against the REQs below, not trusted. (The spec pass on 2026-10-25 had no shell, so the commit's diff was not read for this spec; the REQs come from the verify report's reproductions.)
@@ -129,4 +129,4 @@ STORY-001 (DONE with accepted risk). Independent of STORY-148, which touches onl
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-24 | 1 intake | orchestrator | DRAFT created from STORY-001's accepted residual risk |
-| 2026-10-25 | 1 spec (low tier) | product-analyst | READY — REQ-OPS-168/169 specified from the verify loop-3 reproductions (F-03, F-04 there); REQ-OPS-173/171 (F-03/F-04 here) split to STORY-148 for the size cap; risk_tier low with the security checklist in the combined review |
+| 2026-10-25 | 1 spec (low tier) | product-analyst | READY — REQ-OPS-168/169 specified from the verify loop-3 reproductions (F-03, F-04 there); REQ-OPS-170/171 (F-03/F-04 here) split to STORY-148 for the size cap; risk_tier low with the security checklist in the combined review |
