@@ -20,6 +20,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,12 +30,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -40,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
+import eg.masroof.core.DateFormat
 import eg.masroof.core.MoneyFormat
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.theme.CategoryPalette
@@ -50,6 +60,9 @@ import eg.masroof.ui.viewmodel.EditUiState
 import eg.masroof.ui.viewmodel.TYPE_EXPENSE
 import eg.masroof.ui.viewmodel.TYPE_INCOME
 import eg.masroof.ui.viewmodel.TYPE_TRANSFER
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 @Composable
 fun EditExpenseRoute(
@@ -133,6 +146,9 @@ private fun EditFields(
         when (form.source) {
             "SMS" -> R.string.source_sms
             "PUSH" -> R.string.source_notification
+            "WHATSAPP" -> R.string.source_whatsapp
+            "IOS_SHORTCUT" -> R.string.source_ios_shortcut
+            "UPLOAD" -> R.string.source_upload
             else -> R.string.source_manual
         }
     Text(
@@ -169,16 +185,7 @@ private fun EditFields(
         enabled = !form.busy,
         modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
-        value = form.dateText,
-        onValueChange = actions.onDate,
-        label = { Text(stringResource(R.string.add_date)) },
-        isError = form.dateInvalid,
-        supportingText = { if (form.dateInvalid) Text(stringResource(R.string.add_date_error)) },
-        singleLine = true,
-        enabled = !form.busy,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    DateField(form.date, form.dateInvalid, !form.busy, actions.onDate)
     Text(stringResource(R.string.add_category), style = MaterialTheme.typography.titleSmall)
     ChipRow(
         state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
@@ -249,6 +256,52 @@ private fun EditBar(
                 ) { Text(stringResource(R.string.edit_delete), color = MaterialTheme.colorScheme.error) }
             }
         }
+    }
+}
+
+/** The date as a tappable field that opens a Material 3 date picker; no free-text parsing. Shown per locale and digit setting. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateField(
+    date: LocalDate,
+    invalid: Boolean,
+    enabled: Boolean,
+    onDate: (LocalDate) -> Unit,
+) {
+    val style = LocalMoneyStyle.current
+    var open by remember { mutableStateOf(false) }
+    val label = stringResource(R.string.edit_date)
+    val shown = DateFormat.shortDate(date, style.arabic, style.digits)
+    OutlinedButton(
+        onClick = { open = true },
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = "$label: $shown" },
+    ) {
+        Text("$label: $shown", color = if (invalid) MaterialTheme.colorScheme.error else Color.Unspecified)
+    }
+    if (invalid) {
+        Text(stringResource(R.string.edit_date_error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+    if (open) {
+        // The picker works in UTC midnights; the business date is a plain calendar date (Cairo noon is applied on save).
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { onDate(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) }
+                        open = false
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.edit_date_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { open = false }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.edit_cancel))
+                }
+            },
+        ) { DatePicker(state = pickerState) }
     }
 }
 

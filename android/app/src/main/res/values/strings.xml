@@ -264,6 +264,12 @@
     <string name="edit_merchant">Merchant or label</string>
     <string name="edit_source">Source: %1$s</string>
     <string name="source_manual">Manual</string>
+    <string name="source_whatsapp">WhatsApp</string>
+    <string name="source_ios_shortcut">iPhone Shortcut</string>
+    <string name="source_upload">Receipt upload</string>
+    <string name="edit_date">Date</string>
+    <string name="edit_date_ok">OK</string>
+    <string name="edit_date_error">This date was not accepted</string>
     <string name="edit_status_pending">Pending review</string>
     <string name="edit_status_confirmed">Confirmed</string>
     <string name="edit_confirm">Confirm</string>

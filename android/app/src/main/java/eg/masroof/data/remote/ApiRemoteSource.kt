@@ -343,10 +343,10 @@ class ApiRemoteSource
                 amountMinor = amount.amountMinor,
                 currency = amount.currency,
                 occurredAtMillis = occurredAt.toEpochMilliseconds(),
-                merchant = merchantName ?: merchantRaw,
+                merchant = blankToNull(merchantName ?: merchantRaw),
                 categoryId = categoryId?.toString(),
                 accountId = paymentAccountId?.toString(),
-                notes = notes,
+                notes = blankToNull(notes),
                 pending = false,
                 source =
                     sources

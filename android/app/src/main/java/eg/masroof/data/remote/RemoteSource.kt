@@ -88,3 +88,6 @@ interface ExpenseDeleter {
 object NoExpenseDeleter : ExpenseDeleter {
     override suspend fun deleteExpense(id: String) = false
 }
+
+/** A cleared merchant or note comes back from the server as "": the cache keeps it as absent so titles fall back properly. */
+internal fun blankToNull(text: String?): String? = text?.takeIf { it.isNotBlank() }

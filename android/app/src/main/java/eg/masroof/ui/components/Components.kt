@@ -202,7 +202,8 @@ fun ExpenseListItem(
     val style = LocalMoneyStyle.current
     val categoryName =
         row.category?.let { if (style.arabic) it.nameAr else it.nameEn } ?: stringResource(R.string.uncategorized)
-    val title = row.merchant ?: row.notes ?: stringResource(R.string.expense_fallback_title)
+    val title =
+        row.merchant?.takeIf { it.isNotBlank() } ?: row.notes?.takeIf { it.isNotBlank() } ?: stringResource(R.string.expense_fallback_title)
     val date = DateFormat.shortDate(row.date, style.arabic, style.digits)
     // Only rows the server knows open the edit screen; queued or failed local rows keep Retry / Delete.
     val openLabel = stringResource(R.string.edit_open)

@@ -18,9 +18,11 @@ import eg.masroof.data.edit.fieldOf
 import eg.masroof.data.edit.toPatch
 import eg.masroof.data.remote.HttpFailure
 import eg.masroof.data.remote.apiJson
+import eg.masroof.data.remote.blankToNull
 import eg.masroof.ui.viewmodel.EditError
 import eg.masroof.ui.viewmodel.EditExpenseViewModel
 import eg.masroof.ui.viewmodel.plainAmount
+import eg.masroof.ui.viewmodel.takeCodePoints
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -304,7 +306,7 @@ class EditExpenseViewModelTest {
             vm.onAmount("1500.5")
             vm.onCategory("c2")
             vm.onType("EXPENSE")
-            vm.onDate("2026-10-14")
+            vm.onDate(LocalDate.parse("2026-10-14"))
             vm.save()
             val sent = editor.updates.single()
             assertEquals(150_050L, sent.amountMinor)
@@ -328,14 +330,12 @@ class EditExpenseViewModelTest {
         }
 
     @Test
-    fun `REQ-AND-121 a bad amount or date is flagged and nothing is sent`() =
+    fun `REQ-AND-121 a bad amount is flagged and nothing is sent`() =
         runTest {
             val vm = vm()
             vm.onAmount("abc")
-            vm.onDate("tomorrow")
             vm.save()
             assertTrue(vm.state.value.form.amountInvalid)
-            assertTrue(vm.state.value.form.dateInvalid)
             assertTrue(editor.updates.isEmpty())
         }
 
@@ -414,13 +414,70 @@ class EditExpenseViewModelTest {
     @Test
     fun `REQ-AND-124 a rejected amount is marked on its field`() =
         runTest {
-            editor.outcome = EditOutcome.Invalid("amount")
+            editor.outcome = EditOutcome.Invalid("amount.amountMinor")
             val vm = vm()
             vm.onAmount("5")
             vm.save()
             assertEquals(EditError.INVALID, vm.state.value.form.error)
             assertTrue(vm.state.value.form.amountInvalid)
         }
+
+    @Test
+    fun `REQ-AND-124 the server's nested amount field names mark the amount, occurredAt marks the date`() =
+        runTest {
+            val vm = vm()
+            for (field in listOf("amount.amountMinor", "amount.currency", "amount")) {
+                editor.outcome = EditOutcome.Invalid(field)
+                vm.onAmount("6")
+                vm.save()
+                assertTrue(field, vm.state.value.form.amountInvalid)
+            }
+            editor.outcome = EditOutcome.Invalid("occurredAt")
+            vm.onAmount("7")
+            vm.save()
+            assertTrue(vm.state.value.form.dateInvalid)
+            assertFalse(vm.state.value.form.amountInvalid)
+        }
+
+    @Test
+    fun `REQ-AND-124 an amount above the server maximum is caught before sending`() =
+        runTest {
+            val vm = vm()
+            vm.onAmount("100000000000.01") // 10^13 + 1 minor units
+            vm.save()
+            assertTrue(vm.state.value.form.amountInvalid)
+            assertTrue(editor.updates.isEmpty())
+            vm.onAmount("100000000000")
+            vm.save()
+            assertEquals(10_000_000_000_000L, editor.updates.single().amountMinor)
+        }
+
+    @Test
+    fun `REQ-AND-120 confirm with typed edits sends them plus CONFIRMED, without edits status only`() =
+        runTest {
+            val vm = vm()
+            vm.onCategory("c2")
+            vm.onNotes("kept")
+            vm.confirm()
+            val sent = editor.updates.single()
+            assertEquals("CONFIRMED", sent.status)
+            assertEquals("c2", sent.categoryId)
+            assertEquals("kept", sent.notes)
+        }
+
+    @Test
+    fun `REQ-AND-121 caps count code points and never split an emoji`() {
+        val emoji = "😀"
+        assertEquals(3, emoji.repeat(5).takeCodePoints(3).codePointCount(0, emoji.repeat(3).length))
+        assertEquals(emoji.repeat(3), emoji.repeat(5).takeCodePoints(3))
+        assertEquals("abc", "abc".takeCodePoints(500))
+    }
+
+    @Test
+    fun `REQ-AND-121 a cleared merchant is cached as no merchant, not as blank`() {
+        assertNull(blankToNull("  "))
+        assertEquals("x", blankToNull("x"))
+    }
 
     @Test
     fun `REQ-AND-125 a row that is not in the cache closes the screen`() =

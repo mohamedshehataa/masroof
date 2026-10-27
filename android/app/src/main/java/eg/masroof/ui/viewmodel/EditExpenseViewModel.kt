@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.format.DateTimeParseException
 import javax.inject.Inject
 
 /** Why the last Save / Confirm / Delete did not go through; shown above the buttons. The user's edits stay as typed. */
@@ -30,7 +29,7 @@ data class EditFormState(
     val type: String = TYPE_EXPENSE,
     val amountText: String = "",
     val currency: String = "EGP",
-    val dateText: String = "",
+    val date: LocalDate = LocalDate.of(1970, 1, 1),
     val categoryId: String? = null,
     val merchant: String = "",
     val notes: String = "",
@@ -59,6 +58,14 @@ const val TYPE_TRANSFER = "TRANSFER"
 private const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
 private const val STATUS_CONFIRMED = "CONFIRMED"
 private const val MAX_NOTES = 500
+
+/** The server's ceiling for one amount (ExpenseService.MAX_AMOUNT_MINOR), checked before sending. */
+internal const val MAX_AMOUNT_MINOR = 10_000_000_000_000L
+
+/** At most [n] Unicode code points: a surrogate pair (emoji) is never split. */
+internal fun String.takeCodePoints(n: Int): String =
+    if (codePointCount(0, length) <= n) this else substring(0, offsetByCodePoints(0, n))
+
 private const val MAX_MERCHANT = 200
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val MINOR_PER_MAJOR = 100L
@@ -76,7 +83,7 @@ private fun ExpenseEntity.toForm() =
         type = type,
         amountText = plainAmount(amountMinor),
         currency = currency,
-        dateText = CairoTime.dateOf(occurredAtMillis).toString(),
+        date = CairoTime.dateOf(occurredAtMillis),
         categoryId = categoryId,
         merchant = merchant.orEmpty(),
         notes = notes.orEmpty(),
@@ -118,23 +125,26 @@ class EditExpenseViewModel
 
         fun onAmount(text: String) = edit { it.copy(amountText = text, amountInvalid = false) }
 
-        fun onDate(text: String) = edit { it.copy(dateText = text, dateInvalid = false) }
+        fun onDate(date: LocalDate) = edit { it.copy(date = date, dateInvalid = false) }
 
         fun onCategory(id: String?) = edit { it.copy(categoryId = id) }
 
-        fun onMerchant(text: String) = edit { it.copy(merchant = text.take(MAX_MERCHANT)) }
+        fun onMerchant(text: String) = edit { it.copy(merchant = text.takeCodePoints(MAX_MERCHANT)) }
 
-        fun onNotes(text: String) = edit { it.copy(notes = text.take(MAX_NOTES)) }
+        fun onNotes(text: String) = edit { it.copy(notes = text.takeCodePoints(MAX_NOTES)) }
 
         fun askDelete() = form.update { if (it.busy) it else it.copy(confirmDelete = true) }
 
         fun dismissDelete() = form.update { it.copy(confirmDelete = false) }
 
-        /** One tap on a pending-review row: status CONFIRMED, everything else as it is. */
+        /**
+         * One tap on a pending-review row. With no edits it sends status CONFIRMED only; with typed edits it behaves like
+         * Save (the edits plus CONFIRMED), so nothing the user typed is dropped.
+         */
         fun confirm() {
             val o = original ?: return
             if (o.status != STATUS_PENDING_REVIEW) return
-            submit { editor.update(id, ExpenseChanges(status = STATUS_CONFIRMED)) }
+            save()
         }
 
         /** Sends only what differs from the server's copy; a pending-review row is confirmed by saving it. */
@@ -142,17 +152,12 @@ class EditExpenseViewModel
             val o = original ?: return
             if (inFlight) return
             val f = form.value
-            val minor = MoneyFormat.parseMinor(f.amountText)
-            val date =
-                try {
-                    LocalDate.parse(f.dateText.trim())
-                } catch (_: DateTimeParseException) {
-                    null
-                }
-            if (minor == null || date == null) {
-                form.update { it.copy(amountInvalid = minor == null, dateInvalid = date == null) }
+            val minor = MoneyFormat.parseMinor(f.amountText)?.takeIf { it <= MAX_AMOUNT_MINOR }
+            if (minor == null) {
+                form.update { it.copy(amountInvalid = true) }
                 return
             }
+            val date = f.date
             val changes = changesOf(o, f, minor, date)
             if (changes.isEmpty) {
                 form.update { it.copy(done = true) }
@@ -225,7 +230,7 @@ class EditExpenseViewModel
                     form.update {
                         it.copy(
                             error = EditError.INVALID,
-                            amountInvalid = outcome.field == "amount",
+                            amountInvalid = outcome.field == "amount" || outcome.field?.startsWith("amount.") == true,
                             dateInvalid = outcome.field == "occurredAt",
                         )
                     }

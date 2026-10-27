@@ -284,6 +284,12 @@
     <string name="edit_merchant">التاجر أو الوصف</string>
     <string name="edit_source">المصدر: %1$s</string>
     <string name="source_manual">يدوي</string>
+    <string name="source_whatsapp">واتساب</string>
+    <string name="source_ios_shortcut">اختصار الآيفون</string>
+    <string name="source_upload">رفع إيصال</string>
+    <string name="edit_date">التاريخ</string>
+    <string name="edit_date_ok">تمام</string>
+    <string name="edit_date_error">التاريخ ده ماتقبلش</string>
     <string name="edit_status_pending">في انتظار المراجعة</string>
     <string name="edit_status_confirmed">مؤكدة</string>
     <string name="edit_confirm">تأكيد</string>

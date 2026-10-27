@@ -5,7 +5,7 @@ package eg.masroof.ui.edit
 class EditActions(
     val onType: (String) -> Unit = {},
     val onAmount: (String) -> Unit = {},
-    val onDate: (String) -> Unit = {},
+    val onDate: (java.time.LocalDate) -> Unit = {},
     val onCategory: (String?) -> Unit = {},
     val onMerchant: (String) -> Unit = {},
     val onNotes: (String) -> Unit = {},
