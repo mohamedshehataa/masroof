@@ -8,6 +8,8 @@ import eg.masroof.data.db.OutboxEntity
 /** Non-2xx response. The body is never kept (it may echo user data). */
 class HttpFailure(
     val code: Int,
+    /** The contract field a 400/422 named, when it did (for "which field is wrong"). */
+    val field: String? = null,
 ) : Exception("HTTP $code")
 
 sealed interface UploadResult {
@@ -86,3 +88,6 @@ interface ExpenseDeleter {
 object NoExpenseDeleter : ExpenseDeleter {
     override suspend fun deleteExpense(id: String) = false
 }
+
+/** A cleared merchant or note comes back from the server as "": the cache keeps it as absent so titles fall back properly. */
+internal fun blankToNull(text: String?): String? = text?.takeIf { it.isNotBlank() }

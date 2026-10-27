@@ -28,6 +28,7 @@ import eg.masroof.ui.viewmodel.TransactionsViewModel
 
 @Composable
 fun TransactionsRoute(
+    onOpenExpense: (String) -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel(),
     captured: CapturedViewModel = hiltViewModel(),
 ) {
@@ -40,6 +41,7 @@ fun TransactionsRoute(
         onDeleteEntry = viewModel::deleteEntry,
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
+        onOpenExpense = onOpenExpense,
     )
     StopLearningDialog(captured)
 }
@@ -53,6 +55,7 @@ fun TransactionsContent(
     onDeleteEntry: (String) -> Unit = {},
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
+    onOpenExpense: ((String) -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -70,6 +73,7 @@ fun TransactionsContent(
                         onDeleteEntry = onDeleteEntry,
                         capturedLocalId = capturedIds[it.id],
                         onUndoCaptured = onUndoCaptured,
+                        onOpen = onOpenExpense,
                     )
                 }
             }

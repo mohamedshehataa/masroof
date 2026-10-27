@@ -254,4 +254,34 @@
         <item quantity="one">%1$s day left</item>
         <item quantity="other">%1$s days left</item>
     </plurals>
+
+    <string name="edit_open">Open to confirm or edit</string>
+    <string name="edit_title">Edit transaction</string>
+    <string name="edit_type">Type</string>
+    <string name="edit_type_expense">Expense</string>
+    <string name="edit_type_income">Income</string>
+    <string name="edit_type_transfer">Transfer</string>
+    <string name="edit_merchant">Merchant or label</string>
+    <string name="edit_source">Source: %1$s</string>
+    <string name="source_manual">Manual</string>
+    <string name="source_whatsapp">WhatsApp</string>
+    <string name="source_ios_shortcut">iPhone Shortcut</string>
+    <string name="source_upload">Receipt upload</string>
+    <string name="edit_date">Date</string>
+    <string name="edit_date_ok">OK</string>
+    <string name="edit_date_error">This date was not accepted</string>
+    <string name="edit_status_pending">Pending review</string>
+    <string name="edit_status_confirmed">Confirmed</string>
+    <string name="edit_confirm">Confirm</string>
+    <string name="edit_save">Save changes</string>
+    <string name="edit_delete">Delete</string>
+    <string name="edit_cancel">Cancel</string>
+    <string name="edit_delete_title">Delete this transaction?</string>
+    <string name="edit_delete_body">It is removed from your list and totals.</string>
+    <string name="edit_error_offline">Couldn\'t save, check your connection. Your changes are still here.</string>
+    <string name="edit_error_failed">Couldn\'t save. Try again.</string>
+    <string name="edit_error_invalid">The server did not accept these values. Check them and try again.</string>
+    <string name="edit_error_sign_in">Sign in again - your session expired. Your changes are still here.</string>
+    <string name="edit_changed_elsewhere">This transaction was changed elsewhere. Showing the latest version; check it and save again.</string>
+    <string name="edit_working">Working…</string>
 </resources>

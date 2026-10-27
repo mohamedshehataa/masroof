@@ -222,6 +222,10 @@ class ApiRemoteSource
         /** The generated auth API (invites) on the authenticated client. */
         suspend fun authApi(): AuthApi = retrofit().create(AuthApi::class.java)
 
+        suspend fun expensesApi(): ExpensesApi = retrofit().create(ExpensesApi::class.java)
+
+        fun entityOf(expense: Expense): ExpenseEntity = expense.toEntity()
+
         suspend fun membersApi(): MembersApi = retrofit().create(MembersApi::class.java)
 
         /** The generated budgets API on the authenticated client. */
@@ -339,10 +343,10 @@ class ApiRemoteSource
                 amountMinor = amount.amountMinor,
                 currency = amount.currency,
                 occurredAtMillis = occurredAt.toEpochMilliseconds(),
-                merchant = merchantName ?: merchantRaw,
+                merchant = blankToNull(merchantName ?: merchantRaw),
                 categoryId = categoryId?.toString(),
                 accountId = paymentAccountId?.toString(),
-                notes = notes,
+                notes = blankToNull(notes),
                 pending = false,
                 source =
                     sources
