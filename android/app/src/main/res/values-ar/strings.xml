@@ -282,6 +282,7 @@
     <string name="edit_type_expense">مصروف</string>
     <string name="edit_type_income">دخل</string>
     <string name="edit_type_transfer">تحويل</string>
+    <string name="edit_type_refund">استرداد</string>
     <string name="edit_merchant">التاجر أو الوصف</string>
     <string name="edit_source">المصدر: %1$s</string>
     <string name="source_manual">يدوي</string>
@@ -299,12 +300,15 @@
     <string name="edit_cancel">إلغاء</string>
     <string name="edit_delete_title">تحذف العملية دي؟</string>
     <string name="edit_delete_body">هتتشال من القايمة والإجماليات.</string>
-    <string name="edit_error_offline">ماقدرناش نحفظ، اتأكد من الاتصال. تعديلاتك لسه موجودة.</string>
-    <string name="edit_error_failed">ماقدرناش نحفظ. حاول تاني.</string>
-    <string name="edit_error_invalid">السيرفر ماقبلش القيم دي. راجعها وحاول تاني.</string>
-    <string name="edit_error_sign_in">سجّل الدخول مجددًا - انتهت جلستك. تعديلاتك لسه موجودة.</string>
-    <string name="edit_changed_elsewhere">العملية دي اتغيّرت من مكان تاني. بنعرض آخر نسخة، راجعها واحفظ تاني.</string>
+    <string name="edit_error_failed">مقدرناش نحفظ، جرّب تاني</string>
     <string name="edit_working">جارٍ التنفيذ…</string>
     <string name="startup_could_not_finish">التحديث ماخلصش. بياناتك في أمان، من فضلك تواصل مع الدعم.</string>
     <string name="startup_free_up_storage">أفرغ مساحة تخزين لإكمال التحديث. المطلوب حوالي %1$d ميجابايت.</string>
+    <string name="edit_gone">العملية دي مبقتش موجودة</string>
+    <string name="edit_deleted">اتحذفت</string>
+    <string name="edit_undo">تراجع</string>
+    <string name="paid_by">اللي دفع</string>
+    <string name="paid_by_not_set">مش محدد</string>
+    <string name="paid_by_chip">دفع: %1$s</string>
+    <string name="edit_notes_error">الملاحظات لحد 500 حرف بس</string>
 </resources>

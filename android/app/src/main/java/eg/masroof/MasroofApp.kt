@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.edit.PurgeScheduler
 import eg.masroof.ingest.cancelLeftoverUploadWork
 import javax.inject.Inject
 
@@ -18,6 +19,8 @@ class MasroofApp :
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
     @Inject lateinit var eraser: DataEraser
+
+    @Inject lateinit var purgeScheduler: PurgeScheduler
 
     @Inject lateinit var workManager: WorkManager
 
@@ -36,5 +39,7 @@ class MasroofApp :
         cancelLeftoverUploadWork(workManager)
         // An erase that was cut short (process died) is finished before anything else is captured.
         eraser.recoverInterrupted()
+        // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
+        purgeScheduler.schedule()
     }
 }

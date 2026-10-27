@@ -14,4 +14,5 @@ class EditActions(
     val onAskDelete: () -> Unit = {},
     val onDelete: () -> Unit = {},
     val onDismissDelete: () -> Unit = {},
+    val onPaidBy: (String?) -> Unit = {},
 )

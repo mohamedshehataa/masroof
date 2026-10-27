@@ -80,6 +80,26 @@ interface ExpenseDao {
         nowMillis: Long,
     ): Int
 
+    /** Undo of a soft delete. Returns the rows changed (0 when the row is gone or was never deleted). */
+    @Query("UPDATE expense SET deletedAtMillis = NULL, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NOT NULL")
+    suspend fun restore(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    @Query("DELETE FROM expense_source WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis < :cutoffMillis)")
+    suspend fun purgeSourcesDeletedBefore(cutoffMillis: Long): Int
+
+    @Query("DELETE FROM expense WHERE deletedAtMillis < :cutoffMillis")
+    suspend fun purgeRowsDeletedBefore(cutoffMillis: Long): Int
+
+    /** Removes entries soft-deleted before [cutoffMillis] with their sources (receipts: STORY-174). Returns the entries removed. */
+    @Transaction
+    suspend fun purgeDeletedBefore(cutoffMillis: Long): Int {
+        purgeSourcesDeletedBefore(cutoffMillis)
+        return purgeRowsDeletedBefore(cutoffMillis)
+    }
+
     /**
      * The second channel of one transfer knew more (the account tail, a name): an entry nobody edited takes it. One statement, so
      * an edit made meanwhile wins; `updatedAtMillis` is left alone (the pairing is not an edit). Returns the rows changed.
@@ -210,6 +230,9 @@ interface LookupDao {
 
     @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
     fun observeAllCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM member ORDER BY sortOrder, displayName")
+    fun observeMembers(): Flow<List<MemberEntity>>
 
     @Query("SELECT * FROM account ORDER BY label")
     fun observeAccounts(): Flow<List<AccountEntity>>
