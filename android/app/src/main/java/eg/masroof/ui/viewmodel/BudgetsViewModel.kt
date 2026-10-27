@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -100,9 +101,30 @@ class BudgetsViewModel
                 val rows = state.value.rows
                 val period = rows.firstOrNull { it.id == editingId }?.period ?: BudgetPeriod.MONTHLY
                 val draft = BudgetDraft(categoryId, minor, householdCurrency(rows), rollover, period)
-                val outcome = if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
+                var outcome = if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
+                if (editingId == null && outcome == MutationOutcome.Duplicate) outcome = adoptExisting(draft)
                 form.value = Form(error = outcome.toError())
                 if (outcome == MutationOutcome.Ok) onSaved()
+            }
+        }
+
+        /**
+         * A create the server refused as a duplicate usually means an earlier attempt (one that timed out on this side) did
+         * go through. Look at the fresh list: when that budget exists, bring it to what the user entered and call it saved.
+         */
+        private suspend fun adoptExisting(draft: BudgetDraft): MutationOutcome {
+            repository.refresh()
+            val rows =
+                repository
+                    .observe()
+                    .first()
+                    ?.toRows(state.value.categories)
+                    .orEmpty()
+            val existing = rows.firstOrNull { it.categoryId == draft.categoryId && it.period == draft.period }
+            return when {
+                existing == null -> MutationOutcome.Duplicate
+                existing.limit.amountMinor == draft.amountMinor && existing.rollover == draft.rollover -> MutationOutcome.Ok
+                else -> repository.update(existing.id, draft)
             }
         }
 

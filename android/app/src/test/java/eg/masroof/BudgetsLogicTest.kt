@@ -192,6 +192,58 @@ class BudgetsLogicTest {
             assertNull(vm.state.value.error)
         }
 
+    /** The server already holds the car budget (an earlier save timed out on the phone but went through); create says 409. */
+    private class ConflictRepo : FakeBudgetsRepository() {
+        init {
+            mutation = MutationOutcome.Duplicate
+            snapshot.value = BudgetsFixtures.snapshot()
+        }
+
+        override suspend fun update(
+            id: String,
+            draft: BudgetDraft,
+        ): MutationOutcome {
+            updated += id to draft
+            return MutationOutcome.Ok
+        }
+    }
+
+    @Test
+    fun `REQ-AND-073 a duplicate create whose budget already exists with the same values is a success`() =
+        runTest {
+            val repo = ConflictRepo()
+            val vm = BudgetsViewModel(repo, FakeRepository())
+            backgroundScope.launch { vm.state.collect {} }
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "500", false) { saved++ }
+            runCurrent()
+            assertEquals(1, saved)
+            assertNull(vm.state.value.error)
+            assertTrue(repo.updated.isEmpty())
+            assertTrue(repo.refreshes >= 2)
+            assertTrue(
+                vm.state.value.rows
+                    .any { it.id == BudgetsFixtures.ID_CAR },
+            )
+        }
+
+    @Test
+    fun `REQ-AND-073 a duplicate create whose budget exists with other values updates it and succeeds`() =
+        runTest {
+            val repo = ConflictRepo()
+            val vm = BudgetsViewModel(repo, FakeRepository())
+            backgroundScope.launch { vm.state.collect {} }
+            var saved = 0
+            vm.save(null, BudgetsFixtures.CAR, "900", true) { saved++ }
+            runCurrent()
+            assertEquals(1, saved)
+            assertNull(vm.state.value.error)
+            val (id, draft) = repo.updated.single()
+            assertEquals(BudgetsFixtures.ID_CAR, id)
+            assertEquals(90_000L, draft.amountMinor)
+            assertEquals(true, draft.rollover)
+        }
+
     @Test
     fun `REQ-AND-073 delete closes on success and when the budget is already gone`() =
         runTest {
