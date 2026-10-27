@@ -286,6 +286,7 @@ class SmsUploader
         private val deleter: ExpenseDeleter = NoExpenseDeleter,
         private val locks: CapturedLocks = CapturedLocks(),
         private val notifier: CapturedNotifier = NoCapturedNotifier,
+        private val refresher: UploadedRecordsRefresher = NoUploadedRecordsRefresher,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -316,6 +317,8 @@ class SmsUploader
                 stopped = step.needsSignIn
                 wait = maxOf(wait, step.waitSeconds)
             }
+            // one refresh per pass, however many records went out
+            if (sent > 0) refresher.refreshAfterUpload()
             if (stopped) return SmsSyncReport(sent, rejected, false)
             if (wait > 0) {
                 // a row is held by another upload (maybe a dead one): come back when its claim runs out
