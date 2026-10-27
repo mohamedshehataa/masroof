@@ -104,8 +104,10 @@ object DefaultSeed {
         c: SeedCategory,
     ) {
         db.execSQL(
-            "INSERT OR IGNORE INTO category (id, nameEn, nameAr, sortOrder, parentId, color, archived, system) " +
-                "VALUES (?, ?, ?, ?, ?, ?, 0, 1)",
+            """
+            INSERT OR IGNORE INTO category (id, nameEn, nameAr, sortOrder, parentId, color, archived, system)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 1)
+            """.trimIndent(),
             arrayOf<Any?>(
                 seededCategoryId(c.key),
                 c.nameEn,

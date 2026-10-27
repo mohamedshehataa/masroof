@@ -20,8 +20,10 @@ val MIGRATION_8_9: Migration =
             db.execSQL("ALTER TABLE expense ADD COLUMN serverId TEXT")
             // A row cached from the server keeps the server's id; a queued manual entry (pending = 1) has none yet.
             db.execSQL(
-                "UPDATE expense SET createdAtMillis = occurredAtMillis, updatedAtMillis = occurredAtMillis, " +
-                    "serverId = CASE WHEN pending = 0 THEN id ELSE NULL END",
+                """
+                UPDATE expense SET createdAtMillis = occurredAtMillis, updatedAtMillis = occurredAtMillis,
+                serverId = CASE WHEN pending = 0 THEN id ELSE NULL END
+                """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_occurredAtMillis` ON `expense` (`occurredAtMillis`)")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_categoryId` ON `expense` (`categoryId`)")
@@ -38,22 +40,28 @@ val MIGRATION_8_9: Migration =
             db.execSQL("ALTER TABLE account ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
 
             db.execSQL(
-                "CREATE TABLE IF NOT EXISTS `member` (`id` TEXT NOT NULL, `displayName` TEXT NOT NULL, " +
-                    "`sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+                """
+                CREATE TABLE IF NOT EXISTS `member` (`id` TEXT NOT NULL, `displayName` TEXT NOT NULL,
+                `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`))
+                """.trimIndent(),
             )
             db.execSQL(
-                "CREATE TABLE IF NOT EXISTS `receipt` (`id` TEXT NOT NULL, `expenseId` TEXT, `fileName` TEXT NOT NULL, " +
-                    "`mimeType` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `pageCount` INTEGER, " +
-                    "`createdAtMillis` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
-                    "FOREIGN KEY(`expenseId`) REFERENCES `expense`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+                """
+                CREATE TABLE IF NOT EXISTS `receipt` (`id` TEXT NOT NULL, `expenseId` TEXT, `fileName` TEXT NOT NULL,
+                `mimeType` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `pageCount` INTEGER,
+                `createdAtMillis` INTEGER NOT NULL, PRIMARY KEY(`id`),
+                FOREIGN KEY(`expenseId`) REFERENCES `expense`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )
+                """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_receipt_expenseId` ON `receipt` (`expenseId`)")
             db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_sha256` ON `receipt` (`sha256`)")
             db.execSQL(
-                "CREATE TABLE IF NOT EXISTS `expense_source` (`id` TEXT NOT NULL, `expenseId` TEXT NOT NULL, " +
-                    "`channel` TEXT NOT NULL, `localSourceId` TEXT NOT NULL, `receivedAtMillis` INTEGER NOT NULL, " +
-                    "`senderId` TEXT, `instrumentLast4` TEXT, PRIMARY KEY(`id`), " +
-                    "FOREIGN KEY(`expenseId`) REFERENCES `expense`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                """
+                CREATE TABLE IF NOT EXISTS `expense_source` (`id` TEXT NOT NULL, `expenseId` TEXT NOT NULL,
+                `channel` TEXT NOT NULL, `localSourceId` TEXT NOT NULL, `receivedAtMillis` INTEGER NOT NULL,
+                `senderId` TEXT, `instrumentLast4` TEXT, PRIMARY KEY(`id`),
+                FOREIGN KEY(`expenseId`) REFERENCES `expense`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )
+                """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_source_expenseId` ON `expense_source` (`expenseId`)")
             db.execSQL(
