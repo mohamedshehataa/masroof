@@ -131,6 +131,28 @@ class MetadataStripperTest {
 
   @Test
   @Tag("REQ-RCPT-022")
+  @DisplayName("REQ-RCPT-022 JPEG: bytes hidden after the JFIF header in APP0 are removed")
+  void jpegApp0TailRemoved() throws IOException {
+    byte[] plain = encode("jpg");
+    byte[] jfifHeader = concat(ascii("JFIF\0"), new byte[] {1, 2, 0, 0, 1, 0, 1, 0, 0});
+    byte[] dirty =
+        jpegWith(
+            plain,
+            jpegSegment(0xE0, concat(jfifHeader, ascii("Exif\0\0GPS-30.0444N"))),
+            jpegSegment(0xE0, ascii("JFXX\0thumbnail-bytes")));
+    assertThat(contains(dirty, ascii("GPS-30.0444N"))).isTrue();
+
+    byte[] clean = MetadataStripper.strip(AttachmentType.JPEG, dirty);
+
+    assertThat(contains(clean, ascii("Exif"))).isFalse();
+    assertThat(contains(clean, ascii("GPS-30.0444N"))).isFalse();
+    assertThat(contains(clean, ascii("thumbnail-bytes"))).isFalse();
+    assertThat(contains(clean, ascii("JFIF\0"))).isTrue();
+    assertThat(pixels(clean)).isEqualTo(pixels(plain));
+  }
+
+  @Test
+  @Tag("REQ-RCPT-022")
   @DisplayName("REQ-RCPT-022 JPEG: bytes after EOI are dropped, a clean file is unchanged")
   void jpegTrailingDataAndCleanFile() throws IOException {
     byte[] plain = MetadataStripper.strip(AttachmentType.JPEG, encode("jpg"));
@@ -201,6 +223,26 @@ class MetadataStripperTest {
     assertThat(clean).isEqualTo(plain);
     assertThat(contains(clean, ascii("secret-text"))).isFalse();
     assertThat(contains(clean, ascii("IDAT"))).isTrue();
+    assertThat(pixels(clean)).isEqualTo(pixels(plain));
+  }
+
+  @Test
+  @Tag("REQ-RCPT-022")
+  @DisplayName("REQ-RCPT-022 PNG: private and unknown ancillary chunks are removed (allow-list)")
+  void pngPrivateChunksRemoved() throws IOException {
+    byte[] plain = encode("png");
+    byte[] dirty =
+        pngWith(
+            plain,
+            pngChunk("prVt", ascii("Exif-GPS-30.04N")),
+            pngChunk("caBX", ascii("c2pa-manifest")),
+            pngChunk("orNT", new byte[] {1}));
+
+    byte[] clean = MetadataStripper.strip(AttachmentType.PNG, dirty);
+
+    assertThat(contains(clean, ascii("GPS-30.04N"))).isFalse();
+    assertThat(contains(clean, ascii("c2pa-manifest"))).isFalse();
+    assertThat(clean).isEqualTo(plain);
     assertThat(pixels(clean)).isEqualTo(pixels(plain));
   }
 

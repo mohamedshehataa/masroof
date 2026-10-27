@@ -20,7 +20,19 @@ public final class MetadataStripper {
     }
   }
 
-  private static final Set<String> PNG_DROPPED = Set.of("eXIf", "tEXt", "zTXt", "iTXt", "tIME");
+  /**
+   * PNG chunks that are kept: the critical ones and colour / pixel-size hints. Everything else
+   * (eXIf, tEXt, zTXt, iTXt, tIME, private and unknown chunks) is dropped: an allow-list, so a
+   * private chunk cannot carry metadata through.
+   */
+  private static final Set<String> PNG_KEPT =
+      Set.of(
+          "IHDR", "PLTE", "IDAT", "IEND", "tRNS", "gAMA", "cHRM", "sRGB", "iCCP", "sBIT", "bKGD",
+          "pHYs");
+
+  /** JFIF APP0 payload without its thumbnail: "JFIF\0", version, units, X/Y density. */
+  private static final int JFIF_HEADER = 12;
+
   private static final int PNG_SIGNATURE = 8;
 
   private MetadataStripper() {}
@@ -78,7 +90,9 @@ public final class MetadataStripper {
       if (length < 2 || p + length > in.length) {
         throw new MalformedImageException("bad segment length");
       }
-      if (keepSegment(marker, in, p + 2, length - 2)) {
+      if (marker == 0xE0) {
+        writeJfifHeader(out, in, p + 2, length - 2);
+      } else if (keepSegment(marker, in, p + 2, length - 2)) {
         out.write(0xFF);
         out.write(marker);
         out.write(in, p, length);
@@ -105,11 +119,26 @@ public final class MetadataStripper {
     }
   }
 
-  /** Image structure and the JFIF header are kept; the ICC profile and Adobe colour flag too. */
-  private static boolean keepSegment(int marker, byte[] in, int off, int len) {
-    if (marker == 0xE0) {
-      return hasPrefix(in, off, len, "JFIF\0");
+  /**
+   * APP0 is rewritten to the bare JFIF header with a zero-size thumbnail, so nothing appended to it
+   * (a thumbnail, or Exif bytes hidden after the header) survives; a non-JFIF APP0 is dropped.
+   */
+  private static void writeJfifHeader(ByteArrayOutputStream out, byte[] in, int off, int len) {
+    if (len < JFIF_HEADER || !hasPrefix(in, off, len, "JFIF\0")) {
+      return;
     }
+    int segmentLength = 2 + JFIF_HEADER + 2;
+    out.write(0xFF);
+    out.write(0xE0);
+    out.write(segmentLength >> 8);
+    out.write(segmentLength & 0xFF);
+    out.write(in, off, JFIF_HEADER);
+    out.write(0); // thumbnail width
+    out.write(0); // thumbnail height
+  }
+
+  /** Image structure is kept; the ICC profile and Adobe colour flag too. */
+  private static boolean keepSegment(int marker, byte[] in, int off, int len) {
     if (marker == 0xE2) {
       return hasPrefix(in, off, len, "ICC_PROFILE\0");
     }
@@ -152,7 +181,7 @@ public final class MetadataStripper {
         throw new MalformedImageException("IHDR must come first");
       }
       first = false;
-      if (!PNG_DROPPED.contains(type)) {
+      if (PNG_KEPT.contains(type)) {
         out.write(in, p, (int) (end - p));
       }
       p = (int) end;

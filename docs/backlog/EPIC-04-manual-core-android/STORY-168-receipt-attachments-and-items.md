@@ -152,8 +152,15 @@ None (no parsing).
 - Receipt OCR / AI parsing into items (STORY-053 / REQ-RCPT-010..014).
 - Web UI for attachments and items.
 - Offline queueing of attachment uploads through the outbox (online-only for now, with a clear message).
+- Known minor gaps from verify round 1, accepted for this slice: item `name` length is checked in UTF-16 units by the
+  generated validator (101-200 emoji are rejected); `items:[null]` and a lower-case item currency answer 422, not 400;
+  a future currency-changing PATCH without `items` would leave item totals in the old currency (unreachable today:
+  only EGP is accepted); on Android a camera shot is lost if the OS kills the app while the camera is open.
 
 ## Status log
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | spec + contract | orchestrator | contract + ADR-0009 written, speed mode |
+| 2026-10-27 | build | backend-engineer, android-engineer | check-fast green per module |
+| 2026-10-27 | verify round 1 | qa-verifier | FAIL: MAJOR no REQ-RCPT-027 test; MINOR APP0 tail and private PNG chunks kept |
+| 2026-10-27 | fix round 1 | orchestrator | infra/tests/req-rcpt-027-attachment-storage.sh; APP0 rewritten to bare JFIF header; PNG chunk allow-list |
