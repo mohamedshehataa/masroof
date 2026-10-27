@@ -1,6 +1,5 @@
 package eg.masroof.data.edit
 
-import eg.masroof.api.models.ExpenseItem
 import eg.masroof.api.models.ExpensePatch
 import eg.masroof.api.models.ExpenseStatus
 import eg.masroof.api.models.Money
@@ -63,7 +62,6 @@ internal fun ExpenseChanges.toPatch() =
         status = status?.let { v -> ExpenseStatus.entries.first { it.value == v } },
         merchantRaw = merchantRaw,
         notes = notes,
-        items = items?.map { ExpenseItem(name = it.name, qty = it.qty, total = it.total?.let { m -> Money(m.amountMinor, m.currency) }) },
     )
 
 /** The contract field named by the first entry of the problem's `errors`; the rest of the body is dropped (it may echo user text). */
