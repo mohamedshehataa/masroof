@@ -9,6 +9,11 @@ data class Session(
     val refreshToken: String,
     val memberId: String,
     val displayName: String,
+    /**
+     * Epoch millis at which [accessToken] stops working, or null when unknown (a session stored by an older build):
+     * unknown means "refresh on the first 401".
+     */
+    val accessExpiresAtMillis: Long? = null,
 ) {
     override fun toString(): String = "Session(member=$memberId)"
 }

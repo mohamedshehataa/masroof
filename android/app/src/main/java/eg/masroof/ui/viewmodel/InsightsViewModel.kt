@@ -68,6 +68,22 @@ class InsightsViewModel
             refresh()
         }
 
+        private var shownOnce = false
+
+        /**
+         * The screen became visible. The first time the constructor's refresh is already running; every later time
+         * (tab revisited after an expense was added, edited or deleted) refreshes once, unless one is in flight.
+         * The cached figures stay on screen meanwhile, so this is cheap and never a loop.
+         */
+        fun onShown() {
+            if (!shownOnce) {
+                shownOnce = true
+                return
+            }
+            if (refreshJob?.isActive == true) return
+            refresh()
+        }
+
         fun refresh() {
             refreshJob?.cancel()
             status.value = LoadStatus.LOADING

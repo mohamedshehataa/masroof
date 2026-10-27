@@ -2,6 +2,7 @@ package eg.masroof.data.insights
 
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.HttpFailure
+import eg.masroof.data.remote.withDeadline
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import retrofit2.Response
@@ -23,14 +24,15 @@ class ApiInsightsRemote
         override suspend fun fetch(
             period: InsightsPeriod,
             nowMillis: Long,
-        ): InsightsSnapshot {
-            val api = source.analyticsApi()
-            return coroutineScope {
-                val summary = async { api.getAnalyticsSummary(period.spec).bodyOrThrow() }
-                val categories = async { api.getAnalyticsByCategory(period.spec).bodyOrThrow() }
-                val trend = async { api.getAnalyticsTrend(TREND_MONTHS).bodyOrThrow() }
-                val heatmap = async { api.getAnalyticsHeatmap(period.spec).bodyOrThrow() }
-                InsightsSnapshot(summary.await(), categories.await(), trend.await(), heatmap.await(), nowMillis)
+        ): InsightsSnapshot =
+            withDeadline {
+                val api = source.analyticsApi()
+                coroutineScope {
+                    val summary = async { api.getAnalyticsSummary(period.spec).bodyOrThrow() }
+                    val categories = async { api.getAnalyticsByCategory(period.spec).bodyOrThrow() }
+                    val trend = async { api.getAnalyticsTrend(TREND_MONTHS).bodyOrThrow() }
+                    val heatmap = async { api.getAnalyticsHeatmap(period.spec).bodyOrThrow() }
+                    InsightsSnapshot(summary.await(), categories.await(), trend.await(), heatmap.await(), nowMillis)
+                }
             }
-        }
     }

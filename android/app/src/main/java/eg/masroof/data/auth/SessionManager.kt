@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,6 +28,7 @@ class SessionManager
         private val wiper: LocalDataWiper,
         @IoDispatcher private val io: CoroutineDispatcher,
         private val capture: CaptureGate = NoopCaptureGate,
+        private val clock: Clock = Clock.systemUTC(),
     ) {
         private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
         val state: StateFlow<SessionState> = _state
@@ -81,6 +84,25 @@ class SessionManager
             restore()
             return current?.accessToken
         }
+
+        /**
+         * The token to send now. When the access token is past, or within 60 s of, its known expiry it is refreshed first
+         * (single-flight through [refreshAfter]), so a cold start with an expired token makes ONE refresh instead of a
+         * burst of 401s. An unknown expiry (session stored by an older build) is left to the first 401. A failed
+         * proactive refresh is not retried for 30 s and the current token is sent anyway.
+         */
+        suspend fun freshAccessToken(): String? {
+            restore()
+            val session = current ?: return null
+            val expiresAt = session.accessExpiresAtMillis ?: return session.accessToken
+            val now = clock.millis()
+            if (now < expiresAt - EXPIRY_SKEW_MILLIS || now < retryProactiveAt) return session.accessToken
+            val refreshed = refreshAfter(session.accessToken)
+            if (refreshed == null) retryProactiveAt = clock.millis() + PROACTIVE_BACKOFF_MILLIS
+            return refreshed ?: current?.accessToken
+        }
+
+        @Volatile private var retryProactiveAt = 0L
 
         suspend fun login(
             serverUrl: String,
@@ -210,7 +232,10 @@ class SessionManager
             capture.close()
             val session = current
             if (session != null) {
-                remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
+                // Best effort and bounded: a stuck network must never keep the user from signing out locally.
+                withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) {
+                    remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
+                }
             }
             withContext(io) {
                 runCatchingStore { store.clear() }
@@ -223,5 +248,8 @@ class SessionManager
 
         private companion object {
             const val DEVICE_NAME = "Masroof Android"
+            const val EXPIRY_SKEW_MILLIS = 60_000L
+            const val PROACTIVE_BACKOFF_MILLIS = 30_000L
+            const val LOGOUT_TIMEOUT_MILLIS = 25_000L
         }
     }
