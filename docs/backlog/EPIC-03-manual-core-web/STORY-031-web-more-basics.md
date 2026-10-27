@@ -3,7 +3,7 @@ id: STORY-031
 epic: EPIC-03
 title: Web More tab basics — language/theme/digits, household & members, categories, accounts & cards
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-017, STORY-018, STORY-012, STORY-013, STORY-014, STORY-015]
@@ -64,3 +64,4 @@ STORY-017, STORY-018, STORY-012, STORY-013, STORY-014, STORY-015.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

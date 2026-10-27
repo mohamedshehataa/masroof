@@ -3,7 +3,7 @@ id: STORY-165
 epic: EPIC-16
 title: "Nudges reach the iPhone PWA by web push"
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [backend]
 depends_on: [STORY-160, STORY-114, STORY-162]
@@ -75,3 +75,4 @@ STORY-160 (delivery worker), STORY-114 (web-push sender, Phase 8), STORY-162 (se
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

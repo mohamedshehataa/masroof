@@ -3,7 +3,7 @@ id: STORY-104
 epic: EPIC-11
 title: AI monthly narrative report and weekly mini-summary with deterministic number check and LLM-as-judge
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, eval]
 depends_on: [STORY-093, STORY-094, STORY-099, STORY-077]
@@ -66,3 +66,4 @@ STORY-093, STORY-094, STORY-099, STORY-077
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-102
 epic: EPIC-11
 title: "Budget alerts at 50/80/100% via WhatsApp and push; rollover"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-092, STORY-077, STORY-071]
@@ -63,3 +63,4 @@ STORY-092, STORY-077, STORY-071
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

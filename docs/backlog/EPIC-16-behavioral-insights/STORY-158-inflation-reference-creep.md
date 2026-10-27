@@ -3,7 +3,7 @@ id: STORY-158
 epic: EPIC-16
 title: "Owner-set inflation figure for category creep"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [backend, contracts]
 depends_on: [STORY-157, STORY-012]
@@ -102,3 +102,4 @@ STORY-157 (creep detection), STORY-012 (settings API).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

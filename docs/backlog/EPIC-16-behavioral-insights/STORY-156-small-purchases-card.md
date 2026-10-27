@@ -3,7 +3,7 @@ id: STORY-156
 epic: EPIC-16
 title: "Small-purchases-add-up card"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, contracts]
 depends_on: [STORY-150, STORY-096]
@@ -110,3 +110,4 @@ STORY-150 (shared rules), STORY-096 (merchant aggregation and naming).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-003
 epic: EPIC-01
 title: Observability stack in compose with redacted structured logs
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [infra, backend]
 depends_on: [STORY-142]
@@ -68,3 +68,4 @@ STORY-142 (the `make up` stack with Caddy; it depends on STORY-143 and STORY-141
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-142 after the STORY-002 split; Caddy URL is plain HTTP locally |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -1,11 +1,13 @@
 # Masroof - household expense tracker (Egypt) built through an Agentic SDLC
 
-Masroof turns every expense of a two-person household (Mohamed on Android, Member 2 on iPhone) into one
-structured entry - from WhatsApp text/photos/PDFs/voice notes, Egyptian bank and wallet SMS, bank-app push
-notifications, iOS Shortcut forwarding, receipt uploads or manual entry - deduplicates the same purchase across
-channels, and serves bilingual (Arabic/English, RTL) analytics. Stack: Java 21 + Spring Boot 4.1 (ADR-0004) + PostgreSQL 16 +
-MinIO, React/TypeScript PWA, Kotlin/Compose Android app, Claude API for parsing, Caddy + docker compose.
-The full specification is `docs/PROMPT.md` (protected, read it for product detail). This file is the operating manual.
+Masroof is a **local-only Android app** (owner pivot 2026-10-27, ADR-0009). Mohamed records the household's expenses
+on one phone. They come from Egyptian bank and wallet SMS (parsed on the device, rules only), bank-app notifications, a
+90-day SMS backfill and manual entry. Same-purchase duplicates are linked locally, and receipts (photo, scan, PDF,
+share) can be attached. The app shows bilingual (Arabic/English, RTL) insights computed on the phone, and backs up to one
+passphrase-encrypted file. Stack: Kotlin + Compose + Room (single source of truth) + WorkManager + Tink. There is no
+server, web/PWA, WhatsApp, iOS path, login, sync or LLM in the product.
+The full specification is `docs/PROMPT.md` (protected). ADR-0009 D1 lists which of its Part I sections are superseded.
+This file is the operating manual.
 
 ## Commands (the single command surface - CI, skills and agents call only these)
 Run from Git Bash on Windows; `source scripts/env.sh` puts make/python/jq/scanners on PATH.
@@ -30,9 +32,17 @@ Run from Git Bash on Windows; `source scripts/env.sh` puts make/python/jq/scanne
 | `make selftest` / `make status` | prove every guard blocks (docs/SDLC_SELFTEST.md) / one-screen SDLC status |
 
 ## Architecture map
+- **`android/` is the product.** Kotlin + Compose + Material 3, Hilt, Room as the single source of truth (expense,
+  category, account, member, receipt, expense_source, review_item ...), WorkManager, on-device SMS/notification capture,
+  local analytics (`core/analytics`), receipts in app-private storage, and an encrypted backup file through SAF. See
+  `android/CLAUDE.md` and ADR-0009.
+- **FROZEN until the server is retired (ADR-0009 D7):** `backend/`, `web/`, `infra/` and `contracts/`. They get no new
+  features, only fixes if production breaks. CI keeps running them, and the app uses them only for the one-time import
+  of existing server expenses. Do not start backend, web, WhatsApp, iOS or server-analytics stories. Retiring them
+  (deleting the modules and CI jobs, shutting down the GCP VM) is an owner checkpoint. Their descriptions follow for
+  reference.
 - `backend/` Spring Boot, hexagonal: `domain` (pure Java, no Spring/JPA/HTTP) <- `application` (use cases, ports) <- `adapters/in` (REST from generated OpenAPI interfaces, WhatsApp webhook, scheduler, SKIP LOCKED job workers) and `adapters/out` (JPA/Flyway, S3, Anthropic, WhatsApp Cloud API, FX, STT). Rule: domain depends on nothing; adapters depend inward only and never on each other. See `backend/CLAUDE.md`.
 - `web/` React + TypeScript + Vite PWA (TanStack Query, Tailwind, shadcn/ui, Recharts, i18next ar/en + RTL, vite-plugin-pwa). Client in `src/api/generated` comes from the contract. See `web/CLAUDE.md`.
-- `android/` Kotlin + Compose + Material 3, Hilt, Room (cache + outbox), WorkManager, SMS/notification ingestion, Glance widget. See `android/CLAUDE.md`.
 - `contracts/openapi.yaml` is the API source of truth (contract-first). `eval/` datasets, thresholds, baseline, runners. `infra/` compose, Caddy, backups, deploy. `fixtures/` anonymized samples. `docs/` backlog, ADRs, security, templates, living docs. `scripts/` make, quality and sdlc tooling. `.claude/` agents, skills, hooks, rules, state.
 
 ## Invariants (each is enforced mechanically, not by memory)
@@ -52,9 +62,13 @@ Every story has frontmatter `risk_tier: high | low`. **High** = it touches parsi
 - Integrate: `make check` + `make trace` green, story DONE, PROGRESS + metrics lines, then a PR to `main` that the orchestrator squash-merges itself (owner decision 2026-10-25) once `PR gate` is green on the PR head, the verify report is PASS with no BLOCKER/MAJOR and the diff has been checked; dependency PRs need a green gate and a checked diff. CI (`pr.yml`, job `gate`) must be green; `main` is protected (STORY-145).
 - Loop limit: implement -> verify -> review at most 3 times per story; then write docs/ESCALATIONS.md, set `status: BLOCKED`, move to other ready work. Never ship a red gate.
 - Budget: each phase has a time and AI-spend cap in `docs/SDLC_METRICS.md` ("Phase budgets"), reviewed against delivered stories at the phase gate; passing a cap is an owner checkpoint.
-- **Speed mode (owner decision 2026-10-25, overrides the tiers above for product work):** one builder agent per *feature* writes tests + code together across layers (no separate spec-review/design/test-designer stages); one fresh verifier per feature (qa-verifier, real runs, focus on bugs, money, auth, security), at most 2 fix rounds; PRs are whole usable features; backend, web and android run in parallel. Gates (CI `PR gate`, hooks, security scans, money/date invariants) stay. Spec text only where a feature needs it.
-- Hosting target: Google Cloud Free Tier e2-micro (1 GB RAM, x86_64, about $4/month for the external IPv4 only, docs/HOSTING.md) + DuckDNS subdomain; parsing is rules-only by default ($0), the Claude API is optional.
-- Current goal: a working vertical slice (STORY-143 -> 141 -> 142 -> manual expense entry). `docs/PROMPT_DELIVERY_GATES.md` is mostly deferred (see its status banner); do not expand the SDLC further without an owner decision.
+- **Speed mode (owner decision 2026-10-25, overrides the tiers above for product work):** one builder agent per *feature* writes tests + code together across layers (no separate spec-review/design/test-designer stages); one fresh verifier per feature (qa-verifier, real runs, focus on bugs, money, auth, security), at most 2 fix rounds; PRs are whole usable features (since the 2026-10-27 pivot only android is built; ADR-0009). Gates (CI `PR gate`, hooks, security scans, money/date invariants) stay. Spec text only where a feature needs it.
+- Hosting: none for the product, which is the APK only. The v0.1.x server on the GCP e2-micro (docs/HOSTING.md) stays up,
+  frozen, only until the owner retires it after the one-time import. Parsing is rules-only on the device and makes no
+  Claude API calls.
+- Current goal: the EPIC-17 local-only Android MVP, story by story in the order of `docs/backlog/EPIC-17-local-only-android/`.
+  The design rules are in ADR-0009: Room migration rules, data never wiped by session events, analytics parity file, and
+  receipt and backup formats. `docs/PROMPT_DELIVERY_GATES.md` is mostly deferred (see its status banner); do not expand the SDLC further without an owner decision.
 - Skills: `/next`, `/story <id>`, `/spec`, `/design`, `/tdd`, `/implement`, `/verify`, `/review`, `/security-review`, `/eval`, `/bug`, `/adr`, `/phase-gate <n>`, `/release <v>`, `/retro`, `/sdlc-selftest`, `/sdlc-status`.
 - Stories: `docs/backlog/EPIC-NN-<slug>/STORY-NNN-<slug>.md` (template `docs/templates/story.md`; frontmatter status DRAFT|READY|IN_PROGRESS|BLOCKED|DONE|DESCOPED; `### REQ-<AREA>-<NNN>` headings with Given/When/Then). Reports `.verify.md` / `.review.md` beside the story. Branch `story/STORY-NNN-<slug>`; commits `type(scope): subject [STORY-NNN]` (lefthook enforces).
 - REQ areas: WA SMS NTF IOS RCPT PARSE DEDUP EXP AN UI AND PWA SEC OPS. Tests carry REQ ids (`@Tag("REQ-SMS-004")`, `describe('REQ-SMS-004 ...')`, Kotlin backtick names, eval `tags`).

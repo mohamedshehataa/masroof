@@ -3,7 +3,7 @@ id: STORY-030
 epic: EPIC-03
 title: Web live updates from the SSE stream
 phase: 2
-status: READY
+status: DESCOPED
 size: S
 modules: [web]
 depends_on: [STORY-024, STORY-026, STORY-027]
@@ -59,3 +59,4 @@ STORY-024, STORY-026, STORY-027.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-101
 epic: EPIC-10
 title: "Analytics query performance: no sequential scans above 10k rows, p95 < 200 ms, no N+1"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [backend]
 depends_on: [STORY-093, STORY-094, STORY-095, STORY-096, STORY-097, STORY-098, STORY-099, STORY-100]
@@ -60,3 +60,4 @@ STORY-093, STORY-094, STORY-095, STORY-096, STORY-097, STORY-098, STORY-099, STO
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

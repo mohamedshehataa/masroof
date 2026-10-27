@@ -3,7 +3,7 @@ id: STORY-100
 epic: EPIC-10
 title: "Item-level insights, payment method mix and data quality stats"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-094, STORY-053]
@@ -66,3 +66,4 @@ STORY-094, STORY-053
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-137
 epic: EPIC-15
 title: "Release pipeline: staging → production via /release with smoke tests, auto-rollback, SBOM and signed images"
 phase: 10
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [infra]
 depends_on: [STORY-016, STORY-124, STORY-133]
@@ -67,3 +67,4 @@ STORY-016, STORY-124, STORY-133
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 10 start |
 | 2026-10-25 | phase check | product-analyst | stays DRAFT, phase 10: PROMPT §14 item 10 (staging → production via /release) is Release, not Phase 1 Foundation |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

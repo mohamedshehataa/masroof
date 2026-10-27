@@ -3,7 +3,7 @@ id: STORY-005
 epic: EPIC-01
 title: Ledger schema (raw messages, media, expenses, splits, budgets, jobs, audit) with migration tests
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-004]
@@ -67,3 +67,4 @@ STORY-004.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

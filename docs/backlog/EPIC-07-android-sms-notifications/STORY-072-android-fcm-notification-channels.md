@@ -3,7 +3,7 @@ id: STORY-072
 epic: EPIC-07
 title: "Android FCM registration, notification channels per type and tap-to-recategorize"
 phase: 4
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-071, STORY-037]
@@ -63,3 +63,4 @@ STORY-071, STORY-037
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

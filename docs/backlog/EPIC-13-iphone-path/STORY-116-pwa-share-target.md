@@ -3,7 +3,7 @@ id: STORY-116
 epic: EPIC-13
 title: PWA Web Share Target for images/PDFs/text
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [web]
 depends_on: [STORY-113, STORY-060]
@@ -60,3 +60,4 @@ STORY-113, STORY-060
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

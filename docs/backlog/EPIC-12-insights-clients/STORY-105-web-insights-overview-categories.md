@@ -3,7 +3,7 @@ id: STORY-105
 epic: EPIC-12
 title: "Web Insights: Overview and Categories tabs"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-026, STORY-093, STORY-094]
@@ -60,3 +60,4 @@ STORY-026, STORY-093, STORY-094
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

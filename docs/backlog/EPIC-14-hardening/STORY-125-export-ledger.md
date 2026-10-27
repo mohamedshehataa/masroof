@@ -3,7 +3,7 @@ id: STORY-125
 epic: EPIC-14
 title: "Export: CSV/XLSX/PDF for a date range and full household data export"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-021]
@@ -63,3 +63,4 @@ STORY-021
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-006
 epic: EPIC-01
 title: Backend server interfaces generated from the OpenAPI contract with lint and breaking-change gates
 phase: 1
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [contracts, backend]
 depends_on: [STORY-143]
@@ -69,3 +69,4 @@ STORY-143 (the hand-written `HealthController` this story switches; it depends o
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — HealthController switch from hand-written (STORY-002) made explicit; stale x-req note fixed |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — depends_on re-pointed to STORY-143, which now owns the hand-written HealthController |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

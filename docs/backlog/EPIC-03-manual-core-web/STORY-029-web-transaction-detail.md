@@ -3,7 +3,7 @@ id: STORY-029
 epic: EPIC-03
 title: Web Transaction detail — edit any field, split editor, sources, audit history, delete/restore
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-027, STORY-022, STORY-023]
@@ -60,3 +60,4 @@ STORY-027, STORY-022, STORY-023.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

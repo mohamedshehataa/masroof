@@ -3,7 +3,7 @@ id: STORY-159
 epic: EPIC-16
 title: "Nudge engine and in-app nudge feed"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, contracts]
 depends_on: [STORY-152, STORY-102, STORY-024, STORY-015]
@@ -155,3 +155,4 @@ STORY-152 (pace), STORY-102 (budget alerts to step aside from), STORY-024 (strea
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

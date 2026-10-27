@@ -3,7 +3,7 @@ id: STORY-082
 epic: EPIC-08
 title: "Voice notes: speech-to-text (Egyptian Arabic) then the text parser"
 phase: 5
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, eval]
 depends_on: [STORY-076, STORY-077]
@@ -66,3 +66,4 @@ STORY-076, STORY-077
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 5 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

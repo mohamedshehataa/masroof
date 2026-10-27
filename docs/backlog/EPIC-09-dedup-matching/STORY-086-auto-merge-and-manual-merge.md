@@ -3,7 +3,7 @@ id: STORY-086
 epic: EPIC-09
 title: Auto-merge above the high threshold (feature-flagged) and manual merge endpoint
 phase: 6
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-085]
@@ -66,3 +66,4 @@ STORY-085
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 6 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

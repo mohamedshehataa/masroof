@@ -3,7 +3,7 @@ id: STORY-065
 epic: EPIC-07
 title: On-device OTP and promotional SMS filtering (OTP never leaves the device)
 phase: 4
-status: IN_PROGRESS
+status: DESCOPED
 size: S
 modules: [android]
 depends_on: [STORY-064]
@@ -66,3 +66,4 @@ STORY-064
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

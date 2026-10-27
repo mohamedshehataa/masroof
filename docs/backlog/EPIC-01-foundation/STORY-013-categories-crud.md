@@ -3,7 +3,7 @@ id: STORY-013
 epic: EPIC-01
 title: Bilingual category tree CRUD
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-010]
@@ -64,3 +64,4 @@ STORY-010.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

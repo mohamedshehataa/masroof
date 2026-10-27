@@ -3,7 +3,7 @@ id: STORY-018
 epic: EPIC-01
 title: Web login page and session handling with silent refresh
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-009, STORY-017]
@@ -63,3 +63,4 @@ STORY-009, STORY-017.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

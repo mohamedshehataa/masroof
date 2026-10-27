@@ -3,7 +3,7 @@ id: STORY-004
 epic: EPIC-01
 title: Core schema (household, members, auth, devices, accounts, categories, merchants) with seeds
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-002, STORY-142]
@@ -120,3 +120,4 @@ Filled at stage 3. Open decisions this story hands to the architect (requirement
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — STORY-142 added to depends_on (REQ-OPS-042 runs on make up) after the STORY-002 split |
 | 2026-10-24 | 1-2 spec amend | product-analyst | READY — STORY-002 review #9/#14 and verify X17 follow-ups added as REQ-OPS-046 (money rule) and REQ-OPS-047 (household DDL); Boot 3.5.16 → 4.1.x (ADR-0003) noted; size near limit with a pre-cut split boundary |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

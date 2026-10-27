@@ -3,7 +3,7 @@ id: STORY-163
 epic: EPIC-16
 title: "Android Insights → Habits tab with insight cards"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-109, STORY-153, STORY-154, STORY-155, STORY-156, STORY-157, STORY-158]
@@ -88,3 +88,4 @@ STORY-109 (Android Insights shell), STORY-153..158 (cards and texts).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

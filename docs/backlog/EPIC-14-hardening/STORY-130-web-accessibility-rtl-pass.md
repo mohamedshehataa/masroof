@@ -3,7 +3,7 @@ id: STORY-130
 epic: EPIC-14
 title: "Web accessibility and RTL pass: axe clean, Lighthouse Accessibility 100, RTL screenshot review"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-108, STORY-119]
@@ -60,3 +60,4 @@ STORY-108, STORY-119
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
