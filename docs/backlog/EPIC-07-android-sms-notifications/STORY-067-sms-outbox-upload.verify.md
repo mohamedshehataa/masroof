@@ -289,3 +289,54 @@ bash scripts/quality/test-integrity-check.sh origin/main: TEST_INTEGRITY: OK; as
 bash scripts/quality/test-integrity-check.sh origin/main -> TEST_INTEGRITY: OK (62 -> 140 assertions, none in deleted files, no new skip/tolerance). The only change to existing test code is open class FakeBudgetsRepository; no member changed.
 
 Verdict: FAIL (1 MAJOR: a duplicate-adopt silently overwrites an existing budget).
+
+---
+
+# PR #69 round 2 (head f13b8e0, round diff git diff 45dabb8..f13b8e0)
+
+- Verifier: qa-verifier (fresh context), 2026-10-27, loop 2 of 3. Base 9898d81 (PR #68 head), head f13b8e0fd16b312d81fbfe04d47b78ce72bfc396 (= gh pr view 69 headRefOid).
+- Round diff: SmsWork.kt (refresh wrapped: CancellationException rethrown, other Exception swallowed), BudgetsViewModel.kt (unansweredScopes; adopt only for such a scope, only after refresh == Ok, match category+period+currency), BudgetsScreen.kt (Add dialog starts on first free category when a total exists), BudgetsLogicTest.kt (2 tests rewritten, 5 added), CapturedRefreshTest.kt (1 added). No logging lines added.
+
+## Environment
+- JAVA_HOME=... bash scripts/make/check-fast.sh android sdlc -> check-fast GREEN [android sdlc] in 105s (hook tests 624/624, quality tests 145/145, sdlc-lint 0/0)
+- ./gradlew :app:testDebugUnitTest --tests eg.masroof.QaProbe069bTest --tests eg.masroof.CapturedRefreshTest --tests eg.masroof.BudgetsLogicTest --tests eg.masroof.BudgetsScreenTest -> CapturedRefreshTest 3/3, BudgetsLogicTest 22/22, BudgetsScreenTest 12/12, probe 6/6 (probe file deleted; git status clean)
+- python scripts/quality/traceability.py -> 404 REQs, 0 unknown, gate PASS
+- bash scripts/quality/test-integrity-check.sh origin/main -> TEST_INTEGRITY: OK (62 -> 159 assertions, BudgetsLogicTest 62 -> 88, CapturedRefreshTest 0 -> 13, 0 skips)
+- gh pr checks 69 (at time of run) -> 12 pass, Android (check-fast) pending, PR gate not yet reported. Local check-fast android is GREEN on the same head.
+
+## Round-1 findings re-checked
+| Round-1 finding | Now | Evidence |
+|---|---|---|
+| MAJOR silent overwrite (B1) | FIXED | probe B1: snapshot with total 4,000, save(null, null, "900") -> saved=0 errors=[DUPLICATE] updated=[] ; B8 (Car 500, rollover on, no prior attempt) -> DUPLICATE, no update |
+| MINOR refresher throws loses retry | FIXED | probe: a=Sent, b=Retry(30), refresher throws IllegalStateException -> SmsSyncReport(sent=1, retry=true, retryAfterSeconds=30), b queued; refresher throwing CancellationException -> propagates (correct). New test REQ-SMS-094 a refresher that throws cannot fail the pass or lose its retry PASS |
+| MINOR missing negative tests | FIXED | 5 new REQ-AND-073 tests: never-tried duplicate is an error, no match stays an error, different category, weekly vs monthly, stale cache when refresh fails; all PASS |
+| NIT stale cache adopted / currency | FIXED | probe B5 (Offline then 409, refresh Offline) -> DUPLICATE, no update; match now includes currency |
+
+## Criteria (round 2)
+| Claim | Result | Evidence |
+|---|---|---|
+| REQ-SMS-094 one refresh per pass with sent>=1, none with sent=0, no loop, failure-safe | PASS | CapturedRefreshTest 3/3; refresher-throws probe above; round-1 loop/concurrency analysis unchanged (only the try/catch was added around the call) |
+| REQ-AND-073 409 adopts only after our own unanswered create, same category+period+currency, refresh Ok; update when values differ | PASS | probes B8b (Offline then 409, rollover differs) -> update (50000,true) saved=1; B9 Arabic-Indic "٩٠٠" after Offline -> update 90000 saved=1; O1 total Offline then 409 -> adopts total (own attempt); O2 Car Offline then All-spending 409 -> DUPLICATE; O3 Offline, Ok, then 409 -> DUPLICATE (scope cleared); O4 Offline, Failed, then 409 -> DUPLICATE; O6 after a successful adopt a further 409 -> DUPLICATE; B7 no match -> DUPLICATE; B2/B3/B3b -> DUPLICATE; B6 edit Duplicate -> no adopt |
+| Add dialog default with an existing total | PASS | Compose probe (BudgetsContent): total + Groceries + Car taken, free Fuel -> onSave(null, Fuel id, "900", false); without a total -> null (All spending) as before |
+| Money Long minor units | PASS | B10 "92233720368547758.07" -> 9223372036854775807, no overflow; no double/float in round diff |
+| Test integrity / replaced tests | PASS | see below |
+| Gates | PASS (CI Android job pending at run time) | check-fast GREEN locally, trace 0 unknown, integrity OK |
+
+## Replaced tests: legitimate tightening?
+Yes. Both rewritten tests were added by this PR (they are not on main: BudgetsLogicTest on main had 62 assertions, now 88). Their old premise (any 409 with a matching budget is a success) is exactly the round-1 MAJOR, so they had to change. Each rewritten test now also asserts saved=0 and error OFFLINE after the first attempt, and the second one must now go through the Offline -> 409 path. One assertion was dropped, assertTrue(repo.refreshes >= 2). It only checked the adopt refresh happened, which the new success path still needs (adopt returns DUPLICATE unless refresh() == Ok). Losing it is a NIT, not a weakening of behaviour coverage.
+
+## Findings (round 2)
+| Sev | Where | What | Repro |
+|---|---|---|---|
+| NIT | BudgetsScreen.kt BudgetDialog | With a total and every category already budgeted (or categories not loaded yet), the Add dialog still opens on "All spending", which is not in the menu. Save then gets DUPLICATE (safe, no overwrite). It would be clearer to disable Add or Save there. | Compose probe: total + Groceries + Car, categories = those two -> onSave(null, null, "900", false); same with categories = [] |
+| NIT | BudgetsViewModel.kt unansweredScopes | Known remaining risk: if the first create never reached the server and the other member creates the same scope before the retry, the retry adopts and updates that budget. The window is narrow and needs a prior Offline. The scope set is in memory only, so after the ViewModel is recreated a real timed-out retry shows DUPLICATE (the safe direction). | reasoning from code; O1 shows adopt after Offline |
+| NIT | android CI | Android (check-fast) was still pending on f13b8e0 when checked, so PR gate was not yet reported. Re-check before merge. | gh pr checks 69 |
+
+## Exploratory (round 2, inputs verbatim)
+B1 total exists, save(null,null,"900") ; B2 weekly Groceries vs monthly "1000" ; B3 only Car, save(null,null,"1000") ; B3b only totals, Car "1000" ; B4 Car Offline then 409, update Offline ; B5 Car Offline then 409, refresh Offline ; B6 edit Car 409 ; B7 Car Offline then 409, empty list ; B8 Car "500" rollover on, no prior attempt ; B8b same after Offline ; B9 "٩٠٠" after Offline ; B10 "92233720368547758.07" after Offline ; B11 Offline only ; O1 total Offline then 409 ; O2 Car Offline then total 409 ; O3 Offline, Ok, 409 ; O4 Offline, Failed, 409 ; O5 Offline, 409 + update NotFound, 409 ; O6 Offline, 409 adopt Ok, 409 ; refresher throws IllegalStateException ; refresher throws CancellationException ; dialog total+free Fuel ; dialog total+all taken ; dialog no total ; dialog total+no categories.
+25 cases, 0 problems (2 NIT notes above).
+
+## Test integrity (round 2)
+TEST_INTEGRITY: OK. The replacements are within tests this PR added, and they are stricter overall (see above).
+
+Verdict round 2: PASS (no BLOCKER/MAJOR open; merge once the Android CI job and PR gate are green on f13b8e0).
