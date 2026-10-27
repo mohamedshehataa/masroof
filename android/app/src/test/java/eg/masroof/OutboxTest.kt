@@ -26,7 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class OutboxConversionTest {
+// The old upload-queue tests lived here; REQ-AND-133 turns the queue into local entries (STORY-169).
+class OutboxTest {
     private lateinit var db: AppDatabase
     private val clock = Clock.fixed(Instant.parse("2026-10-27T09:00:00Z"), ZoneOffset.UTC)
 
