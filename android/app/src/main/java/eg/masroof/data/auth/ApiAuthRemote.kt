@@ -21,6 +21,7 @@ private const val HTTP_BAD_REQUEST = 400
 private const val HTTP_UNAUTHORIZED = 401
 private const val HTTP_TOO_MANY = 429
 private const val MILLIS_PER_SECOND = 1_000L
+private const val MIN_TTL_SECONDS = 120L
 
 /** Maps a login/refresh response to an [AuthResult]; unit tested without a server. */
 fun Response<TokenPair>.toAuthResult(nowMillis: Long = System.currentTimeMillis()): AuthResult {
@@ -33,7 +34,8 @@ fun Response<TokenPair>.toAuthResult(nowMillis: Long = System.currentTimeMillis(
                     pair.refreshToken,
                     pair.member.id.toString(),
                     pair.member.displayName,
-                    accessExpiresAtMillis = nowMillis + pair.expiresIn * MILLIS_PER_SECOND,
+                    // A tiny lifetime must not make every request refresh: keep at least twice the 60 s refresh margin.
+                    accessExpiresAtMillis = nowMillis + pair.expiresIn.toLong().coerceAtLeast(MIN_TTL_SECONDS) * MILLIS_PER_SECOND,
                 ),
             )
         code() == HTTP_BAD_REQUEST || code() == HTTP_UNAUTHORIZED -> AuthResult.Rejected

@@ -24,6 +24,9 @@ fun newAuthClient(): OkHttpClient =
     OkHttpClient
         .Builder()
         .dispatcher(Dispatcher())
+        // A 307/308 would re-send the password or refresh token to wherever it points: never follow.
+        .followRedirects(false)
+        .followSslRedirects(false)
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(AUTH_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)

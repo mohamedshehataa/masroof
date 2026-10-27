@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.core.Money
+import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.insights.InsightsPeriod
 import eg.masroof.data.insights.InsightsRepository
@@ -11,11 +12,14 @@ import eg.masroof.ui.insights.InsightsUi
 import eg.masroof.ui.insights.TrendBar
 import eg.masroof.ui.insights.toUi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -23,6 +27,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val STOP_TIMEOUT_MS = 5_000L
+private const val LOCAL_CHANGE_DEBOUNCE_MS = 2_000L
 
 internal fun RefreshOutcome.toStatus(): LoadStatus =
     when (this) {
@@ -44,6 +49,7 @@ class InsightsViewModel
     @Inject
     constructor(
         private val repository: InsightsRepository,
+        localData: LocalDataSignal = LocalDataSignal(),
     ) : ViewModel() {
         private val period = MutableStateFlow(InsightsPeriod.CURRENT)
         private val status = MutableStateFlow(LoadStatus.LOADING)
@@ -60,6 +66,9 @@ class InsightsViewModel
 
         init {
             refresh()
+            // An expense created, edited or deleted on this device changes the figures: one refresh after the burst.
+            @OptIn(FlowPreview::class)
+            viewModelScope.launch { localData.events.debounce(LOCAL_CHANGE_DEBOUNCE_MS).collect { refresh() } }
         }
 
         fun selectPeriod(next: InsightsPeriod) {

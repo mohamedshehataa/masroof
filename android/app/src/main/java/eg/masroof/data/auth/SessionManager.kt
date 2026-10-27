@@ -7,6 +7,10 @@ import eg.masroof.ingest.CaptureGate
 import eg.masroof.ingest.NoopCaptureGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -16,6 +20,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** How long a caller waits for a refresh before giving up (the refresh itself keeps running). */
+internal const val REFRESH_WAIT_MILLIS = 30_000L
 
 /** Owns the signed-in session: restore, login, single-flight refresh, expiry and logout. */
 @Singleton
@@ -97,7 +104,7 @@ class SessionManager
             val expiresAt = session.accessExpiresAtMillis ?: return session.accessToken
             val now = clock.millis()
             if (now < expiresAt - EXPIRY_SKEW_MILLIS || now < retryProactiveAt) return session.accessToken
-            val refreshed = refreshAfter(session.accessToken)
+            val refreshed = withTimeoutOrNull(REFRESH_WAIT_MILLIS) { refreshAfter(session.accessToken) }
             if (refreshed == null) retryProactiveAt = clock.millis() + PROACTIVE_BACKOFF_MILLIS
             return refreshed ?: current?.accessToken
         }
@@ -197,14 +204,25 @@ class SessionManager
          */
         suspend fun refreshAfter(staleToken: String?): String? {
             restore()
-            return refreshMutex.withLock {
+            // The refresh runs in the manager's own scope, not the caller's: a caller that times out or leaves the
+            // screen abandons only its WAIT. A cancelled refresh would lose the server's reply after the refresh token
+            // was rotated, and the next refresh would replay the spent token (reuse detection ends the whole family).
+            // The request itself is bounded by the auth client's call timeout.
+            return refreshScope.async { refreshExclusive(staleToken) }.await()
+        }
+
+        private val refreshScope = CoroutineScope(SupervisorJob() + io)
+
+        private suspend fun refreshExclusive(staleToken: String?): String? =
+            refreshMutex.withLock {
                 val session = current ?: return@withLock null
                 if (staleToken != null && session.accessToken != staleToken) return@withLock session.accessToken
                 val base = settings.current().serverUrl
                 when (val result = remote.refresh(base, session.refreshToken)) {
                     is AuthResult.Success -> {
-                        val persisted = persist(result.session)
+                        // Memory first: the rotated token must be the one used next even if persisting fails.
                         current = result.session
+                        val persisted = persist(result.session)
                         _state.value = SessionState.SignedIn(result.session.displayName, persisted)
                         result.session.accessToken
                     }
@@ -215,7 +233,6 @@ class SessionManager
                     else -> null
                 }
             }
-        }
 
         /** The server no longer accepts this session. Queued entries are kept; they upload after the next sign-in. */
         private suspend fun expire() {
@@ -231,19 +248,25 @@ class SessionManager
             // First, before any network call: from now on no message is read or queued for this account.
             capture.close()
             val session = current
-            if (session != null) {
-                // Best effort and bounded: a stuck network must never keep the user from signing out locally.
-                withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) {
-                    remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
+            try {
+                if (session != null) {
+                    // Best effort and bounded: a stuck network must never keep the user from signing out locally.
+                    withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) {
+                        remote.logout(settings.current().serverUrl, session.accessToken, session.refreshToken)
+                    }
+                }
+            } finally {
+                // Even if the caller (a screen's scope) is cancelled during the revoke wait, the wipe completes.
+                withContext(NonCancellable) {
+                    withContext(io) {
+                        runCatchingStore { store.clear() }
+                        runCatchingStore { store.lastMemberId = null }
+                    }
+                    wiper.wipe()
+                    current = null
+                    _state.value = SessionState.SignedOut()
                 }
             }
-            withContext(io) {
-                runCatchingStore { store.clear() }
-                runCatchingStore { store.lastMemberId = null }
-            }
-            wiper.wipe()
-            current = null
-            _state.value = SessionState.SignedOut()
         }
 
         private companion object {

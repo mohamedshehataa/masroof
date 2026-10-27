@@ -5,6 +5,7 @@ import eg.masroof.ui.viewmodel.InsightsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -36,5 +37,21 @@ class InsightsShownTest {
             vm.onShown()
             runCurrent()
             assertEquals(listOf(InsightsPeriod.CURRENT, InsightsPeriod.CURRENT), repo.refreshed)
+        }
+
+    @Test
+    fun `REQ-AND-071 a burst of local expense changes refreshes Insights once after the debounce`() =
+        runTest {
+            val signal = eg.masroof.data.LocalDataSignal()
+            InsightsViewModel(repo, signal)
+            runCurrent()
+            assertEquals(1, repo.refreshed.size)
+            signal.changed()
+            signal.changed()
+            advanceTimeBy(1_900)
+            assertEquals(1, repo.refreshed.size)
+            advanceTimeBy(200)
+            runCurrent()
+            assertEquals(2, repo.refreshed.size)
         }
 }
