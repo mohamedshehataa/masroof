@@ -112,6 +112,8 @@ into the "capture enabled" setting; until then captures still upload (release ru
 ## Dependencies
 STORY-168
 
+Carried from the STORY-168 verify (MINOR): Room's default `onCorruption` would still delete `masroof.db` if SQLite reports corruption after the startup `quick_check`. Room becomes the only copy here, so guard it in this story (custom open-helper callback that never deletes the file) with a test.
+
 ## Definition of Ready checklist
 - [x] Goal + Part I links
 - [x] Numbered REQs with Given/When/Then incl. unhappy paths
