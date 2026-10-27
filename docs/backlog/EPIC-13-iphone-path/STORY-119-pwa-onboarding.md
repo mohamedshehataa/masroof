@@ -3,7 +3,7 @@ id: STORY-119
 epic: EPIC-13
 title: "PWA/iPhone onboarding: accept invite → password → language → Add to Home Screen → join WhatsApp → Shortcut guide"
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-019, STORY-113, STORY-078, STORY-118]
@@ -60,3 +60,4 @@ STORY-019, STORY-113, STORY-078, STORY-118
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

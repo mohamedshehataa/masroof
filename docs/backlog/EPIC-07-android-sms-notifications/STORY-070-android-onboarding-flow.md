@@ -3,7 +3,7 @@ id: STORY-070
 epic: EPIC-07
 title: "Android onboarding: language, SMS permission explanation, senders, backfill range, notification access, card mapping"
 phase: 4
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-033, STORY-040, STORY-066, STORY-068, STORY-069]
@@ -66,3 +66,4 @@ STORY-033, STORY-040, STORY-066, STORY-068, STORY-069
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

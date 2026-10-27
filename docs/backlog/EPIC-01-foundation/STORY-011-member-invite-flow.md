@@ -3,7 +3,7 @@ id: STORY-011
 epic: EPIC-01
 title: Admin invites member 2 and the invite is accepted with a new password
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-010]
@@ -62,6 +62,7 @@ STORY-010.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
 
 ### REQ-SEC-062 — Password policy for new passwords
 **Given** a new password (invite acceptance, bootstrap admin) **Then** it needs at least 12 characters and at most 72 UTF-8 bytes (BCrypt's limit; a 73-byte or 64-character Arabic password is a `400` on field `password`, never a `500`), no NUL, and must not be one of the 10,000 most common passwords (case-folded, also after dropping trailing digits and symbols, so `password1234` fails); the bootstrap admin refuses to start with a rejected password.

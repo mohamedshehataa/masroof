@@ -3,7 +3,7 @@ id: STORY-121
 epic: EPIC-14
 title: "Security pass: ASVS L2 / MASVS-L1 / OWASP LLM checklists closed; transport hardening; scanning in CI"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, infra]
 depends_on: [STORY-010, STORY-075, STORY-055]
@@ -66,3 +66,4 @@ STORY-010, STORY-075, STORY-055
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

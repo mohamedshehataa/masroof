@@ -3,7 +3,7 @@ id: STORY-036
 epic: EPIC-04
 title: Android Add sheet — Quick add with amount keypad, category grid, member toggle, date, note, account
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-033, STORY-020, STORY-013, STORY-014]
@@ -59,3 +59,4 @@ STORY-033, STORY-020, STORY-013, STORY-014.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-075
 epic: EPIC-08
 title: "WhatsApp Cloud API webhook: verification handshake, signature check, fast ack, idempotent raw persistence"
 phase: 5
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-043, STORY-010]
@@ -72,3 +72,4 @@ STORY-043, STORY-010
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 5 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

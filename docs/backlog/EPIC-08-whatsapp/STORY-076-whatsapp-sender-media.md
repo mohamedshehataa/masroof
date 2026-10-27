@@ -3,7 +3,7 @@ id: STORY-076
 epic: EPIC-08
 title: "WhatsApp sender → member mapping, unknown senders, media download to object storage"
 phase: 5
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-075, STORY-053]
@@ -69,3 +69,4 @@ STORY-075, STORY-053
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 5 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

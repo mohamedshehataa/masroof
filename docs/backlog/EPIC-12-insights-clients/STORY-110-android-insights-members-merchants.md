@@ -3,7 +3,7 @@ id: STORY-110
 epic: EPIC-12
 title: "Android Insights: Members & Settle up and Merchants tabs"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-109, STORY-095, STORY-096]
@@ -60,3 +60,4 @@ STORY-109, STORY-095, STORY-096
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

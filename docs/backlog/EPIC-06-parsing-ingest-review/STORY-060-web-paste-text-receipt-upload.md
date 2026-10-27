@@ -3,7 +3,7 @@ id: STORY-060
 epic: EPIC-06
 title: "Web Add sheet: Paste text and Scan/upload receipt"
 phase: 3
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-028, STORY-055]
@@ -63,3 +63,4 @@ STORY-028, STORY-055
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

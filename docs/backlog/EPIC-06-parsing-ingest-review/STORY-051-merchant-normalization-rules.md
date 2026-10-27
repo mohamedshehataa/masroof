@@ -3,7 +3,7 @@ id: STORY-051
 epic: EPIC-06
 title: "Merchant normalization, merchant CRUD and learned merchant→category rules"
 phase: 3
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-022, STORY-045]
@@ -69,3 +69,4 @@ STORY-022, STORY-045
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

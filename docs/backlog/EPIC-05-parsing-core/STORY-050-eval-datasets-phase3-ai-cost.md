@@ -3,7 +3,7 @@ id: STORY-050
 epic: EPIC-05
 title: Eval datasets at Phase-3 sizes and the monthly AI-cost line in settings
 phase: 3
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [eval, backend]
 depends_on: [STORY-045]
@@ -63,3 +63,4 @@ STORY-045
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

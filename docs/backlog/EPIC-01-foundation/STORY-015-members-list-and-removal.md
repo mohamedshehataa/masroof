@@ -3,7 +3,7 @@ id: STORY-015
 epic: EPIC-01
 title: Members list and instant removal by the admin
 phase: 1
-status: READY
+status: DESCOPED
 size: S
 modules: [backend]
 depends_on: [STORY-011]
@@ -63,3 +63,4 @@ STORY-011.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

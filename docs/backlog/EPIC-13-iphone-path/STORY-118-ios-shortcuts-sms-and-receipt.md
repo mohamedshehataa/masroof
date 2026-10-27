@@ -3,7 +3,7 @@ id: STORY-118
 epic: EPIC-13
 title: "iOS Shortcuts: SMS forwarding and share-sheet receipt upload with per-device token; setup docs"
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, web]
 depends_on: [STORY-056, STORY-054, STORY-055]
@@ -69,3 +69,4 @@ STORY-056, STORY-054, STORY-055
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

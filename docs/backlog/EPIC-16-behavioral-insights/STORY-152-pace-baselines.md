@@ -3,7 +3,7 @@ id: STORY-152
 epic: EPIC-16
 title: "Personal pace baselines by day of period"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, contracts]
 depends_on: [STORY-150]
@@ -115,3 +115,4 @@ STORY-150 (eligible spend, scope, active periods).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-058
 epic: EPIC-06
 title: Web Review inbox card stack
 phase: 3
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-057, STORY-029]
@@ -60,3 +60,4 @@ STORY-057, STORY-029
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-140
 epic: EPIC-15
 title: Release-level eval dataset sizes and thresholds met; baseline committed
 phase: 10
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [eval]
 depends_on: [STORY-050, STORY-091, STORY-104]
@@ -61,3 +61,4 @@ STORY-050, STORY-091, STORY-104
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 10 start |
 | 2026-10-25 | phase check | product-analyst | stays DRAFT, phase 10: PROMPT §14 item 10 (release-level eval dataset sizes) is Release, not Phase 1 Foundation |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

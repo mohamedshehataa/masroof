@@ -3,7 +3,7 @@ id: STORY-117
 epic: EPIC-13
 title: "Desktop layout: sidebar nav and wider analytics grid for monthly review"
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [web]
 depends_on: [STORY-017, STORY-105]
@@ -60,3 +60,4 @@ STORY-017, STORY-105
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

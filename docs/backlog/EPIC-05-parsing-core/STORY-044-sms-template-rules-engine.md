@@ -3,7 +3,7 @@ id: STORY-044
 epic: EPIC-05
 title: "SMS template rules engine: per-sender regex templates with hot reload and direction mapping"
 phase: 3
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-041, STORY-042, STORY-014]
@@ -72,6 +72,7 @@ STORY-041, STORY-042, STORY-014
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
 
 ### REQ-SMS-016 — On-device engine (Kotlin) returns a structured record only; InstaPay transfers, payments, receipts and fees are covered
 Given a bank or wallet SMS (Arabic or English) or an InstaPay notification, when the on-device engine runs, then it emits amountMinor, currency, kind (PURCHASE, TRANSFER_OUT, TRANSFER_IN, INCOME, REFUND, CASH_WITHDRAWAL, FEE), occurredAt (Cairo local to UTC, received time unless a date within 45 days is found), an explicit last four, institution and a digit-free label taken only from at/to/from slots; a failed or declined message, a promotion or an OTP yields nothing; a foreign currency, an unknown template, a secret-looking message or a number it cannot explain stays on the phone. InstaPay sent to a person is TRANSFER_OUT (excluded from spending per PROMPT §4.3), payment to a merchant is PURCHASE, received is INCOME.

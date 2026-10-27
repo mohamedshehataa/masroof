@@ -3,7 +3,7 @@ id: STORY-033
 epic: EPIC-04
 title: Android login screen and session handling with silent refresh
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-009, STORY-032]
@@ -62,3 +62,4 @@ STORY-009, STORY-032.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

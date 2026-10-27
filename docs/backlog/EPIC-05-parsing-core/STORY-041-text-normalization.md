@@ -3,7 +3,7 @@ id: STORY-041
 epic: EPIC-05
 title: "Text normalization: Unicode, Arabic-Indic digits, separators, multipliers, currency words"
 phase: 3
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-005]
@@ -69,3 +69,4 @@ STORY-005
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

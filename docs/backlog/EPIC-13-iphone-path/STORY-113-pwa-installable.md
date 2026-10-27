@@ -3,7 +3,7 @@ id: STORY-113
 epic: EPIC-13
 title: "PWA installability: manifest, icons/splash, iOS meta tags, safe areas, standalone; Add to Home Screen guide"
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-017]
@@ -63,3 +63,4 @@ STORY-017
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

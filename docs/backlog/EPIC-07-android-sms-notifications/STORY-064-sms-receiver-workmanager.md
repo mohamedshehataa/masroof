@@ -3,7 +3,7 @@ id: STORY-064
 epic: EPIC-07
 title: SMS BroadcastReceiver hands off to WorkManager (never parses in the receiver)
 phase: 4
-status: IN_PROGRESS
+status: DESCOPED
 size: S
 modules: [android]
 depends_on: [STORY-038]
@@ -63,3 +63,4 @@ STORY-038
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

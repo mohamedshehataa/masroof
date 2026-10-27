@@ -3,7 +3,7 @@ id: STORY-066
 epic: EPIC-07
 title: "Sender allowlist with defaults and 'Suggested sources' for unknown money-like senders"
 phase: 4
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-064]
@@ -66,3 +66,4 @@ STORY-064
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

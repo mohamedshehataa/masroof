@@ -3,7 +3,7 @@ id: STORY-034
 epic: EPIC-04
 title: Android Home tab — period selector, spent-this-month, vs-last-month chip, recent transactions
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-033, STORY-021, STORY-025]
@@ -58,3 +58,4 @@ STORY-033, STORY-021, STORY-025.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

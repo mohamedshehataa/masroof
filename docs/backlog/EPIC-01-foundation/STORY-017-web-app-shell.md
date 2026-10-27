@@ -3,7 +3,7 @@ id: STORY-017
 epic: EPIC-01
 title: Web app shell — i18n ar/en with RTL, brand theme light/dark, 5-tab navigation, amount formatting
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-007]
@@ -74,3 +74,4 @@ STORY-007 (which depends on STORY-141, where the i18n setup and lint rule origin
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — i18n lint rule now referenced from REQ-OPS-025 (STORY-141) instead of re-specified |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — owns the full LTR/RTL × light/dark × mobile/desktop screenshot/axe matrix incl. the 1280×800 version-page renders moved from STORY-141 |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

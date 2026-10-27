@@ -3,7 +3,7 @@ id: STORY-092
 epic: EPIC-11
 title: "Budgets CRUD and budget status (progress per category or total, period, rollover flag)"
 phase: 7
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-025, STORY-013]
@@ -70,3 +70,4 @@ STORY-025, STORY-013
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
 | 2026-10-26 | 5 implement | backend-engineer | IN_PROGRESS — backend CRUD + status (PR #59), Android screens; web page pending |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

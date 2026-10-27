@@ -3,7 +3,7 @@ id: STORY-025
 epic: EPIC-02
 title: Analytics summary v1 — period totals honoring month start day and Cairo time
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-012, STORY-021]
@@ -67,3 +67,4 @@ STORY-012, STORY-021.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-111
 epic: EPIC-12
 title: "Android Insights: Trends, Calendar and Recurring tabs"
 phase: 7
-status: IN_PROGRESS
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-109, STORY-097, STORY-098, STORY-103]
@@ -60,6 +60,7 @@ STORY-109, STORY-097, STORY-098, STORY-103
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 7 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
 
 ## Implemented acceptance (speed mode, feat/insights-tab)
 - Given cached or fetched analytics, When the Insights tab is scrolled, Then it shows the 6-month trend, the calendar heatmap and the weekday pattern with TalkBack summaries. Trimmed: recurring, tap-to-drill.

@@ -3,7 +3,7 @@ id: STORY-126
 epic: EPIC-14
 title: "Import: CSV and the owner's existing Google Sheets tracker export"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-020, STORY-051]
@@ -62,3 +62,4 @@ STORY-020, STORY-051
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

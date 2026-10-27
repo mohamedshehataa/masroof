@@ -3,7 +3,7 @@ id: STORY-138
 epic: EPIC-15
 title: Signed release APK in CI and in-app update check via /api/app/android/latest
 phase: 10
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android, backend, infra]
 depends_on: [STORY-137, STORY-129]
@@ -67,3 +67,4 @@ STORY-137, STORY-129
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 10 start |
 | 2026-10-25 | phase check | product-analyst | stays DRAFT, phase 10: PROMPT §14 item 10 (signed APK with in-app update) is Release, not Phase 1 Foundation |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

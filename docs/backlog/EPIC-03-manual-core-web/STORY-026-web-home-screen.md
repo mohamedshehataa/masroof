@@ -3,7 +3,7 @@ id: STORY-026
 epic: EPIC-03
 title: Web Home tab — period selector, spent-this-month, vs-last-month chip, recent transactions
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [web]
 depends_on: [STORY-017, STORY-018, STORY-021, STORY-025]
@@ -60,3 +60,4 @@ STORY-017, STORY-018, STORY-021, STORY-025.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

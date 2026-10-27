@@ -3,7 +3,7 @@ id: STORY-020
 epic: EPIC-02
 title: Create a manual expense via POST /api/expenses
 phase: 2
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-005, STORY-013, STORY-014]
@@ -68,6 +68,7 @@ STORY-005, STORY-013, STORY-014.
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-25 | 5 implement | backend-engineer | Manual create/list/get/patch/delete shipped (speed mode). Deferred, see DECISIONS: raw_message, expense_source and audit_log rows wait for the ingestion stories (Phase 3/4); createdBy waits for auth (STORY-009). |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
 
 ### Follow-ups (recorded, not built)
 - Household-scoped composite foreign keys (category, payment_account, member must belong to the expense household at the database level).

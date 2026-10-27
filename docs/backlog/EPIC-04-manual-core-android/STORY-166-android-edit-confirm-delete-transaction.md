@@ -3,7 +3,7 @@ id: STORY-166
 epic: EPIC-04
 title: Android - tap a synced transaction to confirm it, edit it or delete it
 phase: 2
-status: IN_PROGRESS
+status: DESCOPED
 risk_tier: high
 size: M
 modules: [android]
@@ -59,3 +59,4 @@ None.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | speed-mode build | android-engineer | IN_PROGRESS |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

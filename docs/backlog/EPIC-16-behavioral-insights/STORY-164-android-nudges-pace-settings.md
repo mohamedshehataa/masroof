@@ -3,7 +3,7 @@ id: STORY-164
 epic: EPIC-16
 title: "Android nudge notifications, nudge card, 'usual by now' list and nudge settings"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-163, STORY-152, STORY-159, STORY-160, STORY-072, STORY-039, STORY-040]
@@ -96,3 +96,4 @@ STORY-039 (live updates), STORY-040 (More tab).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-26 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request) |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

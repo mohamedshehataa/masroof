@@ -3,7 +3,7 @@ id: STORY-127
 epic: EPIC-14
 title: "Android home-screen widget (Glance): month spend, budget ring, quick-add button"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [android]
 depends_on: [STORY-034, STORY-112]
@@ -60,3 +60,4 @@ STORY-034, STORY-112
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

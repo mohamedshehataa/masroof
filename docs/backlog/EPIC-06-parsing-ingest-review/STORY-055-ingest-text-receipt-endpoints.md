@@ -3,7 +3,7 @@ id: STORY-055
 epic: EPIC-06
 title: "Ingest endpoints for free text and receipt uploads, parse dry-run, rate limiting"
 phase: 3
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-043, STORY-045, STORY-053, STORY-054]
@@ -72,3 +72,4 @@ STORY-043, STORY-045, STORY-053, STORY-054
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 3 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

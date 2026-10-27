@@ -3,7 +3,7 @@ id: STORY-132
 epic: EPIC-14
 title: "Backend and web performance budgets: k6 p95, Lighthouse, size-limit"
 phase: 9
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, web, infra]
 depends_on: [STORY-101, STORY-130]
@@ -63,3 +63,4 @@ STORY-101, STORY-130
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 9 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

@@ -3,7 +3,7 @@ id: STORY-074
 epic: EPIC-07
 title: "Maestro e2e: emulator SMS becomes an entry"
 phase: 4
-status: DRAFT
+status: DESCOPED
 size: S
 modules: [android, infra]
 depends_on: [STORY-067, STORY-056, STORY-044]
@@ -60,3 +60,4 @@ STORY-067, STORY-056, STORY-044
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 4 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

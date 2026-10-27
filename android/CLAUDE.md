@@ -1,9 +1,23 @@
 # android/ - Kotlin + Compose app conventions
 
-Kotlin, Jetpack Compose + Material 3 (custom brand palette, dynamic color off), Hilt, Room (cache + outbox),
-Retrofit/OkHttp with the Kotlin client generated from `../contracts/openapi.yaml`, WorkManager, DataStore, Coil,
-Vico charts, CameraX + ML Kit document scanner, Glance widget. Sideloaded APK (not Play Store) so SMS permissions are allowed.
-Module arrives in Phase 2 (skeleton) and Phase 4 (SMS/notifications).
+Kotlin, Jetpack Compose + Material 3 (custom brand palette, dynamic color off), Hilt, Room (the single source of
+truth), WorkManager, DataStore, Tink, Compose/Canvas charts, receipts in app-private storage. The APK is sideloaded
+(not Play Store), so SMS permissions are allowed.
+
+## Local-only (ADR-0009, 2026-10-27): this overrides any server wording below
+- The app is the whole product and no server is involved. Captures and manual entries write `expense` +
+  `expense_source` in Room directly. There is no outbox and nothing is uploaded. Insights are computed on the phone in
+  `core/analytics`, a Kotlin port with a parity file in `fixtures/analytics/`.
+- The Retrofit/OkHttp generated client (`api-client`), `data/auth`, `data/remote` and `work/OutboxSync*` are frozen.
+  They exist only for the one-time "Import from server" and are deleted when the server is retired. Add nothing new
+  that calls the network.
+- Local data is never wiped by a session event (logout, expiry, Keystore loss). Only Settings → "Erase all data" erases.
+- Every Room version bump needs a hand-written `Migration(n, n+1)`, the exported schema JSON, and a `MigrationTestHelper`
+  test from every shipped version. No new `fallbackToDestructiveMigration*`. Shipped migrations and schema JSONs are
+  immutable.
+- Receipts: type by magic bytes, images re-encoded (strips EXIF/GPS), size caps, in-app viewing only (ADR-0009 D4).
+  Backup: Argon2id + Tink streaming AEAD file through SAF, and it excludes `review_item` text (ADR-0009 D5).
+  CSV export escapes formula cells.
 
 ## Layout
 ```

@@ -3,7 +3,7 @@ id: STORY-114
 epic: EPIC-13
 title: Web push (iOS 16.4+) for budget alerts and review requests; backend web-push sender
 phase: 8
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [web, backend]
 depends_on: [STORY-113, STORY-071]
@@ -63,3 +63,4 @@ STORY-113, STORY-071
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-23 | 1 intake | product-analyst | DRAFT stub — REQ ids reserved; full spec at Phase 8 start |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

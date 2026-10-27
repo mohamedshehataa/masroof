@@ -3,7 +3,7 @@ id: STORY-010
 epic: EPIC-01
 title: API security baseline — JWT filter, household scoping, CORS, headers, Problem+JSON errors
 phase: 1
-status: READY
+status: DESCOPED
 size: M
 modules: [backend]
 depends_on: [STORY-009]
@@ -79,3 +79,4 @@ STORY-009.
 |---|---|---|---|
 | 2026-10-23 | 1-2 spec | product-analyst | READY |
 | 2026-10-23 | 1-2 spec fix | product-analyst | READY — REQ-SEC-051 (rate limiting incl. /health) moved here from STORY-002 |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |

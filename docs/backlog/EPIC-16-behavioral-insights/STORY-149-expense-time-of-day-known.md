@@ -3,7 +3,7 @@ id: STORY-149
 epic: EPIC-16
 title: "Expenses record whether the time of day is known"
 phase: 7
-status: DRAFT
+status: DESCOPED
 size: M
 modules: [backend, contracts]
 depends_on: [STORY-020, STORY-022, STORY-044, STORY-045, STORY-053, STORY-056, STORY-077, STORY-086]
@@ -132,3 +132,4 @@ extraction `date`/`time`), STORY-053 (receipts), STORY-077 (WhatsApp texts), STO
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-25 | 1 spec | product-analyst | DRAFT — fully specified (EPIC-16, owner request); waits for Phase 7 and its Phase 3–6 dependencies |
+| 2026-10-27 | descope | product-analyst | superseded by ADR-0009 local-only Android (EPIC-17) |
