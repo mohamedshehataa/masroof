@@ -4,11 +4,12 @@ import android.app.Application
 import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.edit.PurgeScheduler
-import eg.masroof.ingest.SmsWorkScheduler
+import eg.masroof.ingest.cancelLeftoverUploadWork
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -17,11 +18,11 @@ class MasroofApp :
     Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
-    @Inject lateinit var smsScheduler: SmsWorkScheduler
-
     @Inject lateinit var eraser: DataEraser
 
     @Inject lateinit var purgeScheduler: PurgeScheduler
+
+    @Inject lateinit var workManager: WorkManager
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -34,8 +35,8 @@ class MasroofApp :
 
     override fun onCreate() {
         super.onCreate()
-        // Captures still upload until STORY-171; no session event starts or stops them (REQ-AND-131).
-        smsScheduler.scheduleUpload()
+        // Nothing is uploaded any more (ADR-0009): jobs an older version left behind are cancelled.
+        cancelLeftoverUploadWork(workManager)
         // An erase that was cut short (process died) is finished before anything else is captured.
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).

@@ -31,7 +31,6 @@ import eg.masroof.data.edit.ExpenseChanges
 import eg.masroof.data.insights.FileInsightsCache
 import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.newBareClient
-import eg.masroof.ingest.AlwaysSignedIn
 import eg.masroof.ingest.CaptureData
 import eg.masroof.ingest.CapturedActions
 import eg.masroof.ingest.DeviceIdProvider
@@ -473,22 +472,21 @@ class LocalSafetyRound1Test {
         }
 
     @Test
-    fun `REQ-AND-131 Undo of a captured expense without a session makes no request and is remembered`() =
+    fun `REQ-AND-131 REQ-SMS-097 Undo of a captured expense without a session makes no request and soft deletes the entry`() =
         runTest {
             val recorder = Recorder()
-            val settings = FakeSettings()
-            val signedOut = SessionManager(FakeSessionStore(), FakeAuthRemote(), settings, Dispatchers.Unconfined)
-            val api = ApiRemoteSource(settings, recorder.client, signedOut)
+            db.expenses().insert(
+                ExpenseEntity("e1", 50_000, "EGP", 1L, "AMAZON", null, null, null, false, createdAtMillis = 1L, updatedAtMillis = 1L),
+            )
             db.captured().insert(
                 eg.masroof.data.db
-                    .CapturedTxEntity("c1", "srv-9", 50_000, "EGP", "AMAZON", "SMS", null, 1),
+                    .CapturedTxEntity("c1", "e1", 50_000, "EGP", "AMAZON", "SMS", null, 1),
             )
-            val result = CapturedActions(db, api, clock, upload = SessionUploadCheck(signedOut)).undo("c1")
-            assertTrue(result.deferred)
+            val result = CapturedActions(db, clock).undo("c1")
+            assertTrue(result.removed)
+            assertNotNull(db.expenses().find("e1")!!.deletedAtMillis)
             assertTrue(recorder.paths.isEmpty())
-            assertEquals(1, db.captured().undoRequests().size)
-            // control: with the always-signed-in check the same Undo does reach the deleter
-            assertNotNull(AlwaysSignedIn)
+            assertEquals("hidden from the chips, kept until purged", 1, db.captured().undoRequests().size)
         }
 
     // ---- item 7: the re-check INSIDE the write transaction
@@ -515,7 +513,7 @@ class LocalSafetyRound1Test {
                         keyWipes++
                     }
                 }
-            val pipeline = SmsPipeline(db, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, gate, key)
+            val pipeline = SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, gate, key)
             val message = IncomingMessage(CaptureSource.SMS, "CIB", purchase, 1_000L)
             assertEquals(Disposition.DROPPED, pipeline.accept(message))
             assertEquals("the early check passed, so the key was not wiped", 0, keyWipes)

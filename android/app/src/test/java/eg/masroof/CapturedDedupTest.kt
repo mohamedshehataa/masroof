@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -73,7 +74,7 @@ class CapturedDedupTest {
     fun tearDown() = db.close()
 
     private val pipeline get() =
-        SmsPipeline(db, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, MemoryGate(), FixedKey, notices)
+        SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey, notices)
 
     private fun bankSms(
         atMillis: Long = at,
@@ -84,55 +85,60 @@ class CapturedDedupTest {
         IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, atMillis)
 
     @Test
-    fun `REQ-SMS-090 the bank SMS first, then the InstaPay notification of the same transfer - one record, one notice`() =
+    fun `REQ-SMS-090 REQ-NTF-021 the SMS first, then the InstaPay push of the same transfer - one entry, two sources, one notice`() =
         runTest {
-            assertEquals(Disposition.QUEUED, pipeline.accept(bankSms()))
-            assertEquals(Disposition.QUEUED, pipeline.accept(appPush()))
+            assertEquals(Disposition.RECORDED, pipeline.accept(bankSms()))
+            assertEquals(Disposition.RECORDED, pipeline.accept(appPush()))
+            val entry = db.expenses().all().single()
+            assertEquals("SMS", entry.source)
+            assertEquals("1094", entry.instrumentLast4)
             assertEquals(
-                "SMS",
+                listOf("PUSH", "SMS"),
                 db
-                    .parsedOutbox()
+                    .sources()
                     .all()
-                    .single()
-                    .source,
+                    .map { it.channel }
+                    .sorted(),
             )
-            assertEquals(
-                "1094",
+            assertEquals(1, db.captured().all().size)
+            assertEquals(1, notices.shown.size)
+            assertTrue(db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-090 REQ-NTF-021 the push first, then the bank SMS - the entry takes the SMS tail and the first notice is withdrawn`() =
+        runTest {
+            pipeline.accept(appPush())
+            val first = db.captured().all().single()
+            assertNull(
                 db
-                    .parsedOutbox()
+                    .expenses()
                     .all()
                     .single()
                     .instrumentLast4,
             )
-            assertEquals(1, db.captured().all().size)
-            assertEquals(1, notices.shown.size)
-        }
-
-    @Test
-    fun `REQ-SMS-090 the notification first, then the bank SMS - the richer SMS replaces it and the first notice is withdrawn`() =
-        runTest {
-            pipeline.accept(appPush())
-            val first = db.parsedOutbox().all().single()
             pipeline.accept(bankSms())
-            val kept = db.parsedOutbox().all().single()
-            assertEquals("SMS", kept.source)
-            assertEquals("1094", kept.instrumentLast4)
+            val entry = db.expenses().all().single()
+            assertEquals("1094", entry.instrumentLast4)
+            assertEquals("MOHAMED MAHMOUD AHMED", entry.merchant)
             assertEquals(1, db.captured().all().size)
             assertEquals(listOf(first.localId), notices.withdrawn)
             assertEquals(2, notices.shown.size)
+            assertEquals(entry.id, notices.shown.last().expenseId)
         }
 
     @Test
-    fun `REQ-SMS-090 when the first record is already uploaded the second one is dropped`() =
+    fun `REQ-SMS-090 a twin of an entry the user deleted only adds its source and shows no second notice`() =
         runTest {
             pipeline.accept(appPush())
-            val first = db.parsedOutbox().all().single()
-            db.parsedOutbox().delete(first.localId) // as after a successful upload
-            db.captured().setExpenseId(first.localId, "expense-1")
+            val first = db.captured().all().single()
+            db.expenses().softDelete(first.expenseId!!, 5L)
             pipeline.accept(bankSms())
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertEquals(listOf(first.localId), db.captured().all().map { it.localId })
+            val entry = db.expenses().all().single()
+            assertNull("a deleted entry is not filled in", entry.instrumentLast4)
+            assertEquals(2, db.sources().all().size)
             assertEquals(1, notices.shown.size)
+            assertTrue(notices.withdrawn.isEmpty())
         }
 
     @Test
@@ -140,7 +146,7 @@ class CapturedDedupTest {
         runTest {
             pipeline.accept(bankSms())
             pipeline.accept(appPush(atMillis = at + 6 * 60_000))
-            assertEquals(2, db.parsedOutbox().all().size)
+            assertEquals(2, db.expenses().all().size)
             assertEquals(2, notices.shown.size)
         }
 
@@ -149,7 +155,7 @@ class CapturedDedupTest {
         runTest {
             pipeline.accept(bankSms())
             pipeline.accept(appPush().copy(text = "InstaPay\nYou have received  2.00 EGP from mohamed.shehataaaaa@instapay"))
-            assertEquals(2, db.parsedOutbox().all().size)
+            assertEquals(2, db.expenses().all().size)
         }
 
     @Test
@@ -157,7 +163,18 @@ class CapturedDedupTest {
         runTest {
             pipeline.accept(bankSms())
             pipeline.accept(bankSms(atMillis = at + 60_000, text = sms.replace("bda86be1", "cda86be2")))
-            assertEquals(2, db.parsedOutbox().all().size)
+            assertEquals(2, db.expenses().all().size)
+        }
+
+    @Test
+    fun `REQ-SMS-100 a received transfer is an INCOME entry that waits for review and never counts as spending`() =
+        runTest {
+            pipeline.accept(bankSms())
+            val entry = db.expenses().all().single()
+            assertEquals("INCOME", entry.type)
+            assertEquals("PENDING_REVIEW", entry.status)
+            assertEquals(100L, entry.amountMinor)
+            assertEquals(0L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
         }
 
     @Test

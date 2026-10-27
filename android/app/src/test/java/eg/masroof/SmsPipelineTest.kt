@@ -4,14 +4,14 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.ProblemInfo
 import eg.masroof.data.remote.SmsUploadResult
-import eg.masroof.data.remote.apiJson
 import eg.masroof.data.remote.classifySmsStatus
-import eg.masroof.data.remote.parsedRequest
 import eg.masroof.ingest.CaptureGate
+import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.IncomingSms
@@ -31,10 +31,10 @@ import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ingest.parse.NotificationApps
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -48,26 +48,23 @@ import java.time.ZoneOffset
 
 internal class FakeSmsScheduler : SmsWorkScheduler {
     val intake = mutableListOf<IncomingMessage>()
-    var uploads = 0
 
     override fun enqueueIntake(message: IncomingMessage) {
         intake += message
     }
-
-    override fun scheduleUpload() {
-        uploads++
-    }
-
-    override fun scheduleUploadRetry(
-        delaySeconds: Long,
-        attempt: Int,
-    ) = Unit
 }
 
 internal class MemorySettings(
     private var policy: SenderPolicy = SenderPolicy(),
 ) : SenderSettings {
     val suggested = mutableListOf<String>()
+    var smsOn = true
+
+    override fun smsCaptureEnabled() = smsOn
+
+    override fun setSmsCaptureEnabled(on: Boolean) {
+        smsOn = on
+    }
 
     override fun policy() = policy
 
@@ -281,16 +278,53 @@ class NotificationHandoffTest {
     }
 }
 
+/** A row the older (server-era) version left in `parsed_outbox`: the frozen uploader still handles it; no capture ever writes one. */
+@Suppress("LongParameterList") // a row builder with defaults
+internal fun legacyOutboxRow(
+    localId: String,
+    source: String = "SMS",
+    kind: String = "PURCHASE",
+    amountMinor: Long = 9_900L,
+    last4: String? = "4512",
+    merchant: String? = "PHARMACY",
+    createdAt: Long = 1_000L,
+    attempts: Int = 0,
+) = ParsedOutboxEntity(
+    localId = localId,
+    source = source,
+    kind = kind,
+    amountMinor = amountMinor,
+    currency = "EGP",
+    occurredAtMillis = createdAt,
+    instrumentLast4 = last4,
+    senderId = "CIB",
+    institution = "CIB",
+    paymentMethod = "CARD",
+    merchant = merchant,
+    attempts = attempts,
+    createdAtMillis = createdAt,
+)
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SmsOutboxTest {
     private lateinit var db: AppDatabase
     private val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
-    private val scheduler = FakeSmsScheduler()
     private val settings = MemorySettings()
     private val notifications = MemoryNotifications()
     private val remote = ScriptedRemote()
     private val gate = MemoryGate()
+    private val notices = mutableListOf<CapturedTxEntity>()
+    private val noticeSink =
+        object : CapturedNotifier {
+            override fun captured(item: CapturedTxEntity) {
+                notices += item
+            }
+
+            override fun cancel(localId: String) = Unit
+
+            override fun cancelAll() = Unit
+        }
     private val device =
         object : DeviceIdProvider {
             override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
@@ -318,7 +352,7 @@ class SmsOutboxTest {
     @After
     fun tearDown() = db.close()
 
-    private val pipeline get() = SmsPipeline(db, settings, notifications, scheduler, clock, gate, FixedKey)
+    private val pipeline get() = SmsPipeline(db, settings, notifications, clock, gate, FixedKey, noticeSink)
     private val uploader get() = SmsUploader(db, remote, device, clock, gate)
 
     private fun sms(
@@ -330,21 +364,39 @@ class SmsOutboxTest {
     private val purchase = "Your card ending 4512 was charged EGP 99.00 at PHARMACY on 12/03/2026 14:05"
 
     @Test
-    fun `REQ-SMS-060 a parsed SMS is queued once as a typed record and uploading removes it`() =
+    fun `REQ-SMS-060 REQ-SMS-095 a parsed SMS becomes one local entry with its source, written once, and nothing is queued`() =
         runTest {
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms(purchase)))
-            assertEquals(Disposition.QUEUED, pipeline.accept(sms(purchase)))
-            assertEquals(1, db.parsedOutbox().all().size)
-            assertEquals(2, scheduler.uploads)
-            val report = uploader.uploadPending()
-            assertEquals(1, report.sent)
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertEquals(9_900L, remote.sent.single().amountMinor)
-            assertEquals("PHARMACY", remote.sent.single().merchant)
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(purchase)))
+            assertEquals(Disposition.RECORDED, pipeline.accept(sms(purchase)))
+            assertTrue("no outbox row is ever written", db.parsedOutbox().all().isEmpty())
+            val entry = db.expenses().all().single()
+            assertEquals(9_900L, entry.amountMinor)
+            assertEquals("EGP", entry.currency)
+            assertEquals("EXPENSE", entry.type)
+            assertEquals("CONFIRMED", entry.status)
+            assertEquals("PHARMACY", entry.merchant)
+            assertEquals("4512", entry.instrumentLast4)
+            assertEquals("SMS", entry.source)
+            assertNull(entry.deletedAtMillis)
+            val source = db.sources().all().single()
+            assertEquals(entry.id, source.expenseId)
+            assertEquals("SMS", source.channel)
+            assertEquals("CIB", source.senderId)
+            assertEquals("4512", source.instrumentLast4)
+            assertEquals(1_000L, source.receivedAtMillis)
+            assertEquals(
+                entry.id,
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .expenseId,
+            )
+            assertEquals("one notice for one message", 1, notices.size)
         }
 
     @Test
-    fun `REQ-SMS-062 secrets never reach the outbox or the wire - the serialized request carries only typed fields`() =
+    fun `REQ-SMS-062 secrets never reach an entry, a source or the outbox - only masked review items keep them`() =
         runTest {
             val secrets =
                 listOf(
@@ -357,18 +409,30 @@ class SmsOutboxTest {
                     "Auth code:551234 for purchase of EGP 500.00 at AMAZON",
                 )
             for (s in secrets) pipeline.accept(sms(s))
-            // genuine messages that carry codes upload structured records without the codes
+            // genuine messages that carry codes record a structured entry without the codes
             pipeline.accept(sms("Your card ending 1234 was charged EGP 250.00 at CARREFOUR on 12/03/2026 14:05. Auth code 123456"))
-            uploader.uploadPending()
             assertTrue(db.parsedOutbox().all().isEmpty())
-            val wire = remote.sent.map { apiJson.encodeToString(parsedRequest(device.get(), it)) }
-            assertEquals(1, wire.size)
-            for (json in wire) {
+            val entry = db.expenses().all().single()
+            val stored =
+                listOf(
+                    entry.toString(),
+                    db
+                        .sources()
+                        .all()
+                        .single()
+                        .toString(),
+                    db
+                        .captured()
+                        .all()
+                        .single()
+                        .toString(),
+                )
+            for (row in stored) {
                 for (secret in listOf("889900", "4821", "551234", "22/09", "123456", "Auth", "OTP")) {
-                    assertFalse("$secret on the wire: $json", json.contains(secret))
+                    assertFalse("$secret in $row", row.contains(secret))
                 }
-                assertFalse("no text field exists", json.contains("\"body\"") || json.contains("\"text\""))
             }
+            assertEquals("CARREFOUR", entry.merchant)
             // the secret-looking purchases stay on the phone only, masked
             val review = db.reviews().all()
             assertTrue("only money-like secrets are kept, masked", review.size in 1..secrets.size)
@@ -376,14 +440,19 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-031 an OTP, a promo and a non-allowlisted sender never reach the outbox or the review list`() =
+    fun `REQ-SMS-031 REQ-SMS-095 an OTP, a promo and a non-allowlisted sender store nothing at all`() =
         runTest {
+            assertEquals(Disposition.DROPPED, pipeline.accept(sms("Your OTP is 889900, do not share it")))
             assertEquals(Disposition.DROPPED, pipeline.accept(sms("Your OTP is 482915. Do not share it with anyone.")))
             assertEquals(Disposition.DROPPED, pipeline.accept(sms("Get 20% off at Noon this weekend! Offer ends soon")))
             assertEquals(Disposition.DROPPED, pipeline.accept(sms(purchase, sender = "Pizza")))
             assertEquals(Disposition.DROPPED, pipeline.accept(sms("Your card ending 1234 transaction of EGP 200.00 was declined")))
             assertTrue(db.parsedOutbox().all().isEmpty())
             assertTrue(db.reviews().all().isEmpty())
+            assertTrue(db.expenses().all().isEmpty())
+            assertTrue(db.sources().all().isEmpty())
+            assertTrue(db.captured().all().isEmpty())
+            assertTrue(notices.isEmpty())
         }
 
     @Test
@@ -397,6 +466,7 @@ class SmsOutboxTest {
             assertEquals("deduplicated on the local id", 1, items.size)
             assertEquals("no_template", items.single().reason)
             assertTrue(db.parsedOutbox().all().isEmpty())
+            assertTrue("a review item is not an entry", db.expenses().all().isEmpty())
             db.reviews().delete(items.single().id)
             assertTrue(db.reviews().all().isEmpty())
         }
@@ -406,20 +476,22 @@ class SmsOutboxTest {
         runTest {
             pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))
             val later = Clock.fixed(Instant.parse("2026-12-30T09:00:00Z"), ZoneOffset.UTC)
-            SmsPipeline(
-                db,
-                settings,
-                notifications,
-                scheduler,
-                later,
-                gate,
-                FixedKey,
-            ).accept(sms("Another unparsed note from CIB", at = 2L))
+            SmsPipeline(db, settings, notifications, later, gate, FixedKey).accept(sms("Another unparsed note from CIB", at = 2L))
             assertEquals(1, db.reviews().all().size)
         }
 
     @Test
-    fun `REQ-NTF-013 an allowlisted InstaPay notification becomes a NOTIFICATION record`() =
+    fun `REQ-SMS-063 an automatic record also purges expired review items, with no new review needed`() =
+        runTest {
+            pipeline.accept(sms("Welcome to CIB: nothing to parse here", at = 1L))
+            val later = Clock.fixed(Instant.parse("2026-12-30T09:00:00Z"), ZoneOffset.UTC)
+            SmsPipeline(db, settings, notifications, later, gate, FixedKey).accept(sms(purchase, at = 2L))
+            assertTrue(db.reviews().all().isEmpty())
+            assertEquals(1, db.expenses().all().size)
+        }
+
+    @Test
+    fun `REQ-NTF-013 REQ-NTF-021 an allowlisted InstaPay notification becomes a local PUSH entry`() =
         runTest {
             val msg =
                 IncomingMessage(
@@ -428,21 +500,30 @@ class SmsOutboxTest {
                     "InstaPay\nYou sent EGP 250.00 to Sara Ahmed",
                     5_000L,
                 )
-            assertEquals(Disposition.QUEUED, pipeline.accept(msg))
-            uploader.uploadPending()
-            val sent = remote.sent.single()
-            assertEquals("NOTIFICATION", sent.source)
-            assertEquals("TRANSFER_OUT", sent.kind)
-            assertEquals("INSTAPAY", sent.paymentMethod)
-            assertEquals("Sara Ahmed", sent.merchant)
+            assertEquals(Disposition.RECORDED, pipeline.accept(msg))
+            assertTrue(db.parsedOutbox().all().isEmpty())
+            val entry = db.expenses().all().single()
+            assertEquals("PUSH", entry.source)
+            assertEquals("TRANSFER", entry.type)
+            assertEquals("INSTAPAY", entry.paymentMethod)
+            assertEquals("Sara Ahmed", entry.merchant)
+            assertEquals(
+                "PUSH",
+                db
+                    .sources()
+                    .all()
+                    .single()
+                    .channel,
+            )
             notifications.on = false
             assertEquals(Disposition.DROPPED, pipeline.accept(msg.copy(receivedAtMillis = 6_000L)))
+            assertEquals(1, db.expenses().all().size)
         }
 
     @Test
-    fun `REQ-SMS-061 offline keeps the row and asks for a backoff retry, 5xx too`() =
+    fun `REQ-SMS-061 offline keeps a leftover row and asks for a backoff retry, 5xx too`() =
         runTest {
-            pipeline.accept(sms(purchase))
+            db.parsedOutbox().insert(legacyOutboxRow("old-1"))
             remote.next = SmsUploadResult.Retry(null)
             val report = uploader.uploadPending()
             assertTrue(report.retry)
@@ -457,9 +538,9 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-063 a record the server refuses is never silently lost - it moves to the review list`() =
+    fun `REQ-SMS-063 a leftover row the server refuses is never silently lost - it moves to the review list`() =
         runTest {
-            pipeline.accept(sms(purchase))
+            db.parsedOutbox().insert(legacyOutboxRow("old-1"))
             remote.next = SmsUploadResult.Rejected
             assertEquals(1, uploader.uploadPending().rejected)
             assertTrue(db.parsedOutbox().all().isEmpty())
@@ -468,7 +549,7 @@ class SmsOutboxTest {
             assertTrue("described from typed fields only", item.text.contains("PURCHASE 99.00 EGP"))
             assertFalse(item.text.contains("12/03/2026"))
 
-            pipeline.accept(sms("Your card ending 4512 was charged EGP 10.00 at KIOSK", at = 2_000L))
+            db.parsedOutbox().insert(legacyOutboxRow("old-2", amountMinor = 1_000L, merchant = "KIOSK"))
             remote.next = SmsUploadResult.RetryLimited
             repeat(5) { uploader.uploadPending() }
             assertEquals("an ambiguous answer ends in review after five tries", 2, db.reviews().all().size)
@@ -476,31 +557,25 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-062 after logout nothing is read, queued or uploaded - and the next account gets nothing`() =
+    fun `REQ-SMS-062 REQ-AND-135 with capture closed nothing is read, recorded or uploaded - and a leftover row is not sent`() =
         runTest {
             gate.close()
             assertEquals(Disposition.DROPPED, pipeline.accept(sms(purchase)))
+            assertTrue(db.expenses().all().isEmpty())
             assertTrue(db.parsedOutbox().all().isEmpty())
             val closedHandoff = FakeSmsScheduler()
             SmsHandoff(settings, closedHandoff, gate).handOff(listOf(IncomingSms("CIB", purchase, 1_000L)))
             NotificationHandoff(notifications, closedHandoff, gate)
                 .handOff(NotificationApps.INSTAPAY_CANDIDATE, "InstaPay", "You sent EGP 250.00 to Sara", 1_000L)
             assertTrue(closedHandoff.intake.isEmpty())
-            // a row queued before logout is not sent while no one is signed in
-            gate.open()
-            pipeline.accept(sms(purchase))
-            gate.close()
-            assertEquals(0, uploader.uploadPending().sent)
-            assertTrue(remote.sent.isEmpty())
-            // login as B: the wipe cleared the queue, so nothing of A's is uploaded
-            db.clearAllTables()
-            gate.open()
+            // a leftover row is not sent while capture is closed
+            db.parsedOutbox().insert(legacyOutboxRow("old-1"))
             assertEquals(0, uploader.uploadPending().sent)
             assertTrue(remote.sent.isEmpty())
         }
 
     @Test
-    fun `REQ-SMS-062 an intake in flight during logout cannot insert after the wipe and forgets the key`() =
+    fun `REQ-SMS-062 an intake in flight during an erase cannot insert after the wipe and forgets the key`() =
         runTest {
             // open for the first two checks (start, after the key), closed by the time of the write
             var calls = 0
@@ -521,9 +596,11 @@ class SmsOutboxTest {
                         wiped++
                     }
                 }
-            val racingPipeline = SmsPipeline(db, settings, notifications, scheduler, clock, racing, key)
+            val racingPipeline = SmsPipeline(db, settings, notifications, clock, racing, key)
             assertEquals(Disposition.DROPPED, racingPipeline.accept(sms(purchase)))
             assertTrue(db.parsedOutbox().all().isEmpty())
+            assertTrue(db.expenses().all().isEmpty())
+            assertTrue(db.sources().all().isEmpty())
             assertTrue(db.reviews().all().isEmpty())
             // and when the gate closes right after the key was fetched, the key is wiped again
             calls = 1
@@ -539,7 +616,7 @@ class SmsOutboxTest {
                 }
             assertEquals(
                 Disposition.DROPPED,
-                SmsPipeline(db, settings, notifications, scheduler, clock, lateGate, key).accept(sms(purchase)),
+                SmsPipeline(db, settings, notifications, clock, lateGate, key).accept(sms(purchase)),
             )
             assertEquals(1, wiped)
         }
@@ -565,9 +642,9 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-061 a 401 keeps the row queued and does not spin`() =
+    fun `REQ-SMS-061 a 401 keeps a leftover row queued and does not spin`() =
         runTest {
-            pipeline.accept(sms(purchase))
+            db.parsedOutbox().insert(legacyOutboxRow("old-1"))
             remote.next = SmsUploadResult.Unauthorized
             val report = uploader.uploadPending()
             assertFalse(report.retry)
@@ -575,16 +652,10 @@ class SmsOutboxTest {
         }
 
     @Test
-    fun `REQ-SMS-061 failed rows are purged after seven days`() =
+    fun `REQ-SMS-061 failed leftover rows are purged after seven days`() =
         runTest {
-            pipeline.accept(sms(purchase))
-            db.parsedOutbox().markFailed(
-                db
-                    .parsedOutbox()
-                    .all()
-                    .single()
-                    .localId,
-            )
+            db.parsedOutbox().insert(legacyOutboxRow("old-1", createdAt = clock.millis()))
+            db.parsedOutbox().markFailed("old-1")
             val later = Clock.fixed(Instant.parse("2026-10-18T09:00:00Z"), ZoneOffset.UTC)
             SmsUploader(db, remote, device, later, gate).uploadPending()
             assertEquals(1, db.parsedOutbox().all().size)

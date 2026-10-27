@@ -37,6 +37,8 @@ data class ParsedRecord(
     val institution: String?,
     val paymentMethod: String?,
     val merchant: String?,
+    /** False when the message gave a date only (the time is Cairo noon of that day). */
+    val timeKnown: Boolean = true,
 )
 
 /** A message as received: the sender id (SMS) or package name (notification) and the text (title + body). */

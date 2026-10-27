@@ -23,11 +23,12 @@ import dagger.hilt.components.SingletonComponent
 import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
+import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.capturedCutoff
-import eg.masroof.data.remote.ExpenseDeleter
 import eg.masroof.ingest.parse.TxKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -269,69 +270,47 @@ class CapturedLocks
         suspend fun <T> guard(block: suspend () -> T): T = mutex.withLock { block() }
     }
 
-/**
- * How one Undo ended: [removed] is true when the record is gone or will be (see [deferred]); [templateId] is the learned format
- * that made it, if any. [deferred]: the upload was in flight (or the server id is not known yet), so the Undo is remembered and the
- * expense is deleted the moment its id arrives.
- */
+/** How one Undo ended: [removed] when the entry is gone from every list; [templateId] is the learned format that made it, if any. */
 data class UndoResult(
     val removed: Boolean,
     val templateId: String?,
-    val deferred: Boolean = false,
 )
 
 /**
- * Undo of an automatically captured expense, shared by the notification action and the chip in the lists. If the record is still in
- * the upload outbox it is simply removed from it; otherwise the expense is deleted through the API (a soft delete the server can
- * restore). While an upload of the same record may be in flight the Undo is only REMEMBERED (never half-applied): the uploader
- * deletes the expense when the server answers. A failure (offline) leaves everything as it was so the user can try again.
+ * Undo of an automatically captured entry, shared by the notification action and the chip in the lists. It soft deletes the local
+ * expense (ADR-0009 D3): it leaves every list and total at once, its source rows stay so the same message is never recorded again,
+ * and the chip row is kept hidden (`undoRequested`) so a late twin of the same transfer does not bring it back. An entry the user
+ * already deleted stays deleted; an edited one is deleted too. No network, no error path.
  */
 @Singleton
 class CapturedActions
     @Inject
     constructor(
         private val db: AppDatabase,
-        private val deleter: ExpenseDeleter,
         private val clock: Clock,
-        private val locks: CapturedLocks = CapturedLocks(),
-        private val upload: UploadSession = AlwaysSignedIn,
+        private val signal: LocalDataSignal = LocalDataSignal(),
+        private val eraseLock: EraseLock = EraseLock(),
+        private val notifier: CapturedNotifier = NoCapturedNotifier,
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
-        suspend fun undo(localId: String): UndoResult =
-            locks.guard {
-                val item = db.captured().find(localId) ?: return@guard UndoResult(false, null)
-                val queued = db.parsedOutbox().all().any { it.localId == localId }
-                when {
-                    locks.isInFlight(localId) -> remember(item)
-                    // never sent: simply forgotten. Sent once (the answer may be lost): the server may have it, so the Undo is remembered
-                    // and the expense is deleted through the API when the next upload pass learns its id.
-                    queued -> if (removeUnsent(localId)) UndoResult(true, item.templateId) else remember(item)
-                    // uploaded, but the server has not told us which expense it made: remembered, resolved by the next upload pass
-                    item.expenseId == null -> remember(item)
-                    // no session: no request is made; the Undo is remembered and replayed when a session exists
-                    !upload.hasSession() -> remember(item)
-                    !deleter.deleteExpense(item.expenseId) -> UndoResult(false, item.templateId)
-                    else -> {
-                        db.withTransaction {
-                            db.expenses().delete(item.expenseId)
-                            db.captured().delete(localId)
+        suspend fun undo(localId: String): UndoResult {
+            val item =
+                eraseLock.mutex.withLock {
+                    db.withTransaction {
+                        val found = db.captured().find(localId)
+                        if (found != null) {
+                            found.expenseId?.let { db.expenses().softDelete(it, clock.millis()) }
+                            db.captured().requestUndo(localId)
                         }
-                        UndoResult(true, item.templateId)
+                        found
                     }
                 }
-            }
-
-        private suspend fun removeUnsent(localId: String): Boolean =
-            db.withTransaction {
-                val gone = db.parsedOutbox().deleteIfUnclaimed(localId, clock.millis() - UPLOAD_CLAIM_TTL_MILLIS) == 1
-                if (gone) db.captured().delete(localId)
-                gone
-            }
-
-        private suspend fun remember(item: CapturedTxEntity): UndoResult {
-            db.captured().requestUndo(item.localId)
-            return UndoResult(removed = true, templateId = item.templateId, deferred = true)
+            // The notice goes away whatever happened: its row may be gone already (purged, or replaced by the twin's notice).
+            notifier.cancel(localId)
+            if (item == null) return UndoResult(false, null)
+            signal.changed()
+            return UndoResult(removed = true, templateId = item.templateId)
         }
 
         /** "Stop learning this format?" answered yes. */
@@ -383,8 +362,9 @@ class CapturedActionReceiver : BroadcastReceiver() {
         localId: String,
     ) {
         val result = graph.actions().undo(localId)
-        if (!result.removed) return
+        // the notice goes away whatever happened: its row may be gone already (purged, or replaced by the twin's notice)
         graph.notifier().cancel(localId)
+        if (!result.removed) return
         result.templateId?.let { graph.notifier().promptStopLearning(it) }
     }
 

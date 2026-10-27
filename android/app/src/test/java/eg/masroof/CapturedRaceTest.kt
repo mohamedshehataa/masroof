@@ -8,17 +8,14 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MIGRATION_7_8
 import eg.masroof.data.db.MIGRATION_8_9
-import eg.masroof.data.db.ParsedOutboxEntity
-import eg.masroof.data.remote.ParsedRemote
-import eg.masroof.data.remote.SmsUploadResult
-import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.SmsPipeline
-import eg.masroof.ingest.SmsUploader
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ui.components.kindLabelRes
 import eg.masroof.ui.viewmodel.toRows
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -71,10 +68,6 @@ class CapturedRaceTest {
             "رقم المعاملة bda86be1 للمزيد أتصل ب 16990"
     private val push = "InstaPay\nYou have received  1.00 EGP from mohamed.shehataaaaa@instapay"
     private val at = Instant.parse("2026-10-26T20:04:10Z").toEpochMilli()
-    private val device =
-        object : DeviceIdProvider {
-            override fun get() = "6f1c1b7e-0000-4000-8000-000000000001"
-        }
 
     @Before
     fun setUp() {
@@ -86,67 +79,105 @@ class CapturedRaceTest {
     fun tearDown() = db.close()
 
     private val pipeline get() =
-        SmsPipeline(db, MemorySettings(), MemoryNotifications(), FakeSmsScheduler(), clock, MemoryGate(), FixedKey)
+        SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey)
 
     private fun bankSms(atMillis: Long = at) = IncomingMessage(CaptureSource.SMS, "BDC", sms, atMillis)
 
     private fun appPush(atMillis: Long) = IncomingMessage(CaptureSource.NOTIFICATION, "com.egyptianbanks.instapay", push, atMillis)
 
-    private suspend fun markUploaded(source: String) {
-        for (row in db.parsedOutbox().all().filter { it.source == source }) {
-            db.parsedOutbox().delete(row.localId)
-            db.captured().setExpenseId(row.localId, "expense-${row.localId.take(4)}")
-        }
-    }
+    private suspend fun entries() = db.expenses().all()
+
+    private suspend fun sourcesOf(expenseId: String) =
+        db
+            .sources()
+            .all()
+            .filter { it.expenseId == expenseId }
+            .map { it.channel }
+            .sorted()
 
     @Test
-    fun `REQ-SMS-090 the bank SMS arriving while the notification record is being uploaded leaves exactly one server record`() =
+    fun `REQ-SMS-090 REQ-SMS-096 the bank SMS and the notification accepted at the same moment make one entry with two sources`() =
         runTest {
-            val server = mutableListOf<String>()
             val p = pipeline
-            p.accept(appPush(at + 3_000))
-            val remote =
-                object : ParsedRemote {
-                    override suspend fun uploadParsed(
-                        deviceId: String,
-                        item: ParsedOutboxEntity,
-                    ): SmsUploadResult {
-                        // the request is on the wire when the richer SMS of the same transfer is accepted
-                        assertEquals(Disposition.QUEUED, p.accept(bankSms()))
-                        server += item.source
-                        return SmsUploadResult.Sent("expense-1")
-                    }
-                }
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            SmsUploader(db, remote, device, clock, MemoryGate()).uploadPending()
-            assertEquals(listOf("NOTIFICATION"), server)
+            val both = listOf(async { p.accept(appPush(at + 3_000)) }, async { p.accept(bankSms()) }).awaitAll()
+            assertEquals(listOf(Disposition.RECORDED, Disposition.RECORDED), both)
+            val entry = entries().single()
+            assertEquals(listOf("PUSH", "SMS"), sourcesOf(entry.id))
             assertTrue(db.parsedOutbox().all().isEmpty())
-            // the one expense has its local row, so it can still be undone
-            val kept = db.captured().all().single()
-            assertEquals("expense-1", kept.expenseId)
-            assertEquals(CaptureSource.NOTIFICATION.name, kept.source)
+            assertEquals(
+                entry.id,
+                db
+                    .captured()
+                    .all()
+                    .single()
+                    .expenseId,
+            )
         }
 
     @Test
-    fun `REQ-SMS-090 a queued record that nobody is uploading is still replaced by the richer twin`() =
+    fun `REQ-SMS-096 two intake jobs for the same message running together make one entry and neither fails`() =
         runTest {
             val p = pipeline
-            p.accept(appPush(at + 3_000))
-            p.accept(bankSms())
-            assertEquals(listOf("SMS"), db.parsedOutbox().all().map { it.source })
+            val both = listOf(async { p.accept(bankSms()) }, async { p.accept(bankSms()) }).awaitAll()
+            assertEquals(listOf(Disposition.RECORDED, Disposition.RECORDED), both)
+            assertEquals(1, entries().size)
+            assertEquals(1, db.sources().all().size)
             assertEquals(1, db.captured().all().size)
         }
 
     @Test
-    fun `REQ-SMS-090 a claim is atomic - the second taker and the replacement both lose, and a row once claimed is never replaced`() =
+    fun `REQ-SMS-090 a notification first is replaced by the richer SMS twin - the entry takes the account tail`() =
         runTest {
-            pipeline.accept(appPush(at))
-            val id =
-                db
-                    .parsedOutbox()
-                    .all()
-                    .single()
-                    .localId
+            val p = pipeline
+            p.accept(appPush(at + 3_000))
+            p.accept(bankSms())
+            val entry = entries().single()
+            assertEquals("1094", entry.instrumentLast4)
+            assertEquals(listOf("PUSH", "SMS"), sourcesOf(entry.id))
+            assertEquals(1, db.captured().all().size)
+        }
+
+    @Test
+    fun `REQ-SMS-090 SMS, a push, then a separate push a minute later are two transfers`() =
+        runTest {
+            val p = pipeline
+            p.accept(bankSms())
+            p.accept(appPush(at + 3_000))
+            p.accept(appPush(at + 60_000))
+            assertEquals(2, entries().size)
+            assertEquals(2, db.captured().all().size)
+        }
+
+    @Test
+    fun `REQ-SMS-090 REQ-NTF-021 SMS, a push at plus 3 s and a push at plus 60 s are two entries in every arrival order`() =
+        runTest {
+            val messages = listOf(bankSms(), appPush(at + 3_000), appPush(at + 60_000))
+            for (order in permutations(messages)) {
+                db.clearAllTables()
+                val p = pipeline
+                for (m in order) p.accept(m)
+                assertEquals(2, entries().size)
+                assertEquals(3, db.sources().all().size)
+                assertEquals(2, db.captured().all().size)
+            }
+        }
+
+    @Test
+    fun `REQ-SMS-090 the receive time pairs the channels, not the time written in the SMS body`() =
+        runTest {
+            val p = pipeline
+            p.accept(appPush(at))
+            // no time in the body at all, received four minutes after the push
+            p.accept(IncomingMessage(CaptureSource.SMS, "BDC", sms.replace(" في 23:04 يوم 10/26/26", ""), at + 4 * 60_000))
+            val entry = entries().single()
+            assertEquals(listOf("PUSH", "SMS"), sourcesOf(entry.id))
+        }
+
+    @Test
+    fun `REQ-SMS-090 a claim on a leftover queued row is atomic - the second taker and the replacement both lose`() =
+        runTest {
+            db.parsedOutbox().insert(legacyOutboxRow("old-1"))
+            val id = "old-1"
             val now = clock.millis()
             val stale = now - 120_000
             assertEquals(1, db.parsedOutbox().claim(id, now, stale))
@@ -161,56 +192,8 @@ class CapturedRaceTest {
             assertEquals(1, db.parsedOutbox().claim(id, now, stale))
         }
 
-    @Test
-    fun `REQ-SMS-090 SMS, a push, then a separate push a minute later are two transfers`() =
-        runTest {
-            val p = pipeline
-            p.accept(bankSms())
-            p.accept(appPush(at + 3_000))
-            p.accept(appPush(at + 60_000))
-            assertEquals(2, db.parsedOutbox().all().size)
-            assertEquals(2, db.captured().all().size)
-        }
-
-    @Test
-    fun `REQ-SMS-090 push, push, SMS offline are two transfers`() =
-        runTest {
-            val p = pipeline
-            p.accept(appPush(at))
-            p.accept(appPush(at + 60_000))
-            p.accept(bankSms(at + 3_000))
-            assertEquals(
-                listOf("SMS", "NOTIFICATION"),
-                db
-                    .parsedOutbox()
-                    .all()
-                    .map { it.source }
-                    .sortedDescending(),
-            )
-            assertEquals(2, db.captured().all().size)
-        }
-
-    @Test
-    fun `REQ-SMS-090 push, push, SMS online are two transfers`() =
-        runTest {
-            val p = pipeline
-            p.accept(appPush(at))
-            p.accept(appPush(at + 60_000))
-            markUploaded("NOTIFICATION")
-            p.accept(bankSms(at + 3_000))
-            assertTrue(db.parsedOutbox().all().isEmpty())
-            assertEquals(2, db.captured().all().size)
-        }
-
-    @Test
-    fun `REQ-SMS-090 the receive time pairs the channels, not the time written in the SMS body`() =
-        runTest {
-            val p = pipeline
-            p.accept(appPush(at))
-            // no time in the body at all, received four minutes after the push
-            p.accept(IncomingMessage(CaptureSource.SMS, "BDC", sms.replace(" في 23:04 يوم 10/26/26", ""), at + 4 * 60_000))
-            assertEquals(listOf("SMS"), db.parsedOutbox().all().map { it.source })
-        }
+    private fun <T> permutations(items: List<T>): List<List<T>> =
+        if (items.size <= 1) listOf(items) else items.flatMap { head -> permutations(items - head).map { listOf(head) + it } }
 
     @Test
     fun `REQ-SMS-090 migration 7 to 8 keeps every v7 row, gives defaults and backfills the kind of queued records`() =

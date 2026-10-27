@@ -37,7 +37,7 @@ interface ExpenseDao {
 
     @Query(
         """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND deletedAtMillis IS NULL AND type = 'EXPENSE'
-            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+            AND status = 'CONFIRMED' AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
@@ -99,6 +99,20 @@ interface ExpenseDao {
         purgeSourcesDeletedBefore(cutoffMillis)
         return purgeRowsDeletedBefore(cutoffMillis)
     }
+
+    /**
+     * The second channel of one transfer knew more (the account tail, a name): an entry nobody edited takes it. One statement, so
+     * an edit made meanwhile wins; `updatedAtMillis` is left alone (the pairing is not an edit). Returns the rows changed.
+     */
+    @Query(
+        """UPDATE expense SET instrumentLast4 = :last4, merchant = COALESCE(:merchant, merchant)
+            WHERE id = :id AND deletedAtMillis IS NULL AND updatedAtMillis = createdAtMillis""",
+    )
+    suspend fun enrichFromTwin(
+        id: String,
+        last4: String?,
+        merchant: String?,
+    ): Int
 
     @Query("DELETE FROM expense WHERE id = :id")
     suspend fun delete(id: String)
