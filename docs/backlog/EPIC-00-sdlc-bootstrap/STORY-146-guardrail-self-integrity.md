@@ -7,7 +7,7 @@ status: READY
 size: M
 modules: [sdlc]
 depends_on: [STORY-001]
-reqs: [REQ-OPS-168, REQ-OPS-169]
+reqs: [REQ-OPS-168, REQ-OPS-169, REQ-OPS-173]
 implements: ["PROMPT.md S7 (hooks)", "PROMPT.md S15 item 6 (every guard proven)", "STORY-001 accepted residual risk F-01, F-02"]
 risk_tier: low
 owner_agent: devops-engineer
@@ -75,6 +75,10 @@ Non-goal, recorded as residual risk: one call that rewrites every hook wired to 
 Unhappy path: **Given** 200 PreToolUse calls with no matching PostToolUse (crashed or cancelled calls) **Then** at most 20 per-call snapshot files remain in the state dir, and the next pre + post pair still takes < 2 s.
 Unhappy path: **Given** a hook input without `tool_use_id` **Then** stderr has exactly one warning line, and the HEAD/lock-time comparison above still applies, so the hook errs toward restoring.
 Unhappy path: **Given** malformed JSON **Then** behaviour stays as in REQ-OPS-011: exit 0 and exactly one stderr line.
+
+### REQ-OPS-173 — The release flag cannot be switched on inline by an agent
+**Given** `release_active` is false in `.claude/state.json` **When** an agent runs `MASROOF_RELEASE_ACTIVE=1 make bootstrap-host ...` (or any command that assigns `MASROOF_RELEASE_ACTIVE=` or `SSH_OPTS=` inline) **Then** guard-bash blocks it with one stderr line naming the rule, and `scripts/make/deploy-guard.sh` refuses unless `state.json` says `release_active` (the env flag is honoured only inside CI, `GITHUB_ACTIONS=true` set by the runner, as `release.yml` needs). Found by the PR #67 security review (THREAT_MODEL B9, row E).
+Unhappy path: **Given** read-only diagnostics (`STEP=logs|db-recent`) **Then** they need their own `diag_active` flag, so diagnosing never arms the full release (which also unlocks raw ssh).
 
 ## UX states (UI stories only)
 N/A
