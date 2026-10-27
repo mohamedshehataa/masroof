@@ -101,6 +101,7 @@ None (no automatic reading of receipts in v1).
 
 ## Design notes (architect)
 ADR-0009 D4 is the design (sources, limits, re-encode parameters, viewing, deletion, sweeper).
+Reusable UI from closed PR #73 is on branch `wip/receipts-ui-for-story-174` (picker, camera, PDF, in-app viewer, items editor; server wiring removed, see `android/RECEIPTS-UI-WIP.md` there). Owner want (2026-10-27): also a list of purchased items per entry; line items stay deferred here (ADR-0009 D1 §7), so this flags the want, not a scope change.
 
 ## Dependencies
 STORY-170
