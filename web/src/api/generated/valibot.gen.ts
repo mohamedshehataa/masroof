@@ -266,15 +266,46 @@ export const vTokenPair = v.object({
 });
 
 /**
- * A receipt line item.
+ * A purchased item on the expense (typed by the user; receipt OCR is a later story). Sent as the whole list on
+ * create or patch (the list replaces the stored one; `id` is assigned by the server and ignored on input).
+ * Item amounts use the expense's currency and do not have to add up to the expense amount.
+ *
  */
 export const vExpenseItem = v.object({
     id: v.optional(v.pipe(v.string(), v.uuid())),
-    name: v.pipe(v.string(), v.maxLength(200)),
+    name: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
     qty: v.optional(vDecimalString),
     unitPrice: v.optional(vMoney),
-    total: vMoney,
+    total: v.optional(vMoney),
     categoryId: v.nullish(v.pipe(v.string(), v.uuid()))
+});
+
+/**
+ * A receipt photo or PDF attached to an expense (metadata only; no file name is kept).
+ */
+export const vAttachment = v.object({
+    id: v.pipe(v.string(), v.uuid()),
+    expenseId: v.pipe(v.string(), v.uuid()),
+    contentType: v.picklist([
+        'image/jpeg',
+        'image/png',
+        'application/pdf'
+    ]),
+    sizeBytes: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt('-9223372036854775808'), 'Invalid value: Expected int64 to be >= -9223372036854775808'), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')),
+    uploadedByMemberId: v.nullish(v.pipe(v.string(), v.uuid())),
+    createdAt: v.pipe(v.string(), v.isoTimestamp())
+});
+
+export const vAttachmentList = v.object({
+    items: v.pipe(v.array(vAttachment), v.maxLength(5))
+});
+
+export const vAttachmentUploadForm = v.object({
+    file: v.string()
 });
 
 export const vExpenseSplit = v.object({
@@ -1166,6 +1197,8 @@ export const vStreamEvent = v.object({
 
 export const vExpenseId = v.pipe(v.string(), v.uuid());
 
+export const vAttachmentId = v.pipe(v.string(), v.uuid());
+
 /**
  * Opaque cursor from a previous page's `nextCursor`.
  */
@@ -1373,6 +1406,46 @@ export const vRestoreExpensePath = v.object({
  * Restored expense.
  */
 export const vRestoreExpenseResponse = vExpense;
+
+export const vListExpenseAttachmentsPath = v.object({
+    expenseId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * The attachments (possibly empty).
+ */
+export const vListExpenseAttachmentsResponse = vAttachmentList;
+
+export const vUploadExpenseAttachmentBody = vAttachmentUploadForm;
+
+export const vUploadExpenseAttachmentPath = v.object({
+    expenseId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * Stored.
+ */
+export const vUploadExpenseAttachmentResponse = vAttachment;
+
+export const vDeleteExpenseAttachmentPath = v.object({
+    expenseId: v.pipe(v.string(), v.uuid()),
+    attachmentId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * Removed (the stored file is deleted too).
+ */
+export const vDeleteExpenseAttachmentResponse = v.void();
+
+export const vGetExpenseAttachmentContentPath = v.object({
+    expenseId: v.pipe(v.string(), v.uuid()),
+    attachmentId: v.pipe(v.string(), v.uuid())
+});
+
+/**
+ * The file.
+ */
+export const vGetExpenseAttachmentContentResponse = v.string();
 
 export const vListReviewQuery = v.object({
     reason: v.optional(vReviewReason),

@@ -80,7 +80,7 @@ final class SigV4Signer {
             + payloadHash;
     String day = DAY.format(now);
     String scope = day + "/" + region + "/s3/aws4_request";
-    String stringToSign =
+    final String stringToSign =
         "AWS4-HMAC-SHA256\n"
             + amzDate(now)
             + '\n'

@@ -101,6 +101,7 @@ class V2CoreSchemaMigrationTest {
             "V9__budget.sql",
             "V10__invite.sql",
             "V11__refresh_token_grace.sql",
+            "V12__expense_attachment_item.sql",
             "R__seed_reference.sql");
   }
 

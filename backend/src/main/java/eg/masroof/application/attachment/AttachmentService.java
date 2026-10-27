@@ -62,7 +62,7 @@ public class AttachmentService {
 
   /** Validates, strips and stores one file; the object is written before the row. */
   public Row upload(UUID expenseId, byte[] raw) {
-    UUID household = requireLiveExpense(expenseId);
+    final UUID household = requireLiveExpense(expenseId);
     if (raw.length == 0) {
       throw new AttachmentException(Kind.EMPTY, "The file is empty");
     }

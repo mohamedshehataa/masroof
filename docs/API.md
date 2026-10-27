@@ -412,7 +412,7 @@ The stored (metadata-stripped) bytes, served as a download (`Content-Disposition
 
 | Status | Description | Body |
 |---|---|---|
-| 200 | The file. | image/jpeg: string, image/png: string, application/pdf: string |
+| 200 | The file. | image/jpeg: string (binary), image/png: string (binary), application/pdf: string (binary) |
 | 401 | Missing, expired or invalid credentials. | application/problem+json: `Problem` |
 | 404 | Resource not found in this household. | application/problem+json: `Problem` |
 | 503 | Attachment storage is not configured or not reachable. | application/problem+json: `Problem` |
@@ -1785,7 +1785,7 @@ A receipt photo or PDF attached to an expense (metadata only; no file name is ke
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `file` | string | yes | JPEG, PNG or PDF, at most 8 MiB. |
+| `file` | string (binary) | yes | JPEG, PNG or PDF, at most 8 MiB. |
 
 ### ExpenseSource
 

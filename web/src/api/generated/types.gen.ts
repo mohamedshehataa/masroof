@@ -274,18 +274,59 @@ export type Expense = {
 };
 
 /**
- * A receipt line item.
+ * A purchased item on the expense (typed by the user; receipt OCR is a later story). Sent as the whole list on
+ * create or patch (the list replaces the stored one; `id` is assigned by the server and ignored on input).
+ * Item amounts use the expense's currency and do not have to add up to the expense amount.
+ *
  */
 export type ExpenseItem = {
     id?: string;
+    /**
+     * Trimmed; 1 to 200 characters, no NUL.
+     */
     name: string;
     /**
-     * Quantity; may be fractional (e.g. `1.5` kg).
+     * Optional quantity, greater than 0, at most 3 decimals and at most 999999 (e.g. `2`, `1.5` kg).
      */
     qty?: DecimalString;
+    /**
+     * Not supported yet; must be absent.
+     */
     unitPrice?: Money;
-    total: Money;
+    /**
+     * Optional amount for this line, 0 or more, in the expense's currency.
+     */
+    total?: Money;
     categoryId?: string | null;
+};
+
+/**
+ * A receipt photo or PDF attached to an expense (metadata only; no file name is kept).
+ */
+export type Attachment = {
+    id: string;
+    expenseId: string;
+    /**
+     * Sniffed from the bytes at upload.
+     */
+    contentType: 'image/jpeg' | 'image/png' | 'application/pdf';
+    /**
+     * Size of the stored (metadata-stripped) file.
+     */
+    sizeBytes: number;
+    uploadedByMemberId?: string | null;
+    createdAt: string;
+};
+
+export type AttachmentList = {
+    items: Array<Attachment>;
+};
+
+export type AttachmentUploadForm = {
+    /**
+     * JPEG, PNG or PDF, at most 8 MiB.
+     */
+    file: Blob | File;
 };
 
 /**
@@ -1242,6 +1283,8 @@ export type StreamEvent = {
 
 export type ExpenseId = string;
 
+export type AttachmentId = string;
+
 /**
  * Opaque cursor from a previous page's `nextCursor`.
  */
@@ -1936,6 +1979,156 @@ export type RestoreExpenseResponses = {
 };
 
 export type RestoreExpenseResponse = RestoreExpenseResponses[keyof RestoreExpenseResponses];
+
+export type ListExpenseAttachmentsData = {
+    body?: never;
+    path: {
+        expenseId: string;
+    };
+    query?: never;
+    url: '/api/expenses/{expenseId}/attachments';
+};
+
+export type ListExpenseAttachmentsErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+};
+
+export type ListExpenseAttachmentsError = ListExpenseAttachmentsErrors[keyof ListExpenseAttachmentsErrors];
+
+export type ListExpenseAttachmentsResponses = {
+    /**
+     * The attachments (possibly empty).
+     */
+    200: AttachmentList;
+};
+
+export type ListExpenseAttachmentsResponse = ListExpenseAttachmentsResponses[keyof ListExpenseAttachmentsResponses];
+
+export type UploadExpenseAttachmentData = {
+    body: AttachmentUploadForm;
+    path: {
+        expenseId: string;
+    };
+    query?: never;
+    url: '/api/expenses/{expenseId}/attachments';
+};
+
+export type UploadExpenseAttachmentErrors = {
+    /**
+     * Malformed request or validation failure.
+     */
+    400: Problem;
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+    /**
+     * State conflict (duplicate, already merged, optimistic lock).
+     */
+    409: Problem;
+    /**
+     * Body exceeds the configured size limit.
+     */
+    413: Problem;
+    /**
+     * Not a JPEG, PNG or PDF after sniffing.
+     */
+    415: Problem;
+    /**
+     * Attachment storage is not configured or not reachable.
+     */
+    503: Problem;
+};
+
+export type UploadExpenseAttachmentError = UploadExpenseAttachmentErrors[keyof UploadExpenseAttachmentErrors];
+
+export type UploadExpenseAttachmentResponses = {
+    /**
+     * Stored.
+     */
+    201: Attachment;
+};
+
+export type UploadExpenseAttachmentResponse = UploadExpenseAttachmentResponses[keyof UploadExpenseAttachmentResponses];
+
+export type DeleteExpenseAttachmentData = {
+    body?: never;
+    path: {
+        expenseId: string;
+        attachmentId: string;
+    };
+    query?: never;
+    url: '/api/expenses/{expenseId}/attachments/{attachmentId}';
+};
+
+export type DeleteExpenseAttachmentErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+};
+
+export type DeleteExpenseAttachmentError = DeleteExpenseAttachmentErrors[keyof DeleteExpenseAttachmentErrors];
+
+export type DeleteExpenseAttachmentResponses = {
+    /**
+     * Removed (the stored file is deleted too).
+     */
+    204: void;
+};
+
+export type DeleteExpenseAttachmentResponse = DeleteExpenseAttachmentResponses[keyof DeleteExpenseAttachmentResponses];
+
+export type GetExpenseAttachmentContentData = {
+    body?: never;
+    path: {
+        expenseId: string;
+        attachmentId: string;
+    };
+    query?: never;
+    url: '/api/expenses/{expenseId}/attachments/{attachmentId}';
+};
+
+export type GetExpenseAttachmentContentErrors = {
+    /**
+     * Missing, expired or invalid credentials.
+     */
+    401: Problem;
+    /**
+     * Resource not found in this household.
+     */
+    404: Problem;
+    /**
+     * Attachment storage is not configured or not reachable.
+     */
+    503: Problem;
+};
+
+export type GetExpenseAttachmentContentError = GetExpenseAttachmentContentErrors[keyof GetExpenseAttachmentContentErrors];
+
+export type GetExpenseAttachmentContentResponses = {
+    /**
+     * The file.
+     */
+    200: Blob | File;
+};
+
+export type GetExpenseAttachmentContentResponse = GetExpenseAttachmentContentResponses[keyof GetExpenseAttachmentContentResponses];
 
 export type ListReviewData = {
     body?: never;

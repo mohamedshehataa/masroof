@@ -138,8 +138,11 @@ The e2-micro's shared vCPUs sustain 0.25 CPU each and burst higher for short per
 backend health check allows 240 s before declaring it unhealthy and `deploy.sh` waits up to 180 s for the first smoke test.
 No startup-snapshot (AppCDS) is built: it needs a training run at image build time and the start time is already fine.
 
-MinIO is kept (32 MiB measured, capped at 128 MiB) because the next stories need object storage; the backend does not
-use it yet.
+MinIO is kept (32 MiB measured, capped at 128 MiB). Since STORY-168 the backend stores receipt attachments in it
+(bucket `masroof-media`, created on first upload; `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` in the
+backend environment; without them only the attachment endpoints answer 503). Uploads are capped at 8 MiB and held on the
+Java heap (never spooled to the memory-backed `/tmp`); a single upload peaks at roughly 3 x 8 MiB of the 224 MiB heap,
+so the memory budget above is unchanged.
 
 ### First login
 `bootstrap.sh` generates `MASROOF_JWT_SECRET`. To create the first admin, add `MASROOF_BOOTSTRAP_ADMIN_EMAIL` and
