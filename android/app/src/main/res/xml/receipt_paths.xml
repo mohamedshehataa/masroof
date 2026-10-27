@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only cache/receipts/: the camera target. Nothing else in the app's storage is reachable through the provider. -->
+    <cache-path
+        name="receipts"
+        path="receipts/" />
+</paths>

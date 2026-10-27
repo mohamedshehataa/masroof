@@ -285,7 +285,7 @@ class EditExpenseViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun TestScope.vm() =
-        EditExpenseViewModel(editor, SavedStateHandle(mapOf("id" to "e1"))).also {
+        EditExpenseViewModel(editor, FakeReceiptRemote(), SavedStateHandle(mapOf("id" to "e1"))).also {
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { it.state.collect {} }
         }
 
