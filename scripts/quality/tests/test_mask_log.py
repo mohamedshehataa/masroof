@@ -60,7 +60,9 @@ class MaskLogTests(unittest.TestCase):
             "o.s.w.s.m.s.DefaultHandlerExceptionResolver : rawMessageId=3f2b9c1e-8d4a-4e6b-9c2d-1a2b3c4d5e6f traceId="
             "662ac8f5-36d1-4a16-be7c-f961c6490a1b"
         )
-        self.assertEqual(line, mask(line))
+        # the placeholders are random per call: run it often enough that a sentinel the masks could cut into shows up
+        for _ in range(300):
+            self.assertEqual(line, mask(line))
 
     def test_a_crafted_placeholder_in_the_input_never_breaks_masking(self):
         out = mask("\x000\x00 \x00abc:7\x00 card " + "-".join(["4" + "0" * 3] * 4))

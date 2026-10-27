@@ -30,14 +30,28 @@ _MASKS = [
 MAX_LINE = 400
 
 
+_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+
+
+def _letters(n: int) -> str:
+    """n written with letters only, so no mask (digit runs, tokens) can ever match inside a placeholder."""
+    out = ""
+    while True:
+        out = _LETTERS[n % 26] + out
+        n //= 26
+        if n == 0:
+            return out
+
+
 def mask(line: str) -> str:
-    # placeholders use a per-call random sentinel, so a crafted log line can never collide with them
-    sentinel = secrets.token_hex(8)
+    # placeholders use a per-call random letters-only sentinel: a crafted log line can never collide with them, and
+    # the masks below (digits, tokens) can never cut into them
+    sentinel = "".join(secrets.choice(_LETTERS) for _ in range(12))
     kept: list[str] = []
 
     def hold(m: re.Match) -> str:
         kept.append(m.group(0))
-        return f"\x00{sentinel}:{len(kept) - 1}\x00"
+        return f"\x00{sentinel}:{_letters(len(kept) - 1)}\x00"
 
     out = line
     for pattern in _KEEP:
@@ -45,11 +59,13 @@ def mask(line: str) -> str:
     for pattern, replacement in _MASKS:
         out = pattern.sub(replacement, out)
 
-    def restore(m: re.Match) -> str:
-        index = int(m.group(1))
-        return kept[index] if index < len(kept) else "<masked>"
+    index_of = {_letters(i): i for i in range(len(kept))}
 
-    out = re.sub(rf"\x00{sentinel}:(\d+)\x00", restore, out)
+    def restore(m: re.Match) -> str:
+        index = index_of.get(m.group(1))
+        return kept[index] if index is not None else "<masked>"
+
+    out = re.sub(rf"\x00{sentinel}:([a-z]+)\x00", restore, out)
     return out[:MAX_LINE]
 
 
