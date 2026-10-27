@@ -14,6 +14,7 @@ import eg.masroof.data.remote.SmsUploadResult
 import eg.masroof.ingest.DeviceIdProvider
 import eg.masroof.ingest.ExpenseListRefresher
 import eg.masroof.ingest.SmsUploader
+import eg.masroof.ingest.UploadedRecordsRefresher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -136,5 +137,26 @@ class CapturedRefreshTest {
             uploader(SmsUploadResult.Sent("x")).first.uploadPending()
             assertEquals(0, fetches)
             assertEquals(0, signals)
+        }
+
+    @Test
+    fun `REQ-SMS-094 a refresher that throws cannot fail the pass or lose its retry`() =
+        runTest(UnconfinedTestDispatcher()) {
+            queue("a", "b")
+            val parsed =
+                object : ParsedRemote {
+                    override suspend fun uploadParsed(
+                        deviceId: String,
+                        item: ParsedOutboxEntity,
+                    ) = if (item.localId == "a") SmsUploadResult.Sent("server-1") else SmsUploadResult.Retry(30)
+                }
+            val broken =
+                object : UploadedRecordsRefresher {
+                    override suspend fun refreshAfterUpload() = error("boom")
+                }
+            val report = SmsUploader(db, parsed, device, clock, MemoryGate(), refresher = broken).uploadPending()
+            assertEquals(1, report.sent)
+            assertTrue(report.retry)
+            assertEquals(30L, report.retryAfterSeconds)
         }
 }

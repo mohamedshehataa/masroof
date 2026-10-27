@@ -36,6 +36,7 @@ import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 const val SMS_INTAKE_TAG = "sms-intake"
 const val SMS_UPLOAD_WORK = "sms-upload"
@@ -318,7 +319,18 @@ class SmsUploader
                 wait = maxOf(wait, step.waitSeconds)
             }
             // one refresh per pass, however many records went out
-            if (sent > 0) refresher.refreshAfterUpload()
+            if (sent > 0) {
+                // a failing refresh must never fail the pass: the records are sent and the retry below is still needed
+                try {
+                    refresher.refreshAfterUpload()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") _: Exception,
+                ) {
+                    // the next normal sync fetches the rows
+                }
+            }
             if (stopped) return SmsSyncReport(sent, rejected, false)
             if (wait > 0) {
                 // a row is held by another upload (maybe a dead one): come back when its claim runs out

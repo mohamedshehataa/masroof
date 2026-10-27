@@ -224,3 +224,68 @@ Inputs (PII as in the owner's report, already in committed fixtures). SMS from B
 
 ## Test integrity
 bash scripts/quality/test-integrity-check.sh origin/main: TEST_INTEGRITY: OK; assertions 96 to 169, none in deleted files, no new skip. SmsLifecycleTest assertion count unchanged (36 to 36). The CapturedUploadTest timing change keeps every assertion and its purpose (the server rules accept both payload shapes). The script did not write .claude/state/test-integrity.log in this worktree; its stdout was used.
+
+---
+
+# PR #69 verification (fix/sync-after-capture-upload): REQ-SMS-094 + STORY-112 budgets duplicate adopt
+
+- Verifier: qa-verifier (fresh context), 2026-10-27, loop 1 of 3
+- Base 9898d81273f7e5a3114508c7f657bf3b174271c5 (PR #68 head), head 45dabb8cce087414541639d6440542d0296e4b89; diff = git diff 9898d81...45dabb8 (8 files, +260/-3)
+- JVM/Robolectric level only (emulator run is separate). JAVA_HOME = Temurin 21.0.12.
+
+## Environment
+- JAVA_HOME=... bash scripts/make/check-fast.sh android sdlc -> check-fast GREEN [android sdlc] in 121s (gradle checkFast OK, hook tests 624/624, quality tests 145/145, sdlc-lint 0/0, contract lint OK)
+- gh pr checks 69 -> all 14 checks pass incl. PR gate, Android check-fast, Test integrity, Security, SDLC traceability
+- python scripts/quality/traceability.py --out (scratch) -> 404 REQs, 0 unknown, gate PASS; REQ-SMS-094 row: 2 tests PASS
+- ./gradlew :app:testDebugUnitTest --tests eg.masroof.CapturedRefreshTest --tests eg.masroof.BudgetsLogicTest --tests eg.masroof.QaProbe069Test -> BudgetsLogicTest 17/17, CapturedRefreshTest 2/2, probe 5/5 (probe file deleted afterwards; git status clean)
+
+## Criteria
+| Claim | Result | Evidence |
+|---|---|---|
+| 1 REQ-SMS-094 one refresh + one signal per pass with sent>=1, none with sent=0 | PASS | CapturedRefreshTest 2/2 PASS; probe: sent-then-retry sent=1 refreshes=1; sent-then-401 sent=1 refresh+1; rejected / gate closed / 401-only / Retry-only -> no refresh, fetches unchanged |
+| 1a no sync -> upload -> sync loop | PASS | ExpenseListRefresher depends only on ExpenseRepository + LocalDataSignal; DefaultExpenseRepository.refresh = syncOutbox (manual outbox) + 3 GETs, no SmsWorkScheduler/SmsUploader; LocalDataSignal is only collected by InsightsViewModel; SessionState.SignedIn is a data class, so a token refresh with the same name/persisted does not re-emit to the MasroofApp scheduleUpload collector; probe concurrent run uploads=[a,b,c,d] (each row once, no extra upload) |
+| 1b refresh failure does not fail/roll back the pass | PASS | probe refresh-fail: IOException / HTTP 401 / HTTP 500 -> sent=2, pendingLeft=0, no exception, signal still sent (signals 1,2,3) |
+| 1c concurrent passes | PASS | probe: two uploadPending on Dispatchers.Default, 50 ms remote latency, 4 rows -> sents=[2,2], uploads=[a,b,c,d], refreshes=2, left=0 |
+| 1d server rows visible via repository flow | PASS | CapturedRefreshTest asserts observeAll ids {server-1, server-2}; probe concurrent list=[srv-1, srv-2] |
+| 2 duplicate create adopts same category+period, updates when values differ | PASS | BudgetsLogicTest 2 new REQ-AND-073 tests PASS; probe B8 rollover-only diff -> update (50000,true) saved=1; B9 Arabic-Indic digits -> update 90000 |
+| 2a no match -> Duplicate stays; never other category/period | PASS | probe B2 weekly Groceries vs monthly create -> DUPLICATE, no update; B3 All-spending vs only Car -> DUPLICATE; B3b Car vs only All-spending rows -> DUPLICATE; B7 empty list -> DUPLICATE; B6 edit path Duplicate -> no adopt |
+| 2b money Long minor units | PASS | BudgetDraft.amountMinor (Long) compared with BudgetRowUi.limit.amountMinor (Long); no double/float in diff |
+| 3 no weakened tests; FakeBudgetsRepository open is additive | PASS | bash scripts/quality/test-integrity-check.sh origin/main -> TEST_INTEGRITY: OK, 62 -> 140 assertions, 0 in deleted files, 0 skips; BudgetsFixtures diff is only class -> open class |
+| 4 gates + no logging of bodies/amounts | PASS | check-fast GREEN, PR checks green, trace 0 unknown; git diff 9898d81...HEAD -- android/app/src/main has no Log/println/Timber/logger lines |
+
+## Findings
+| Sev | Where | What | Repro |
+|---|---|---|---|
+| MAJOR | BudgetsViewModel.kt adoptExisting + BudgetsScreen.kt BudgetDialog | A Duplicate on create now silently overwrites an existing budget that the user did not choose to edit. The Add dialog starts with categoryId = null (All spending) even when hasTotal is true; the menu only hides the item. With a total budget already shown, Add -> amount 900 -> Save gets 409, then adoptExisting updates the existing total budget from 4,000 EGP to 900 EGP and closes the dialog as saved. Before this PR the user got the DUPLICATE error. The same happens when the local cache is stale and the other member already created a budget for that category: the limit the other member set is replaced. The adopt cannot tell an earlier save of mine that timed out from a budget that was already there. Suggestion: adopt only when the list before the save had no budget for that category+period (it appeared between attempts); otherwise keep DUPLICATE. | probe B1: FakeBudgetsRepository with mutation=Duplicate, snapshot=BudgetsFixtures.snapshot() (holds ID_TOTAL at 400000); vm.save(null, null, "900", false) -> saved=1 error=null updated=[(22222222-...-222222222222, (90000,false))] |
+| MINOR | SmsWork.kt uploadPending + CapturedRefresh.kt | refreshAfterUpload is not contained. DefaultExpenseRepository.refresh catches only IOException, HttpFailure and SerializationException; any other exception (Room/SQLite, IllegalStateException from the HTTP stack) escapes uploadPending after rows were sent. The worker then fails, and the computed retry for Retry/held rows is never scheduled (rows wait for the next trigger). Sent rows are not affected. Suggestion: runCatching around the refresh (rethrow CancellationException), or compute the report first. | probe: rows a,b; remote a=Sent, b=Retry(30); refresher throws IllegalStateException -> uploadPending throws IllegalStateException, pendingLeft=[b], report (retry=true, 30 s) lost |
+| MINOR | BudgetsLogicTest.kt | The committed REQ-AND-073 tests cover only the two happy adopt paths. Nothing pins that no match after refresh keeps DUPLICATE, or that another category or period is never adopted (the claim-2 guards). Only these verifier probes cover them. | add tests that mirror probes B2, B3, B3b, B7 |
+| NIT | BudgetsViewModel.kt adoptExisting | The refresh outcome is ignored. When the refresh fails, a stale cached row is adopted and updated (probe B5 saved=1). The update still goes to the server, so this is harmless. Currency is not part of the match (one household currency today). | probe B5 refreshOutcome=Offline |
+
+## Exploratory (inputs verbatim)
+1. Upload pass, rows a=Sent, b,c=Retry(30) -> sent=1 retry=true after=30, 1 refresh
+2. Rows b=Sent, c=Unauthorized -> sent=1 retry=false, refresh still runs once, c stays queued
+3. All Rejected -> sent=0, no refresh
+4. CaptureGate closed, row d queued, remote would answer Sent -> sent=0, no refresh, no fetch
+5. Only Unauthorized -> sent=0, no refresh
+6. Refresh fetchExpenses throws IOException("offline") / HttpFailure(401) / HttpFailure(500) -> pass sent=2, queue empty, signal still emitted
+7. Refresher throws IllegalStateException("boom") with a=Sent, b=Retry(30) -> exception escapes, retry lost (MINOR)
+8. Two concurrent passes over 4 rows with 50 ms latency -> each row uploaded once, 2 refreshes, list shows server rows
+9. Budget create 409, All-spending 4,000 exists, user adds All-spending "900" -> existing overwritten to 900 (MAJOR)
+10. Budget create 409, only WEEKLY Groceries exists, create MONTHLY Groceries "1000" -> DUPLICATE kept
+11. Budget create 409, only Car exists, create All-spending "1000" -> DUPLICATE kept
+12. Budget create 409, only All-spending rows, create Car "1000" -> DUPLICATE kept
+13. Budget create 409, Car exists, adopt update returns Offline -> error OFFLINE, not saved
+14. Budget create 409, refresh Offline, stale cache has Car -> adopted + updated (NIT)
+15. Budget edit (editingId=Car) returns Duplicate -> no adopt, DUPLICATE
+16. Budget create 409, empty list after refresh -> DUPLICATE
+17. Budget create 409, Car 500 exists, user enters "500" with rollover on -> update (50000, rollover true), saved
+18. Amount "٩٠٠" (Arabic-Indic) -> 90000 minor, adopt update
+19. Amount "92233720368547758.07" -> 9223372036854775807 (Long.MAX, no overflow), adopt update
+20. Budget create returns Offline -> no adopt, OFFLINE, 1 refresh only
+
+20 cases, 2 problems (9, 7).
+
+## Test integrity
+bash scripts/quality/test-integrity-check.sh origin/main -> TEST_INTEGRITY: OK (62 -> 140 assertions, none in deleted files, no new skip/tolerance). The only change to existing test code is open class FakeBudgetsRepository; no member changed.
+
+Verdict: FAIL (1 MAJOR: a duplicate-adopt silently overwrites an existing budget).
