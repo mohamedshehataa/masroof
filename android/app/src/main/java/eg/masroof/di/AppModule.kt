@@ -48,6 +48,8 @@ import eg.masroof.data.remote.ApiRemoteSource
 import eg.masroof.data.remote.ExpenseDeleter
 import eg.masroof.data.remote.ParsedRemote
 import eg.masroof.data.remote.RemoteSource
+import eg.masroof.data.remote.newAuthClient
+import eg.masroof.data.remote.newBareClient
 import eg.masroof.ingest.AndroidCapturedNotifier
 import eg.masroof.ingest.AndroidNotificationPermission
 import eg.masroof.ingest.CaptureData
@@ -75,13 +77,17 @@ import okhttp3.OkHttpClient
 import java.io.File
 import java.time.Clock
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class IoDispatcher
+
+/** The OkHttp client with its own Dispatcher and a call deadline, for login/refresh/logout only. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AuthHttp
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -122,8 +128,6 @@ abstract class BindingsModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object ProvidersModule {
-    private const val TIMEOUT_SECONDS = 15L
-
     @Provides @Singleton
     fun database(
         @ApplicationContext context: Context,
@@ -195,12 +199,11 @@ object ProvidersModule {
 
     /** No auth interceptor/authenticator: used for login/refresh/logout and as the base of the authenticated client. */
     @Provides @Singleton
-    fun bareClient(): OkHttpClient =
-        OkHttpClient
-            .Builder()
-            .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .build()
+    fun bareClient(): OkHttpClient = newBareClient()
+
+    /** Separate Dispatcher and deadline: a refresh must never queue behind authenticated calls waiting for it. */
+    @Provides @Singleton @AuthHttp
+    fun authClient(): OkHttpClient = newAuthClient()
 
     /** Last good analytics answer per period, as files in private storage (offline Insights; wiped on logout). */
     @Provides @Singleton

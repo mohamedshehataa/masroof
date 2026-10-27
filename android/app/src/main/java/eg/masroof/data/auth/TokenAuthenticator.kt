@@ -1,6 +1,7 @@
 package eg.masroof.data.auth
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -16,7 +17,7 @@ class BearerInterceptor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         // Runs on an OkHttp dispatcher thread, never the main thread.
-        val token = runBlocking { session.accessToken() }
+        val token = runBlocking { session.freshAccessToken() }
         val request =
             chain
                 .request()
@@ -41,7 +42,8 @@ class TokenAuthenticator(
     ): Request? {
         val sent = response.request.header(AUTHORIZATION)?.removePrefix(BEARER) ?: return null
         if (response.priorResponse != null) return null // already retried once
-        val fresh = runBlocking { session.refreshAfter(sent) } ?: return null
+        // Bounded: on timeout the 401 goes back to the caller (an error the UI can show) instead of parking this thread.
+        val fresh = runBlocking { withTimeoutOrNull(REFRESH_WAIT_MILLIS) { session.refreshAfter(sent) } } ?: return null
         return response.request
             .newBuilder()
             .header(AUTHORIZATION, "$BEARER$fresh")

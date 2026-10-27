@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +66,8 @@ fun InsightsRoute(
     viewModel: InsightsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Runs each time the destination enters composition (tab revisited), not on recomposition.
+    LaunchedEffect(viewModel) { viewModel.onShown() }
     InsightsContent(state, onPeriod = viewModel::selectPeriod, onRetry = viewModel::refresh, onOpenBudgets = onOpenBudgets)
 }
 

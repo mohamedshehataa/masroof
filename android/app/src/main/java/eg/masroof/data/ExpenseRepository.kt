@@ -89,6 +89,7 @@ class DefaultExpenseRepository
         private val db: AppDatabase,
         private val remote: RemoteSource,
         private val clock: Clock,
+        private val signal: LocalDataSignal = LocalDataSignal(),
     ) : ExpenseRepository {
         override fun observeAll() = db.expenses().observeAll()
 
@@ -150,6 +151,7 @@ class DefaultExpenseRepository
                     createdAtMillis = now,
                 ),
             )
+            signal.changed()
             return id
         }
 
@@ -208,7 +210,10 @@ class DefaultExpenseRepository
 
         override suspend fun retryFailed(id: String) = db.resetFailed(id)
 
-        override suspend fun deleteFailed(id: String) = db.discard(id)
+        override suspend fun deleteFailed(id: String) {
+            db.discard(id)
+            signal.changed()
+        }
 
         private companion object {
             const val UNAUTHORIZED = 401
