@@ -216,6 +216,11 @@ class SmsPipeline
             val expenseId = twin.expense.id
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             val richer = twin.captured.instrumentLast4 == null && r.instrumentLast4 != null
+            if (twin.captured.templateId == CaptureRows.REVIEW_SAVED) {
+                // the user saved the first one by hand: take what this one knows, but no new notice and no Undo chip
+                if (richer) db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r))
+                return Stored(Disposition.RECORDED, changed = true)
+            }
             val replace =
                 richer &&
                     !twin.captured.undoRequested &&

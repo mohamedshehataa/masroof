@@ -10,6 +10,7 @@ import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
 import eg.masroof.data.db.MemberEntity
+import eg.masroof.ingest.CaptureQueueConverter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -99,6 +100,7 @@ class DefaultExpenseRepository
         private val eraseLock: EraseLock = EraseLock(),
     ) : ExpenseRepository {
         private val converter = OutboxConverter(db, clock, ids)
+        private val captureConverter = CaptureQueueConverter(db, clock, ids, eraseLock)
 
         override fun observeAll() = db.expenses().observeAll()
 
@@ -166,7 +168,11 @@ class DefaultExpenseRepository
             return id
         }
 
-        override suspend fun convertQueuedEntries(): Int = converter.convertAll().also { if (it > 0) signal.changed() }
+        override suspend fun convertQueuedEntries(): Int {
+            val converted = converter.convertAll() + captureConverter.convertAll()
+            if (converted > 0) signal.changed()
+            return converted
+        }
 
         /**
          * Two chips with the same name would confuse the user. The phone's own default wins over a server category of the

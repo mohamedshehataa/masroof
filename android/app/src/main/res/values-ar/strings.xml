@@ -155,6 +155,9 @@
     <string name="learned_formats">أشكال الرسائل المحفوظة (%1$d)</string>
     <string name="learned_clear">مسح</string>
     <string name="learned_explainer">بعد ما تحفظ رسالة مرة، الرسالة اللي بنفس الشكل بتتسجل لوحدها. الأشكال بتفضل على الموبايل ده ومفيهاش أرقام ولا أسماء.</string>
+    <string name="review_already_recorded">اتسجلت قبل كده</string>
+    <string name="review_save_failed">مقدرناش نحفظ، جرّب تاني</string>
+    <string name="review_amount_invalid">المبلغ لازم يكون أكبر من صفر ومايزيدش عن ١٠٬٠٠٠٬٠٠٠٬٠٠٠</string>
     <string name="review_reason_rejected">السيرفر مقدرش يقبل العملية دي. أضفها بإيدك لو حقيقية.</string>
 
     <string name="nav_insights">التحليلات</string>

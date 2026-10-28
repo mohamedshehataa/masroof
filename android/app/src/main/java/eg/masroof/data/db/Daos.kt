@@ -171,6 +171,9 @@ interface ExpenseSourceDao {
     @Query("SELECT COUNT(*) FROM expense_source WHERE localSourceId = :localSourceId")
     suspend fun countByLocalSourceId(localSourceId: String): Int
 
+    @Query("SELECT expenseId FROM expense_source WHERE localSourceId = :localSourceId")
+    suspend fun expenseIdOfLocalSource(localSourceId: String): String?
+
     @Query("SELECT * FROM expense_source")
     suspend fun all(): List<ExpenseSourceEntity>
 }
@@ -364,7 +367,10 @@ interface CapturedDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: CapturedTxEntity): Long
 
-    @Query("SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff AND undoRequested = 0 ORDER BY capturedAtMillis DESC")
+    @Query(
+        """SELECT * FROM captured_tx WHERE capturedAtMillis >= :cutoff AND undoRequested = 0
+            AND COALESCE(templateId, '') != 'REVIEW_SAVED' ORDER BY capturedAtMillis DESC""",
+    )
     fun observeRecent(cutoff: Long): Flow<List<CapturedTxEntity>>
 
     @Query("SELECT * FROM captured_tx WHERE localId = :localId")

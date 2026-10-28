@@ -827,9 +827,69 @@ object MessageParser {
             ci,
         )
 
+    /**
+     * A completed cashback credit ("Cashback of EGP 12.50 has been credited to your card ... for your purchase at X", "تم اضافة كاش باك"):
+     * money IN. The purchase it refers to is the reason, not a debit (SMS-001 direction guard, STORY-172).
+     */
+    private val cashbackCredited =
+        Regex(
+            "cash\\s?back(?:[^.;]|\\d\\.\\d){0,80}?\\b(?:has been|was|have been)\\s+credited\\b" +
+                "|\\bcredited\\b(?:[^.;]|\\d\\.\\d){0,40}\\bcash\\s?back" +
+                "|(?<![\\p{L}])(?:اضافه|اضافة)\\s+كاش\\s?باك",
+            ci,
+        )
+
+    private val cashbackWord = Regex("cash\\s?back|كاش\\s?باك", ci)
+    private const val CURRENCY_WORD = "(?:(?:egp|le|جنيه)\\s*)?"
+
+    /** What may sit between the cashback word and its amount: "of", "reward of", ":" - nothing that names another thing. */
+    private val cashbackLead = Regex("^\\s*(?:(?:reward|bonus)\\s+)?(?:of\\s+|:\\s*|-\\s*|(?:بقيمه|بقيمة|بمبلغ)\\s*)?$CURRENCY_WORD$", ci)
+
+    /** "Cashback has been credited to your card ending 4512: EGP 40.00": the amount closes the credited clause. */
+    private val creditedColon = Regex("^(?:[^.;]|\\d\\.\\d)*credited[^.;]*:\\s*$CURRENCY_WORD$", ci)
+
+    /** The reason a cashback was given ("for your purchase at X", "paid with card ending 4512", "عن عملية الشراء لدى X"): not a debit. */
+    private val cashbackReason =
+        Regex(
+            "\\b(?:for|on|from|against)\\s+(?:(?:your|the|a|an)\\s+)?(?:[\\p{L}]+\\s+){0,2}?" +
+                "(?:purchases?|spending|transactions?|orders?)\\b" +
+                "(?:\\s+(?:paid|made)\\s+with\\s+(?:your\\s+)?card(?:\\s+ending\\s+\\d+)?)?" +
+                "(?:\\s+(?:of\\s+\\p{L}+\\s+)?(?:at|from)\\s+\\p{L}+)?" +
+                "|\\bon\\s+the\\s+amount\\s+you\\s+spent(?:\\s+at\\s+\\p{L}+)?" +
+                "|(?<![\\p{L}])(?:عن|علي|على|مقابل)\\s+(?:عمليه\\s+)?(?:ال)?(?:شراء|مشتريات\\p{L}*)(?:\\s+(?:لدي|عند|من)\\s+\\p{L}+)?",
+            ci,
+        )
+
+    /**
+     * A message that is only a cashback credit: exactly ONE money amount, introduced by the cashback word itself ("Cashback of EGP 12",
+     * "EGP 45 cashback", "كاش باك 25 جنيه"), and none of the parser's outgoing vocabulary anywhere except in the reason clause of the
+     * cashback. Anything else may be a purchase and takes the normal decision, never an INCOME suggestion.
+     */
+    private fun isPureCashback(now: String): Boolean {
+        val amounts = findAmounts(now).filter { !it.balance && it.minor != null }
+        if (amounts.map { it.minor }.distinct().size != 1) return false
+        val words = cashbackWord.findAll(now).toList()
+        val attached =
+            amounts.all { a ->
+                words.any { w ->
+                    if (a.start >= w.range.last + 1) {
+                        val gap = now.substring(w.range.last + 1, a.start)
+                        cashbackLead.matches(gap) || creditedColon.matches(gap)
+                    } else {
+                        a.end <= w.range.first && now.substring(a.end, w.range.first).isBlank()
+                    }
+                }
+            }
+        return attached && !outAnchor.containsMatchIn(cashbackReason.replace(now, " "))
+    }
+
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
+        val cashback = cashbackCredited.containsMatchIn(now)
+        if (cashback && isPureCashback(now)) return Dir.IN
+        // a cashback line next to other amounts: the normal decision, but never IN (a purchase is not income) - review instead
+        val cashbackMixed = cashback
         // the household's own credit card is the beneficiary of a payment: money leaving the account, never income
         if (cardRepayment.containsMatchIn(now)) return Dir.OUT
         val debit =
@@ -857,7 +917,7 @@ object MessageParser {
                 ownInitiated.containsMatchIn(now)
         return when {
             anyIn && anyOut -> if (isOwnToOwn(ownSource, ownDest, strongIn, debit)) Dir.OUT else Dir.CONFLICT
-            anyIn -> Dir.IN
+            anyIn -> if (cashbackMixed) Dir.CONFLICT else Dir.IN
             anyOut -> Dir.OUT
             transfer -> Dir.CONFLICT // a transfer that says nothing about who gave or received
             else -> Dir.NONE
@@ -950,6 +1010,7 @@ object MessageParser {
             withdrawal.containsMatchIn(t) && outgoing && !atmTransfer(t) -> TxKind.CASH_WITHDRAWAL
             outgoing && feeIsTheTransaction(t) -> TxKind.FEE
             outgoing && cardRepayment.containsMatchIn(t) -> TxKind.TRANSFER_OUT
+            !outgoing && cashbackCredited.containsMatchIn(t) -> TxKind.INCOME
             !outgoing -> if (ownAccount.containsMatchIn(t)) TxKind.TRANSFER_IN else TxKind.INCOME
             transferWords.containsMatchIn(t) && !paymentWords.containsMatchIn(t) -> TxKind.TRANSFER_OUT
             else -> TxKind.PURCHASE

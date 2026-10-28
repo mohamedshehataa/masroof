@@ -151,6 +151,9 @@
     <string name="learned_formats">Learned SMS formats (%1$d)</string>
     <string name="learned_clear">Clear</string>
     <string name="learned_explainer">After you save a message once, the next one in the same format is recorded for you. Formats stay on this phone and contain no numbers or names.</string>
+    <string name="review_already_recorded">Already recorded</string>
+    <string name="review_save_failed">Couldn\'t save, try again</string>
+    <string name="review_amount_invalid">The amount must be more than zero and at most 10,000,000,000</string>
     <string name="review_reason_rejected">The server could not accept this one. Create the expense by hand if it is real.</string>
 
     <string name="nav_insights">Insights</string>

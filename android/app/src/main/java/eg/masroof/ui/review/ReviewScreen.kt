@@ -14,11 +14,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -34,6 +37,7 @@ import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
+import eg.masroof.ui.viewmodel.ReviewSaveResult
 import eg.masroof.ui.viewmodel.ReviewViewModel
 
 /** The local "Needs review" list: messages that never left the phone (REQ-SMS-014). */
@@ -44,7 +48,23 @@ fun ReviewRoute(
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
     SecureWindow()
-    ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss, onSave = viewModel::save)
+    val snackbar = remember { SnackbarHostState() }
+    val already = stringResource(R.string.review_already_recorded)
+    val failed = stringResource(R.string.review_save_failed)
+    val invalid = stringResource(R.string.review_amount_invalid)
+    LaunchedEffect(viewModel) {
+        viewModel.results.collect { result ->
+            val message =
+                when (result) {
+                    ReviewSaveResult.ALREADY_RECORDED -> already
+                    ReviewSaveResult.FAILED -> failed
+                    ReviewSaveResult.AMOUNT_INVALID -> invalid
+                    else -> null
+                }
+            message?.let { snackbar.showSnackbar(it) }
+        }
+    }
+    ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss, onSave = viewModel::save, snackbar = snackbar)
 }
 
 @Composable
@@ -54,6 +74,7 @@ fun ReviewContent(
     onDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
     onSave: (String) -> Unit = {},
+    snackbar: SnackbarHostState? = null,
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -66,10 +87,11 @@ fun ReviewContent(
             items == null -> CircularProgressIndicator()
             items.isEmpty() -> Text(stringResource(R.string.review_empty), style = MaterialTheme.typography.bodyMedium)
             else ->
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(items, key = { it.id }) { item -> ReviewCard(item, onCreate, onDismiss, onSave) }
                 }
         }
+        snackbar?.let { SnackbarHost(it) }
     }
 }
 
