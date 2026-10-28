@@ -297,6 +297,24 @@ class ReceiptStoreTest {
         }
 
     @Test
+    fun `REQ-RCPT-017 the stored long edge is exactly 2560 for big photos and never upscaled`() =
+        runTest {
+            entry()
+            for ((w, h, expected) in listOf(Triple(3000, 2000, 2560), Triple(6000, 4000, 2560), Triple(1200, 800, 1200))) {
+                dir.deleteRecursively()
+                db.clearAllTables()
+                entry()
+                assertTrue(attach(jpeg(w, h)) is AttachResult.Added)
+                val o =
+                    android.graphics.BitmapFactory
+                        .Options()
+                        .apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(files().single().path, o)
+                assertEquals("$w x $h", expected, maxOf(o.outWidth, o.outHeight))
+            }
+        }
+
+    @Test
     fun `REQ-RCPT-017 a long edge over 2560 is scaled down`() =
         runTest {
             entry()

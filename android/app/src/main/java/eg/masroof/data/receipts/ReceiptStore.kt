@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ReceiptEntity
@@ -251,10 +252,12 @@ class ReceiptStore
         ): Bitmap? {
             val matrix = JpegExif.matrixFor(if (kind == ReceiptKind.JPEG) JpegExif.orientation(raw) else 1)
             var sample = 1
-            while (longEdge / sample > ReceiptLimits.MAX_LONG_EDGE) sample *= 2
+            // the largest power of two that keeps the decoded long edge >= 2560 (so < 5120): full detail, bounded memory
+            while (longEdge / (sample * 2) >= ReceiptLimits.MAX_LONG_EDGE) sample *= 2
             var current = BitmapFactory.decodeFile(raw.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
             var done = false
             try {
+                current = fitLongEdge(current)
                 if (current.hasAlpha()) current = onWhite(current)
                 if (!matrix.isIdentity) {
                     val turned = Bitmap.createBitmap(current, 0, 0, current.width, current.height, matrix, true)
@@ -266,6 +269,15 @@ class ReceiptStore
             } finally {
                 if (!done) current.recycle()
             }
+        }
+
+        /** Exactly [ReceiptLimits.MAX_LONG_EDGE] on the long side when larger; never scaled up. */
+        private fun fitLongEdge(src: Bitmap): Bitmap {
+            val long = maxOf(src.width, src.height)
+            if (long <= ReceiptLimits.MAX_LONG_EDGE) return src
+            val w = maxOf(1, src.width * ReceiptLimits.MAX_LONG_EDGE / long)
+            val h = maxOf(1, src.height * ReceiptLimits.MAX_LONG_EDGE / long)
+            return src.scale(w, h).also { if (it !== src) src.recycle() }
         }
 
         private fun onWhite(src: Bitmap): Bitmap {
