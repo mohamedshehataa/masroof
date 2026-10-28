@@ -28,4 +28,6 @@ data class InsightsSnapshot(
     val trend: Trend,
     val heatmap: Heatmap,
     val fetchedAtMillis: Long,
+    /** Entries of the period in a currency other than EGP; they are not in any figure (REQ-AN-145). */
+    val otherCurrencyCount: Int = 0,
 )

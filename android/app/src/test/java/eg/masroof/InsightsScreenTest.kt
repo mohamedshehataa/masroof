@@ -133,7 +133,7 @@ class InsightsScreenTest {
     @Test
     fun `REQ-AND-071 error without cached data offers retry`() {
         show(InsightsState(status = LoadStatus.ERROR))
-        compose.onNodeWithText("Could not load insights").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't compute insights").assertIsDisplayed()
         compose.onNodeWithText("Retry").performClick()
         assertEquals(1, retries)
     }

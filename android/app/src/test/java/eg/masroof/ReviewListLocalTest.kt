@@ -319,7 +319,8 @@ class ReviewListLocalTest {
             assertEquals("PENDING_REVIEW", byAmount.getValue(200_000L).status)
             assertEquals("PENDING_REVIEW", byAmount.getValue(5_000_001L).status)
             assertEquals("CONFIRMED", byAmount.getValue(5_000L).status)
-            assertEquals(5_000L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+            // STORY-178: the pending 50,000.01 EGP expense counts too; income and the incoming transfer never do.
+            assertEquals(5_005_001L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
         }
 
     @Test

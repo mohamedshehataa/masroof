@@ -187,7 +187,9 @@ class LocalCaptureTest {
             assertEquals("PENDING_REVIEW", all.getValue(6_000_000L).status)
             assertEquals("EXPENSE", all.getValue(6_000_000L).type)
             assertEquals("CONFIRMED", all.getValue(2_000L).status)
-            assertEquals("only the small purchase counts", 2_000L, db.expenses().observeTotal(0L, Long.MAX_VALUE).first())
+            // STORY-178: a PENDING_REVIEW expense counts (one rule for Home and Insights); the incoming transfer never does.
+            val total = db.expenses().observeTotal(0L, Long.MAX_VALUE).first()
+            assertEquals("both purchases count, the incoming transfer does not", 6_002_000L, total)
         }
 
     @Test

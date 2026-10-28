@@ -31,11 +31,8 @@ import eg.masroof.data.budgets.DefaultBudgetsRepository
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
-import eg.masroof.data.insights.ApiInsightsRemote
-import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.FileInsightsCache
 import eg.masroof.data.insights.InsightsCache
-import eg.masroof.data.insights.InsightsRemote
 import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.data.members.ApiMembersRemote
 import eg.masroof.data.members.MembersRemote
@@ -134,9 +131,9 @@ abstract class BindingsModule {
 
     @Binds abstract fun smsScheduler(impl: WorkManagerSmsScheduler): SmsWorkScheduler
 
-    @Binds abstract fun insights(impl: DefaultInsightsRepository): InsightsRepository
+    @Binds abstract fun insights(impl: eg.masroof.data.insights.LocalInsightsRepository): InsightsRepository
 
-    @Binds abstract fun insightsRemote(impl: ApiInsightsRemote): InsightsRemote
+    @Binds abstract fun analyticsEngine(impl: eg.masroof.core.analytics.RoomAnalyticsEngine): eg.masroof.core.analytics.AnalyticsEngine
 
     @Binds abstract fun membersRemote(impl: ApiMembersRemote): MembersRemote
 

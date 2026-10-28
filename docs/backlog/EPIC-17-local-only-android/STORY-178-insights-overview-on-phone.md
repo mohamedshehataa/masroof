@@ -3,7 +3,7 @@ id: STORY-178
 epic: EPIC-17
 title: Home and the Insights overview and categories are computed on the phone
 phase: 7
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -112,3 +112,4 @@ STORY-171, STORY-176, STORY-177
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D2), reuses STORY-109 Insights UI |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - AnalyticsEngine, LocalInsightsRepository, Settings section, parity + benchmark tests |
