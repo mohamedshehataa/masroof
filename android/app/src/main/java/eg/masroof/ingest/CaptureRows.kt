@@ -1,5 +1,6 @@
 package eg.masroof.ingest
 
+import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
 import eg.masroof.ingest.parse.CaptureSource
@@ -13,6 +14,33 @@ internal const val CHANNEL_PUSH = "PUSH"
 internal object CaptureRows {
     private const val REVIEW_CEILING_MINOR = 5_000_000L
     private const val BASE_CURRENCY = "EGP"
+
+    /** `captured_tx.templateId` of a row made by the review list: it only lets a later twin find the entry, and is never shown. */
+    const val REVIEW_SAVED = "REVIEW_SAVED"
+
+    @Suppress("LongParameterList") // typed fields of one row
+    fun reviewSavedRow(
+        id: String,
+        expenseId: String,
+        r: ParsedRecord,
+        receivedAt: Long,
+        now: Long,
+        pairedWith: String?,
+    ) = CapturedTxEntity(
+        localId = id,
+        expenseId = expenseId,
+        amountMinor = r.amountMinor,
+        currency = r.currency,
+        label = null,
+        source = r.source.name,
+        templateId = REVIEW_SAVED,
+        capturedAtMillis = now,
+        kind = r.kind.name,
+        receivedAtMillis = receivedAt,
+        paired = pairedWith != null,
+        pairedLocalId = pairedWith,
+        instrumentLast4 = r.instrumentLast4,
+    )
 
     /** The name an entry shows: the merchant or counterparty label, else the institution (typed, digit-free values only). */
     fun label(r: ParsedRecord): String? = r.merchant ?: r.institution

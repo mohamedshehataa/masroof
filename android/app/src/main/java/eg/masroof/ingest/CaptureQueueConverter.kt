@@ -2,6 +2,7 @@ package eg.masroof.ingest
 
 import androidx.room.withTransaction
 import eg.masroof.core.CairoTime
+import eg.masroof.core.MoneyFormat
 import eg.masroof.data.IdFactory
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
@@ -55,7 +56,16 @@ internal class CaptureQueueConverter(
         val record = recordOf(row, kind ?: TxKind.PURCHASE)
         val captured = db.captured().find(row.localId)
         val receivedAt = captured?.receivedAtMillis?.takeIf { it > 0 } ?: row.createdAtMillis
-        val twin = if (kind != null) pairing.claimTwin(record, row.localId, receivedAt) else null
+        // rows the old pairQueued already matched point at each other: the second to convert joins the first one's entry
+        val partner = captured?.takeIf { it.paired }?.pairedLocalId
+        val partnerExpense = partner?.let { db.sources().expenseIdOfLocalSource(it) }?.let { db.expenses().find(it) }
+        val partnerRow = partner?.let { db.captured().find(it) }
+        val twin =
+            when {
+                partnerExpense != null && partnerRow != null -> LocalTwin(partnerRow, partnerExpense)
+                captured?.paired == true || kind == null -> null
+                else -> pairing.claimTwin(record, row.localId, receivedAt)
+            }
         if (twin != null) {
             db.sources().insert(CaptureRows.source(ids.next(), twin.expense.id, record, row.localId, receivedAt))
             if (twin.captured.instrumentLast4 == null && record.instrumentLast4 != null) {
@@ -68,13 +78,27 @@ internal class CaptureQueueConverter(
         } else {
             val expenseId = ids.next()
             val entry = CaptureRows.expense(expenseId, record, now)
-            // a row nobody can read (corrupt kind) is kept for the user, never dropped
-            db.expenses().insert(if (kind == null) entry.copy(status = "PENDING_REVIEW") else entry)
+            // a row nobody can trust (corrupt kind, amount or time) is kept for the user to check, never dropped
+            db.expenses().insert(if (suspicious(row, kind, now)) entry.copy(status = "PENDING_REVIEW") else entry)
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, row.localId, receivedAt))
             if (captured != null) db.captured().setExpenseId(row.localId, expenseId)
         }
         db.parsedOutbox().delete(row.localId)
         return true
+    }
+
+    private fun suspicious(
+        row: ParsedOutboxEntity,
+        kind: TxKind?,
+        now: Long,
+    ) = kind == null ||
+        row.amountMinor !in 1..MoneyFormat.MAX_ENTRY_MINOR ||
+        row.occurredAtMillis < now - MAX_AGE_MILLIS ||
+        row.occurredAtMillis > now + MAX_AHEAD_MILLIS
+
+    private companion object {
+        const val MAX_AGE_MILLIS = 45L * 24 * 60 * 60 * 1000
+        const val MAX_AHEAD_MILLIS = 24L * 60 * 60 * 1000
     }
 
     private fun recordOf(

@@ -839,10 +839,19 @@ object MessageParser {
             ci,
         )
 
+    /** Wording of money really leaving: the cashback's own "for your purchase at X" is a reason, not a debit. */
+    private val realDebit =
+        Regex(
+            "\\b(?:charged|debited|deducted|spent|paid|withdrawn)\\b|\\bpurchase of\\b|\\bwith (?:your )?card\\b" +
+                "|(?<![\\p{L}])(?:خصم|سحب|دفع|شراء)(?![\\p{L}])",
+            ci,
+        )
+
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
-        if (cashbackCredited.containsMatchIn(now)) return Dir.IN
+        // a purchase that merely mentions a credited cashback keeps the normal decision (never INCOME with the purchase amount)
+        if (cashbackCredited.containsMatchIn(now) && !realDebit.containsMatchIn(now)) return Dir.IN
         // the household's own credit card is the beneficiary of a payment: money leaving the account, never income
         if (cardRepayment.containsMatchIn(now)) return Dir.OUT
         val debit =

@@ -18,6 +18,7 @@ import eg.masroof.ui.viewmodel.ReviewSaveResult
 import eg.masroof.ui.viewmodel.ReviewViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -467,6 +468,165 @@ class ReviewListLocalTest {
             }
             assertTrue("stored as money out: $offenders", offenders.isEmpty())
             assertTrue("the rows were really exercised: $stored", stored >= 10)
+        }
+
+    @Test
+    fun `REQ-SMS-100 a purchase that also mentions a credited cashback is never income`() {
+        val texts =
+            listOf(
+                "Your card ending 4512 was charged EGP 1,250.00 at ZARA. Cashback of EGP 12.50 has been credited to your card",
+                "تم خصم 500 جنيه من بطاقتك المنتهية ب 4512 لدى امازون وتم اضافة كاش باك 25 جنيه إلى حسابك",
+                "Purchase of EGP 300.00 at NOON with card ending 4512. EGP 15 cashback was credited to your account",
+                "Your card ending 4512 was debited EGP 200.00 at UBER, cashback has been credited",
+                "Your card ending 4512 was charged EGP 800.00 at NOON. EGP 40 cashback has been credited",
+            )
+        for (text in texts) {
+            val outcome =
+                eg.masroof.ingest.parse.MessageParser
+                    .parse(IncomingMessage(CaptureSource.SMS, "CIB", text, at))
+            val kind =
+                (outcome as? eg.masroof.ingest.parse.ParseOutcome.Review)?.suggestion?.kind
+                    ?: (outcome as? eg.masroof.ingest.parse.ParseOutcome.Record)?.record?.kind
+            assertTrue("$kind for $outcome", kind == null || kind.name !in INCOMING)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-100 no purchase fixture row becomes income`() =
+        runTest {
+            val rows = fixtureRows().filter { (it["expect"] as? JsonObject)?.get("kind")?.jsonPrimitive?.contentOrNull == "PURCHASE" }
+            assertTrue("purchase rows: ${rows.size}", rows.size >= 20)
+            val p = pipeline()
+            val model = vm()
+            val offenders = mutableListOf<String>()
+            val seen = mutableSetOf<String>()
+            for ((i, row) in rows.withIndex()) {
+                val id = row["id"]!!.jsonPrimitive.content
+                val stamp = row["receivedAt"]?.jsonPrimitive?.contentOrNull
+                val received = stamp?.let { Instant.parse(it).toEpochMilli() } ?: (at + i * 3_600_000L)
+                val source =
+                    if (row["source"]?.jsonPrimitive?.contentOrNull ==
+                        "NOTIFICATION"
+                    ) {
+                        CaptureSource.NOTIFICATION
+                    } else {
+                        CaptureSource.SMS
+                    }
+                p.accept(IncomingMessage(source, row["sender"]!!.jsonPrimitive.content, row["body"]!!.jsonPrimitive.content, received))
+                for (item in db.reviews().all()) model.saveNow(item.id)
+                if (db
+                        .expenses()
+                        .all()
+                        .filter { seen.add(it.id) }
+                        .any { it.type == "INCOME" }
+                ) {
+                    offenders += id
+                }
+            }
+            assertTrue("purchase fixtures stored as income: $offenders", offenders.isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-098 a Save that waited for an erase writes nothing and learns nothing`() =
+        runTest {
+            val lock =
+                eg.masroof.data.auth
+                    .EraseLock()
+            pipeline().accept(sms("NBE", z18))
+            val item = db.reviews().all().single()
+            lock.mutex.lock()
+            val job =
+                launch(Dispatchers.Unconfined) { ReviewViewModel(db, Dispatchers.Unconfined, clock, eraseLock = lock).saveNow(item.id) }
+            // the erase runs while the Save waits
+            db.reviews().delete(item.id)
+            lock.mutex.unlock()
+            job.join()
+            assertTrue(db.expenses().all().isEmpty())
+            assertTrue(db.sources().all().isEmpty())
+            assertTrue(db.learnedTemplates().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-099 a row with a bad amount or a time far in the past or the future is kept for review`() =
+        runTest {
+            enqueue(queued("q-zero", "PURCHASE", 0L, receivedAt = at))
+            enqueue(queued("q-old", "PURCHASE", 5_000L, receivedAt = at - 46L * 24 * 3_600_000))
+            enqueue(queued("q-future", "PURCHASE", 6_000L, receivedAt = at + 2L * 24 * 3_600_000))
+            enqueue(queued("q-fine", "PURCHASE", 7_000L, receivedAt = at))
+            CaptureQueueConverter(db, clock, CountingIds()).convertAll()
+            val byAmount = db.expenses().all().associateBy { it.amountMinor }
+            assertEquals(4, byAmount.size)
+            for (a in listOf(0L, 5_000L, 6_000L)) assertEquals("PENDING_REVIEW", byAmount.getValue(a).status)
+            assertEquals("CONFIRMED", byAmount.getValue(7_000L).status)
+        }
+
+    @Test
+    fun `REQ-SMS-099 two rows the old pairing already matched, both claimed, become one entry with two sources`() =
+        runTest {
+            val a = queued("q-a", "TRANSFER_IN", 125_000L, "SMS", receivedAt = at, claims = 1, last4 = null)
+            val b = queued("q-b", "TRANSFER_IN", 125_000L, "NOTIFICATION", receivedAt = at + 3_000, claims = 1, last4 = "4471")
+            db.parsedOutbox().insert(a)
+            db.parsedOutbox().insert(b)
+            db.captured().insert(captured("q-a", null, "SMS", 125_000L, "TRANSFER_IN", at).copy(paired = true, pairedLocalId = "q-b"))
+            db.captured().insert(
+                captured("q-b", null, "NOTIFICATION", 125_000L, "TRANSFER_IN", at + 3_000).copy(paired = true, pairedLocalId = "q-a"),
+            )
+            CaptureQueueConverter(db, clock, CountingIds()).convertAll()
+            val entry = db.expenses().all().single()
+            assertEquals(
+                setOf("q-a", "q-b"),
+                db
+                    .sources()
+                    .all()
+                    .filter { it.expenseId == entry.id }
+                    .map { it.localSourceId }
+                    .toSet(),
+            )
+            assertTrue(db.parsedOutbox().all().isEmpty())
+        }
+
+    @Test
+    fun `REQ-SMS-098 a notification arriving after a review-saved SMS joins it and no Undo chip is shown for the saved one`() =
+        runTest {
+            pipeline().accept(sms("NBE", z18))
+            vm().saveNow(
+                db
+                    .reviews()
+                    .all()
+                    .single()
+                    .id,
+            )
+            assertTrue(
+                "no chip",
+                db
+                    .captured()
+                    .observeRecent(0L)
+                    .first()
+                    .isEmpty(),
+            )
+            val push =
+                IncomingMessage(
+                    CaptureSource.NOTIFICATION,
+                    "com.egyptianbanks.instapay",
+                    "InstaPay\nYou received EGP 1,000.00 from Omar K",
+                    at + 3_000,
+                )
+            pipeline().accept(push)
+            assertEquals("one entry", 1, db.expenses().all().size)
+            assertEquals(2, db.sources().all().size)
+        }
+
+    @Test
+    fun `REQ-SMS-098 two review items of one transfer saved one after the other make one entry`() =
+        runTest {
+            pipeline().accept(sms("NBE", z18))
+            val first = db.reviews().all().single()
+            db.reviews().insert(first.copy(id = "second", source = "NOTIFICATION", receivedAtMillis = at + 3_000))
+            val model = vm()
+            model.saveNow(first.id)
+            model.saveNow("second")
+            assertEquals(1, db.expenses().all().size)
+            assertEquals(2, db.sources().all().size)
         }
 
     private companion object {

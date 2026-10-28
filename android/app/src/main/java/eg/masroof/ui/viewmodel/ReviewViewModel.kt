@@ -1,6 +1,5 @@
 package eg.masroof.ui.viewmodel
 
-import android.database.sqlite.SQLiteException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -35,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val STOP_TIMEOUT = 5_000L
 
@@ -104,15 +104,14 @@ class ReviewViewModel
         internal suspend fun saveNow(id: String): ReviewSaveResult {
             val result =
                 withContext(io) {
-                    val item = db.reviews().find(id) ?: return@withContext ReviewSaveResult.NOTHING
-                    val base = item.toRecord() ?: return@withContext ReviewSaveResult.NOTHING
-                    if (base.amountMinor !in 1..MoneyFormat.MAX_ENTRY_MINOR) return@withContext ReviewSaveResult.AMOUNT_INVALID
-                    val record = base.copy(timeKnown = timeKnownOf(item, base))
                     try {
-                        // like every other write of an entry: after a running erase, in one transaction (a failure rolls back, item kept)
-                        eraseLock.mutex.withLock { db.withTransaction { write(item, record) } }
+                        // like every other write of an entry: after a running erase, in one transaction (a failure rolls back, item kept).
+                        // The item is read again under the lock, so a Save that waited for an erase works from nothing stale.
+                        eraseLock.mutex.withLock { db.withTransaction { writeLocked(id) } }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (
-                        @Suppress("SwallowedException") _: SQLiteException,
+                        @Suppress("TooGenericExceptionCaught", "SwallowedException") _: Exception,
                     ) {
                         ReviewSaveResult.FAILED
                     }
@@ -122,11 +121,11 @@ class ReviewViewModel
             return result
         }
 
-        private suspend fun write(
-            item: ReviewItemEntity,
-            record: ParsedRecord,
-        ): ReviewSaveResult {
-            val id = item.id
+        private suspend fun writeLocked(id: String): ReviewSaveResult {
+            val item = db.reviews().find(id) ?: return ReviewSaveResult.NOTHING
+            val base = item.toRecord() ?: return ReviewSaveResult.NOTHING
+            if (base.amountMinor !in 1..MoneyFormat.MAX_ENTRY_MINOR) return ReviewSaveResult.AMOUNT_INVALID
+            val record = base.copy(timeKnown = timeKnownOf(item, base))
             // the same message may already be an entry (a live capture, a backfill): then only the item goes
             if (db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0) {
                 db.reviews().delete(id)
@@ -135,16 +134,18 @@ class ReviewViewModel
             val now = clock.millis()
             // the other channel already recorded this transfer: this message joins that entry as a second source
             val twin = pairing.claimTwin(record, id, item.receivedAtMillis)
+            val expenseId = twin?.expense?.id ?: ids.next()
             if (twin != null) {
-                db.sources().insert(CaptureRows.source(ids.next(), twin.expense.id, record, id, item.receivedAtMillis))
+                db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, id, item.receivedAtMillis))
                 if (twin.captured.instrumentLast4 == null && record.instrumentLast4 != null) {
-                    db.expenses().enrichFromTwin(twin.expense.id, record.instrumentLast4, CaptureRows.label(record))
+                    db.expenses().enrichFromTwin(expenseId, record.instrumentLast4, CaptureRows.label(record))
                 }
             } else {
-                val expenseId = ids.next()
                 db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true))
                 db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, id, item.receivedAtMillis))
             }
+            // Later twins of the other channel find this entry through this row; it shows no Undo chip (CaptureRows.REVIEW_SAVED)
+            db.captured().insert(CaptureRows.reviewSavedRow(id, expenseId, record, item.receivedAtMillis, now, twin?.captured?.localId))
             TemplateLearning.learn(db, item, now)
             db.reviews().delete(id)
             return ReviewSaveResult.SAVED

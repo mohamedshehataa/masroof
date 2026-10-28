@@ -108,3 +108,4 @@ STORY-171
 
 Carried from STORY-171 verify (2026-10-28): Review Save must (1) keep the parser's timeKnown (date-only review items are stored at Cairo noon with timeKnown = 0, today it is 1) and (2) run ChannelPairing.claimTwin before inserting, so a review-saved SMS whose notification twin was auto-recorded joins that entry as a second source instead of making a second entry.
 | 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - review Save (twin join, timeKnown re-parse, snackbars), parsed_outbox conversion (CaptureQueueConverter), SMS-001 guard test; parser fix: a completed cashback credit is money in |
+- Follow-up (STORY-172 verify): delete the dead upload code (`SmsUploader`, `ChannelPairing.pairQueued`, `ParsedRemote` ingest usage) with a story that rewrites their tests.
