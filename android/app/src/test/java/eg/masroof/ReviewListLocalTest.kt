@@ -479,6 +479,16 @@ class ReviewListLocalTest {
                 "Purchase of EGP 300.00 at NOON with card ending 4512. EGP 15 cashback was credited to your account",
                 "Your card ending 4512 was debited EGP 200.00 at UBER, cashback has been credited",
                 "Your card ending 4512 was charged EGP 800.00 at NOON. EGP 40 cashback has been credited",
+                "Transaction of EGP 500.00 at NOON on card ending 4512. Cashback of EGP 25 has been credited",
+                "تم استخدام بطاقتك المنتهية ب 4512 بمبلغ 500 جنيه لدى امازون وتمت اضافة كاش باك 25 جنيه",
+                "Your card ending 4512 was used for EGP 500.00 at NOON. Cashback of EGP 25 has been credited",
+                "Purchase transaction of EGP 500.00 at NOON. Cashback of EGP 25 has been credited",
+                "Debit transaction EGP 500.00 at NOON. Cashback of EGP 25 has been credited",
+                "تم استخدام بطاقتكم بمبلغ 500 جنيه لدى نون وتم اضافه كاش باك 25 جنيه",
+                "تمت عمليه شرائيه ببطاقتكم بمبلغ 500 جنيه وتم اضافه كاش باك 25 جنيه",
+                "تم الخصم من بطاقتكم 500 جنيه وتم اضافه كاش باك 25 جنيه",
+                "Your purchase EGP 500.00 at NOON using card 4512 is approved. Cashback of EGP 25 has been credited",
+                "مدفوعات 500 جنيه لدى نون وتم اضافه كاش باك 25 جنيه",
             )
         for (text in texts) {
             val outcome =
@@ -490,6 +500,73 @@ class ReviewListLocalTest {
             assertTrue("$kind for $outcome", kind == null || kind.name !in INCOMING)
         }
     }
+
+    @Test
+    fun `REQ-SMS-100 a genuine cashback-only credit is INCOME with the cashback amount`() {
+        val cases =
+            mapOf(
+                "تم اضافة كاش باك 20 جنيه على عملية شراء من نون إلى حسابك" to 2_000L,
+                "Cashback of EGP 20 on the amount you spent at NOON has been credited to your account" to 2_000L,
+                "Cashback of EGP 10 on your purchase paid with card ending 4512 has been credited" to 1_000L,
+                "EGP 20 cashback has been credited to your card ending 4512 for purchase of goods at NOON" to 2_000L,
+            )
+        for ((text, minor) in cases) {
+            val outcome =
+                eg.masroof.ingest.parse.MessageParser
+                    .parse(IncomingMessage(CaptureSource.SMS, "CIB", text, at))
+            val r =
+                (outcome as? eg.masroof.ingest.parse.ParseOutcome.Review)?.suggestion
+                    ?: (outcome as? eg.masroof.ingest.parse.ParseOutcome.Record)?.record
+            assertEquals(outcome.toString(), "INCOME", r?.kind?.name)
+            assertEquals(minor, r?.amountMinor)
+        }
+    }
+
+    @Test
+    fun `REQ-SMS-098 an SMS twin of a review-saved notification adds its source and last four with no notice and no Undo chip`() =
+        runTest {
+            db.reviews().insert(
+                eg.masroof.data.db.ReviewItemEntity(
+                    id = "n-rev",
+                    source = "NOTIFICATION",
+                    sender = "com.egyptianbanks.instapay",
+                    text = "x",
+                    reason = "unconfirmed",
+                    receivedAtMillis = at,
+                    createdAtMillis = at,
+                    sugKind = "INCOME",
+                    sugAmountMinor = 125_000L,
+                    sugCurrency = "EGP",
+                    sugOccurredAtMillis = at,
+                    sugSenderId = "InstaPay",
+                ),
+            )
+            vm().saveNow("n-rev")
+            val notices = mutableListOf<CapturedTxEntity>()
+            val notifier =
+                object : eg.masroof.ingest.CapturedNotifier {
+                    override fun captured(item: CapturedTxEntity) {
+                        notices += item
+                    }
+
+                    override fun cancel(localId: String) = Unit
+
+                    override fun cancelAll() = Unit
+                }
+            SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), FixedKey, notifier)
+                .accept(sms("BanqueMisr", r4, receivedAt = at + 3_000))
+            val entry = db.expenses().all().single()
+            assertEquals("4471", entry.instrumentLast4)
+            assertEquals(2, db.sources().all().size)
+            assertTrue(
+                db
+                    .captured()
+                    .observeRecent(0L)
+                    .first()
+                    .isEmpty(),
+            )
+            assertTrue(notices.isEmpty())
+        }
 
     @Test
     fun `REQ-SMS-100 no purchase fixture row becomes income`() =

@@ -1,5 +1,6 @@
 package eg.masroof.ui.viewmodel
 
+import android.database.sqlite.SQLiteException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -111,7 +112,11 @@ class ReviewViewModel
                     } catch (e: CancellationException) {
                         throw e
                     } catch (
-                        @Suppress("TooGenericExceptionCaught", "SwallowedException") _: Exception,
+                        @Suppress("SwallowedException") _: SQLiteException,
+                    ) {
+                        ReviewSaveResult.FAILED
+                    } catch (
+                        @Suppress("SwallowedException") _: IllegalStateException,
                     ) {
                         ReviewSaveResult.FAILED
                     }

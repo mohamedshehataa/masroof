@@ -29,6 +29,9 @@ object MessageParser {
     private const val MAX_LABEL_TOKENS = 5
     private const val MAX_DATE_AGE_DAYS = 45L
     private const val MAX_AMOUNT_MINOR = 10_000_000_000_000L
+
+    /** The most characters between a cashback amount and its cashback word ("Cashback of EGP 12.50", "EGP 45.00 cashback"). */
+    private const val CASHBACK_GAP = 8
     private const val NOON = 12
     private const val TWO_DIGIT_YEAR_BASE = 2000
     private const val NOON_HOURS = 12
@@ -839,19 +842,29 @@ object MessageParser {
             ci,
         )
 
-    /** Wording of money really leaving: the cashback's own "for your purchase at X" is a reason, not a debit. */
-    private val realDebit =
-        Regex(
-            "\\b(?:charged|debited|deducted|spent|paid|withdrawn)\\b|\\bpurchase of\\b|\\bwith (?:your )?card\\b" +
-                "|(?<![\\p{L}])(?:خصم|سحب|دفع|شراء)(?![\\p{L}])",
-            ci,
-        )
+    private val cashbackWord = Regex("cash\\s?back|كاش\\s?باك", ci)
+
+    /**
+     * A message that is only a cashback credit has exactly ONE money amount and it sits right next to the cashback word. Any other
+     * amount (the purchase the cashback refers to) or an amount elsewhere means the message may be about a purchase: no word list
+     * tries to recognise purchases, the structure decides.
+     */
+    private fun isPureCashback(now: String): Boolean {
+        val amounts = findAmounts(now).filter { !it.balance && it.minor != null }
+        if (amounts.map { it.minor }.distinct().size != 1) return false
+        val words = cashbackWord.findAll(now).toList()
+        return amounts.all { a ->
+            words.any { w -> (w.range.first - a.end) in 0..CASHBACK_GAP || (a.start - (w.range.last + 1)) in 0..CASHBACK_GAP }
+        }
+    }
 
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
-        // a purchase that merely mentions a credited cashback keeps the normal decision (never INCOME with the purchase amount)
-        if (cashbackCredited.containsMatchIn(now) && !realDebit.containsMatchIn(now)) return Dir.IN
+        val cashback = cashbackCredited.containsMatchIn(now)
+        if (cashback && isPureCashback(now)) return Dir.IN
+        // a cashback line next to other amounts: the normal decision, but never IN (a purchase is not income) - review instead
+        val cashbackMixed = cashback
         // the household's own credit card is the beneficiary of a payment: money leaving the account, never income
         if (cardRepayment.containsMatchIn(now)) return Dir.OUT
         val debit =
@@ -879,7 +892,7 @@ object MessageParser {
                 ownInitiated.containsMatchIn(now)
         return when {
             anyIn && anyOut -> if (isOwnToOwn(ownSource, ownDest, strongIn, debit)) Dir.OUT else Dir.CONFLICT
-            anyIn -> Dir.IN
+            anyIn -> if (cashbackMixed) Dir.CONFLICT else Dir.IN
             anyOut -> Dir.OUT
             transfer -> Dir.CONFLICT // a transfer that says nothing about who gave or received
             else -> Dir.NONE
@@ -972,6 +985,7 @@ object MessageParser {
             withdrawal.containsMatchIn(t) && outgoing && !atmTransfer(t) -> TxKind.CASH_WITHDRAWAL
             outgoing && feeIsTheTransaction(t) -> TxKind.FEE
             outgoing && cardRepayment.containsMatchIn(t) -> TxKind.TRANSFER_OUT
+            !outgoing && cashbackCredited.containsMatchIn(t) -> TxKind.INCOME
             !outgoing -> if (ownAccount.containsMatchIn(t)) TxKind.TRANSFER_IN else TxKind.INCOME
             transferWords.containsMatchIn(t) && !paymentWords.containsMatchIn(t) -> TxKind.TRANSFER_OUT
             else -> TxKind.PURCHASE
