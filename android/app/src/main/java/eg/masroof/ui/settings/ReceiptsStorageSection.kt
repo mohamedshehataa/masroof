@@ -3,6 +3,7 @@ package eg.masroof.ui.settings
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -22,8 +23,9 @@ fun ReceiptsStorageSection(viewModel: ReceiptTotalsViewModel = hiltViewModel()) 
     val style = LocalMoneyStyle.current
     SectionCard(stringResource(R.string.rcpt_title)) {
         Text(
-            stringResource(
-                R.string.rcpt_storage,
+            pluralStringResource(
+                R.plurals.rcpt_storage,
+                totals.files,
                 DateFormat.number(totals.files, style.digits),
                 DateFormat.digitsAs(megabytes(totals.bytes), style.digits),
             ),

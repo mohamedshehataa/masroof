@@ -27,6 +27,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -100,9 +102,23 @@ private fun png(
         pngChunk("IHDR", ihdr) + pngChunk("IDAT", packed.toByteArray()) + pngChunk("IEND", ByteArray(0))
 }
 
+/** Left half red, right half blue (big blocks survive JPEG), 40 x 20, optionally with EXIF orientation 6. */
+private fun splitJpeg(exif: ByteArray? = null): ByteArray {
+    val bmp = Bitmap.createBitmap(40, 20, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bmp)
+    canvas.drawColor(Color.BLUE)
+    canvas.drawRect(0f, 0f, 20f, 20f, android.graphics.Paint().apply { color = Color.RED })
+    val out = ByteArrayOutputStream()
+    bmp.compress(Bitmap.CompressFormat.JPEG, 95, out)
+    val bytes = out.toByteArray()
+    return if (exif == null) bytes else bytes.copyOfRange(0, 2) + exif + bytes.copyOfRange(2, bytes.size)
+}
+
 private fun pdf(extra: Int = 0) = "%PDF-1.4\n% fake body\n".toByteArray() + ByteArray(extra) { 'x'.code.toByte() }
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34])
 class ReceiptStoreTest {
     private lateinit var db: AppDatabase
     private lateinit var dir: File
@@ -373,4 +389,101 @@ class ReceiptStoreTest {
             assertEquals(2, t.files)
             assertEquals(files().sumOf { it.length() }, t.bytes)
         }
+
+    @Test
+    fun `REQ-RCPT-017 orientation 6 turns the picture clockwise so the left half ends on top`() =
+        runTest {
+            entry()
+            assertTrue(attach(splitJpeg(exifOrientation6())) is AttachResult.Added)
+            val bmp = android.graphics.BitmapFactory.decodeFile(files().single().path)
+            assertEquals(20, bmp.width)
+            assertEquals(40, bmp.height)
+            val top = bmp.getPixel(10, 5)
+            val bottom = bmp.getPixel(10, 35)
+            assertTrue("top should be red", Color.red(top) > 180 && Color.blue(top) < 90)
+            assertTrue("bottom should be blue", Color.blue(bottom) > 180 && Color.red(bottom) < 90)
+        }
+
+    @Test
+    fun `REQ-RCPT-017 a transparent png is put on a white background`() =
+        runTest {
+            entry()
+            val clear = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+            val png = ByteArrayOutputStream().also { clear.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+            assertTrue(attach(png) is AttachResult.Added)
+            val px =
+                android.graphics.BitmapFactory
+                    .decodeFile(files().single().path)
+                    .getPixel(8, 8)
+            assertTrue(Color.red(px) > 240 && Color.green(px) > 240 && Color.blue(px) > 240)
+        }
+
+    @Test
+    fun `REQ-RCPT-017 a valid jpeg with a Samsung trailer or an appended motion photo video is accepted and the trailer is dropped`() =
+        runTest {
+            entry()
+            val seft = jpeg(seed = Color.GREEN) + "\u0000\u0000SEFHxxxxxxxxImage_UTC_Data1700000000000SEFT".toByteArray(Charsets.ISO_8859_1)
+            assertTrue(attach(seft) is AttachResult.Added)
+            val mp4 = jpeg(seed = Color.CYAN) + byteArrayOf(0, 0, 0, 0x18) + "ftypmp42isommp42".toByteArray() + ByteArray(5000)
+            assertTrue(attach(mp4) is AttachResult.Added)
+            assertEquals(2, files().size)
+            for (f in files()) {
+                val text = String(f.readBytes(), Charsets.ISO_8859_1)
+                assertFalse(text.contains("SEFT") || text.contains("ftyp") || text.contains("Image_UTC"))
+            }
+        }
+
+    @Test
+    fun `REQ-RCPT-016 an endless stream is cut at the cap plus one buffer`() =
+        runTest {
+            entry()
+            var read = 0L
+            val endless =
+                object : InputStream() {
+                    private val head = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
+
+                    override fun read(): Int = 0
+
+                    override fun read(
+                        b: ByteArray,
+                        off: Int,
+                        len: Int,
+                    ): Int {
+                        for (i in 0 until len) b[off + i] = if (read + i < head.size) head[(read + i).toInt()] else 0
+                        read += len
+                        return len
+                    }
+                }
+            assertEquals(AttachResult.Refused(Refusal.TOO_LARGE), store.attach("e1") { endless })
+            assertTrue("read $read", read <= 20L * 1024 * 1024 + 16 * 1024)
+            assertTrue(files().isEmpty())
+        }
+
+    @Test
+    fun `REQ-RCPT-020 a file held by a soft deleted entry moves to the new entry instead of reporting a duplicate`() =
+        runTest {
+            entry("e1")
+            entry("e2")
+            val bytes = pdf(11)
+            val first = attach(bytes, "e1") as AttachResult.Added
+            db.expenses().softDelete("e1", CLOCK.millis())
+            val second = attach(bytes, "e2")
+            assertEquals(AttachResult.Added(first.receiptId), second)
+            assertEquals("e2", db.receipts().find(first.receiptId)!!.expenseId)
+            assertEquals(1, files().size)
+        }
+
+    @Test
+    fun `REQ-RCPT-017 an exif ifd offset near Int MAX does not wrap around`() {
+        val tiff = "MM".toByteArray() + byteArrayOf(0, 0x2A, 0x7F, 0xFF.toByte(), 0xFF.toByte(), 0xF2.toByte()) + ByteArray(8)
+        val body = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff
+        val len = body.size + 2
+        val segment = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), (len shr 8).toByte(), len.toByte()) + body
+        val file = byteArrayOf(0xFF.toByte(), 0xD8.toByte()) + segment + byteArrayOf(0xFF.toByte(), 0xDA.toByte(), 0, 2)
+        assertEquals(
+            1,
+            eg.masroof.data.receipts.JpegExif
+                .orientationOf(file),
+        )
+    }
 }

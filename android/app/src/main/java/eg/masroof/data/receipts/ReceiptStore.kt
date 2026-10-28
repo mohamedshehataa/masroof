@@ -2,9 +2,11 @@ package eg.masroof.data.receipts
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
-import androidx.core.graphics.scale
+import androidx.core.graphics.createBitmap
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ReceiptEntity
@@ -12,6 +14,7 @@ import eg.masroof.di.IoDispatcher
 import eg.masroof.di.ReceiptsDir
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -51,6 +54,8 @@ class ReceiptStore
         private val eraseLock: EraseLock,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) {
+        private val attachLock = Mutex()
+
         fun fileOf(receipt: ReceiptEntity): File = File(dir, receipt.fileName)
 
         /** Copies, checks, re-encodes and records the file behind [open] for [expenseId]. */
@@ -59,21 +64,26 @@ class ReceiptStore
             expenseId: String,
             open: () -> InputStream?,
         ): AttachResult =
-            withContext(io) {
-                val raw = File(dir, "${UUID.randomUUID()}.part")
-                var stored: File? = null
-                var result: AttachResult = AttachResult.Failed
-                try {
-                    result = copyAndStore(expenseId, raw, open) { stored = it }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    result = AttachResult.Failed
-                } finally {
-                    raw.delete()
-                    if (result !is AttachResult.Added) stored?.delete()
+            // one at a time: a decode of a large photo takes tens of MB, two at once could run out of memory
+            attachLock.withLock {
+                withContext(io) {
+                    val raw = File(dir, "${UUID.randomUUID()}.part")
+                    var stored: File? = null
+                    var result: AttachResult = AttachResult.Failed
+                    try {
+                        result = copyAndStore(expenseId, raw, open) { stored = it }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: OutOfMemoryError) {
+                        result = AttachResult.Failed
+                    } catch (_: Exception) {
+                        result = AttachResult.Failed
+                    } finally {
+                        raw.delete()
+                        if (result !is AttachResult.Added) stored?.delete()
+                    }
+                    result
                 }
-                result
             }
 
         private suspend fun copyAndStore(
@@ -103,7 +113,14 @@ class ReceiptStore
                 val same = db.receipts().bySha(hash)
                 if (same != null) {
                     val owner = same.expenseId?.let { db.expenses().find(it) }
-                    return@withLock AttachResult.Duplicate(same.id, owner?.id, owner?.occurredAtMillis, owner?.amountMinor, owner?.currency)
+                    if (owner != null && owner.deletedAtMillis == null) {
+                        return@withLock AttachResult.Duplicate(same.id, owner.id, owner.occurredAtMillis, owner.amountMinor, owner.currency)
+                    }
+                    // Held by a deleted entry (or by none): the unique sha256 allows one row, so this entry takes it over and the new
+                    // copy is dropped. Undo of the deleted entry then brings it back without this receipt.
+                    db.receipts().moveTo(same.id, expenseId)
+                    stored.file.delete()
+                    return@withLock AttachResult.Added(same.id)
                 }
                 val id = UUID.randomUUID().toString()
                 db.receipts().insert(
@@ -223,28 +240,41 @@ class ReceiptStore
             return Made.Stored(target, "image/jpeg", 1)
         }
 
-        /** Upright, long edge at most 2560 px. A Bitmap carries no EXIF, so writing it out strips everything. */
+        /**
+         * Upright, long edge at most 2560 px (sampled down while decoding, so a 50 MP photo never sits in memory whole), on a white
+         * background if it has transparency. A Bitmap carries no EXIF, so writing it out strips everything.
+         */
         private fun decode(
             raw: File,
             kind: ReceiptKind,
             longEdge: Int,
         ): Bitmap? {
+            val matrix = JpegExif.matrixFor(if (kind == ReceiptKind.JPEG) JpegExif.orientation(raw) else 1)
             var sample = 1
-            while (longEdge / sample > ReceiptLimits.MAX_LONG_EDGE * 2) sample *= 2
-            val decoded = BitmapFactory.decodeFile(raw.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-            val long = maxOf(decoded.width, decoded.height)
-            val bmp =
-                if (long > ReceiptLimits.MAX_LONG_EDGE) {
-                    val w = maxOf(1, decoded.width * ReceiptLimits.MAX_LONG_EDGE / long)
-                    val h = maxOf(1, decoded.height * ReceiptLimits.MAX_LONG_EDGE / long)
-                    decoded.scale(w, h).also { if (it !== decoded) decoded.recycle() }
-                } else {
-                    decoded
+            while (longEdge / sample > ReceiptLimits.MAX_LONG_EDGE) sample *= 2
+            var current = BitmapFactory.decodeFile(raw.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+            var done = false
+            try {
+                if (current.hasAlpha()) current = onWhite(current)
+                if (!matrix.isIdentity) {
+                    val turned = Bitmap.createBitmap(current, 0, 0, current.width, current.height, matrix, true)
+                    if (turned !== current) current.recycle()
+                    current = turned
                 }
-            val m = JpegExif.matrixFor(if (kind == ReceiptKind.JPEG) JpegExif.orientation(raw) else 1)
-            if (m.isIdentity) return bmp
-            val out = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
-            if (out !== bmp) bmp.recycle()
+                done = true
+                return current
+            } finally {
+                if (!done) current.recycle()
+            }
+        }
+
+        private fun onWhite(src: Bitmap): Bitmap {
+            val out = createBitmap(src.width, src.height)
+            Canvas(out).apply {
+                drawColor(Color.WHITE)
+                drawBitmap(src, 0f, 0f, null)
+            }
+            src.recycle()
             return out
         }
 

@@ -341,5 +341,13 @@
     <string name="rcpt_err_too_many_pages">ملف الـ PDF ده صفحاته كتير أوي</string>
     <string name="rcpt_err_pdf_unreadable">معرفناش نفتح ملف الـ PDF ده</string>
     <string name="rcpt_err_image_unreadable">معرفناش نفتح الصورة دي</string>
-    <string name="rcpt_storage">الإيصالات: %1$s ملف، %2$s ميجا</string>
+    <string name="rcpt_opening">بنفتح الإيصال…</string>
+    <plurals name="rcpt_storage">
+        <item quantity="zero">الإيصالات: %1$s ملف، %2$s ميجا</item>
+        <item quantity="one">الإيصالات: %1$s ملف، %2$s ميجا</item>
+        <item quantity="two">الإيصالات: %1$s ملفين، %2$s ميجا</item>
+        <item quantity="few">الإيصالات: %1$s ملفات، %2$s ميجا</item>
+        <item quantity="many">الإيصالات: %1$s ملف، %2$s ميجا</item>
+        <item quantity="other">الإيصالات: %1$s ملف، %2$s ميجا</item>
+    </plurals>
 </resources>

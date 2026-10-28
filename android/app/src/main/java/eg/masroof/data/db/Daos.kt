@@ -205,6 +205,12 @@ interface ReceiptDao {
     @Query("SELECT * FROM receipt WHERE id = :id")
     suspend fun find(id: String): ReceiptEntity?
 
+    @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id")
+    suspend fun moveTo(
+        id: String,
+        expenseId: String,
+    )
+
     @Query("SELECT * FROM receipt WHERE sha256 = :sha256")
     suspend fun bySha(sha256: String): ReceiptEntity?
 

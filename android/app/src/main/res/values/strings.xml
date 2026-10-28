@@ -325,5 +325,9 @@
     <string name="rcpt_err_too_many_pages">This PDF has too many pages</string>
     <string name="rcpt_err_pdf_unreadable">This PDF can\'t be opened</string>
     <string name="rcpt_err_image_unreadable">This image can\'t be opened</string>
-    <string name="rcpt_storage">Receipts: %1$s files, %2$s MB</string>
+    <string name="rcpt_opening">Opening the receipt…</string>
+    <plurals name="rcpt_storage">
+        <item quantity="one">Receipts: %1$s file, %2$s MB</item>
+        <item quantity="other">Receipts: %1$s files, %2$s MB</item>
+    </plurals>
 </resources>

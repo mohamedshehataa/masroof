@@ -40,6 +40,7 @@ class DeletedEntryPurger
         suspend fun purge(): Int {
             val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(PURGE_AFTER_DAYS)
             return eraseLock.mutex.withLock {
+                // a restore racing this read could lose its receipt files: the entry was over 30 days deleted, accepted
                 val files = db.expenses().receiptsDeletedBefore(cutoff)
                 val removed = db.expenses().purgeDeletedBefore(cutoff)
                 // a file that cannot be deleted here has no row any more: the startup sweeper removes it

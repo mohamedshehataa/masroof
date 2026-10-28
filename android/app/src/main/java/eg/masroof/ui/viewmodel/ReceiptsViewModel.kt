@@ -38,8 +38,11 @@ data class ReceiptsUiState(
     val adding: Int = 0,
     val message: ReceiptMessage? = null,
     val viewing: ReceiptEntity? = null,
-    val confirmRemove: Boolean = false,
-)
+    /** The receipt the remove dialog is about (from the viewer or from a thumbnail). */
+    val removing: ReceiptEntity? = null,
+) {
+    val confirmRemove: Boolean get() = removing != null
+}
 
 private const val STOP_TIMEOUT_MS = 5_000L
 
@@ -81,7 +84,7 @@ class ReceiptsViewModel
 
         fun dismissMessage() = local.update { it.copy(message = null) }
 
-        fun view(receipt: ReceiptEntity) = local.update { it.copy(viewing = receipt, confirmRemove = false) }
+        fun view(receipt: ReceiptEntity) = local.update { it.copy(viewing = receipt, removing = null) }
 
         /** The duplicate message's "Open": the existing receipt, wherever it is attached. */
         fun openDuplicate(receiptId: String) {
@@ -91,15 +94,19 @@ class ReceiptsViewModel
             }
         }
 
-        fun closeViewer() = local.update { it.copy(viewing = null, confirmRemove = false) }
+        fun closeViewer() = local.update { it.copy(viewing = null, removing = null) }
 
-        fun askRemove() = local.update { if (it.viewing == null) it else it.copy(confirmRemove = true) }
+        /** From the viewer: the receipt being shown. */
+        fun askRemove() = local.update { if (it.viewing == null) it else it.copy(removing = it.viewing) }
 
-        fun dismissRemove() = local.update { it.copy(confirmRemove = false) }
+        /** From a thumbnail, so a receipt that cannot be shown can still be removed. */
+        fun askRemove(receipt: ReceiptEntity) = local.update { it.copy(removing = receipt) }
+
+        fun dismissRemove() = local.update { it.copy(removing = null) }
 
         fun confirmRemove() {
-            val id = local.value.viewing?.id ?: return
-            local.update { it.copy(viewing = null, confirmRemove = false) }
+            val id = local.value.removing?.id ?: return
+            local.update { it.copy(viewing = it.viewing?.takeIf { v -> v.id != id }, removing = null) }
             viewModelScope.launch { store.remove(id) }
         }
     }

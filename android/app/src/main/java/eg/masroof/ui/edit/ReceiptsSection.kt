@@ -95,7 +95,12 @@ fun ReceiptsSection(
                     DateFormat.number(state.receipts.size, style.digits),
                     kind,
                 )
-            Thumbnail(viewModel.fileOf(receipt), receipt.mimeType == PDF_MIME, description) { viewModel.view(receipt) }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Thumbnail(viewModel.fileOf(receipt), receipt.mimeType == PDF_MIME, description) { viewModel.view(receipt) }
+                TextButton(onClick = { viewModel.askRemove(receipt) }, enabled = enabled, modifier = Modifier.heightIn(min = TARGET)) {
+                    Text(stringResource(R.string.rcpt_remove), color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
         repeat(state.adding) {
             Box(
