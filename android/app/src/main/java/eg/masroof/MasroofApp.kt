@@ -9,7 +9,11 @@ import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.edit.PurgeScheduler
+import eg.masroof.data.receipts.ReceiptStore
+import eg.masroof.di.AppScope
 import eg.masroof.ingest.cancelLeftoverUploadWork
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -23,6 +27,11 @@ class MasroofApp :
     @Inject lateinit var purgeScheduler: PurgeScheduler
 
     @Inject lateinit var workManager: WorkManager
+
+    @Inject lateinit var receipts: ReceiptStore
+
+    @Inject @AppScope
+    lateinit var appScope: CoroutineScope
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -41,5 +50,7 @@ class MasroofApp :
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
         purgeScheduler.schedule()
+        // Receipt files with no row (a crash between copy and insert, a failed delete) are deleted (REQ-RCPT-019).
+        if (!DatabaseStartup.isBlocked()) appScope.launch { runCatching { receipts.sweep() } }
     }
 }

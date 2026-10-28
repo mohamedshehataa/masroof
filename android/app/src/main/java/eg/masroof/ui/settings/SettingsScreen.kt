@@ -60,6 +60,7 @@ fun SettingsRoute(
         ),
         extra = {
             SmsCaptureSection(onOpenReview = onOpenReview)
+            ReceiptsStorageSection()
             MembersRoute()
         },
     )

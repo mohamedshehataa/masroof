@@ -97,6 +97,7 @@ fun EditExpenseRoute(
             viewModel::dismissDelete,
             viewModel::onPaidBy,
         ),
+        receipts = { ReceiptsSection(enabled = !state.form.locked) },
     )
 }
 
@@ -105,6 +106,7 @@ fun EditExpenseContent(
     state: EditUiState,
     actions: EditActions,
     modifier: Modifier = Modifier,
+    receipts: @Composable () -> Unit = {},
 ) {
     val form = state.form
     Column(modifier.fillMaxSize().imePadding()) {
@@ -121,7 +123,10 @@ fun EditExpenseContent(
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.semantics { heading() },
             )
-            if (form.loaded) EditFields(state, actions)
+            if (form.loaded) {
+                EditFields(state, actions)
+                receipts()
+            }
         }
         if (form.loaded) EditBar(state, actions)
     }

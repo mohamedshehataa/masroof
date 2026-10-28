@@ -93,9 +93,16 @@ interface ExpenseDao {
     @Query("DELETE FROM expense WHERE deletedAtMillis < :cutoffMillis")
     suspend fun purgeRowsDeletedBefore(cutoffMillis: Long): Int
 
-    /** Removes entries soft-deleted before [cutoffMillis] with their sources (receipts: STORY-174). Returns the entries removed. */
+    @Query("SELECT receipt.* FROM receipt JOIN expense ON expense.id = receipt.expenseId WHERE expense.deletedAtMillis < :cutoffMillis")
+    suspend fun receiptsDeletedBefore(cutoffMillis: Long): List<ReceiptEntity>
+
+    @Query("DELETE FROM receipt WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis < :cutoffMillis)")
+    suspend fun purgeReceiptRowsDeletedBefore(cutoffMillis: Long): Int
+
+    /** Removes entries soft-deleted before [cutoffMillis] with their sources and receipt rows (files: DeletedEntryPurger). */
     @Transaction
     suspend fun purgeDeletedBefore(cutoffMillis: Long): Int {
+        purgeReceiptRowsDeletedBefore(cutoffMillis)
         purgeSourcesDeletedBefore(cutoffMillis)
         return purgeRowsDeletedBefore(cutoffMillis)
     }
@@ -178,10 +185,37 @@ interface ExpenseSourceDao {
     suspend fun all(): List<ExpenseSourceEntity>
 }
 
+/** How many receipt files are stored and their total size (Settings). */
+data class ReceiptTotals(
+    val files: Int,
+    val bytes: Long,
+)
+
 @Dao
 interface ReceiptDao {
     @Query("SELECT COUNT(*) FROM receipt")
     suspend fun count(): Int
+
+    @Insert
+    suspend fun insert(receipt: ReceiptEntity)
+
+    @Query("SELECT * FROM receipt WHERE expenseId = :expenseId ORDER BY createdAtMillis, rowid")
+    fun observeFor(expenseId: String): Flow<List<ReceiptEntity>>
+
+    @Query("SELECT * FROM receipt WHERE id = :id")
+    suspend fun find(id: String): ReceiptEntity?
+
+    @Query("SELECT * FROM receipt WHERE sha256 = :sha256")
+    suspend fun bySha(sha256: String): ReceiptEntity?
+
+    @Query("DELETE FROM receipt WHERE id = :id")
+    suspend fun delete(id: String): Int
+
+    @Query("SELECT fileName FROM receipt")
+    suspend fun fileNames(): List<String>
+
+    @Query("SELECT COUNT(*) AS files, COALESCE(SUM(sizeBytes), 0) AS bytes FROM receipt")
+    fun observeTotals(): Flow<ReceiptTotals>
 }
 
 @Dao

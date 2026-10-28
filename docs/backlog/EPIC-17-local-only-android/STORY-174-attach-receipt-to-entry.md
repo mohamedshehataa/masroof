@@ -3,7 +3,7 @@ id: STORY-174
 epic: EPIC-17
 title: Attach a receipt photo or PDF to an entry and view it in the app
 phase: 3
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -121,3 +121,4 @@ STORY-170
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D4), reuses STORY-061 receipt intent |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - ReceiptStore, edit-screen section, in-app viewer, Settings total (speed mode) |
