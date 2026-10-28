@@ -165,6 +165,11 @@ object ProvidersModule {
         @ApplicationContext context: Context,
     ): CaptureGate = PrefsCaptureGate(context.getSharedPreferences("masroof_capture", Context.MODE_PRIVATE))
 
+    @Provides @Singleton
+    fun pdfProbe(): eg.masroof.data.receipts.PdfProbe =
+        eg.masroof.data.receipts
+            .AndroidPdfProbe()
+
     @Provides @ReceiptsDir
     fun receiptsDir(
         @ApplicationContext context: Context,

@@ -61,6 +61,7 @@ fun SettingsRoute(
         extra = {
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
+            ReceiptsStorageSection()
             MembersRoute()
         },
     )

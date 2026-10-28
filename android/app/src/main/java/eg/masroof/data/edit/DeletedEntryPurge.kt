@@ -16,7 +16,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.di.ReceiptsDir
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -32,11 +34,19 @@ class DeletedEntryPurger
         private val db: AppDatabase,
         private val clock: Clock,
         private val eraseLock: EraseLock,
+        @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
     ) {
-        /** Returns how many entries were removed. Receipts of a purged entry are handled by STORY-174. */
+        /** Returns how many entries were removed. Their receipt rows go in the same transaction, then the files (REQ-RCPT-019). */
         suspend fun purge(): Int {
             val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(PURGE_AFTER_DAYS)
-            return eraseLock.mutex.withLock { db.expenses().purgeDeletedBefore(cutoff) }
+            return eraseLock.mutex.withLock {
+                // a restore racing this read could lose its receipt files: the entry was over 30 days deleted, accepted
+                val files = db.expenses().receiptsDeletedBefore(cutoff)
+                val removed = db.expenses().purgeDeletedBefore(cutoff)
+                // a file that cannot be deleted here has no row any more: the startup sweeper removes it
+                files.forEach { runCatching { File(receiptsDir, it.fileName).delete() } }
+                removed
+            }
         }
     }
 
