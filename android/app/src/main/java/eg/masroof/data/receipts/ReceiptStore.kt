@@ -62,7 +62,7 @@ class ReceiptStore
         /** Copies, checks, re-encodes and records the file behind [open] for [expenseId]. */
         @Suppress("TooGenericExceptionCaught") // any failure leaves nothing behind and is reported as Failed
         suspend fun attach(
-            expenseId: String,
+            expenseId: String?,
             open: () -> InputStream?,
         ): AttachResult =
             // one at a time: a decode of a large photo takes tens of MB, two at once could run out of memory
@@ -88,7 +88,7 @@ class ReceiptStore
             }
 
         private suspend fun copyAndStore(
-            expenseId: String,
+            expenseId: String?,
             raw: File,
             open: () -> InputStream?,
             onStored: (File) -> Unit,
@@ -106,7 +106,7 @@ class ReceiptStore
         }
 
         private suspend fun commit(
-            expenseId: String,
+            expenseId: String?,
             stored: Made.Stored,
         ): AttachResult =
             eraseLock.mutex.withLock {
@@ -117,6 +117,8 @@ class ReceiptStore
                     if (owner != null && owner.deletedAtMillis == null) {
                         return@withLock AttachResult.Duplicate(same.id, owner.id, owner.occurredAtMillis, owner.amountMinor, owner.currency)
                     }
+                    // Stored unattached ("Receipt only", share): never take a receipt away from anywhere, just say it is there.
+                    if (expenseId == null) return@withLock AttachResult.Duplicate(same.id, null, null, null, null)
                     // Held by a deleted entry (or by none): the unique sha256 allows one row, so this entry takes it over and the new
                     // copy is dropped. Undo of the deleted entry then brings it back without this receipt.
                     db.receipts().moveTo(same.id, expenseId)
@@ -128,6 +130,23 @@ class ReceiptStore
                     ReceiptEntity(id, expenseId, stored.file.name, stored.mime, stored.file.length(), hash, stored.pages, clock.millis()),
                 )
                 AttachResult.Added(id)
+            }
+
+        /**
+         * Attaches a receipt that waits unattached to a live entry. False if the receipt is gone or already attached, or the entry is
+         * gone or deleted; nothing changes then.
+         */
+        suspend fun attachExisting(
+            receiptId: String,
+            expenseId: String,
+        ): Boolean =
+            eraseLock.mutex.withLock {
+                val row = db.receipts().find(receiptId)
+                val entry = db.expenses().find(expenseId)
+                if (row == null || row.expenseId != null) return@withLock false
+                if (entry == null || entry.deletedAtMillis != null) return@withLock false
+                db.receipts().moveTo(receiptId, expenseId)
+                true
             }
 
         /** Row first, then the file; a file that cannot be deleted is picked up by [sweep] at the next start. */

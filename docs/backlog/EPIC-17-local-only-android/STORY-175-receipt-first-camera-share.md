@@ -3,7 +3,7 @@ id: STORY-175
 epic: EPIC-17
 title: Snap or share a receipt first and turn it into an entry later
 phase: 3
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -97,3 +97,4 @@ STORY-174
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D4), reuses STORY-128 share target |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - camera (non-exported FileProvider), share target activity, Receipts list, Add with waiting receipt; verify pending |

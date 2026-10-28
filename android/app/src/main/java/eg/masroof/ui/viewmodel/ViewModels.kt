@@ -160,6 +160,8 @@ data class AddFormState(
     /** "Amount is too large": above 1,000,000,000,000 minor units. */
     val amountTooLarge: Boolean = false,
     val dateInvalid: Boolean = false,
+    /** The id of the entry just written (a receipt waiting for an entry is attached to it). */
+    val savedId: String? = null,
     /** The write is running: Save is disabled. */
     val saving: Boolean = false,
     /** The write threw: the sheet stays open with the input kept and "Couldn't save, try again". */
@@ -250,7 +252,9 @@ class AddExpenseViewModel
                     }
                 result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
                 // On failure the input is kept and nothing was written (the repository's transaction rolled back). Nothing is logged.
-                form.update { it.copy(saving = false, saved = result.isSuccess, saveFailed = result.isFailure) }
+                form.update {
+                    it.copy(saving = false, saved = result.isSuccess, savedId = result.getOrNull(), saveFailed = result.isFailure)
+                }
             }
         }
     }

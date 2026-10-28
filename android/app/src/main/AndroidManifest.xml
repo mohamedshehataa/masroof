@@ -16,6 +16,14 @@
          notification for transactions the phone captured by itself. The app works fully without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Package visibility (API 30+): only to find out whether a camera app exists, so "Camera" is hidden when none does. Masroof
+         declares no camera permission (the system camera app takes the photo). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MasroofApp"
         android:allowBackup="false"
@@ -70,6 +78,41 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Reason: another app starts the share sheet target, so it must be exported (REQ-RCPT-022, ADR-0009 L2). It accepts only
+             SEND / SEND_MULTIPLE for images and PDFs, takes only content:// URIs of other apps, reads only EXTRA_STREAM, and copies
+             each item at once. It is out of recents and in its own task. -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
+        <activity
+            android:name=".ui.receipts.ShareReceiptActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/share_target_label"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+        </activity>
+
+        <!-- Camera hand-over: not exported, and the URI grant goes only to the camera intent (REQ-RCPT-021). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.receipts.camera"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/camera_paths" />
+        </provider>
 
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider
