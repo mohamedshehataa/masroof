@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import eg.masroof.data.db.ReceiptEntity
+import eg.masroof.ui.edit.PdfPage
 import eg.masroof.ui.edit.ReceiptViewer
 import eg.masroof.ui.edit.pageBitmapSize
 import eg.masroof.ui.theme.MasroofTheme
@@ -48,9 +49,33 @@ class ReceiptViewerTest {
 
     @Test
     fun `REQ-RCPT-018 a very tall pdf page is drawn smaller so its bitmap stays under 16 MB`() {
-        val (w, h) = pageBitmapSize(1, 100, 1440)
+        val (w, h) = pageBitmapSize(1, 50, 1440)!!
         assertTrue(w >= 1 && h >= 1)
         assertTrue(w.toLong() * h * 4 <= 16L * 1024 * 1024)
         assertEquals(1440 to 2037, pageBitmapSize(595, 842, 1440)) // a normal A4 page keeps the full width
+        assertEquals(1440 to 1863, pageBitmapSize(612, 792, 1440))
+    }
+
+    @Test
+    fun `REQ-RCPT-018 pages longer than 50 to 1 are not drawn`() {
+        assertEquals(null, pageBitmapSize(1, 10_000, 1440))
+        assertEquals(null, pageBitmapSize(57, 14_400, 1440))
+        assertEquals(null, pageBitmapSize(1, 30_000_000, 1440))
+        assertEquals(null, pageBitmapSize(30_000_000, 1, 1440))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h640dp-xxhdpi")
+    fun `REQ-RCPT-018 a 1 by 300 page shows without throwing, drawn or as the error line`() {
+        val tall = android.graphics.Bitmap.createBitmap(10, 3_000, android.graphics.Bitmap.Config.ARGB_8888)
+        compose.setContent {
+            MasroofTheme {
+                androidx.compose.foundation.layout.Column {
+                    PdfPage(Result.success(tall), 0)
+                    PdfPage(Result.failure(IllegalStateException("page too long to draw")), 1)
+                }
+            }
+        }
+        compose.onNodeWithText(context.getString(R.string.rcpt_failed)).assertExists()
     }
 }

@@ -58,15 +58,19 @@ import java.io.File
 private const val MAX_PAGE_WIDTH_PX = 1440
 private const val MAX_PAGE_PIXELS = 4_000_000 // 16 MB as ARGB_8888, well under Android's 100 MB draw limit
 private const val MAX_ZOOM = 5f
+private const val MAX_ASPECT = 50L
+private val MAX_PAGE_HEIGHT = 8000.dp
 
-/** Width and height for a PDF page bitmap: [widthPx] wide, but never more than [MAX_PAGE_PIXELS] pixels (a 1 x 100 page stays drawable). */
+/** Width and height for a PDF page bitmap, or null for a page too long to draw: [widthPx] wide, at most [MAX_PAGE_PIXELS] pixels. */
 internal fun pageBitmapSize(
     pageWidth: Int,
     pageHeight: Int,
     widthPx: Int,
-): Pair<Int, Int> {
+): Pair<Int, Int>? {
     val pw = maxOf(1, pageWidth)
     val ph = maxOf(1, pageHeight)
+    // a page more than 50:1 either way is not a document page: it is not drawn (the page shows the error line)
+    if (ph > MAX_ASPECT * pw || pw > MAX_ASPECT * ph) return null
 
     fun heightFor(w: Int) = maxOf(1L, ph.toLong() * w / pw)
     var lo = 1
@@ -174,7 +178,7 @@ private class PdfDoc(
     ): Bitmap? {
         if (closed) return null
         renderer.openPage(index).use { page ->
-            val (w, h) = pageBitmapSize(page.width, page.height, width)
+            val (w, h) = pageBitmapSize(page.width, page.height, width) ?: error("page too long to draw")
             val bitmap = createBitmap(w, h)
             bitmap.eraseColor(Color.WHITE)
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -189,18 +193,15 @@ private class PdfDoc(
     }
 }
 
+@Suppress("TooGenericExceptionCaught") // PdfRenderer and open() throw IOException, SecurityException, RuntimeException
 private fun openPdf(file: File): PdfDoc? {
-    val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    var fd: ParcelFileDescriptor? = null
     return try {
+        fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
         PdfDoc(PdfRenderer(fd))
-    } catch (_: java.io.IOException) {
-        fd.close()
-        null
-    } catch (_: SecurityException) {
-        fd.close()
-        null
-    } catch (_: IllegalArgumentException) {
-        fd.close()
+    } catch (_: Exception) {
+        // missing file, corrupt or password-protected PDF: the viewer shows its error state
+        runCatching { fd?.close() }
         null
     }
 }
@@ -255,19 +256,29 @@ private fun PdfPages(file: File) {
                             }
                         }
                 }
-                val result = page
-                val bitmap = result?.getOrNull()
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = stringResource(R.string.rcpt_page_desc, DateFormat.number(index + 1, style.digits)),
-                        contentScale = ContentScale.FillWidth,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else if (result != null) {
-                    Text(stringResource(R.string.rcpt_failed), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                }
+                PdfPage(page, index)
             }
         }
+    }
+}
+
+/** One page: null = still drawing, a failure (or a page too long to draw) shows a message instead of crashing the viewer. */
+@Composable
+internal fun PdfPage(
+    result: Result<Bitmap>?,
+    index: Int,
+) {
+    val style = LocalMoneyStyle.current
+    val bitmap = result?.getOrNull()
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = stringResource(R.string.rcpt_page_desc, DateFormat.number(index + 1, style.digits)),
+            contentScale = ContentScale.FillWidth,
+            // a layout height past Compose's constraint limit would throw
+            modifier = Modifier.fillMaxWidth().heightIn(max = MAX_PAGE_HEIGHT),
+        )
+    } else if (result != null) {
+        Text(stringResource(R.string.rcpt_failed), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
     }
 }

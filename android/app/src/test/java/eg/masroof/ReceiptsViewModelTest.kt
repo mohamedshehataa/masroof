@@ -69,6 +69,14 @@ class ReceiptsViewModelTest {
     private suspend fun await(cond: (eg.masroof.ui.viewmodel.ReceiptsUiState) -> Boolean) =
         withContext(Dispatchers.Default) { withTimeout(10_000) { vm.state.first { cond(it) } } }
 
+    /** The row goes first, the file right after on an IO thread: wait (real time) for it. */
+    private suspend fun awaitGone(file: File) =
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                while (file.exists()) kotlinx.coroutines.delay(10)
+            }
+        }
+
     @Test
     fun `REQ-RCPT-020 a duplicate says where it is attached and Open shows that receipt`() =
         runTest {
@@ -113,7 +121,22 @@ class ReceiptsViewModelTest {
             vm.confirmRemove()
             await { it.receipts.isEmpty() && it.viewing == null }
             assertEquals(0, db.receipts().count())
-            assertFalse(vm.fileOf(receipt).exists())
+            awaitGone(vm.fileOf(receipt))
+        }
+
+    @Test
+    fun `REQ-RCPT-019 a receipt can be removed from its thumbnail without opening the viewer`() =
+        runTest {
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
+            db.expenses().insert(ExpenseEntity("e1", 100, "EGP", 1_760_000_000_000, null, null, null, null, pending = false))
+            vm.add { ByteArrayInputStream(pdfBytes) }
+            val receipt = await { it.receipts.size == 1 && it.adding == 0 }.receipts.single()
+            vm.askRemove(receipt)
+            assertTrue(await { it.confirmRemove }.viewing == null)
+            vm.confirmRemove()
+            await { it.receipts.isEmpty() && !it.confirmRemove }
+            assertEquals(0, db.receipts().count())
+            awaitGone(vm.fileOf(receipt))
         }
 
     @Test

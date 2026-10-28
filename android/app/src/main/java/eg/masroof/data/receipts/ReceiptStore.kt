@@ -231,7 +231,7 @@ class ReceiptStore
             if (w <= 0 || h <= 0) return Made.Refused(Refusal.IMAGE_UNREADABLE)
             if (w.toLong() * h > ReceiptLimits.MAX_PIXELS) return Made.Refused(Refusal.TOO_LARGE)
             if (kind == ReceiptKind.JPEG && !JpegExif.isComplete(raw)) return Made.Refused(Refusal.IMAGE_UNREADABLE)
-            val decoded = decode(raw, kind, maxOf(w, h)) ?: return Made.Refused(Refusal.IMAGE_UNREADABLE)
+            val decoded = decode(raw, kind, w, h) ?: return Made.Refused(Refusal.IMAGE_UNREADABLE)
             val target = File(dir, "${UUID.randomUUID()}.jpg")
             try {
                 target.outputStream().use { decoded.compress(Bitmap.CompressFormat.JPEG, ReceiptLimits.JPEG_QUALITY, it) }
@@ -248,12 +248,15 @@ class ReceiptStore
         private fun decode(
             raw: File,
             kind: ReceiptKind,
-            longEdge: Int,
+            width: Int,
+            height: Int,
         ): Bitmap? {
             val matrix = JpegExif.matrixFor(if (kind == ReceiptKind.JPEG) JpegExif.orientation(raw) else 1)
             var sample = 1
             // the largest power of two that keeps the decoded long edge >= 2560 (so < 5120): full detail, bounded memory
-            while (longEdge / (sample * 2) >= ReceiptLimits.MAX_LONG_EDGE) sample *= 2
+            while (maxOf(width, height) / (sample * 2) >= ReceiptLimits.MAX_LONG_EDGE) sample *= 2
+            // and never more than 16 MP in memory (5119 x 5119 would be 105 MB)
+            while ((width / sample).toLong() * (height / sample) > MAX_DECODED_PIXELS) sample *= 2
             var current = BitmapFactory.decodeFile(raw.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
             var done = false
             try {
@@ -305,5 +308,6 @@ class ReceiptStore
 
         private companion object {
             const val COPY_BUFFER = 16 * 1024
+            const val MAX_DECODED_PIXELS = 16_000_000L
         }
     }

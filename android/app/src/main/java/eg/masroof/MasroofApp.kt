@@ -9,6 +9,7 @@ import dagger.hilt.android.HiltAndroidApp
 import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.edit.PurgeScheduler
+import eg.masroof.data.insights.deleteLegacyInsightsCache
 import eg.masroof.data.receipts.ReceiptStore
 import eg.masroof.di.AppScope
 import eg.masroof.ingest.cancelLeftoverUploadWork
@@ -46,6 +47,8 @@ class MasroofApp :
         super.onCreate()
         // Nothing is uploaded any more (ADR-0009): jobs an older version left behind are cancelled.
         cancelLeftoverUploadWork(workManager)
+        // Insights are computed from Room now; the cache files an older build wrote are removed (REQ-AN-147).
+        deleteLegacyInsightsCache(java.io.File(filesDir, "insights"))
         // An erase that was cut short (process died) is finished before anything else is captured.
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).

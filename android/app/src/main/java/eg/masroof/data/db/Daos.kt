@@ -10,6 +10,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import eg.masroof.core.analytics.AnalyticsRow
 import kotlinx.coroutines.flow.Flow
 
 private const val DELETE_BATCH = 500
@@ -35,14 +36,37 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
+    // The one spending rule (ADR-0009 D2, parity-v1.json): EGP, CONFIRMED or PENDING_REVIEW, refunds netted, no cash withdrawals here.
     @Query(
-        """SELECT COALESCE(SUM(amountMinor), 0) FROM expense WHERE failed = 0 AND deletedAtMillis IS NULL AND type = 'EXPENSE'
-            AND status = 'CONFIRMED' AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+        """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
+            AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
         to: Long,
     ): Flow<Long>
+
+    /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
+    @Query(
+        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId FROM expense
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    fun observeAnalyticsRows(
+        from: Long,
+        to: Long,
+    ): Flow<List<AnalyticsRow>>
+
+    @Query(
+        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId FROM expense
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    suspend fun analyticsRows(
+        from: Long,
+        to: Long,
+    ): List<AnalyticsRow>
 
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.
@@ -270,6 +294,10 @@ interface LookupDao {
 
     @Query("SELECT * FROM category ORDER BY sortOrder, nameEn")
     fun observeLabelCategories(): Flow<List<CategoryEntity>>
+
+    /** Every category, archived ones too: analytics must not lose an amount whose category was archived. */
+    @Query("SELECT * FROM category")
+    fun observeEveryCategory(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
     fun observeAllCategories(): Flow<List<CategoryEntity>>

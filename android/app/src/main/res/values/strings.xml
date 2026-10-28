@@ -190,8 +190,16 @@
     <string name="insights_weekday_desc">Spending by day of the week: %1$s</string>
     <string name="insights_empty_title">Not enough data yet</string>
     <string name="insights_empty_body">Add a few expenses and your charts will appear here.</string>
-    <string name="insights_error_title">Could not load insights</string>
-    <string name="insights_error_body">The server answered with an error. Try again in a moment.</string>
+    <string name="insights_error_title">Couldn\'t compute insights</string>
+    <string name="insights_error_body">Something went wrong while reading the entries on this phone. Try again.</string>
+    <plurals name="insights_other_currency">
+        <item quantity="one">%1$s entry in another currency is not included</item>
+        <item quantity="other">%1$s entries in another currency are not included</item>
+    </plurals>
+    <string name="settings_section_analytics">Spending figures</string>
+    <string name="settings_month_start">Month starts on</string>
+    <string name="settings_month_start_value">Day %1$s</string>
+    <string name="settings_count_cash">Count ATM withdrawals as spending</string>
     <string name="insights_offline_title">Connect once to see insights</string>
     <string name="insights_offline_body">Your charts are saved on this device after the first successful load.</string>
     <string name="delta_up_desc">Spending is up %1$s compared with the previous period</string>

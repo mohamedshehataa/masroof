@@ -15,6 +15,7 @@ import eg.masroof.data.receipts.ReceiptSniffer
 import eg.masroof.data.receipts.ReceiptStore
 import eg.masroof.data.receipts.Refusal
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -489,6 +490,19 @@ class ReceiptStoreTest {
             assertEquals(AttachResult.Added(first.receiptId), second)
             assertEquals("e2", db.receipts().find(first.receiptId)!!.expenseId)
             assertEquals(1, files().size)
+        }
+
+    @Test
+    fun `REQ-RCPT-015 two attaches at once both complete and an out of memory is a failure that leaves nothing`() =
+        runTest {
+            entry()
+            val a = async { attach(pdf(21)) }
+            val b = async { attach(pdf(22)) }
+            assertTrue(a.await() is AttachResult.Added)
+            assertTrue(b.await() is AttachResult.Added)
+            assertEquals(2, db.receipts().count())
+            assertEquals(AttachResult.Failed, store.attach("e1") { throw OutOfMemoryError("test") })
+            assertEquals(2, files().size)
         }
 
     @Test

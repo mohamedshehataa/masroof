@@ -47,9 +47,10 @@ data class InsightsUi(
     /** Spend per weekday, Saturday first (the Egyptian week), summed over all hours. */
     val weekday: List<Money>,
     val fetchedAtMillis: Long,
+    val otherCurrencyCount: Int = 0,
 ) {
     /** False when there is nothing worth charting yet ("not enough data"). */
-    val hasData: Boolean get() = total.amountMinor > 0 || trend.any { it.total.amountMinor > 0 }
+    val hasData: Boolean get() = total.amountMinor > 0 || trend.any { it.total.amountMinor > 0 } || otherCurrencyCount > 0
 }
 
 private fun ApiMoney.toMoney() = Money(amountMinor, currency)
@@ -96,5 +97,6 @@ fun InsightsSnapshot.toUi(): InsightsUi {
                 hours.fold(Money.zero(s.total.currency)) { acc, m -> acc + m.toMoney() }
             },
         fetchedAtMillis = fetchedAtMillis,
+        otherCurrencyCount = otherCurrencyCount,
     )
 }

@@ -7,6 +7,8 @@ import eg.masroof.core.CairoTime
 import eg.masroof.core.DigitStyle
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
+import eg.masroof.core.analytics.AnalyticsEngine
+import eg.masroof.core.analytics.PeriodAnalytics
 import eg.masroof.data.AppSettings
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
@@ -20,10 +22,14 @@ import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MemberEntity
 import eg.masroof.data.normalizeServerUrl
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -89,6 +95,8 @@ data class HomeUiState(
     val total: Money = Money.zero(),
     val recent: List<ExpenseRow> = emptyList(),
     val status: LoadStatus = LoadStatus.LOADING,
+    /** False when the engine failed: Home then shows the list without the summary card (REQ-AN-147). */
+    val summaryAvailable: Boolean = true,
 )
 
 @HiltViewModel
@@ -96,15 +104,26 @@ class HomeViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
+        engine: AnalyticsEngine,
     ) : ViewModel() {
+        // One spending rule for Home and Insights: the engine's total of the current household period.
+        private val total: Flow<Money?> =
+            engine
+                .observe("current")
+                .map<PeriodAnalytics, Money?> { Money(it.summary.total, Money.EGP) }
+                .catch { e ->
+                    if (e is CancellationException) throw e
+                    emit(null)
+                }
+
         val state: StateFlow<HomeUiState> =
             combine(
-                repository.observeMonthTotal(),
+                total,
                 repository.observeRecent(RECENT_LIMIT),
                 repository.observeLabelCategories(),
                 repository.observeMembers(),
             ) { total, recent, categories, members ->
-                HomeUiState(total, toRows(recent, categories, members), LoadStatus.READY)
+                HomeUiState(total ?: Money.zero(), toRows(recent, categories, members), LoadStatus.READY, summaryAvailable = total != null)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeUiState())
     }
 
