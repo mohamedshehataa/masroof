@@ -179,10 +179,16 @@
     <string name="insights_categories_title">Spending by category</string>
     <string name="insights_donut_desc">Spending by category: %1$s</string>
     <string name="insights_category_row_desc">%1$s: %2$s, %3$s of spending</string>
-    <string name="insights_trend_title">Last %1$s months</string>
+    <plurals name="insights_trend_title">
+        <item quantity="one">Last %1$s month</item>
+        <item quantity="other">Last %1$s months</item>
+    </plurals>
     <string name="insights_trend_desc">Monthly spending: %1$s</string>
     <string name="insights_trend_average">Average %1$s per month</string>
-    <string name="insights_trend_range">%1$s months</string>
+    <plurals name="insights_trend_range">
+        <item quantity="one">%1$s month</item>
+        <item quantity="other">%1$s months</item>
+    </plurals>
     <string name="insights_trend_savings">Savings rate this month: %1$s</string>
     <string name="insights_merchants_title">Top merchants</string>
     <string name="insights_merchants_empty">No merchants yet</string>

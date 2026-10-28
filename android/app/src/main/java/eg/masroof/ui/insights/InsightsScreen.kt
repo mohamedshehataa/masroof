@@ -366,13 +366,13 @@ private fun TrendCard(data: InsightsUi) {
             },
         )
     val active = shown.filter { it.total.amountMinor > 0 }
-    SectionCard(stringResource(R.string.insights_trend_title, DateFormat.number(shown.size, style.digits))) {
+    SectionCard(pluralStringResource(R.plurals.insights_trend_title, shown.size, DateFormat.number(shown.size, style.digits))) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (n in listOf(TREND_SHORT, TREND_LONG)) {
                 FilterChip(
                     selected = months == n,
                     onClick = { months = n },
-                    label = { Text(stringResource(R.string.insights_trend_range, DateFormat.number(n, style.digits))) },
+                    label = { Text(pluralStringResource(R.plurals.insights_trend_range, n, DateFormat.number(n, style.digits))) },
                     modifier = Modifier.heightIn(min = 48.dp),
                 )
             }

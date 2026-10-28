@@ -370,6 +370,19 @@ class AnalyticsEngineTest {
         }
 
     @Test
+    fun `REQ-AN-150 merchant names are trimmed of spaces only like Postgres btrim`() =
+        runTest {
+            now = Instant.parse("2026-10-27T10:00:00Z")
+            db.expenses().insert(e("a", 5_000, "2026-10-05T10:00:00Z", merchant = "Nile Mart\t"))
+            db.expenses().insert(e("b", 3_000, "2026-10-06T10:00:00Z", merchant = "nile mart"))
+            db.expenses().insert(e("c", 2_000, "2026-10-07T10:00:00Z", merchant = "\t"))
+            db.expenses().insert(e("d", 1_000, "2026-10-08T10:00:00Z", merchant = "   "))
+            val out = engine().compute("current")
+            assertEquals(listOf(5_000L, 3_000L, 2_000L), out.merchants.map { it.total })
+            assertEquals(listOf("Nile Mart\t", "nile mart", "\t"), out.merchants.map { it.name })
+        }
+
+    @Test
     fun `REQ-AN-145 an empty period is zero with no delta and a USD-only period counts the entry as not included`() =
         runTest {
             val empty = engine().compute("current").summary

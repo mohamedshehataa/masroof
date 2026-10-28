@@ -191,10 +191,24 @@
     <string name="insights_categories_title">المصروف حسب الفئة</string>
     <string name="insights_donut_desc">المصروف حسب الفئة: %1$s</string>
     <string name="insights_category_row_desc">%1$s: %2$s، %3$s من المصروفات</string>
-    <string name="insights_trend_title">آخر %1$s أشهر</string>
+    <plurals name="insights_trend_title">
+        <item quantity="zero">آخر %1$s شهر</item>
+        <item quantity="one">آخر شهر</item>
+        <item quantity="two">آخر شهرين</item>
+        <item quantity="few">آخر %1$s أشهر</item>
+        <item quantity="many">آخر %1$s شهرًا</item>
+        <item quantity="other">آخر %1$s شهر</item>
+    </plurals>
     <string name="insights_trend_desc">المصروف الشهري: %1$s</string>
     <string name="insights_trend_average">المتوسط %1$s في الشهر</string>
-    <string name="insights_trend_range">%1$s أشهر</string>
+    <plurals name="insights_trend_range">
+        <item quantity="zero">%1$s شهر</item>
+        <item quantity="one">شهر</item>
+        <item quantity="two">شهران</item>
+        <item quantity="few">%1$s أشهر</item>
+        <item quantity="many">%1$s شهرًا</item>
+        <item quantity="other">%1$s شهر</item>
+    </plurals>
     <string name="insights_trend_savings">معدل الادخار هذا الشهر: %1$s</string>
     <string name="insights_merchants_title">أكثر المتاجر إنفاقًا</string>
     <string name="insights_merchants_empty">لا توجد متاجر بعد</string>

@@ -45,7 +45,7 @@ object AnalyticsExtras {
     fun merchants(rows: List<AnalyticsRow>): List<MerchantLine> {
         val groups = HashMap<String, MutableList<AnalyticsRow>>()
         for (r in rows) {
-            val name = r.merchant?.trim()
+            val name = r.merchant?.trim(' ')
             if (name.isNullOrEmpty() || !r.isSpend(false)) continue
             groups.getOrPut(name.lowercase()) { ArrayList() }.add(r)
         }
@@ -63,7 +63,7 @@ object AnalyticsExtras {
                         .firstOrNull()
                         ?.key
                 MerchantLine(
-                    name = g.minOf { it.merchant!!.trim() },
+                    name = g.minOf { it.merchant!!.trim(' ') },
                     total = total,
                     visits = g.size,
                     averageTicket = Projections.divideRounded(total, g.size.toLong()),
