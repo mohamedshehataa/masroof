@@ -439,7 +439,11 @@ class LocalSafetyRound1Test {
                     upload = SessionUploadCheck(signedOut),
                 )
             assertEquals(0, uploader.uploadPending().sent)
-            assertTrue("the row stays queued", db.parsedOutbox().all().isNotEmpty())
+            // STORY-172 (REQ-SMS-099): start/foreground turns the queued row into a local entry; it is never sent, never dropped
+            assertTrue(
+                "the row became a local entry",
+                db.parsedOutbox().all().isEmpty() && db.sources().all().any { it.localSourceId == "l1" },
+            )
             assertEquals(emptyList<String>(), recorder.paths)
         }
 

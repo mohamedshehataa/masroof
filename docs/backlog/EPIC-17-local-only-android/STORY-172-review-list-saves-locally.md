@@ -3,7 +3,7 @@ id: STORY-172
 epic: EPIC-17
 title: The Needs-review list saves local entries and no queued capture is lost
 phase: 4
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -107,3 +107,4 @@ STORY-171
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D3), reuses STORY-067 review list |
 
 Carried from STORY-171 verify (2026-10-28): Review Save must (1) keep the parser's timeKnown (date-only review items are stored at Cairo noon with timeKnown = 0, today it is 1) and (2) run ChannelPairing.claimTwin before inserting, so a review-saved SMS whose notification twin was auto-recorded joins that entry as a second source instead of making a second entry.
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - review Save (twin join, timeKnown re-parse, snackbars), parsed_outbox conversion (CaptureQueueConverter), SMS-001 guard test; parser fix: a completed cashback credit is money in |

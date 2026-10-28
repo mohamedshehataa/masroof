@@ -827,9 +827,22 @@ object MessageParser {
             ci,
         )
 
+    /**
+     * A completed cashback credit ("Cashback of EGP 12.50 has been credited to your card ... for your purchase at X", "تم اضافة كاش باك"):
+     * money IN. The purchase it refers to is the reason, not a debit (SMS-001 direction guard, STORY-172).
+     */
+    private val cashbackCredited =
+        Regex(
+            "cash\\s?back(?:[^.;]|\\d\\.\\d){0,80}?\\b(?:has been|was|have been)\\s+credited\\b" +
+                "|\\bcredited\\b(?:[^.;]|\\d\\.\\d){0,40}\\bcash\\s?back" +
+                "|(?<![\\p{L}])(?:اضافه|اضافة)\\s+كاش\\s?باك",
+            ci,
+        )
+
     private fun decideDirection(t: String): Dir {
         // "... وسيتم إضافة كاش باك", "will be credited ...": a promised future credit is not a signal
         val now = futureClause.replace(t, " ")
+        if (cashbackCredited.containsMatchIn(now)) return Dir.IN
         // the household's own credit card is the beneficiary of a payment: money leaving the account, never income
         if (cardRepayment.containsMatchIn(now)) return Dir.OUT
         val debit =
