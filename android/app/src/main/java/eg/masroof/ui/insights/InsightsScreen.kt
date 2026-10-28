@@ -119,10 +119,11 @@ fun InsightsContent(
                     ) {
                         item { StatusBanner(state.status, onRetry) }
                         item { OverviewCard(data, state.period) }
+                        if (data.otherCurrencyCount > 0) item { OtherCurrencyNote(data.otherCurrencyCount) }
                         if (data.categories.isNotEmpty()) item { CategoriesCard(data) }
-                        item { TrendCard(data) }
-                        item { CalendarCard(data) }
-                        item { WeekdayCard(data) }
+                        if (data.trend.isNotEmpty()) item { TrendCard(data) }
+                        if (data.calendar.isNotEmpty()) item { CalendarCard(data) }
+                        if (data.weekday.isNotEmpty()) item { WeekdayCard(data) }
                     }
                 }
         }
@@ -416,4 +417,14 @@ private fun WeekdayCard(data: InsightsUi) {
     SectionCard(stringResource(R.string.insights_weekday_title)) {
         WeekdayBars(bars, style.arabic, description)
     }
+}
+
+@Composable
+private fun OtherCurrencyNote(count: Int) {
+    val digits = LocalMoneyStyle.current.digits
+    Text(
+        pluralStringResource(R.plurals.insights_other_currency, count, DateFormat.number(count, digits)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

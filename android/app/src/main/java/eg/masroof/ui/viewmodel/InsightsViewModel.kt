@@ -66,6 +66,8 @@ class InsightsViewModel
 
         init {
             refresh()
+            // The figures could not be computed after they were shown: the error with Retry, not "Not enough data yet".
+            viewModelScope.launch { repository.observeFailures.collect { status.value = LoadStatus.ERROR } }
             // An expense created, edited or deleted on this device changes the figures: one refresh after the burst.
             @OptIn(FlowPreview::class)
             viewModelScope.launch { localData.events.debounce(LOCAL_CHANGE_DEBOUNCE_MS).collect { refresh() } }

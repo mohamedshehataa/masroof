@@ -48,6 +48,9 @@ Unhappy path: **Given** 12 periods requested on a phone with 2 months of data **
 ones at zero, and the chart shows them as empty bars, not as missing.
 Unhappy path: **Given** income 0 in a period **Then** the savings rate is "no value" and the chart shows "-".
 
+## Carried over from STORY-178
+- Home's 6-month sparkline (the `HomeInsight.trend` chart) is empty after STORY-178 because the local snapshot has no trend data; this story must bring it back from the same trend computation.
+
 ## UX states (UI stories only)
 - empty: per tab ("No merchants yet", empty heatmap grid, flat trend).
 - loading: Room-backed, no spinner beyond the first frame. error: same "Couldn't compute insights" + Retry as STORY-178.

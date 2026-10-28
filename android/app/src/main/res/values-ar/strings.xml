@@ -202,8 +202,20 @@
     <string name="insights_weekday_desc">المصروف حسب يوم الأسبوع: %1$s</string>
     <string name="insights_empty_title">لا توجد بيانات كافية بعد</string>
     <string name="insights_empty_body">أضف بعض المصروفات وستظهر الرسوم البيانية هنا.</string>
-    <string name="insights_error_title">تعذّر تحميل التحليلات</string>
-    <string name="insights_error_body">رد الخادم بخطأ. حاول مرة أخرى بعد قليل.</string>
+    <string name="insights_error_title">مقدرناش نحسب التحليلات</string>
+    <string name="insights_error_body">حصلت مشكلة وإحنا بنقرا المصاريف من على الموبايل. جرّب تاني.</string>
+    <plurals name="insights_other_currency">
+        <item quantity="zero">%1$s مصروف بعملة تانية مش محسوب</item>
+        <item quantity="one">مصروف واحد بعملة تانية مش محسوب</item>
+        <item quantity="two">مصروفين بعملة تانية مش محسوبين</item>
+        <item quantity="few">%1$s مصاريف بعملة تانية مش محسوبة</item>
+        <item quantity="many">%1$s مصروف بعملة تانية مش محسوب</item>
+        <item quantity="other">%1$s مصروف بعملة تانية مش محسوب</item>
+    </plurals>
+    <string name="settings_section_analytics">أرقام المصروفات</string>
+    <string name="settings_month_start">الشهر يبدأ يوم</string>
+    <string name="settings_month_start_value">يوم %1$s</string>
+    <string name="settings_count_cash">احسب السحب من ماكينة الصراف ضمن المصروفات</string>
     <string name="insights_offline_title">اتصل مرة واحدة لعرض التحليلات</string>
     <string name="insights_offline_body">تُحفظ الرسوم البيانية على هذا الجهاز بعد أول تحميل ناجح.</string>
     <string name="delta_up_desc">المصروف أعلى بنسبة %1$s مقارنة بالفترة السابقة</string>

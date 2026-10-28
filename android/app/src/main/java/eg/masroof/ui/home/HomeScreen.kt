@@ -98,7 +98,7 @@ fun HomeContent(
     onOpenExpense: ((String) -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SpentCard(state, insight)
+        if (state.summaryAvailable) SpentCard(state, insight)
         if (state.recent.isNotEmpty()) StatusBanner(state.status, onRetry)
         if (insight != null && insight.pendingReview > 0) ReviewBanner(insight.pendingReview, onOpenInsights)
         HomeBudgetsCard(budgets, onOpenBudgets)

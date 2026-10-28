@@ -3,7 +3,7 @@ id: STORY-178
 epic: EPIC-17
 title: Home and the Insights overview and categories are computed on the phone
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -70,6 +70,10 @@ computation completes with p95 < 200 ms (PROMPT S9 read budget) over 20 runs, us
 Unhappy path: **Given** 10x that volume (72,000 rows) **Then** it still completes without an out-of-memory error (rows of
 one period only are loaded).
 
+## Known limitations
+- Home's budgets card (and the Budgets screen) still read GET `/api/analytics/budgets` until STORY-180; STORY-178 does not build budgets.
+- Insights trend, calendar and weekday data, and Home's 6-month sparkline, are empty until STORY-179.
+
 ## UX states (UI stories only)
 - empty: "No spending yet this month" on Home/Insights; Categories shows the empty donut placeholder.
 - loading: figures appear from Room; a skeleton for at most the first frame.
@@ -112,3 +116,5 @@ STORY-171, STORY-176, STORY-177
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D2), reuses STORY-109 Insights UI |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - AnalyticsEngine, LocalInsightsRepository, Settings section, parity + benchmark tests |
+| 2026-10-28 | 6+7 verify | qa-verifier | PASS loop 2 (round 1 fixed USD-only note, Home engine path, Cairo midnight, savings rate); merged |
