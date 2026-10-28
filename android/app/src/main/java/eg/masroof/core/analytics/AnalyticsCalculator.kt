@@ -12,6 +12,7 @@ data class AnalyticsRow(
     val amountMinor: Long,
     val occurredAtMillis: Long,
     val categoryId: String?,
+    val merchant: String? = null,
 )
 
 /** A category as the engine sees it. [parentId] is null for a top-level category. */
@@ -69,6 +70,10 @@ data class PeriodAnalytics(
     val categories: List<CategoryLine>,
     /** Sum of every category total (also the ones that net to zero or less), equal to the summary total. */
     val categoryTotal: Long,
+    val merchants: List<MerchantLine> = emptyList(),
+    val heatmap: HeatmapResult = HeatmapResult(emptyList(), List(7) { LongArray(24).toList() }),
+    /** The last 12 household months ending with the one that holds today, oldest first (Home shows the last 6). */
+    val trend: List<TrendPoint> = emptyList(),
 )
 
 /**
@@ -81,12 +86,12 @@ object AnalyticsCalculator {
     const val UNCATEGORISED_EN = "Uncategorised"
     const val UNCATEGORISED_AR = "غير مصنف"
     private const val TOP_CATEGORIES = 5
-    private const val EXPENSE = "EXPENSE"
-    private const val REFUND = "REFUND"
-    private const val CASH = "CASH_WITHDRAWAL"
-    private const val INCOME = "INCOME"
-    private const val CONFIRMED = "CONFIRMED"
-    private const val PENDING = "PENDING_REVIEW"
+    internal const val EXPENSE = "EXPENSE"
+    internal const val REFUND = "REFUND"
+    internal const val CASH = "CASH_WITHDRAWAL"
+    internal const val INCOME = "INCOME"
+    internal const val CONFIRMED = "CONFIRMED"
+    internal const val PENDING = "PENDING_REVIEW"
 
     /**
      * @param rows entries from the start of the previous period to the end of [period]; each is assigned to its period here
@@ -134,10 +139,17 @@ object AnalyticsCalculator {
                 Projections.linear(noCashTotal, elapsed, period.lengthDays()),
                 Projections.weekdayAware(period.from, daily(cur, period, elapsed, false), period.lengthDays()),
             )
-        return PeriodAnalytics(summary, forecast, lines, total)
+        return PeriodAnalytics(
+            summary,
+            forecast,
+            lines,
+            total,
+            AnalyticsExtras.merchants(cur),
+            AnalyticsExtras.heatmap(period, cur, includeCash),
+        )
     }
 
-    private fun inRange(
+    internal fun inRange(
         rows: List<AnalyticsRow>,
         period: AnalyticsPeriod,
     ): List<AnalyticsRow> {
@@ -146,11 +158,11 @@ object AnalyticsCalculator {
         return rows.filter { it.occurredAtMillis in from until to && (it.status == CONFIRMED || it.status == PENDING) }
     }
 
-    private fun AnalyticsRow.countsAsSpend(includeCash: Boolean) = type == EXPENSE || type == REFUND || (includeCash && type == CASH)
+    internal fun AnalyticsRow.countsAsSpend(includeCash: Boolean) = type == EXPENSE || type == REFUND || (includeCash && type == CASH)
 
-    private fun AnalyticsRow.counts(includeCash: Boolean) = currency == BASE_CURRENCY && countsAsSpend(includeCash)
+    internal fun AnalyticsRow.counts(includeCash: Boolean) = currency == BASE_CURRENCY && countsAsSpend(includeCash)
 
-    private fun AnalyticsRow.signed(): Long = if (type == REFUND) -amountMinor else amountMinor
+    internal fun AnalyticsRow.signed(): Long = if (type == REFUND) -amountMinor else amountMinor
 
     private fun spend(
         rows: List<AnalyticsRow>,
@@ -190,7 +202,7 @@ object AnalyticsCalculator {
         }
     }
 
-    private fun categoryLines(
+    internal fun categoryLines(
         cur: List<AnalyticsRow>,
         before: List<AnalyticsRow>,
         byId: Map<String, AnalyticsCategory>,

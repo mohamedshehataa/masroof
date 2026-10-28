@@ -194,6 +194,20 @@
     <string name="insights_trend_title">آخر %1$s أشهر</string>
     <string name="insights_trend_desc">المصروف الشهري: %1$s</string>
     <string name="insights_trend_average">المتوسط %1$s في الشهر</string>
+    <string name="insights_trend_range">%1$s أشهر</string>
+    <string name="insights_trend_savings">معدل الادخار هذا الشهر: %1$s</string>
+    <string name="insights_merchants_title">أكثر المتاجر إنفاقًا</string>
+    <string name="insights_merchants_empty">لا توجد متاجر بعد</string>
+    <plurals name="insights_merchant_visits">
+        <item quantity="zero">لا زيارات</item>
+        <item quantity="one">زيارة واحدة</item>
+        <item quantity="two">زيارتان</item>
+        <item quantity="few">%1$s زيارات</item>
+        <item quantity="many">%1$s زيارة</item>
+        <item quantity="other">%1$s زيارة</item>
+    </plurals>
+    <string name="insights_merchant_detail">%1$s · المتوسط %2$s</string>
+    <string name="insights_merchant_row_desc">%1$s: %2$s، %3$s، المتوسط %4$s</string>
     <string name="insights_calendar_title">المصروف اليومي</string>
     <string name="insights_calendar_desc">تقويم المصروف اليومي. أكثر الأيام إنفاقًا %1$s بمبلغ %2$s.</string>
     <string name="insights_calendar_desc_none">تقويم المصروف اليومي. لا مصروفات في هذه الفترة.</string>

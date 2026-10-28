@@ -113,12 +113,13 @@ class AnalyticsEngineTest {
         currency: String = "EGP",
         category: String? = null,
         deleted: Boolean = false,
+        merchant: String? = null,
     ) = ExpenseEntity(
         id = id,
         amountMinor = amount,
         currency = currency,
         occurredAtMillis = Instant.parse(at).toEpochMilli(),
-        merchant = null,
+        merchant = merchant,
         categoryId = category,
         accountId = null,
         notes = null,
@@ -216,6 +217,7 @@ class AnalyticsEngineTest {
                         x.str("currency")!!,
                         x.str("categoryKey"),
                         x.getValue("deleted").jsonPrimitive.boolean,
+                        x.str("merchant"),
                     ),
                 )
             }
@@ -240,6 +242,131 @@ class AnalyticsEngineTest {
                 }
             }
             assertEquals(24, checked)
+        }
+
+    private fun checkLines(
+        k: String,
+        actual: List<CategoryLine>,
+        expected: kotlinx.serialization.json.JsonArray,
+    ) {
+        assertEquals("$k size", expected.size, actual.size)
+        expected.forEachIndexed { i, t -> line("$k[$i]", actual[i], t.obj()) }
+    }
+
+    private fun checkExtras(
+        k: String,
+        out: PeriodAnalytics,
+        merchants: JsonObject,
+        heatmap: JsonObject,
+        trend6: kotlinx.serialization.json.JsonArray,
+        trend12: kotlinx.serialization.json.JsonArray,
+    ) {
+        val items = merchants.getValue("items").jsonArray
+        assertEquals("$k merchants size", items.size, out.merchants.size)
+        items.forEachIndexed { i, t ->
+            val x = t.obj()
+            val m = out.merchants[i]
+            assertEquals("$k m$i name", x.str("name"), m.name)
+            assertEquals("$k m$i total", x.lng("total"), m.total)
+            assertEquals("$k m$i visits", x.getValue("visits").jsonPrimitive.int, m.visits)
+            assertEquals("$k m$i avg", x.lng("averageTicket"), m.averageTicket)
+            assertEquals("$k m$i category", x.str("categoryKey"), m.categoryId)
+        }
+        val days = heatmap.getValue("days").jsonArray
+        assertEquals("$k days size", days.size, out.heatmap.days.size)
+        days.forEachIndexed { i, t ->
+            val x = t.obj()
+            assertEquals(
+                "$k day$i",
+                x.str("date"),
+                out.heatmap.days[i]
+                    .date
+                    .toString(),
+            )
+            assertEquals("$k day$i total", x.lng("total"), out.heatmap.days[i].total)
+            assertEquals("$k day$i count", x.getValue("count").jsonPrimitive.int, out.heatmap.days[i].count)
+        }
+        val wh = heatmap.getValue("weekdayHour").jsonArray.map { r -> r.jsonArray.map { it.jsonPrimitive.long } }
+        assertEquals("$k weekdayHour", wh, out.heatmap.weekdayHour)
+        for ((n, expected) in listOf(6 to trend6, 12 to trend12)) {
+            val actual = out.trend.takeLast(n)
+            assertEquals("$k trend$n size", expected.size, actual.size)
+            expected.forEachIndexed { i, t ->
+                val x = t.obj()
+                val p = actual[i]
+                assertEquals("$k trend$n[$i] label", x.getValue("period").obj().str("label"), p.period.label)
+                assertEquals("$k trend$n[$i] from", x.getValue("period").obj().str("from"), p.period.from.toString())
+                assertEquals("$k trend$n[$i] total", x.lng("total"), p.total)
+                assertEquals("$k trend$n[$i] income", x.lng("income"), p.income)
+                assertEquals("$k trend$n[$i] savings", x.intOrNull("savingsRateBps"), p.savingsRateBps)
+                checkLines("$k trend$n[$i] cat", p.byCategory, x.getValue("byCategory").jsonArray)
+            }
+        }
+    }
+
+    @Test
+    fun `REQ-AN-150 REQ-AN-151 REQ-AN-152 merchants heatmap and trend equal the golden file for both cash settings`() =
+        runTest {
+            val root = Json.parseToJsonElement(parityFile().readText()).obj()
+            root.getValue("categories").jsonArray.forEach {
+                val c = it.obj()
+                db.lookups().upsertCategories(
+                    listOf(CategoryEntity(c.str("key")!!, c.str("nameEn")!!, c.str("nameAr")!!, 0, c.str("parentKey"), c.str("color"))),
+                )
+            }
+            root.getValue("expenses").jsonArray.forEach {
+                val x = it.obj()
+                db.expenses().insert(
+                    e(
+                        x.str("id")!!,
+                        x.lng("amountMinor"),
+                        x.str("occurredAt")!!,
+                        x.str("type")!!,
+                        x.str("status")!!,
+                        x.str("currency")!!,
+                        x.str("categoryKey"),
+                        x.getValue("deleted").jsonPrimitive.boolean,
+                        x.str("merchant"),
+                    ),
+                )
+            }
+            var checked = 0
+            for (sc in root.getValue("scenarios").jsonArray.map { it.obj() }) {
+                val today = LocalDate.parse(sc.str("today")!!)
+                now = today.atTime(12, 0).atZone(eg.masroof.core.CairoTime.zone).toInstant()
+                val out = sc.getValue("outputs").obj()
+                val startDay = sc.getValue("monthStartDay").jsonPrimitive.int
+                for (cash in listOf(false, true)) {
+                    settings.update { it.copy(monthStartDay = startDay, includeCashWithdrawals = cash) }
+                    val s = if (cash) "WithCash" else ""
+                    checkExtras(
+                        "d$startDay $today cash=$cash",
+                        engine().compute("current"),
+                        out.getValue("merchants").obj(),
+                        out.getValue("heatmap$s").obj(),
+                        out.getValue("trend6$s").jsonArray,
+                        out.getValue("trend12$s").jsonArray,
+                    )
+                    checked++
+                }
+            }
+            assertEquals(24, checked)
+        }
+
+    @Test
+    fun `REQ-AN-152 twelve periods on a phone with two months of data are present and the older ones are zero`() =
+        runTest {
+            now = Instant.parse("2026-10-27T10:00:00Z")
+            db.expenses().insert(e("a", 5_000, "2026-10-05T10:00:00Z", merchant = " Shop "))
+            db.expenses().insert(e("b", 7_000, "2026-09-05T10:00:00Z", merchant = "shop"))
+            db.expenses().insert(e("c", 7_000, "2026-09-06T10:00:00Z", type = "REFUND", merchant = "SHOP"))
+            val out = engine().compute("current")
+            assertEquals(12, out.trend.size)
+            assertEquals(5_000L, out.trend[11].total)
+            assertTrue(out.trend.take(10).all { it.total == 0L && it.byCategory.isEmpty() && it.savingsRateBps == null })
+            assertEquals(1, out.merchants.size)
+            assertEquals("Shop", out.merchants[0].name)
+            assertEquals(5_000L, out.merchants[0].total)
         }
 
     @Test
@@ -351,7 +478,7 @@ class AnalyticsEngineTest {
                     amountMinor = 1_000L + i % 977,
                     currency = "EGP",
                     occurredAtMillis = start + month * 30L * 86_400_000L + within * 40_000L,
-                    merchant = null,
+                    merchant = "m${i % 40}",
                     categoryId = "c${i % 8}",
                     accountId = null,
                     notes = null,
@@ -362,7 +489,7 @@ class AnalyticsEngineTest {
     }
 
     @Test
-    fun `REQ-AN-149 summary and by-category over 12 x 600 rows take under 200 ms at p95`() =
+    fun `REQ-AN-149 summary, by-category, merchants, heatmap and trend over 12 x 600 rows take under 200 ms at p95`() =
         runTest {
             now = Instant.parse("2026-10-27T10:00:00Z")
             seedYear(600)
@@ -373,7 +500,7 @@ class AnalyticsEngineTest {
                     .map {
                         val t = System.nanoTime()
                         val out = engine.compute("current")
-                        assertTrue(out.summary.total > 0)
+                        assertTrue(out.summary.total > 0 && out.merchants.isNotEmpty() && out.trend.size == 12 && out.trend[11].total > 0)
                         (System.nanoTime() - t) / 1_000_000
                     }.sorted()
             val p95 = times[18]
