@@ -20,7 +20,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -84,6 +89,7 @@ class AnalyticsEngineTest {
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(kotlinx.coroutines.test.UnconfinedTestDispatcher())
         db =
             Room
                 .inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), AppDatabase::class.java)
@@ -92,7 +98,10 @@ class AnalyticsEngineTest {
     }
 
     @After
-    fun tearDown() = db.close()
+    fun tearDown() {
+        Dispatchers.resetMain()
+        db.close()
+    }
 
     @Suppress("LongParameterList")
     private fun e(
@@ -152,7 +161,18 @@ class AnalyticsEngineTest {
         val s = out.summary
         assertEquals("$k from", summary.getValue("period").obj().str("from"), s.period.from.toString())
         assertEquals("$k to", summary.getValue("period").obj().str("to"), s.period.to.toString())
+        assertEquals("$k label", summary.getValue("period").obj().str("label"), s.period.label)
         assertEquals("$k total", summary.lng("total"), s.total)
+        // The golden file has no savings rate; the server formula is (income - spent) / income in basis points, half away from zero.
+        val expectedSavings =
+            summary.lng("income").takeIf { it > 0 }?.let { inc ->
+                java.math
+                    .BigDecimal(inc - summary.lng("total"))
+                    .multiply(java.math.BigDecimal(10_000))
+                    .divide(java.math.BigDecimal(inc), 0, java.math.RoundingMode.HALF_UP)
+                    .toInt()
+            }
+        assertEquals("$k savingsRateBps", expectedSavings, s.savingsRateBps)
         assertEquals("$k previousTotal", summary.lng("previousTotal"), s.previousTotal)
         assertEquals("$k deltaBps", summary.intOrNull("deltaBps"), s.deltaBps)
         assertEquals("$k dailyAverage", summary.lng("dailyAverage"), s.dailyAverage)
@@ -366,5 +386,63 @@ class AnalyticsEngineTest {
             seedYear(6_000)
             val out = engine().compute("current")
             assertTrue(out.summary.total > 0)
+        }
+
+    @Test
+    fun `REQ-AN-147 Home spent equals the engine summary for month start 25 and an engine failure hides the summary card`() =
+        runTest {
+            settings.update { it.copy(monthStartDay = 25) }
+            db.expenses().insert(e("in", 5_000, "2026-10-26T08:00:00Z"))
+            db.expenses().insert(e("out", 9_000, "2026-10-20T08:00:00Z"))
+            val repo =
+                eg.masroof.data.DefaultExpenseRepository(
+                    db,
+                    clock,
+                    eg.masroof.data.UuidIdFactory(),
+                    eg.masroof.data.LocalDataSignal(),
+                )
+            val home =
+                eg.masroof.ui.viewmodel
+                    .HomeViewModel(repo, engine())
+            val job = backgroundScope.launch(Dispatchers.Unconfined) { home.state.collect {} }
+            val state = home.state.first { it.status == eg.masroof.ui.viewmodel.LoadStatus.READY }
+            assertEquals(engine().compute("current").summary.total, state.total.amountMinor)
+            assertEquals(5_000L, state.total.amountMinor)
+            assertTrue(state.summaryAvailable)
+            job.cancel()
+            val broken =
+                object : AnalyticsEngine {
+                    override fun observe(spec: String): Flow<PeriodAnalytics> = flow { error("boom") }
+
+                    override suspend fun compute(spec: String): PeriodAnalytics = error("boom")
+                }
+            val failed =
+                eg.masroof.ui.viewmodel
+                    .HomeViewModel(repo, broken)
+            val job2 = backgroundScope.launch(Dispatchers.Unconfined) { failed.state.collect {} }
+            val fs = failed.state.first { it.status == eg.masroof.ui.viewmodel.LoadStatus.READY }
+            assertTrue(!fs.summaryAvailable)
+            assertEquals(2, fs.recent.size)
+            job2.cancel()
+        }
+
+    @Test
+    fun `REQ-AN-148 an open screen moves to the next month after Cairo midnight`() =
+        runTest {
+            val t0 = System.nanoTime()
+            val start = Instant.parse("2026-10-31T21:59:59.700Z")
+            val moving =
+                object : Clock() {
+                    override fun getZone() = ZoneOffset.UTC
+
+                    override fun withZone(zone: java.time.ZoneId?) = this
+
+                    override fun instant(): Instant = start.plusNanos(System.nanoTime() - t0)
+                }
+            val labels =
+                RoomAnalyticsEngine(db, settings, moving, Dispatchers.Unconfined).observe("current").take(2).toList().map {
+                    it.summary.period.label
+                }
+            assertEquals(listOf("2026-10", "2026-11"), labels)
         }
 }

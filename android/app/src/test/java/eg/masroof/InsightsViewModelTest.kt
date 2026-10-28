@@ -159,4 +159,21 @@ class InsightsViewModelTest {
             runCurrent()
             assertTrue(repo.refreshed.size >= 2)
         }
+
+    @Test
+    fun `REQ-AN-147 a computation failure after data was shown moves the screen to the error state`() =
+        runTest {
+            val failures = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            val failing =
+                object : eg.masroof.data.insights.InsightsRepository by repo {
+                    override val observeFailures = failures
+                }
+            repo.snapshots.value = mapOf(InsightsPeriod.CURRENT to InsightsFixtures.snapshot())
+            val vm = InsightsViewModel(failing)
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            failures.tryEmit(Unit)
+            runCurrent()
+            assertEquals(LoadStatus.ERROR, vm.state.value.status)
+        }
 }

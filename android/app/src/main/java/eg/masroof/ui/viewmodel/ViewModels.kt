@@ -104,17 +104,17 @@ class HomeViewModel
     @Inject
     constructor(
         repository: ExpenseRepository,
-        engine: AnalyticsEngine? = null,
+        engine: AnalyticsEngine,
     ) : ViewModel() {
         // One spending rule for Home and Insights: the engine's total of the current household period.
         private val total: Flow<Money?> =
             engine
-                ?.observe("current")
-                ?.map<PeriodAnalytics, Money?> { Money(it.summary.total, Money.EGP) }
-                ?.catch { e ->
+                .observe("current")
+                .map<PeriodAnalytics, Money?> { Money(it.summary.total, Money.EGP) }
+                .catch { e ->
                     if (e is CancellationException) throw e
                     emit(null)
-                } ?: repository.observeMonthTotal()
+                }
 
         val state: StateFlow<HomeUiState> =
             combine(

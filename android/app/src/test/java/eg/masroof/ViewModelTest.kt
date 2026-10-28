@@ -8,6 +8,7 @@ import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.TransactionsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -41,7 +42,7 @@ class ViewModelTest {
     fun `REQ-AND-130 Home shows total and recent from Room and is ready at once`() =
         runTest {
             repo.all.value = listOf(expense("a", 12_500), expense("b", 2_500))
-            val vm = HomeViewModel(repo)
+            val vm = HomeViewModel(repo, TotalEngine(repo.all.map { l -> l.sumOf { it.amountMinor } }))
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             val state = vm.state.value

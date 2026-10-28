@@ -70,6 +70,10 @@ computation completes with p95 < 200 ms (PROMPT S9 read budget) over 20 runs, us
 Unhappy path: **Given** 10x that volume (72,000 rows) **Then** it still completes without an out-of-memory error (rows of
 one period only are loaded).
 
+## Known limitations
+- Home's budgets card (and the Budgets screen) still read GET `/api/analytics/budgets` until STORY-180; STORY-178 does not build budgets.
+- Insights trend, calendar and weekday data, and Home's 6-month sparkline, are empty until STORY-179.
+
 ## UX states (UI stories only)
 - empty: "No spending yet this month" on Home/Insights; Categories shows the empty donut placeholder.
 - loading: figures appear from Room; a skeleton for at most the first frame.

@@ -76,6 +76,9 @@ interface InsightsRepository {
     suspend fun refresh(period: InsightsPeriod): RefreshOutcome
 
     fun clear()
+
+    /** Emits when an observed computation failed after [observe] started; the screens then show the error state. */
+    val observeFailures: Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
 }
 
 @Singleton

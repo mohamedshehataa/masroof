@@ -418,7 +418,7 @@ class LocalSafetyRound1Test {
             // start / foreground
             ForegroundSync(repo).onForeground()
             // the lists and the Add sheet
-            val home = HomeViewModel(repo)
+            val home = HomeViewModel(repo, TotalEngine(kotlinx.coroutines.flow.flowOf(0L)))
             val tx = TransactionsViewModel(repo)
             backgroundScope.launch { home.state.collect {} }
             backgroundScope.launch { tx.state.collect {} }

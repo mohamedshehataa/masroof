@@ -1,6 +1,7 @@
 package eg.masroof
 
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -65,6 +66,14 @@ class InsightsScreenTest {
 
     private fun scrollTo(text: String) {
         compose.onNode(hasScrollAction()).performScrollToNode(hasText(text))
+    }
+
+    @Test
+    fun `REQ-AN-145 a period with only foreign-currency entries shows zero and the not-included note, not the empty state`() {
+        val foreign = InsightsFixtures.emptySnapshot().copy(otherCurrencyCount = 1).toUi()
+        show(InsightsState(InsightsPeriod.CURRENT, foreign, LoadStatus.READY))
+        compose.onNodeWithText("1 entry in another currency is not included").assertIsDisplayed()
+        compose.onAllNodesWithText("Not enough data yet").assertCountEquals(0)
     }
 
     @Test

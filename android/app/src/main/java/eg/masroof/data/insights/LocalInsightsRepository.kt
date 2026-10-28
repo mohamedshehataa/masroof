@@ -6,7 +6,9 @@ import eg.masroof.core.analytics.PeriodAnalytics
 import eg.masroof.data.RefreshOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -43,6 +45,9 @@ class LocalInsightsRepository
         private val clock: Clock,
     ) : InsightsRepository {
         private val version = MutableStateFlow(0)
+        private val failures = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+        override val observeFailures: Flow<Unit> = failures
 
         @OptIn(ExperimentalCoroutinesApi::class)
         override fun observe(period: InsightsPeriod): Flow<InsightsSnapshot?> =
@@ -55,6 +60,7 @@ class LocalInsightsRepository
                                 .map<PeriodAnalytics, InsightsSnapshot?> { it.toSnapshot(clock.millis()) }
                                 .catch { e ->
                                     if (e is CancellationException) throw e
+                                    failures.tryEmit(Unit)
                                     emitAll(flowOf(null))
                                 },
                         )

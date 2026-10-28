@@ -119,10 +119,15 @@ fun normalizeServerUrl(input: String): String? {
     return withSlash.takeIf { it.toHttpUrlOrNull() != null }
 }
 
+private val invalidMonthStartLogged =
+    java.util.concurrent.atomic
+        .AtomicBoolean(false)
+
 /** A stored or restored month start day outside 1..28 falls back to 1; only an error code is logged, never the value. */
 fun validMonthStartDay(stored: Int?): Int {
     if (stored == null) return AppSettings.DEFAULT_MONTH_START_DAY
     if (stored in AppSettings.MONTH_START_DAYS) return stored
-    android.util.Log.e("Settings", "E_MONTH_START_DAY_INVALID")
+    // Once per process: the setting flow re-reads the stored value on every emission.
+    if (invalidMonthStartLogged.compareAndSet(false, true)) android.util.Log.e("Settings", "E_MONTH_START_DAY_INVALID")
     return AppSettings.DEFAULT_MONTH_START_DAY
 }
