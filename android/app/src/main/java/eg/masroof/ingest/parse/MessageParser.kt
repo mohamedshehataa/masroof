@@ -29,9 +29,6 @@ object MessageParser {
     private const val MAX_LABEL_TOKENS = 5
     private const val MAX_DATE_AGE_DAYS = 45L
     private const val MAX_AMOUNT_MINOR = 10_000_000_000_000L
-
-    /** The most characters between a cashback amount and its cashback word ("Cashback of EGP 12.50", "EGP 45.00 cashback"). */
-    private const val CASHBACK_GAP = 8
     private const val NOON = 12
     private const val TWO_DIGIT_YEAR_BASE = 2000
     private const val NOON_HOURS = 12
@@ -843,19 +840,47 @@ object MessageParser {
         )
 
     private val cashbackWord = Regex("cash\\s?back|كاش\\s?باك", ci)
+    private const val CURRENCY_WORD = "(?:(?:egp|le|جنيه)\\s*)?"
+
+    /** What may sit between the cashback word and its amount: "of", "reward of", ":" - nothing that names another thing. */
+    private val cashbackLead = Regex("^\\s*(?:(?:reward|bonus)\\s+)?(?:of\\s+|:\\s*|-\\s*|(?:بقيمه|بقيمة|بمبلغ)\\s*)?$CURRENCY_WORD$", ci)
+
+    /** "Cashback has been credited to your card ending 4512: EGP 40.00": the amount closes the credited clause. */
+    private val creditedColon = Regex("^(?:[^.;]|\\d\\.\\d)*credited[^.;]*:\\s*$CURRENCY_WORD$", ci)
+
+    /** The reason a cashback was given ("for your purchase at X", "paid with card ending 4512", "عن عملية الشراء لدى X"): not a debit. */
+    private val cashbackReason =
+        Regex(
+            "\\b(?:for|on|from|against)\\s+(?:(?:your|the|a|an)\\s+)?(?:[\\p{L}]+\\s+){0,2}?" +
+                "(?:purchases?|spending|transactions?|orders?)\\b" +
+                "(?:\\s+(?:paid|made)\\s+with\\s+(?:your\\s+)?card(?:\\s+ending\\s+\\d+)?)?" +
+                "(?:\\s+(?:of\\s+\\p{L}+\\s+)?(?:at|from)\\s+\\p{L}+)?" +
+                "|\\bon\\s+the\\s+amount\\s+you\\s+spent(?:\\s+at\\s+\\p{L}+)?" +
+                "|(?<![\\p{L}])(?:عن|علي|على|مقابل)\\s+(?:عمليه\\s+)?(?:ال)?(?:شراء|مشتريات\\p{L}*)(?:\\s+(?:لدي|عند|من)\\s+\\p{L}+)?",
+            ci,
+        )
 
     /**
-     * A message that is only a cashback credit has exactly ONE money amount and it sits right next to the cashback word. Any other
-     * amount (the purchase the cashback refers to) or an amount elsewhere means the message may be about a purchase: no word list
-     * tries to recognise purchases, the structure decides.
+     * A message that is only a cashback credit: exactly ONE money amount, introduced by the cashback word itself ("Cashback of EGP 12",
+     * "EGP 45 cashback", "كاش باك 25 جنيه"), and none of the parser's outgoing vocabulary anywhere except in the reason clause of the
+     * cashback. Anything else may be a purchase and takes the normal decision, never an INCOME suggestion.
      */
     private fun isPureCashback(now: String): Boolean {
         val amounts = findAmounts(now).filter { !it.balance && it.minor != null }
         if (amounts.map { it.minor }.distinct().size != 1) return false
         val words = cashbackWord.findAll(now).toList()
-        return amounts.all { a ->
-            words.any { w -> (w.range.first - a.end) in 0..CASHBACK_GAP || (a.start - (w.range.last + 1)) in 0..CASHBACK_GAP }
-        }
+        val attached =
+            amounts.all { a ->
+                words.any { w ->
+                    if (a.start >= w.range.last + 1) {
+                        val gap = now.substring(w.range.last + 1, a.start)
+                        cashbackLead.matches(gap) || creditedColon.matches(gap)
+                    } else {
+                        a.end <= w.range.first && now.substring(a.end, w.range.first).isBlank()
+                    }
+                }
+            }
+        return attached && !outAnchor.containsMatchIn(cashbackReason.replace(now, " "))
     }
 
     private fun decideDirection(t: String): Dir {

@@ -57,6 +57,7 @@ private class CountingIds(
 }
 
 /** STORY-172: review Save is local (REQ-SMS-098), the old upload queue becomes entries (REQ-SMS-099), direction guard (REQ-SMS-100). */
+@Suppress("LargeClass") // one story, one file of REQ-SMS-098/099/100 tests
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ReviewListLocalTest {
@@ -489,6 +490,10 @@ class ReviewListLocalTest {
                 "تم الخصم من بطاقتكم 500 جنيه وتم اضافه كاش باك 25 جنيه",
                 "Your purchase EGP 500.00 at NOON using card 4512 is approved. Cashback of EGP 25 has been credited",
                 "مدفوعات 500 جنيه لدى نون وتم اضافه كاش باك 25 جنيه",
+                "Purchase at NOON EGP 500.00 - cashback has been credited",
+                "Purchase at NOON. Amount EGP 500.00. Cashback has been credited",
+                "POS purchase EGP 500.00 - Cashback has been credited",
+                "Cashback on EGP 500.00 purchase at NOON has been credited to your card ending 4512",
             )
         for (text in texts) {
             val outcome =
@@ -509,6 +514,8 @@ class ReviewListLocalTest {
                 "Cashback of EGP 20 on the amount you spent at NOON has been credited to your account" to 2_000L,
                 "Cashback of EGP 10 on your purchase paid with card ending 4512 has been credited" to 1_000L,
                 "EGP 20 cashback has been credited to your card ending 4512 for purchase of goods at NOON" to 2_000L,
+                "Cashback reward of EGP 75.00 has been credited to your account ending 7781 for October spending" to 7_500L,
+                "Cashback has been credited to your card ending 4512: EGP 40.00" to 4_000L,
             )
         for ((text, minor) in cases) {
             val outcome =
@@ -517,7 +524,7 @@ class ReviewListLocalTest {
             val r =
                 (outcome as? eg.masroof.ingest.parse.ParseOutcome.Review)?.suggestion
                     ?: (outcome as? eg.masroof.ingest.parse.ParseOutcome.Record)?.record
-            assertEquals(outcome.toString(), "INCOME", r?.kind?.name)
+            assertEquals("$text -> $outcome", "INCOME", r?.kind?.name)
             assertEquals(minor, r?.amountMinor)
         }
     }
