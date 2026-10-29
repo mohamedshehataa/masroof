@@ -61,8 +61,8 @@ fun AddExpenseRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val waiting by pending.receipt.collectAsStateWithLifecycle()
     SecureWindow()
-    // A receipt the form was opened from belongs to the new entry once it is saved; a cancel leaves it waiting (REQ-RCPT-023).
-    LaunchedEffect(state.form.savedId) { state.form.savedId?.let { pending.attachTo(it) } }
+    // A receipt the form was opened from is attached in the same write as the entry; a cancel leaves it waiting (REQ-RCPT-023).
+    LaunchedEffect(pending.receiptId) { viewModel.setReceipt(pending.receiptId) }
     LaunchedEffect(state.form.saved) { if (state.form.saved) onDone() }
     AddExpenseContent(
         state = state,

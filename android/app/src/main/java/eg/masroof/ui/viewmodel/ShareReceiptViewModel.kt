@@ -20,7 +20,10 @@ import javax.inject.Inject
 sealed interface ShareOutcome {
     data object Stored : ShareOutcome
 
-    data object Duplicate : ShareOutcome
+    /** The same file is already stored: unattached (in the list) or on a live entry (date and amount in [result]). */
+    data class Duplicate(
+        val result: AttachResult.Duplicate,
+    ) : ShareOutcome
 
     /** Not a `content://` URI of another app: refused without being read. */
     data object CantShare : ShareOutcome
@@ -75,7 +78,7 @@ class ShareReceiptViewModel
             if (uri == null) return ShareOutcome.CantShare
             return when (val result = store.attach(null) { resolver.openInputStream(uri) }) {
                 is AttachResult.Added -> ShareOutcome.Stored
-                is AttachResult.Duplicate -> ShareOutcome.Duplicate
+                is AttachResult.Duplicate -> ShareOutcome.Duplicate(result)
                 is AttachResult.Refused -> ShareOutcome.Refused(result.reason)
                 AttachResult.Failed -> ShareOutcome.Refused(null)
             }

@@ -22,6 +22,7 @@ import eg.masroof.ui.viewmodel.ShareReceiptViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -286,25 +287,196 @@ class ReceiptCameraShareTest {
         }
 
     @Test
-    fun `REQ-RCPT-023 new entry from a receipt attaches on save and a cancel leaves it waiting`() =
+    fun `REQ-RCPT-023 new entry from a receipt attaches in the same write as the save and a cancel leaves it waiting`() =
         runTest {
             val id = addAt("n", now.toEpochMilli())
-            db.expenses().insert(entry("saved", now.toEpochMilli()))
-            val cancelled = PendingReceiptViewModel(store, db, SavedStateHandle(mapOf("receipt" to id)))
-            assertEquals(id, cancelled.receiptId)
-            assertNull(db.receipts().find(id)!!.expenseId) // nothing happens until a save
-            val vm = PendingReceiptViewModel(store, db, SavedStateHandle(mapOf("receipt" to id)))
-            vm.attachTo("saved")
-            withContext(Dispatchers.Default) {
-                withTimeout(10_000) {
-                    while (db.receipts().find(id)!!.expenseId ==
-                        null
-                    ) {
-                        kotlinx.coroutines.delay(10)
-                    }
-                }
-            }
-            assertEquals("saved", db.receipts().find(id)!!.expenseId)
+            val pending = PendingReceiptViewModel(store, db, SavedStateHandle(mapOf("receipt" to id)))
+            assertEquals(id, pending.receiptId)
+            assertNull(db.receipts().find(id)!!.expenseId) // a cancel never writes
+            val repo =
+                eg.masroof.data.DefaultExpenseRepository(
+                    db,
+                    clock,
+                    eg.masroof.data.UuidIdFactory(),
+                    eg.masroof.data.LocalDataSignal(),
+                )
+            val entryId =
+                repo.add(
+                    eg.masroof.data.NewExpense(
+                        eg.masroof.core.Money(5_000, "EGP"),
+                        java.time.LocalDate.parse("2026-10-28"),
+                        null,
+                        null,
+                        null,
+                        receiptId = pending.receiptId,
+                    ),
+                )
+            assertEquals(entryId, db.receipts().find(id)!!.expenseId)
             assertNull(PendingReceiptViewModel(store, db, SavedStateHandle()).receiptId)
         }
+
+    // ---- fix round 1 ----
+
+    private fun cut(id: String) =
+        ExpenseEntity(
+            id,
+            9_900,
+            "EGP",
+            now.toEpochMilli(),
+            null,
+            null,
+            null,
+            null,
+            pending = false,
+            createdAtMillis = 1,
+            updatedAtMillis = 1,
+        )
+
+    @Test
+    fun `REQ-RCPT-022 a shared file already on a soft-deleted entry moves to the unattached list`() =
+        runTest {
+            db.expenses().insert(cut("gone").copy(deletedAtMillis = now.toEpochMilli()))
+            store.attach("gone") { ByteArrayInputStream(pdf) }
+            val result = store.attach(null) { ByteArrayInputStream(pdf) }
+            assertTrue(result is eg.masroof.data.receipts.AttachResult.Added)
+            val row =
+                db
+                    .receipts()
+                    .observeUnattached()
+                    .first()
+                    .single()
+            assertNull(row.expenseId)
+        }
+
+    @Test
+    fun `REQ-RCPT-022 a shared file already on a live entry reports that entry with date and amount`() =
+        runTest {
+            db.expenses().insert(cut("live"))
+            store.attach("live") { ByteArrayInputStream(pdf) }
+            val result = store.attach(null) { ByteArrayInputStream(pdf) }
+            val dup = result as eg.masroof.data.receipts.AttachResult.Duplicate
+            assertEquals("live", dup.expenseId)
+            assertEquals(9_900L, dup.amountMinor)
+            assertTrue(
+                db
+                    .receipts()
+                    .observeUnattached()
+                    .first()
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun `REQ-RCPT-022 a file that is already waiting is reported as waiting`() =
+        runTest {
+            store.attach(null) { ByteArrayInputStream(pdf) }
+            val dup = store.attach(null) { ByteArrayInputStream(pdf) } as eg.masroof.data.receipts.AttachResult.Duplicate
+            assertNull(dup.expenseId)
+        }
+
+    @Test
+    fun `REQ-RCPT-022 telephony and contacts authorities are refused without being opened`() {
+        val blocked =
+            listOf(
+                "sms",
+                "mms",
+                "mms-sms",
+                "telephony",
+                "com.android.contacts",
+                "contacts",
+                "call_log",
+            ).map { Uri.parse("content://$it/x/1") }
+        val plan = ShareIntentParser.parse(send(Intent.ACTION_SEND_MULTIPLE, blocked + foreign(1)), ctx.packageName)
+        assertEquals(blocked.size, plan.items.take(blocked.size).count { it == null })
+        assertNotNull(plan.items.last())
+    }
+
+    @Test
+    fun `REQ-RCPT-022 the waiting list is capped and refuses more with a reason`() =
+        runTest {
+            repeat(eg.masroof.data.receipts.ReceiptLimits.MAX_UNATTACHED_FILES) { n ->
+                db.receipts().insert(
+                    eg.masroof.data.db
+                        .ReceiptEntity("q$n", null, "q$n.pdf", "application/pdf", 10, "h$n", 1, 1),
+                )
+            }
+            val refused = store.attach(null) { ByteArrayInputStream(pdf) }
+            assertEquals(
+                eg.masroof.data.receipts.AttachResult
+                    .Refused(eg.masroof.data.receipts.Refusal.QUOTA),
+                refused,
+            )
+            // an attach to an entry is not a waiting receipt and is not capped
+            db.expenses().insert(cut("e"))
+            assertTrue(store.attach("e") { ByteArrayInputStream(pdf) } is eg.masroof.data.receipts.AttachResult.Added)
+        }
+
+    @Test
+    fun `REQ-RCPT-022 a stream that never returns times out and does not block the next attach`() =
+        runBlocking {
+            val slow = ReceiptStore(db, dir, PdfProbe { 1 }, clock, EraseLock(), Dispatchers.IO)
+            slow.copyTimeoutMillis = 300
+            val latch = java.util.concurrent.CountDownLatch(1)
+            val stuck =
+                object : java.io.InputStream() {
+                    override fun read(): Int {
+                        latch.await()
+                        return -1
+                    }
+                }
+            assertEquals(eg.masroof.data.receipts.AttachResult.Failed, slow.attach(null) { stuck })
+            latch.countDown()
+            assertTrue(slow.attach(null) { ByteArrayInputStream(pdf) } is eg.masroof.data.receipts.AttachResult.Added)
+        }
+
+    @Test
+    fun `REQ-RCPT-021 stale camera files are cleaned and a fresh one stays`() {
+        val fresh = CameraFiles.newTarget(ctx)
+        val old = CameraFiles.newTarget(ctx).also { it.setLastModified(System.currentTimeMillis() - 2 * CameraFiles.STALE_MILLIS) }
+        CameraFiles.clean(ctx, CameraFiles.STALE_MILLIS)
+        assertTrue(fresh.exists())
+        assertFalse(old.exists())
+    }
+
+    // ---- MainActivity deep-link hardening ----
+
+    @Test
+    fun `REQ-RCPT-022 MainActivity honours only the fixed boolean and survives a hostile extras bundle`() {
+        assertTrue(MainActivity.wantsReceipts(Intent().putExtra(MainActivity.EXTRA_OPEN_RECEIPTS, true)))
+        assertFalse(MainActivity.wantsReceipts(Intent().putExtra("android-support-nav:controller:deepLinkIds", intArrayOf(1, 2))))
+        assertFalse(MainActivity.wantsReceipts(Intent().putExtra("x", HostileParcelable())))
+        assertFalse(MainActivity.wantsReceipts(null))
+        val src = File("src/main/java/eg/masroof/MainActivity.kt").readText()
+        // the launch intent is replaced before navigation can read it
+        assertTrue(src.indexOf("takeIntent(intent, savedInstanceState == null)") < src.indexOf("setContent {"))
+        assertTrue(src.contains("setIntent(Intent(this, MainActivity::class.java))"))
+    }
+
+    private class HostileParcelable : android.os.Parcelable {
+        override fun describeContents() = 0
+
+        override fun writeToParcel(
+            dest: android.os.Parcel,
+            flags: Int,
+        ) = error("hostile")
+    }
+
+    // ---- guard test for the camera hand-over (strengthens REQ-RCPT-018) ----
+
+    @Test
+    fun `REQ-RCPT-021 only data camera uses FileProvider and no receipt code views, shares or grants`() {
+        val root = File("src/main/java/eg/masroof")
+        for (d in listOf("data/receipts", "ui/edit", "ui/receipts", "data/camera")) {
+            for (f in File(root, d).walkTopDown().filter { it.extension == "kt" }) {
+                val text = f.readText()
+                assertFalse("${f.name} must not use ACTION_VIEW", text.contains("ACTION_VIEW"))
+                assertFalse("${f.name} must not grant URIs", text.contains("grantUriPermission") || text.contains("FLAG_GRANT"))
+                if (d != "data/camera") assertFalse("${f.name} must not use FileProvider", text.contains("FileProvider"))
+            }
+        }
+        val paths = File("src/main/res/xml/camera_paths.xml").readText()
+        assertEquals(1, Regex("<cache-path\\b").findAll(paths).count())
+        assertEquals(1, Regex("<[a-z-]+-path\\b").findAll(paths).count())
+        assertTrue(Regex("<cache-path[^>]*path=\"camera/\"").containsMatchIn(paths))
+    }
 }

@@ -160,8 +160,8 @@ data class AddFormState(
     /** "Amount is too large": above 1,000,000,000,000 minor units. */
     val amountTooLarge: Boolean = false,
     val dateInvalid: Boolean = false,
-    /** The id of the entry just written (a receipt waiting for an entry is attached to it). */
-    val savedId: String? = null,
+    /** The waiting receipt this form was opened from. */
+    val receiptId: String? = null,
     /** The write is running: Save is disabled. */
     val saving: Boolean = false,
     /** The write threw: the sheet stays open with the input kept and "Couldn't save, try again". */
@@ -203,6 +203,9 @@ class AddExpenseViewModel
         fun onPaidBy(id: String?) = form.update { it.copy(paidByMemberId = id) }
 
         fun onDate(text: String) = form.update { it.copy(dateText = text, dateInvalid = false) }
+
+        /** The form was opened from a waiting receipt: Save attaches it in the same write as the entry (REQ-RCPT-023). */
+        fun setReceipt(id: String?) = form.update { it.copy(receiptId = id) }
 
         /** Prefill from a review item (REQ-SMS-014): amount and note only; the user still reviews and saves. */
         fun prefill(
@@ -246,6 +249,7 @@ class AddExpenseViewModel
                                 categoryId = f.categoryId,
                                 accountId = f.accountId,
                                 paidByMemberId = f.paidByMemberId,
+                                receiptId = f.receiptId,
                                 notes = f.notes.trim().ifEmpty { null },
                             ),
                         )
@@ -253,7 +257,7 @@ class AddExpenseViewModel
                 result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
                 // On failure the input is kept and nothing was written (the repository's transaction rolled back). Nothing is logged.
                 form.update {
-                    it.copy(saving = false, saved = result.isSuccess, savedId = result.getOrNull(), saveFailed = result.isFailure)
+                    it.copy(saving = false, saved = result.isSuccess, saveFailed = result.isFailure)
                 }
             }
         }

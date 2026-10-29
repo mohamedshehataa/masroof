@@ -98,3 +98,8 @@ STORY-174
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D4), reuses STORY-128 share target |
 | 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - camera (non-exported FileProvider), share target activity, Receipts list, Add with waiting receipt; verify pending |
+
+## Known limitations
+- Sharing to Masroof reopens MainActivity and discards a half-typed Add form.
+- "Receipt only" opens the Receipts list by watching for a new unattached row; after process death the list is not opened automatically.
+- Copying shows a spinner on the list (not per-item thumbnail placeholders).

@@ -348,6 +348,7 @@
     <string name="share_stored">اتضاف</string>
     <string name="share_cant">الملف ده ما ينفعش يتشارك مع مصروف</string>
     <string name="share_open">افتح الإيصالات</string>
+    <string name="rcpt_err_quota">فيه إيصالات كتير مستنية. اربط أو امسح شوية الأول.</string>
     <string name="rcpt_title">الإيصالات</string>
     <string name="rcpt_add">أضف إيصال</string>
     <string name="rcpt_empty">مفيش إيصال مرفق</string>

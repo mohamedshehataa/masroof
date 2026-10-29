@@ -328,6 +328,7 @@
     <string name="share_stored">Added</string>
     <string name="share_cant">This file can\'t be shared to Masroof</string>
     <string name="share_open">Open receipts</string>
+    <string name="rcpt_err_quota">Too many receipts are waiting. Attach or delete some first.</string>
     <string name="rcpt_title">Receipts</string>
     <string name="rcpt_add">Add receipt</string>
     <string name="rcpt_empty">No receipt attached</string>

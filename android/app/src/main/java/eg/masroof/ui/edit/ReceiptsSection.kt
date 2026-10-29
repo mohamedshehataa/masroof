@@ -237,6 +237,7 @@ internal fun errorRes(reason: Refusal?) =
         Refusal.TOO_MANY_PAGES -> R.string.rcpt_err_too_many_pages
         Refusal.PDF_UNREADABLE -> R.string.rcpt_err_pdf_unreadable
         Refusal.IMAGE_UNREADABLE -> R.string.rcpt_err_image_unreadable
+        Refusal.QUOTA -> R.string.rcpt_err_quota
         null -> R.string.rcpt_err_failed
     }
 

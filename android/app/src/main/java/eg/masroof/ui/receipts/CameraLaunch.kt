@@ -1,5 +1,6 @@
 package eg.masroof.ui.receipts
 
+import android.content.ActivityNotFoundException
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -29,11 +30,19 @@ fun rememberCameraLaunch(onPhoto: (File) -> Unit): (() -> Unit)? {
             if (file == null) return@rememberLauncherForActivityResult
             if (taken) onPhoto(file) else file.delete()
         }
-    if (!available) return null
+    // The camera app was disabled or removed while this screen was open: the option disappears.
+    var broken by remember { mutableStateOf(false) }
+    if (!available || broken) return null
     return {
-        CameraFiles.clean(context)
+        CameraFiles.clean(context, CameraFiles.STALE_MILLIS)
         val file = CameraFiles.newTarget(context)
         pending = file.name
-        launcher.launch(CameraFiles.uriOf(context, file))
+        try {
+            launcher.launch(CameraFiles.uriOf(context, file))
+        } catch (_: ActivityNotFoundException) {
+            file.delete()
+            pending = null
+            broken = true
+        }
     }
 }

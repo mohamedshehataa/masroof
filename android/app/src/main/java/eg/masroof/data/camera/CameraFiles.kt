@@ -38,10 +38,16 @@ object CameraFiles {
         name: String,
     ): File? = File(dir(context), name).takeIf { name.isNotEmpty() && name == it.name }
 
-    /** Deletes leftovers (a camera session killed with the process). */
-    fun clean(context: Context) {
-        dir(context).listFiles()?.forEach { runCatching { it.deleteRecursively() } }
+    /** Deletes leftovers (a camera session killed with the process) older than [olderThanMillis]; a photo still being copied stays. */
+    fun clean(
+        context: Context,
+        olderThanMillis: Long = 0L,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        dir(context).listFiles()?.filter { now - it.lastModified() >= olderThanMillis }?.forEach { runCatching { it.deleteRecursively() } }
     }
+
+    const val STALE_MILLIS = 60L * 60 * 1000
 
     /** False when no app can take a picture: the Camera option is then not shown at all. */
     fun available(context: Context): Boolean =

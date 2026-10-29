@@ -136,7 +136,7 @@ class ReceiptListViewModel
     }
 
 /**
- * The Add sheet opened from a receipt ("New entry"): holds the receipt id from the route, and attaches it to the entry once saved.
+ * The Add sheet opened from a receipt ("New entry"): holds the receipt id from the route, and the form attaches it with the entry.
  * Cancelling never touches the receipt (REQ-RCPT-023).
  */
 @HiltViewModel
@@ -155,10 +155,4 @@ class PendingReceiptViewModel
                 .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
         fun fileOf(receipt: ReceiptEntity): File = store.fileOf(receipt)
-
-        /** Called once with the new entry's id. */
-        fun attachTo(expenseId: String) {
-            val id = receiptId ?: return
-            viewModelScope.launch { store.attachExisting(id, expenseId) }
-        }
     }

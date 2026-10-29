@@ -44,6 +44,8 @@ data class NewExpense(
     val notes: String?,
     /** Optional "paid by" label (ADR-0009 D1); null = not set. */
     val paidByMemberId: String? = null,
+    /** A receipt that waited unattached (REQ-RCPT-023): attached in the same write as the entry, or not at all. */
+    val receiptId: String? = null,
 )
 
 /** New ids for rows. A seam so a test can make a write fail deterministically. */
@@ -151,6 +153,7 @@ class DefaultExpenseRepository
                             timeKnown = today,
                         ),
                     )
+                    entry.receiptId?.let { db.receipts().attachWaiting(it, id) }
                     db.sources().insert(
                         ExpenseSourceEntity(
                             id = sourceId,

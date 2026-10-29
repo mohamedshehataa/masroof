@@ -19,6 +19,10 @@ data class SharePlan(
 object ShareIntentParser {
     const val MAX_ITEMS = 10
 
+    // System providers that hold private data: a hostile app could point a share at them to make Masroof copy that data (confused deputy).
+    private val systemAuthorities =
+        setOf("sms", "mms", "mms-sms", "telephony", "com.android.contacts", "contacts", "call_log", "com.android.calllog")
+
     @Suppress("TooGenericExceptionCaught") // a hostile extra can throw BadParcelableException, ClassCastException, ...
     fun parse(
         intent: Intent,
@@ -45,6 +49,7 @@ object ShareIntentParser {
         if (!"content".equals(uri.scheme, ignoreCase = true)) return false
         val authority = uri.authority?.lowercase().orEmpty()
         if (authority.isEmpty() || '@' in authority) return false
+        if (authority in systemAuthorities) return false
         return !authority.contains(ownPackage.lowercase())
     }
 }

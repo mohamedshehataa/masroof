@@ -32,7 +32,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import eg.masroof.MainActivity
 import eg.masroof.R
+import eg.masroof.core.CairoTime
 import eg.masroof.core.DateFormat
+import eg.masroof.core.Money
+import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.data.receipts.ShareIntentParser
@@ -109,7 +112,7 @@ private fun ShareResult(
                 }
                 state.outcomes.forEachIndexed { index, outcome ->
                     val n = DateFormat.number(index + 1, LocalMoneyStyle.current.digits)
-                    Text(stringResource(R.string.share_item, n, stringResource(outcomeRes(outcome))))
+                    Text(stringResource(R.string.share_item, n, outcomeText(outcome)))
                 }
             }
             if (state.finished) {
@@ -121,10 +124,26 @@ private fun ShareResult(
     }
 }
 
-private fun outcomeRes(outcome: ShareOutcome): Int =
-    when (outcome) {
-        ShareOutcome.Stored -> R.string.share_stored
-        ShareOutcome.Duplicate -> R.string.rcpt_duplicate_waiting
-        ShareOutcome.CantShare -> R.string.share_cant
-        is ShareOutcome.Refused -> errorRes(outcome.reason)
+@Composable
+private fun outcomeText(outcome: ShareOutcome): String {
+    val style = LocalMoneyStyle.current
+    return when (outcome) {
+        ShareOutcome.Stored -> stringResource(R.string.share_stored)
+        ShareOutcome.CantShare -> stringResource(R.string.share_cant)
+        is ShareOutcome.Refused -> stringResource(errorRes(outcome.reason))
+        is ShareOutcome.Duplicate -> {
+            val d = outcome.result
+            if (d.occurredAtMillis != null && d.amountMinor != null && d.currency != null) {
+                stringResource(
+                    R.string.rcpt_duplicate,
+                    DateFormat.shortDate(CairoTime.dateOf(d.occurredAtMillis), style.arabic, style.digits),
+                    MoneyFormat.format(Money(d.amountMinor, d.currency), style.arabic, style.digits),
+                )
+            } else if (d.expenseId != null) {
+                stringResource(R.string.rcpt_duplicate_unknown)
+            } else {
+                stringResource(R.string.rcpt_duplicate_waiting)
+            }
+        }
     }
+}

@@ -240,8 +240,18 @@ interface ReceiptDao {
     @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id")
     suspend fun moveTo(
         id: String,
+        expenseId: String?,
+    )
+
+    /** Attaches a waiting receipt; no effect if it is gone or already attached. */
+    @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id AND expenseId IS NULL")
+    suspend fun attachWaiting(
+        id: String,
         expenseId: String,
     )
+
+    @Query("SELECT COUNT(*) AS files, COALESCE(SUM(sizeBytes), 0) AS bytes FROM receipt WHERE expenseId IS NULL")
+    suspend fun unattachedTotals(): ReceiptTotals
 
     @Query("SELECT * FROM receipt WHERE sha256 = :sha256")
     suspend fun bySha(sha256: String): ReceiptEntity?

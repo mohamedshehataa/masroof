@@ -79,10 +79,12 @@
             </intent-filter>
         </service>
 
-        <!-- Reason: another app starts the share sheet target, so it must be exported (REQ-RCPT-022, ADR-0009 L2). It accepts only
-             SEND / SEND_MULTIPLE for images and PDFs, takes only content:// URIs of other apps, reads only EXTRA_STREAM, and copies
-             each item at once. It is out of recents and in its own task. -->
-        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
+        <!-- Reason: another app starts the share sheet target, so it must be exported, and a share target cannot require a
+             permission (REQ-RCPT-022, ADR-0009 L2). It accepts only SEND / SEND_MULTIPLE for images and PDFs, takes only content://
+             URIs of other apps, reads only EXTRA_STREAM, and copies each item at once. It is out of recents; the empty task affinity
+             means it runs in the sender's task (it never reaches other Masroof screens: it only starts MainActivity with one fixed
+             boolean). -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity, masroof-android-exported-without-permission -->
         <activity
             android:name=".ui.receipts.ShareReceiptActivity"
             android:excludeFromRecents="true"

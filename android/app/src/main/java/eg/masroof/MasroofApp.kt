@@ -53,6 +53,9 @@ class MasroofApp :
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
         purgeScheduler.schedule()
+        // Camera temp photos a killed session left in the cache (older than an hour, so one being copied stays).
+        eg.masroof.data.camera.CameraFiles
+            .clean(this, eg.masroof.data.camera.CameraFiles.STALE_MILLIS)
         // Receipt files with no row (a crash between copy and insert, a failed delete) are deleted (REQ-RCPT-019).
         if (!DatabaseStartup.isBlocked()) appScope.launch { runCatching { receipts.sweep() } }
     }

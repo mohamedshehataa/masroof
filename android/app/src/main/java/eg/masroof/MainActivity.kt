@@ -1,6 +1,7 @@
 package eg.masroof
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -90,6 +93,32 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Set only by the share target: open the Receipts list. The one extra this exported activity reads. */
         const val EXTRA_OPEN_RECEIPTS = "eg.masroof.OPEN_RECEIPTS"
+
+        /** True only for the fixed boolean; a hostile or unreadable extras bundle counts as false. */
+        @Suppress("TooGenericExceptionCaught") // BadParcelableException, ClassCastException ...
+        internal fun wantsReceipts(intent: Intent?): Boolean =
+            try {
+                intent?.getBooleanExtra(EXTRA_OPEN_RECEIPTS, false) == true
+            } catch (_: Exception) {
+                false
+            }
+    }
+
+    private var openReceipts by mutableStateOf(false)
+
+    /**
+     * The launch intent is replaced by a bare one before any navigation sees it: the navigation library reads deep-link extras
+     * (`android-support-nav:controller:deepLinkIds`) from the activity intent, and any app can start this exported activity.
+     */
+    private fun takeIntent(intent: Intent?, fresh: Boolean) {
+        val wants = fresh && wantsReceipts(intent)
+        setIntent(Intent(this, MainActivity::class.java))
+        if (wants) openReceipts = true
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeIntent(intent, fresh = true)
     }
 
     @Inject lateinit var settings: SettingsRepository
@@ -110,13 +139,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        takeIntent(intent, savedInstanceState == null)
         val startup = DatabaseStartup.state()
         if (startup !is DbStartup.Ready) {
             setContent { MasroofTheme { StartupBlockedScreen(startup) } }
             return
         }
-        // Only the share target sets this fixed flag; it can only open the Receipts list, and not again after a rotation.
-        val openReceipts = savedInstanceState == null && intent?.getBooleanExtra(EXTRA_OPEN_RECEIPTS, false) == true
         setContent {
             val current by settings.settings.collectAsState(initial = AppSettings())
             MasroofTheme(digitOverride = current.digitStyle) {
@@ -124,6 +152,7 @@ class MainActivity : ComponentActivity() {
                 // whether or not a session exists, and a rejected or lost session never blocks it.
                 MasroofRoot(
                     openReceipts = openReceipts,
+                    onReceiptsOpened = { openReceipts = false },
                     onToggleLanguage = {
                         AppLanguage.toggle(this@MainActivity)
                         recreate()
@@ -137,6 +166,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MasroofRoot(
     openReceipts: Boolean,
+    onReceiptsOpened: () -> Unit,
     onToggleLanguage: () -> Unit,
 ) {
     val nav = rememberNavController()
@@ -144,7 +174,12 @@ private fun MasroofRoot(
     val destination = entry?.destination
     val snackbars = remember { SnackbarHostState() }
     val undo: UndoDeleteViewModel = hiltViewModel()
-    LaunchedEffect(Unit) { if (openReceipts) nav.navigate(RECEIPTS_ROUTE) }
+    LaunchedEffect(openReceipts) {
+        if (openReceipts) {
+            nav.navigate(RECEIPTS_ROUTE)
+            onReceiptsOpened()
+        }
+    }
     val deletedText = stringResource(R.string.edit_deleted)
     val undoText = stringResource(R.string.edit_undo)
     // "Deleted - Undo" stays for the Long duration (about 10 s, at least 5 s). Undo restores the soft-deleted entry.
