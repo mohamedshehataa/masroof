@@ -21,6 +21,7 @@ import eg.masroof.ui.viewmodel.ShareOutcome
 import eg.masroof.ui.viewmodel.ShareReceiptViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -478,5 +479,95 @@ class ReceiptCameraShareTest {
         assertEquals(1, Regex("<cache-path\\b").findAll(paths).count())
         assertEquals(1, Regex("<[a-z-]+-path\\b").findAll(paths).count())
         assertTrue(Regex("<cache-path[^>]*path=\"camera/\"").containsMatchIn(paths))
+    }
+
+    // ---- fix round 2 ----
+
+    @Test
+    fun `REQ-RCPT-022 a sweep during a running attach does not break it`() =
+        runBlocking {
+            val racing = ReceiptStore(db, dir, PdfProbe { 1 }, clock, EraseLock(), Dispatchers.IO)
+            val opened = java.util.concurrent.CountDownLatch(1)
+            val release = java.util.concurrent.CountDownLatch(1)
+            val slowStream =
+                object : java.io.InputStream() {
+                    private val inner = ByteArrayInputStream(pdf)
+
+                    override fun read(): Int = inner.read()
+
+                    override fun read(
+                        b: ByteArray,
+                        off: Int,
+                        len: Int,
+                    ): Int {
+                        opened.countDown()
+                        release.await()
+                        return inner.read(b, off, len)
+                    }
+                }
+            val attach = async(Dispatchers.Default) { racing.attach(null) { slowStream } }
+            withContext(Dispatchers.Default) { opened.await() }
+            File(dir, "${java.util.UUID.randomUUID()}.part").writeText("x") // a stray file that is not in flight
+            racing.sweep()
+            release.countDown()
+            assertTrue(attach.await() is eg.masroof.data.receipts.AttachResult.Added)
+            // the stray file is gone, the stored receipt stays
+            racing.sweep()
+            assertEquals(1, db.receipts().count())
+            assertEquals(1, dir.listFiles().orEmpty().size)
+        }
+
+    @Test
+    fun `REQ-RCPT-022 an open that returns after the timeout leaves no partial file`() =
+        runBlocking {
+            val slow = ReceiptStore(db, dir, PdfProbe { 1 }, clock, EraseLock(), Dispatchers.IO)
+            slow.copyTimeoutMillis = 200
+            val gate = java.util.concurrent.CountDownLatch(1)
+            val closed =
+                java.util.concurrent.atomic
+                    .AtomicBoolean(false)
+            val late =
+                object : ByteArrayInputStream(pdf) {
+                    override fun close() {
+                        closed.set(true)
+                    }
+                }
+            val result =
+                slow.attach(null) {
+                    gate.await()
+                    late
+                }
+            assertEquals(eg.masroof.data.receipts.AttachResult.Failed, result)
+            gate.countDown()
+            withContext(Dispatchers.Default) { withTimeout(5_000) { while (!closed.get()) kotlinx.coroutines.delay(10) } }
+            assertTrue(dir.listFiles().orEmpty().none { it.extension == "part" })
+            assertEquals(0, db.receipts().count())
+        }
+
+    @Test
+    fun `REQ-RCPT-022 a re-share of a waiting file at the cap says it is already in the list`() =
+        runTest {
+            store.attach(null) { ByteArrayInputStream(pdf) }
+            repeat(eg.masroof.data.receipts.ReceiptLimits.MAX_UNATTACHED_FILES - 1) { n ->
+                db.receipts().insert(
+                    eg.masroof.data.db
+                        .ReceiptEntity("c$n", null, "c$n.pdf", "application/pdf", 10, "x$n", 1, 1),
+                )
+            }
+            val again = store.attach(null) { ByteArrayInputStream(pdf) }
+            assertTrue(again is eg.masroof.data.receipts.AttachResult.Duplicate)
+            val other = store.attach(null) { ByteArrayInputStream("%PDF-1.4 different".toByteArray()) }
+            assertEquals(
+                eg.masroof.data.receipts.AttachResult
+                    .Refused(eg.masroof.data.receipts.Refusal.QUOTA),
+                other,
+            )
+        }
+
+    @Test
+    fun `REQ-RCPT-022 odd authority spellings of telephony providers are refused`() {
+        val odd = listOf("com.android.calllog", "user@sms", "SMS", "Mms-Sms").map { Uri.parse("content://$it/x/1") }
+        val plan = ShareIntentParser.parse(send(Intent.ACTION_SEND_MULTIPLE, odd), ctx.packageName)
+        assertTrue(plan.items.all { it == null })
     }
 }

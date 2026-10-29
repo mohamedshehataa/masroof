@@ -61,6 +61,11 @@ class ReceiptStore
     ) {
         private val attachLock = Mutex()
 
+        /** Names of the temp and re-encoded files of attaches that are running: the startup sweeper must not touch them. */
+        private val inFlight =
+            java.util.concurrent.ConcurrentHashMap
+                .newKeySet<String>()
+
         fun fileOf(receipt: ReceiptEntity): File = File(dir, receipt.fileName)
 
         /** How long one copy may take before it is abandoned (a provider whose stream never returns must not hold anything up). */
@@ -74,6 +79,7 @@ class ReceiptStore
         ): AttachResult =
             withContext(io) {
                 val raw = File(dir, "${UUID.randomUUID()}.part")
+                inFlight.add(raw.name)
                 var stored: File? = null
                 var result: AttachResult = AttachResult.Failed
                 try {
@@ -87,6 +93,8 @@ class ReceiptStore
                 } finally {
                     raw.delete()
                     if (result !is AttachResult.Added) stored?.delete()
+                    inFlight.remove(raw.name)
+                    stored?.let { inFlight.remove(it.name) }
                 }
                 result
             }
@@ -98,7 +106,6 @@ class ReceiptStore
             onStored: (File) -> Unit,
         ): AttachResult {
             if (!dir.isDirectory && !dir.mkdirs()) return AttachResult.Failed
-            if (expenseId == null && quotaReached()) return AttachResult.Refused(Refusal.QUOTA)
             // The copy runs outside the lock: a slow or stuck source cannot hold up other attaches.
             val copied = copyWithTimeout(open, raw) ?: return AttachResult.Failed
             if (copied is Copied.Refused) return AttachResult.Refused(copied.reason)
@@ -113,32 +120,62 @@ class ReceiptStore
             }
         }
 
-        private suspend fun quotaReached(): Boolean {
+        /** Would one more waiting file of [bytes] go over the cap? Checked inside [commit], after the duplicate check. */
+        private suspend fun overQuota(bytes: Long): Boolean {
             val t = db.receipts().unattachedTotals()
-            return t.files >= ReceiptLimits.MAX_UNATTACHED_FILES || t.bytes >= ReceiptLimits.MAX_UNATTACHED_BYTES
+            return t.files + 1 > ReceiptLimits.MAX_UNATTACHED_FILES || t.bytes + bytes > ReceiptLimits.MAX_UNATTACHED_BYTES
         }
 
-        /** Null on timeout or when the source gives no stream. The stream is closed from here on timeout to unblock the reader. */
+        /** Shared between the caller and the copy job: the job stops as soon as [abandoned] is set. */
+        private class Progress {
+            @Volatile var abandoned = false
+
+            @Volatile var lastActivityNanos = System.nanoTime()
+        }
+
+        /**
+         * Null on timeout or when the source gives no stream. [copyTimeoutMillis] is an inactivity limit (reset by every chunk read),
+         * with an overall cap of [OVERALL_TIMEOUT_MS]. On timeout, or when the caller is cancelled, the job is abandoned: it closes
+         * its stream, stops at the next buffer and deletes its partial file.
+         */
         private suspend fun copyWithTimeout(
             open: () -> InputStream?,
             raw: File,
         ): Copied? {
+            val progress = Progress()
             val holder =
                 java.util.concurrent.atomic
                     .AtomicReference<InputStream?>(null)
             val job =
                 CoroutineScope(io + SupervisorJob()).async {
-                    val input = open() ?: return@async null
-                    holder.set(input)
-                    input.use { copyCapped(it, raw) }
+                    try {
+                        val input = open() ?: return@async null
+                        holder.set(input)
+                        if (progress.abandoned) {
+                            runCatching { input.close() }
+                            return@async null
+                        }
+                        input.use { copyCapped(it, raw, progress) }
+                    } finally {
+                        if (progress.abandoned) raw.delete()
+                    }
                 }
-            val done = withTimeoutOrNull(copyTimeoutMillis) { runCatching { job.await() } }
-            if (done == null) {
-                runCatching { holder.get()?.close() }
-                job.cancel()
-                return null
+            val startNanos = System.nanoTime()
+            try {
+                while (job.isActive) {
+                    val idleMs = (System.nanoTime() - progress.lastActivityNanos) / NANOS_PER_MS
+                    val totalMs = (System.nanoTime() - startNanos) / NANOS_PER_MS
+                    if (idleMs > copyTimeoutMillis || totalMs > OVERALL_TIMEOUT_MS) return null
+                    withTimeoutOrNull(POLL_MS) { runCatching { job.await() } }
+                }
+                return runCatching { job.await() }.getOrNull()
+            } finally {
+                if (job.isActive) {
+                    progress.abandoned = true
+                    runCatching { holder.get()?.close() }
+                    job.cancel()
+                }
             }
-            return done.getOrNull()
         }
 
         private suspend fun commit(
@@ -159,10 +196,12 @@ class ReceiptStore
                     if (expenseId == null && same.expenseId == null) {
                         return@withLock AttachResult.Duplicate(same.id, null, null, null, null)
                     }
+                    if (expenseId == null && overQuota(same.sizeBytes)) return@withLock AttachResult.Refused(Refusal.QUOTA)
                     db.receipts().moveTo(same.id, expenseId)
                     stored.file.delete()
                     return@withLock AttachResult.Added(same.id)
                 }
+                if (expenseId == null && overQuota(stored.file.length())) return@withLock AttachResult.Refused(Refusal.QUOTA)
                 val id = UUID.randomUUID().toString()
                 db.receipts().insert(
                     ReceiptEntity(id, expenseId, stored.file.name, stored.mime, stored.file.length(), hash, stored.pages, clock.millis()),
@@ -206,7 +245,11 @@ class ReceiptStore
             eraseLock.mutex.withLock {
                 withContext(io) {
                     val known = db.receipts().fileNames().toSet()
-                    dir.listFiles()?.filter { it.name !in known }?.forEach { runCatching { it.deleteRecursively() } }
+                    dir
+                        .listFiles()
+                        ?.filter {
+                            it.name !in known && it.name !in inFlight
+                        }?.forEach { runCatching { it.deleteRecursively() } }
                 }
             }
         }
@@ -237,6 +280,7 @@ class ReceiptStore
         private fun copyCapped(
             input: InputStream,
             to: File,
+            progress: Progress,
         ): Copied {
             val header = ByteArray(ReceiptSniffer.HEADER_BYTES)
             var got = 0
@@ -244,6 +288,7 @@ class ReceiptStore
                 val n = input.read(header, got, header.size - got)
                 if (n < 0) break
                 got += n
+                progress.lastActivityNanos = System.nanoTime()
             }
             val kind = ReceiptSniffer.kindOf(header.copyOf(got)) ?: return Copied.Refused(Refusal.UNSUPPORTED)
             val cap = if (kind == ReceiptKind.PDF) ReceiptLimits.PDF_MAX_BYTES else ReceiptLimits.IMAGE_MAX_BYTES
@@ -254,6 +299,8 @@ class ReceiptStore
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
+                    if (progress.abandoned) throw java.io.IOException("abandoned")
+                    progress.lastActivityNanos = System.nanoTime()
                     total += n
                     if (total > cap) return Copied.Refused(Refusal.TOO_LARGE)
                     out.write(buf, 0, n)
@@ -272,7 +319,7 @@ class ReceiptStore
                 }
             if (pages < 1) return Made.Refused(Refusal.PDF_UNREADABLE)
             if (pages > ReceiptLimits.MAX_PDF_PAGES) return Made.Refused(Refusal.TOO_MANY_PAGES)
-            val target = File(dir, "${UUID.randomUUID()}.pdf")
+            val target = File(dir, "${UUID.randomUUID()}.pdf").also { inFlight.add(it.name) }
             raw.copyTo(target) // byte for byte; the PDF's metadata is kept (ADR-0009 D4)
             return Made.Stored(target, "application/pdf", pages)
         }
@@ -289,7 +336,7 @@ class ReceiptStore
             if (w.toLong() * h > ReceiptLimits.MAX_PIXELS) return Made.Refused(Refusal.TOO_LARGE)
             if (kind == ReceiptKind.JPEG && !JpegExif.isComplete(raw)) return Made.Refused(Refusal.IMAGE_UNREADABLE)
             val decoded = decode(raw, kind, w, h) ?: return Made.Refused(Refusal.IMAGE_UNREADABLE)
-            val target = File(dir, "${UUID.randomUUID()}.jpg")
+            val target = File(dir, "${UUID.randomUUID()}.jpg").also { inFlight.add(it.name) }
             try {
                 target.outputStream().use { decoded.compress(Bitmap.CompressFormat.JPEG, ReceiptLimits.JPEG_QUALITY, it) }
             } finally {
@@ -366,6 +413,9 @@ class ReceiptStore
         private companion object {
             const val COPY_BUFFER = 16 * 1024
             const val COPY_TIMEOUT_MS = 30_000L
+            const val OVERALL_TIMEOUT_MS = 5L * 60 * 1000
+            const val POLL_MS = 50L
+            const val NANOS_PER_MS = 1_000_000L
             const val MAX_DECODED_PIXELS = 16_000_000L
         }
     }
