@@ -3,6 +3,7 @@ package eg.masroof.data.insights
 import eg.masroof.api.models.AnalyticsSummary
 import eg.masroof.api.models.CategoryBreakdown
 import eg.masroof.api.models.Heatmap
+import eg.masroof.api.models.MerchantTotal
 import eg.masroof.api.models.Trend
 import kotlinx.serialization.Serializable
 
@@ -27,6 +28,8 @@ data class InsightsSnapshot(
     val categories: CategoryBreakdown,
     val trend: Trend,
     val heatmap: Heatmap,
+    /** Top merchants of the period, largest first; empty before any merchant has a positive net. */
+    val merchants: List<MerchantTotal> = emptyList(),
     val fetchedAtMillis: Long,
     /** Entries of the period in a currency other than EGP; they are not in any figure (REQ-AN-145). */
     val otherCurrencyCount: Int = 0,

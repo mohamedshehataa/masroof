@@ -21,6 +21,17 @@ data class TrendBar(
     val start: LocalDate,
     val total: Money,
     val selected: Boolean,
+    val income: Money = Money.zero(total.currency),
+    /** `(income - spent) / income` in basis points; null without income, shown as "-". */
+    val savingsRateBps: Int? = null,
+)
+
+/** A merchant of the period; [averageTicket] is per visit. */
+data class MerchantRow(
+    val name: String,
+    val total: Money,
+    val visits: Int,
+    val averageTicket: Money,
 )
 
 data class CalendarDay(
@@ -43,6 +54,7 @@ data class InsightsUi(
     val pendingReview: Int,
     val categories: List<CategoryShare>,
     val trend: List<TrendBar>,
+    val merchants: List<MerchantRow>,
     val calendar: List<CalendarDay>,
     /** Spend per weekday, Saturday first (the Egyptian week), summed over all hours. */
     val weekday: List<Money>,
@@ -86,8 +98,11 @@ fun InsightsSnapshot.toUi(): InsightsUi {
                     start = p.period.from.toJavaLocalDate(),
                     total = p.total.toMoney(),
                     selected = p.period.label == s.period.label,
+                    income = p.income?.toMoney() ?: Money.zero(p.total.currency),
+                    savingsRateBps = p.savingsRateBps,
                 )
             },
+        merchants = merchants.map { MerchantRow(it.name, it.total.toMoney(), it.visits, it.averageTicket.toMoney()) },
         calendar =
             heatmap.days.map {
                 CalendarDay(it.date.toJavaLocalDate(), it.total.toMoney(), it.count)

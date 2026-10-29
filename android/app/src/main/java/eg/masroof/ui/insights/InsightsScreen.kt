@@ -26,6 +26,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +61,9 @@ import eg.masroof.ui.viewmodel.LoadStatus
 import java.time.DayOfWeek
 
 private const val MAX_CATEGORY_ROWS = 8
+private const val MAX_MERCHANT_ROWS = 10
+private const val TREND_SHORT = 6
+private const val TREND_LONG = 12
 private const val DONUT_SLICES = 8
 
 @Composable
@@ -122,6 +128,7 @@ fun InsightsContent(
                         if (data.otherCurrencyCount > 0) item { OtherCurrencyNote(data.otherCurrencyCount) }
                         if (data.categories.isNotEmpty()) item { CategoriesCard(data) }
                         if (data.trend.isNotEmpty()) item { TrendCard(data) }
+                        item { MerchantsCard(data) }
                         if (data.calendar.isNotEmpty()) item { CalendarCard(data) }
                         if (data.weekday.isNotEmpty()) item { WeekdayCard(data) }
                     }
@@ -345,20 +352,41 @@ private fun CategoryRow(
 @Composable
 private fun TrendCard(data: InsightsUi) {
     val style = LocalMoneyStyle.current
+    var months by rememberSaveable { mutableIntStateOf(TREND_SHORT) }
+    val shown = data.trend.takeLast(months)
     val items =
-        data.trend.map {
+        shown.map {
             BarItem(DateFormat.monthShort(it.start, style.arabic), it.total.amountMinor, it.selected)
         }
     val description =
         stringResource(
             R.string.insights_trend_desc,
-            data.trend.joinToString(", ") {
+            shown.joinToString(", ") {
                 DateFormat.monthShort(it.start, style.arabic) + " " + MoneyFormat.format(it.total, style.arabic, style.digits)
             },
         )
-    val active = data.trend.filter { it.total.amountMinor > 0 }
-    SectionCard(stringResource(R.string.insights_trend_title, DateFormat.number(data.trend.size, style.digits))) {
+    val active = shown.filter { it.total.amountMinor > 0 }
+    SectionCard(pluralStringResource(R.plurals.insights_trend_title, shown.size, DateFormat.number(shown.size, style.digits))) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (n in listOf(TREND_SHORT, TREND_LONG)) {
+                FilterChip(
+                    selected = months == n,
+                    onClick = { months = n },
+                    label = { Text(pluralStringResource(R.plurals.insights_trend_range, n, DateFormat.number(n, style.digits))) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+        }
         BarChart(items, description)
+        val last = shown.lastOrNull()
+        if (last != null) {
+            val rate = last.savingsRateBps?.let { PercentFormat.format(it, style.arabic, style.digits) } ?: "-"
+            Text(
+                stringResource(R.string.insights_trend_savings, rate),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (active.isNotEmpty()) {
             val average = Money(active.sumOf { it.total.amountMinor } / active.size, data.total.currency)
             Text(
@@ -366,6 +394,42 @@ private fun TrendCard(data: InsightsUi) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun MerchantsCard(data: InsightsUi) {
+    val style = LocalMoneyStyle.current
+    SectionCard(stringResource(R.string.insights_merchants_title)) {
+        if (data.merchants.isEmpty()) {
+            Text(
+                stringResource(R.string.insights_merchants_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        data.merchants.take(MAX_MERCHANT_ROWS).forEachIndexed { index, m ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            val amount = MoneyFormat.format(m.total, style.arabic, style.digits)
+            val visits = pluralStringResource(R.plurals.insights_merchant_visits, m.visits, DateFormat.number(m.visits, style.digits))
+            val average = MoneyFormat.format(m.averageTicket, style.arabic, style.digits)
+            val description = stringResource(R.string.insights_merchant_row_desc, m.name, amount, visits, average)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).semantics(mergeDescendants = true) { contentDescription = description },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                    Text(
+                        stringResource(R.string.insights_merchant_detail, visits, average),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                AmountText(m.total, style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }

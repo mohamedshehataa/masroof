@@ -53,7 +53,7 @@ interface ExpenseDao {
 
     /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
     @Query(
-        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId FROM expense
+        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
             WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
@@ -63,7 +63,7 @@ interface ExpenseDao {
     ): Flow<List<AnalyticsRow>>
 
     @Query(
-        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId FROM expense
+        """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
             WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )

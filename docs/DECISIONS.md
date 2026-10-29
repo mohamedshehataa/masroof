@@ -311,3 +311,4 @@ One line per non-obvious decision: **decision — why**. Significant ones also g
 
 2026-10-28 · STORY-178 · Home's budgets card and the Budgets screen stay server-backed (GET /api/analytics/budgets) until STORY-180; STORY-178 only moves spent/Insights overview/categories to the phone, and Home's 6-month sparkline returns with STORY-179.
 2026-10-28 · STORY-175 · Share target is one exported activity (ShareReceiptActivity, own task, out of recents, FLAG_SECURE) that reads only EXTRA_STREAM and hands MainActivity one fixed boolean extra to open the Receipts list; camera FileProvider lives in data/camera (STORY-174 test bans FileProvider in data/receipts) · no new dependency
+2026-10-28 · STORY-179 · Insights trend, merchants and heatmap are computed in core/analytics from one 12-period range query (no per-period queries); the dead ApiInsightsRemote was removed so no /api/analytics trend or heatmap call remains; Home sparkline is the last 6 of the same trend.

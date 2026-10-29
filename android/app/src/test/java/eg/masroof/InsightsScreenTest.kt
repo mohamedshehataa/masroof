@@ -238,6 +238,16 @@ class InsightsScreenTest {
     }
 
     @Test
+    fun `REQ-AN-150 REQ-AN-152 insights shows No merchants yet and a dash for the savings rate without income`() {
+        val noIncome = data.copy(merchants = emptyList(), trend = data.trend.map { it.copy(savingsRateBps = null) })
+        show(InsightsState(InsightsPeriod.CURRENT, noIncome, LoadStatus.READY))
+        scrollTo("No merchants yet")
+        compose.onNodeWithText("No merchants yet").assertIsDisplayed()
+        scrollTo("Savings rate this month: -")
+        compose.onNodeWithText("Savings rate this month: -").assertIsDisplayed()
+    }
+
+    @Test
     fun `REQ-AND-074 home without analytics yet keeps the plain total card`() {
         compose.setContent {
             MasroofTheme { HomeContent(HomeUiState(total = Money(125_000), status = LoadStatus.READY), {}, {}) }

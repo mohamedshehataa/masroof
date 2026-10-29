@@ -3,7 +3,7 @@ id: STORY-179
 epic: EPIC-17
 title: Insights merchants, calendar heatmap and trends are computed on the phone
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -91,3 +91,5 @@ STORY-178
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D2), reuses STORY-111 Insights tabs |
+| 2026-10-28 | 5 implement | android-engineer | IN_PROGRESS - engine merchants/heatmap/trend, Insights cards, Home sparkline |
+| 2026-10-29 | 6+7 verify | qa-verifier | PASS loop 1; 3 MINORs fixed (Arabic plurals, btrim parity, sparkline/UI tests); merged |
