@@ -3,7 +3,7 @@ id: STORY-175
 epic: EPIC-17
 title: Snap or share a receipt first and turn it into an entry later
 phase: 3
-status: IN_PROGRESS
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -103,3 +103,4 @@ STORY-174
 - Sharing to Masroof reopens MainActivity and discards a half-typed Add form.
 - "Receipt only" opens the Receipts list by watching for a new unattached row; after process death the list is not opened automatically.
 - Copying shows a spinner on the list (not per-item thumbnail placeholders).
+| 2026-10-29 | 6+7 verify | qa-verifier + security-reviewer | PASS loop 3, security APPROVE (semgrep suppression scoped, deleted-entry receipts kept, deep-link extras dropped, copy timeout + quota, cold-start share vs sweep); merged |
