@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The only place the camera FileProvider can reach: cache/camera/ (REQ-RCPT-021). -->
+<paths>
+    <cache-path
+        name="camera"
+        path="camera/" />
+</paths>

@@ -10,6 +10,10 @@ object ReceiptLimits {
     const val MAX_PDF_PAGES = 30
     const val MAX_LONG_EDGE = 2560
     const val JPEG_QUALITY = 85
+
+    /** Receipts waiting without an entry stop at 200 files or 500 MB (shares and "Receipt only" are refused beyond that). */
+    const val MAX_UNATTACHED_FILES = 200
+    const val MAX_UNATTACHED_BYTES = 500L * 1024 * 1024
 }
 
 /** Magic-byte sniffing. SVG, text, ZIP and anything else return null. */
@@ -39,7 +43,7 @@ object ReceiptSniffer {
 }
 
 /** Why a file was not stored. */
-enum class Refusal { UNSUPPORTED, TOO_LARGE, TOO_MANY_PAGES, PDF_UNREADABLE, IMAGE_UNREADABLE }
+enum class Refusal { UNSUPPORTED, TOO_LARGE, TOO_MANY_PAGES, PDF_UNREADABLE, IMAGE_UNREADABLE, QUOTA }
 
 sealed interface AttachResult {
     data class Added(

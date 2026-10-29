@@ -42,18 +42,27 @@ import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.ui.components.SecureWindow
+import eg.masroof.ui.edit.PDF_MIME
+import eg.masroof.ui.edit.Thumbnail
+import eg.masroof.ui.receipts.ReceiptOnlySection
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
 import eg.masroof.ui.viewmodel.AddUiState
+import eg.masroof.ui.viewmodel.PendingReceiptViewModel
 
 @Composable
 fun AddExpenseRoute(
     onDone: () -> Unit,
+    onOpenReceipts: () -> Unit = {},
     viewModel: AddExpenseViewModel = hiltViewModel(),
+    pending: PendingReceiptViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val waiting by pending.receipt.collectAsStateWithLifecycle()
     SecureWindow()
+    // A receipt the form was opened from is attached in the same write as the entry; a cancel leaves it waiting (REQ-RCPT-023).
+    LaunchedEffect(pending.receiptId) { viewModel.setReceipt(pending.receiptId) }
     LaunchedEffect(state.form.saved) { if (state.form.saved) onDone() }
     AddExpenseContent(
         state = state,
@@ -64,6 +73,20 @@ fun AddExpenseRoute(
         onNotes = viewModel::onNotes,
         onSave = viewModel::save,
         onPaidBy = viewModel::onPaidBy,
+        extra = {
+            val receipt = waiting
+            if (receipt != null) {
+                Text(stringResource(R.string.rcpt_waiting_title), style = MaterialTheme.typography.titleSmall)
+                Thumbnail(
+                    pending.fileOf(receipt),
+                    receipt.mimeType == PDF_MIME,
+                    stringResource(R.string.rcpt_waiting_desc),
+                    onClick = {},
+                )
+            } else if (pending.receiptId == null) {
+                ReceiptOnlySection(onStored = onOpenReceipts)
+            }
+        },
     )
 }
 
@@ -78,6 +101,7 @@ fun AddExpenseContent(
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
     onPaidBy: (String?) -> Unit = {},
+    extra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val arabic = LocalMoneyStyle.current.arabic
     val form = state.form
@@ -93,6 +117,7 @@ fun AddExpenseContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes, onPaidBy))
+            extra()
         }
         Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
             Button(

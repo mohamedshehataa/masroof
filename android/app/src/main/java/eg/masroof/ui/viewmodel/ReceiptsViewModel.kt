@@ -65,10 +65,18 @@ class ReceiptsViewModel
         fun fileOf(receipt: ReceiptEntity): File = store.fileOf(receipt)
 
         /** [open] runs on an IO thread; a null stream is a failure. A cancelled picker never gets here. */
-        fun add(open: () -> InputStream?) {
+        fun add(
+            after: () -> Unit = {},
+            open: () -> InputStream?,
+        ) {
             local.update { it.copy(adding = it.adding + 1, message = null) }
             viewModelScope.launch {
-                val result = store.attach(expenseId, open)
+                val result =
+                    try {
+                        store.attach(expenseId, open)
+                    } finally {
+                        after()
+                    }
                 local.update {
                     val message =
                         when (result) {

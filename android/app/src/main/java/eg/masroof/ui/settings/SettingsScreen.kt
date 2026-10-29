@@ -43,6 +43,7 @@ import eg.masroof.ui.viewmodel.SettingsViewModel
 fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
     onOpenReview: () -> Unit = {},
+    onOpenReceipts: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -61,7 +62,7 @@ fun SettingsRoute(
         extra = {
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
-            ReceiptsStorageSection()
+            ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
             MembersRoute()
         },
     )

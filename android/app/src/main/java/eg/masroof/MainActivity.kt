@@ -1,6 +1,7 @@
 package eg.masroof
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -33,10 +36,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
 import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
@@ -49,6 +54,7 @@ import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
+import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
 import eg.masroof.ui.review.ReviewRoute
 import eg.masroof.ui.settings.SettingsRoute
@@ -74,7 +80,9 @@ private enum class Tab(
     Settings("settings", R.string.nav_settings, Icons.Filled.Settings),
 }
 
-private const val ADD_ROUTE = "add"
+// "add" opens a blank form; "add?receipt=<id>" opens it with a waiting receipt that is attached on Save (REQ-RCPT-023).
+private const val ADD_ROUTE = "add?receipt={receipt}"
+private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
 private const val EDIT_ROUTE = "edit/{id}"
 private const val REVIEW_ROUTE = "review"
@@ -82,6 +90,37 @@ private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Set only by the share target: open the Receipts list. The one extra this exported activity reads. */
+        const val EXTRA_OPEN_RECEIPTS = "eg.masroof.OPEN_RECEIPTS"
+
+        /** True only for the fixed boolean; a hostile or unreadable extras bundle counts as false. */
+        @Suppress("TooGenericExceptionCaught") // BadParcelableException, ClassCastException ...
+        internal fun wantsReceipts(intent: Intent?): Boolean =
+            try {
+                intent?.getBooleanExtra(EXTRA_OPEN_RECEIPTS, false) == true
+            } catch (_: Exception) {
+                false
+            }
+    }
+
+    private var openReceipts by mutableStateOf(false)
+
+    /**
+     * The launch intent is replaced by a bare one before any navigation sees it: the navigation library reads deep-link extras
+     * (`android-support-nav:controller:deepLinkIds`) from the activity intent, and any app can start this exported activity.
+     */
+    private fun takeIntent(intent: Intent?, fresh: Boolean) {
+        val wants = fresh && wantsReceipts(intent)
+        setIntent(Intent(this, MainActivity::class.java))
+        if (wants) openReceipts = true
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeIntent(intent, fresh = true)
+    }
+
     @Inject lateinit var settings: SettingsRepository
 
     @Inject lateinit var foregroundSync: ForegroundSync
@@ -100,6 +139,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        takeIntent(intent, savedInstanceState == null)
         val startup = DatabaseStartup.state()
         if (startup !is DbStartup.Ready) {
             setContent { MasroofTheme { StartupBlockedScreen(startup) } }
@@ -111,6 +151,8 @@ class MainActivity : ComponentActivity() {
                 // No sign-in screen and no session check: the app is the whole product (REQ-AND-130). Home is the first screen
                 // whether or not a session exists, and a rejected or lost session never blocks it.
                 MasroofRoot(
+                    openReceipts = openReceipts,
+                    onReceiptsOpened = { openReceipts = false },
                     onToggleLanguage = {
                         AppLanguage.toggle(this@MainActivity)
                         recreate()
@@ -122,12 +164,22 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MasroofRoot(onToggleLanguage: () -> Unit) {
+private fun MasroofRoot(
+    openReceipts: Boolean,
+    onReceiptsOpened: () -> Unit,
+    onToggleLanguage: () -> Unit,
+) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val destination = entry?.destination
     val snackbars = remember { SnackbarHostState() }
     val undo: UndoDeleteViewModel = hiltViewModel()
+    LaunchedEffect(openReceipts) {
+        if (openReceipts) {
+            nav.navigate(RECEIPTS_ROUTE)
+            onReceiptsOpened()
+        }
+    }
     val deletedText = stringResource(R.string.edit_deleted)
     val undoText = stringResource(R.string.edit_undo)
     // "Deleted - Undo" stays for the Long duration (about 10 s, at least 5 s). Undo restores the soft-deleted entry.
@@ -159,7 +211,7 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
         },
         floatingActionButton = {
             if (destination?.route != ADD_ROUTE && destination?.route != EDIT_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
-                FloatingActionButton(onClick = { nav.navigate(ADD_ROUTE) }) {
+                FloatingActionButton(onClick = { nav.navigate("add") }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
             }
@@ -179,13 +231,37 @@ private fun MasroofRoot(onToggleLanguage: () -> Unit) {
             composable(Tab.Transactions.route) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(EDIT_ROUTE) { EditExpenseRoute(onDone = { nav.popBackStack() }) }
             composable(Tab.Settings.route) {
-                SettingsRoute(onToggleLanguage = onToggleLanguage, onOpenReview = { nav.navigate(REVIEW_ROUTE) })
+                SettingsRoute(
+                    onToggleLanguage = onToggleLanguage,
+                    onOpenReview = { nav.navigate(REVIEW_ROUTE) },
+                    onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                )
             }
             composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
             composable(REVIEW_ADD_ROUTE) { entry ->
                 ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })
             }
-            composable(ADD_ROUTE) { AddExpenseRoute(onDone = { nav.popBackStack() }) }
+            composable(RECEIPTS_ROUTE) { ReceiptsListRoute(onNewEntry = { id -> nav.navigate("add?receipt=$id") }) }
+            composable(
+                ADD_ROUTE,
+                arguments =
+                    listOf(
+                        navArgument("receipt") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
+            ) {
+                AddExpenseRoute(onDone = { nav.popBackStack() }, onOpenReceipts = {
+                    nav.navigate(RECEIPTS_ROUTE) {
+                        popUpTo("add?receipt={receipt}") {
+                            inclusive =
+                                true
+                        }
+                    }
+                })
+            }
         }
     }
 }

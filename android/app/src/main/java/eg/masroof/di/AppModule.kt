@@ -88,6 +88,11 @@ annotation class AuthHttp
 @Retention(AnnotationRetention.BINARY)
 annotation class ReceiptsDir
 
+/** `cacheDir/camera`: temp photos from the camera hand-over; emptied by "Erase all data". */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CameraDir
+
 /** `noBackupFilesDir`: holds the pre-migration safety copy of the database. */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -169,6 +174,11 @@ object ProvidersModule {
     fun pdfProbe(): eg.masroof.data.receipts.PdfProbe =
         eg.masroof.data.receipts
             .AndroidPdfProbe()
+
+    @Provides @CameraDir
+    fun cameraDir(
+        @ApplicationContext context: Context,
+    ): File = File(context.cacheDir, eg.masroof.data.camera.CameraFiles.DIR)
 
     @Provides @ReceiptsDir
     fun receiptsDir(

@@ -15,9 +15,13 @@ import eg.masroof.di.IoDispatcher
 import eg.masroof.di.ReceiptsDir
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -57,56 +61,125 @@ class ReceiptStore
     ) {
         private val attachLock = Mutex()
 
+        /** Names of the temp and re-encoded files of attaches that are running: the startup sweeper must not touch them. */
+        private val inFlight =
+            java.util.concurrent.ConcurrentHashMap
+                .newKeySet<String>()
+
         fun fileOf(receipt: ReceiptEntity): File = File(dir, receipt.fileName)
 
-        /** Copies, checks, re-encodes and records the file behind [open] for [expenseId]. */
+        /** How long one copy may take before it is abandoned (a provider whose stream never returns must not hold anything up). */
+        @Volatile internal var copyTimeoutMillis: Long = COPY_TIMEOUT_MS
+
+        /** Copies, checks, re-encodes and records the file behind [open] for [expenseId] (null = waits unattached). */
         @Suppress("TooGenericExceptionCaught") // any failure leaves nothing behind and is reported as Failed
         suspend fun attach(
-            expenseId: String,
+            expenseId: String?,
             open: () -> InputStream?,
         ): AttachResult =
-            // one at a time: a decode of a large photo takes tens of MB, two at once could run out of memory
-            attachLock.withLock {
-                withContext(io) {
-                    val raw = File(dir, "${UUID.randomUUID()}.part")
-                    var stored: File? = null
-                    var result: AttachResult = AttachResult.Failed
-                    try {
-                        result = copyAndStore(expenseId, raw, open) { stored = it }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: OutOfMemoryError) {
-                        result = AttachResult.Failed
-                    } catch (_: Exception) {
-                        result = AttachResult.Failed
-                    } finally {
-                        raw.delete()
-                        if (result !is AttachResult.Added) stored?.delete()
-                    }
-                    result
+            withContext(io) {
+                val raw = File(dir, "${UUID.randomUUID()}.part")
+                inFlight.add(raw.name)
+                var stored: File? = null
+                var result: AttachResult = AttachResult.Failed
+                try {
+                    result = copyAndStore(expenseId, raw, open) { stored = it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: OutOfMemoryError) {
+                    result = AttachResult.Failed
+                } catch (_: Exception) {
+                    result = AttachResult.Failed
+                } finally {
+                    raw.delete()
+                    if (result !is AttachResult.Added) stored?.delete()
+                    inFlight.remove(raw.name)
+                    stored?.let { inFlight.remove(it.name) }
                 }
+                result
             }
 
         private suspend fun copyAndStore(
-            expenseId: String,
+            expenseId: String?,
             raw: File,
             open: () -> InputStream?,
             onStored: (File) -> Unit,
         ): AttachResult {
             if (!dir.isDirectory && !dir.mkdirs()) return AttachResult.Failed
-            val input = open() ?: return AttachResult.Failed
-            val copied = input.use { copyCapped(it, raw) }
+            // The copy runs outside the lock: a slow or stuck source cannot hold up other attaches.
+            val copied = copyWithTimeout(open, raw) ?: return AttachResult.Failed
             if (copied is Copied.Refused) return AttachResult.Refused(copied.reason)
             val kind = (copied as Copied.Ok).kind
-            val made = if (kind == ReceiptKind.PDF) storePdf(raw) else storeImage(raw, kind)
-            if (made is Made.Refused) return AttachResult.Refused(made.reason)
-            val ok = made as Made.Stored
-            onStored(ok.file)
-            return commit(expenseId, ok)
+            // one decode at a time: a large photo takes tens of MB, two at once could run out of memory
+            return attachLock.withLock {
+                val made = if (kind == ReceiptKind.PDF) storePdf(raw) else storeImage(raw, kind)
+                if (made is Made.Refused) return@withLock AttachResult.Refused(made.reason)
+                val ok = made as Made.Stored
+                onStored(ok.file)
+                commit(expenseId, ok)
+            }
+        }
+
+        /** Would one more waiting file of [bytes] go over the cap? Checked inside [commit], after the duplicate check. */
+        private suspend fun overQuota(bytes: Long): Boolean {
+            val t = db.receipts().unattachedTotals()
+            return t.files + 1 > ReceiptLimits.MAX_UNATTACHED_FILES || t.bytes + bytes > ReceiptLimits.MAX_UNATTACHED_BYTES
+        }
+
+        /** Shared between the caller and the copy job: the job stops as soon as [abandoned] is set. */
+        private class Progress {
+            @Volatile var abandoned = false
+
+            @Volatile var lastActivityNanos = System.nanoTime()
+        }
+
+        /**
+         * Null on timeout or when the source gives no stream. [copyTimeoutMillis] is an inactivity limit (reset by every chunk read),
+         * with an overall cap of [OVERALL_TIMEOUT_MS]. On timeout, or when the caller is cancelled, the job is abandoned: it closes
+         * its stream, stops at the next buffer and deletes its partial file.
+         */
+        private suspend fun copyWithTimeout(
+            open: () -> InputStream?,
+            raw: File,
+        ): Copied? {
+            val progress = Progress()
+            val holder =
+                java.util.concurrent.atomic
+                    .AtomicReference<InputStream?>(null)
+            val job =
+                CoroutineScope(io + SupervisorJob()).async {
+                    try {
+                        val input = open() ?: return@async null
+                        holder.set(input)
+                        if (progress.abandoned) {
+                            runCatching { input.close() }
+                            return@async null
+                        }
+                        input.use { copyCapped(it, raw, progress) }
+                    } finally {
+                        if (progress.abandoned) raw.delete()
+                    }
+                }
+            val startNanos = System.nanoTime()
+            try {
+                while (job.isActive) {
+                    val idleMs = (System.nanoTime() - progress.lastActivityNanos) / NANOS_PER_MS
+                    val totalMs = (System.nanoTime() - startNanos) / NANOS_PER_MS
+                    if (idleMs > copyTimeoutMillis || totalMs > OVERALL_TIMEOUT_MS) return null
+                    withTimeoutOrNull(POLL_MS) { runCatching { job.await() } }
+                }
+                return runCatching { job.await() }.getOrNull()
+            } finally {
+                if (job.isActive) {
+                    progress.abandoned = true
+                    runCatching { holder.get()?.close() }
+                    job.cancel()
+                }
+            }
         }
 
         private suspend fun commit(
-            expenseId: String,
+            expenseId: String?,
             stored: Made.Stored,
         ): AttachResult =
             eraseLock.mutex.withLock {
@@ -119,15 +192,38 @@ class ReceiptStore
                     }
                     // Held by a deleted entry (or by none): the unique sha256 allows one row, so this entry takes it over and the new
                     // copy is dropped. Undo of the deleted entry then brings it back without this receipt.
+                    // A receipt-first flow (expenseId null) frees it from the deleted entry so it shows in the Receipts list.
+                    if (expenseId == null && same.expenseId == null) {
+                        return@withLock AttachResult.Duplicate(same.id, null, null, null, null)
+                    }
+                    if (expenseId == null && overQuota(same.sizeBytes)) return@withLock AttachResult.Refused(Refusal.QUOTA)
                     db.receipts().moveTo(same.id, expenseId)
                     stored.file.delete()
                     return@withLock AttachResult.Added(same.id)
                 }
+                if (expenseId == null && overQuota(stored.file.length())) return@withLock AttachResult.Refused(Refusal.QUOTA)
                 val id = UUID.randomUUID().toString()
                 db.receipts().insert(
                     ReceiptEntity(id, expenseId, stored.file.name, stored.mime, stored.file.length(), hash, stored.pages, clock.millis()),
                 )
                 AttachResult.Added(id)
+            }
+
+        /**
+         * Attaches a receipt that waits unattached to a live entry. False if the receipt is gone or already attached, or the entry is
+         * gone or deleted; nothing changes then.
+         */
+        suspend fun attachExisting(
+            receiptId: String,
+            expenseId: String,
+        ): Boolean =
+            eraseLock.mutex.withLock {
+                val row = db.receipts().find(receiptId)
+                val entry = db.expenses().find(expenseId)
+                if (row == null || row.expenseId != null) return@withLock false
+                if (entry == null || entry.deletedAtMillis != null) return@withLock false
+                db.receipts().moveTo(receiptId, expenseId)
+                true
             }
 
         /** Row first, then the file; a file that cannot be deleted is picked up by [sweep] at the next start. */
@@ -149,7 +245,11 @@ class ReceiptStore
             eraseLock.mutex.withLock {
                 withContext(io) {
                     val known = db.receipts().fileNames().toSet()
-                    dir.listFiles()?.filter { it.name !in known }?.forEach { runCatching { it.deleteRecursively() } }
+                    dir
+                        .listFiles()
+                        ?.filter {
+                            it.name !in known && it.name !in inFlight
+                        }?.forEach { runCatching { it.deleteRecursively() } }
                 }
             }
         }
@@ -180,6 +280,7 @@ class ReceiptStore
         private fun copyCapped(
             input: InputStream,
             to: File,
+            progress: Progress,
         ): Copied {
             val header = ByteArray(ReceiptSniffer.HEADER_BYTES)
             var got = 0
@@ -187,6 +288,7 @@ class ReceiptStore
                 val n = input.read(header, got, header.size - got)
                 if (n < 0) break
                 got += n
+                progress.lastActivityNanos = System.nanoTime()
             }
             val kind = ReceiptSniffer.kindOf(header.copyOf(got)) ?: return Copied.Refused(Refusal.UNSUPPORTED)
             val cap = if (kind == ReceiptKind.PDF) ReceiptLimits.PDF_MAX_BYTES else ReceiptLimits.IMAGE_MAX_BYTES
@@ -197,6 +299,8 @@ class ReceiptStore
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
+                    if (progress.abandoned) throw java.io.IOException("abandoned")
+                    progress.lastActivityNanos = System.nanoTime()
                     total += n
                     if (total > cap) return Copied.Refused(Refusal.TOO_LARGE)
                     out.write(buf, 0, n)
@@ -215,7 +319,7 @@ class ReceiptStore
                 }
             if (pages < 1) return Made.Refused(Refusal.PDF_UNREADABLE)
             if (pages > ReceiptLimits.MAX_PDF_PAGES) return Made.Refused(Refusal.TOO_MANY_PAGES)
-            val target = File(dir, "${UUID.randomUUID()}.pdf")
+            val target = File(dir, "${UUID.randomUUID()}.pdf").also { inFlight.add(it.name) }
             raw.copyTo(target) // byte for byte; the PDF's metadata is kept (ADR-0009 D4)
             return Made.Stored(target, "application/pdf", pages)
         }
@@ -232,7 +336,7 @@ class ReceiptStore
             if (w.toLong() * h > ReceiptLimits.MAX_PIXELS) return Made.Refused(Refusal.TOO_LARGE)
             if (kind == ReceiptKind.JPEG && !JpegExif.isComplete(raw)) return Made.Refused(Refusal.IMAGE_UNREADABLE)
             val decoded = decode(raw, kind, w, h) ?: return Made.Refused(Refusal.IMAGE_UNREADABLE)
-            val target = File(dir, "${UUID.randomUUID()}.jpg")
+            val target = File(dir, "${UUID.randomUUID()}.jpg").also { inFlight.add(it.name) }
             try {
                 target.outputStream().use { decoded.compress(Bitmap.CompressFormat.JPEG, ReceiptLimits.JPEG_QUALITY, it) }
             } finally {
@@ -308,6 +412,10 @@ class ReceiptStore
 
         private companion object {
             const val COPY_BUFFER = 16 * 1024
+            const val COPY_TIMEOUT_MS = 30_000L
+            const val OVERALL_TIMEOUT_MS = 5L * 60 * 1000
+            const val POLL_MS = 50L
+            const val NANOS_PER_MS = 1_000_000L
             const val MAX_DECODED_PIXELS = 16_000_000L
         }
     }

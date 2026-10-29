@@ -49,6 +49,7 @@ import eg.masroof.core.DateFormat
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.receipts.Refusal
+import eg.masroof.ui.receipts.rememberCameraLaunch
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.ReceiptMessage
 import eg.masroof.ui.viewmodel.ReceiptsViewModel
@@ -56,7 +57,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val TARGET = 48.dp
+internal val TARGET = 48.dp
 private val THUMB = 72.dp
 private const val THUMB_PX = 160
 
@@ -71,6 +72,10 @@ fun ReceiptsSection(
     val context = LocalContext.current
     val style = LocalMoneyStyle.current
     var choosing by remember { mutableStateOf(false) }
+    val camera =
+        rememberCameraLaunch { file ->
+            viewModel.add(after = { file.delete() }) { file.inputStream() }
+        }
     // A cancelled picker returns null: nothing is stored and nothing is shown.
     val photo =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -137,6 +142,15 @@ fun ReceiptsSection(
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = TARGET),
                     ) { Text(stringResource(R.string.rcpt_photo), Modifier.fillMaxWidth()) }
+                    if (camera != null) {
+                        TextButton(
+                            onClick = {
+                                choosing = false
+                                camera()
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = TARGET),
+                        ) { Text(stringResource(R.string.rcpt_camera), Modifier.fillMaxWidth()) }
+                    }
                     TextButton(
                         onClick = {
                             choosing = false
@@ -178,7 +192,7 @@ fun ReceiptsSection(
 internal const val PDF_MIME = "application/pdf"
 
 @Composable
-private fun MessageLine(
+internal fun MessageLine(
     message: ReceiptMessage,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -196,7 +210,9 @@ private fun MessageLine(
             is ReceiptMessage.Duplicate -> {
                 val d = message.result
                 val text =
-                    if (d.occurredAtMillis != null && d.amountMinor != null && d.currency != null) {
+                    if (d.expenseId == null) {
+                        stringResource(R.string.rcpt_duplicate_waiting)
+                    } else if (d.occurredAtMillis != null && d.amountMinor != null && d.currency != null) {
                         stringResource(
                             R.string.rcpt_duplicate,
                             DateFormat.shortDate(CairoTime.dateOf(d.occurredAtMillis), style.arabic, style.digits),
@@ -214,18 +230,19 @@ private fun MessageLine(
     }
 }
 
-private fun errorRes(reason: Refusal?) =
+internal fun errorRes(reason: Refusal?) =
     when (reason) {
         Refusal.UNSUPPORTED -> R.string.rcpt_err_unsupported
         Refusal.TOO_LARGE -> R.string.rcpt_err_too_large
         Refusal.TOO_MANY_PAGES -> R.string.rcpt_err_too_many_pages
         Refusal.PDF_UNREADABLE -> R.string.rcpt_err_pdf_unreadable
         Refusal.IMAGE_UNREADABLE -> R.string.rcpt_err_image_unreadable
+        Refusal.QUOTA -> R.string.rcpt_err_quota
         null -> R.string.rcpt_err_failed
     }
 
 @Composable
-private fun Thumbnail(
+internal fun Thumbnail(
     file: File,
     isPdf: Boolean,
     description: String,

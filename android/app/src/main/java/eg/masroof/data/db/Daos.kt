@@ -36,6 +36,10 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
+    /** Live entries on or after [since], newest first: the "Attach to entry" picker. */
+    @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id")
+    fun observeSince(since: Long): Flow<List<ExpenseEntity>>
+
     // The one spending rule (ADR-0009 D2, parity-v1.json): EGP, CONFIRMED or PENDING_REVIEW, refunds netted, no cash withdrawals here.
     @Query(
         """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
@@ -226,14 +230,28 @@ interface ReceiptDao {
     @Query("SELECT * FROM receipt WHERE expenseId = :expenseId ORDER BY createdAtMillis, rowid")
     fun observeFor(expenseId: String): Flow<List<ReceiptEntity>>
 
+    /** Receipts that wait for an entry (taken or shared first), newest first. Never deleted automatically. */
+    @Query("SELECT * FROM receipt WHERE expenseId IS NULL ORDER BY createdAtMillis DESC, rowid DESC")
+    fun observeUnattached(): Flow<List<ReceiptEntity>>
+
     @Query("SELECT * FROM receipt WHERE id = :id")
     suspend fun find(id: String): ReceiptEntity?
 
     @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id")
     suspend fun moveTo(
         id: String,
+        expenseId: String?,
+    )
+
+    /** Attaches a waiting receipt; no effect if it is gone or already attached. */
+    @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id AND expenseId IS NULL")
+    suspend fun attachWaiting(
+        id: String,
         expenseId: String,
     )
+
+    @Query("SELECT COUNT(*) AS files, COALESCE(SUM(sizeBytes), 0) AS bytes FROM receipt WHERE expenseId IS NULL")
+    suspend fun unattachedTotals(): ReceiptTotals
 
     @Query("SELECT * FROM receipt WHERE sha256 = :sha256")
     suspend fun bySha(sha256: String): ReceiptEntity?

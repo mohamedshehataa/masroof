@@ -7,6 +7,7 @@ import androidx.work.await
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.insights.InsightsCache
+import eg.masroof.di.CameraDir
 import eg.masroof.di.IoDispatcher
 import eg.masroof.di.ReceiptsDir
 import eg.masroof.di.SafetyCopyDir
@@ -28,6 +29,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("LongParameterList") // one injected seam per thing the erase must empty
 @Singleton
 class RoomDataWiper
     @Inject
@@ -41,6 +43,7 @@ class RoomDataWiper
         private val gate: CaptureGate = NoopCaptureGate,
         @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
         @SafetyCopyDir private val safetyCopyDir: File = File("no-safety-copy-dir"),
+        @CameraDir private val cameraDir: File = File("no-camera-dir"),
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -137,6 +140,8 @@ class RoomDataWiper
             // a delete that returns false is a failure: the erase is Incomplete and stays in CLEANUP
             val failed = receiptsDir.listFiles()?.filterNot { it.deleteRecursively() }.orEmpty()
             check(failed.isEmpty()) { "${failed.size} receipt files could not be deleted" }
+            // a photo the camera hand-over left in the cache is a receipt copy too
+            cameraDir.listFiles()?.forEach { it.deleteRecursively() }
         }
 
         /**
