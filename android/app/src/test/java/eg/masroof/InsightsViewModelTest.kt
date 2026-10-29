@@ -149,6 +149,47 @@ class InsightsViewModelTest {
         }
 
     @Test
+    fun `REQ-AN-152 home sparkline shows the last 6 of a 12 point trend`() =
+        runTest {
+            val base = InsightsFixtures.snapshot()
+            val points =
+                (1..12).map { i ->
+                    val month = "2026-%02d".format(i)
+                    eg.masroof.api.models.TrendPoint(
+                        period =
+                            eg.masroof.api.models.PeriodRange(
+                                month,
+                                kotlinx.datetime.LocalDate(2026, i, 1),
+                                kotlinx.datetime.LocalDate(2026, i, 28),
+                            ),
+                        total =
+                            eg.masroof.api.models
+                                .Money(i * 1_000L, "EGP"),
+                        byCategory = emptyList(),
+                    )
+                }
+            repo.snapshots.value =
+                mapOf(
+                    InsightsPeriod.CURRENT to
+                        base.copy(
+                            trend =
+                                eg.masroof.api.models
+                                    .Trend(points),
+                        ),
+                )
+            val vm = HomeInsightsViewModel(repo)
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+
+            assertEquals(
+                listOf(7_000L, 8_000L, 9_000L, 10_000L, 11_000L, 12_000L),
+                vm.state.value
+                    ?.trend
+                    ?.map { it.total.amountMinor },
+            )
+        }
+
+    @Test
     fun `REQ-AND-074 home insight is absent until something is cached`() =
         runTest {
             val vm = HomeInsightsViewModel(repo)

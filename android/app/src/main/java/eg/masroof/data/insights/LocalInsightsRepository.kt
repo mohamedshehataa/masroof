@@ -1,8 +1,12 @@
 package eg.masroof.data.insights
 
+import eg.masroof.api.models.HeatmapDaysInner
+import eg.masroof.api.models.MerchantTotal
 import eg.masroof.core.analytics.AnalyticsEngine
 import eg.masroof.core.analytics.CategoryLine
+import eg.masroof.core.analytics.MerchantLine
 import eg.masroof.core.analytics.PeriodAnalytics
+import eg.masroof.core.analytics.TrendPoint
 import eg.masroof.data.RefreshOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,10 +35,11 @@ import eg.masroof.api.models.Heatmap as ApiHeatmap
 import eg.masroof.api.models.Money as ApiMoney
 import eg.masroof.api.models.PeriodRange as ApiPeriod
 import eg.masroof.api.models.Trend as ApiTrend
+import eg.masroof.api.models.TrendPoint as ApiTrendPoint
 
 /**
  * Insights from Room through the [AnalyticsEngine] (ADR-0009 D2): no network, no cache file, identical online and offline.
- * Trend, calendar and weekday data are STORY-179; until then those lists are empty. [refresh] recomputes once and reports
+ * [refresh] recomputes once and reports
  * [RefreshOutcome.Failed] when the engine throws, which the screens show as "Couldn't compute insights" with Retry.
  */
 @Singleton
@@ -85,6 +90,17 @@ class LocalInsightsRepository
 
 private fun Long.money() = ApiMoney(this, "EGP")
 
+private fun MerchantLine.toApi() = MerchantTotal(null, name, total.money(), visits, averageTicket.money())
+
+private fun TrendPoint.toApi() =
+    ApiTrendPoint(
+        period = ApiPeriod(period.label, period.from.toKotlinLocalDate(), period.to.toKotlinLocalDate()),
+        total = total.money(),
+        byCategory = byCategory.map { it.toApi() },
+        income = income.money(),
+        savingsRateBps = savingsRateBps,
+    )
+
 private fun CategoryLine.toApi() =
     ApiCategory(
         categoryId = categoryId?.let { runCatching { UUID.fromString(it) }.getOrElse { _ -> UUID.nameUUIDFromBytes(it.toByteArray()) } },
@@ -118,8 +134,14 @@ internal fun PeriodAnalytics.toSnapshot(nowMillis: Long): InsightsSnapshot {
                 topCategories = s.topCategories.map { it.toApi() },
             ),
         categories = ApiBreakdown(range, categoryTotal.money(), categories.map { it.toApi() }),
-        trend = ApiTrend(emptyList()),
-        heatmap = ApiHeatmap(range, emptyList(), emptyList()),
+        trend = ApiTrend(trend.map { it.toApi() }),
+        heatmap =
+            ApiHeatmap(
+                range,
+                heatmap.days.map { HeatmapDaysInner(it.date.toKotlinLocalDate(), it.total.money(), it.count) },
+                heatmap.weekdayHour.map { row -> row.map { it.money() } },
+            ),
+        merchants = merchants.map { it.toApi() },
         fetchedAtMillis = nowMillis,
         otherCurrencyCount = s.otherCurrencyCount,
     )

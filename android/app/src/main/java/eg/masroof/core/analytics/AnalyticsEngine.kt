@@ -53,10 +53,10 @@ class RoomAnalyticsEngine
                 .combine(cairoToday()) { o, today -> o to today }
                 .flatMapLatest { (o, today) ->
                     val period = AnalyticsPeriod.parse(spec, today, o.monthStartDay)
-                    val from = period.previous().start().toEpochMilli()
-                    val to = period.endExclusive().toEpochMilli()
+                    val trendPeriods = AnalyticsExtras.trendPeriods(today, o.monthStartDay)
+                    val (from, to) = span(period, trendPeriods)
                     combine(db.expenses().observeAnalyticsRows(from, to), db.lookups().observeEveryCategory()) { rows, cats ->
-                        AnalyticsCalculator.compute(period, today, rows, cats.map { it.toAnalytics() }, o.includeCash)
+                        assemble(period, today, trendPeriods, rows, cats.map { it.toAnalytics() }, o.includeCash)
                     }
                 }.flowOn(io)
 
@@ -76,15 +76,37 @@ class RoomAnalyticsEngine
                 val s = settings.current()
                 val today = BusinessCalendar.dateOf(clock.instant())
                 val period = AnalyticsPeriod.parse(spec, today, s.monthStartDay)
-                val rows = db.expenses().analyticsRows(period.previous().start().toEpochMilli(), period.endExclusive().toEpochMilli())
+                val trendPeriods = AnalyticsExtras.trendPeriods(today, s.monthStartDay)
+                val (from, to) = span(period, trendPeriods)
+                val rows = db.expenses().analyticsRows(from, to)
                 val cats =
                     db
                         .lookups()
                         .observeEveryCategory()
                         .first()
                         .map { it.toAnalytics() }
-                AnalyticsCalculator.compute(period, today, rows, cats, s.includeCashWithdrawals)
+                assemble(period, today, trendPeriods, rows, cats, s.includeCashWithdrawals)
             }
+
+        /** One range query for the period, the one before it and the whole trend: never one query per period. */
+        private fun span(
+            period: AnalyticsPeriod,
+            trend: List<AnalyticsPeriod>,
+        ): Pair<Long, Long> =
+            minOf(period.previous().start(), trend.first().start()).toEpochMilli() to
+                maxOf(period.endExclusive(), trend.last().endExclusive()).toEpochMilli()
+
+        private fun assemble(
+            period: AnalyticsPeriod,
+            today: LocalDate,
+            trendPeriods: List<AnalyticsPeriod>,
+            rows: List<AnalyticsRow>,
+            cats: List<AnalyticsCategory>,
+            includeCash: Boolean,
+        ): PeriodAnalytics =
+            AnalyticsCalculator
+                .compute(period, today, rows, cats, includeCash)
+                .copy(trend = AnalyticsExtras.trend(trendPeriods, rows, cats, includeCash))
 
         private fun CategoryEntity.toAnalytics() = AnalyticsCategory(id, parentId, nameEn, nameAr, color, archived)
     }

@@ -107,6 +107,8 @@ class InsightsViewModel
     }
 
 /** What Home shows from the cached analytics: change vs last month, a 6-month trend and the review count. */
+private const val HOME_TREND_MONTHS = 6
+
 data class HomeInsight(
     val deltaBps: Int?,
     val previousTotal: Money,
@@ -124,7 +126,14 @@ class HomeInsightsViewModel
             repository
                 .observe(InsightsPeriod.CURRENT)
                 .map { snapshot ->
-                    snapshot?.toUi()?.let { HomeInsight(it.deltaBps, it.previousTotal, it.trend, it.pendingReview) }
+                    snapshot?.toUi()?.let {
+                        HomeInsight(
+                            it.deltaBps,
+                            it.previousTotal,
+                            it.trend.takeLast(HOME_TREND_MONTHS),
+                            it.pendingReview,
+                        )
+                    }
                 }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
         init {
