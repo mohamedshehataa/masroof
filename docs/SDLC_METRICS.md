@@ -7,76 +7,207 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 ## Summary
 | metric | value |
 |---|---|
-| stories done | 7 |
+| stories done | 21 |
 | stories blocked | 0 |
 | median cycle time | 1.0 d |
-| mean loops per story | 0.33 |
-| review findings (BLOCKER/MAJOR/MINOR) | 1/13/57 |
-| escaped defects | 4 |
-| gate failures | 51 |
+| mean loops per story | 0.11 |
+| review findings (BLOCKER/MAJOR/MINOR) | 1/19/98 |
+| escaped defects | 7 |
+| gate failures | 42 |
 | flaky tests quarantined | 0 |
-| AI spend (USD) | 135.00 |
+| AI spend (USD) | 168.00 |
 
 ## Stories by status
 | status | count |
 |---|---|
-| DRAFT | 100 |
-| READY | 40 |
+| DRAFT | 11 |
+| READY | 11 |
 | IN_PROGRESS | 0 |
 | BLOCKED | 0 |
-| DONE | 7 |
-| DESCOPED | 1 |
-| total | 148 |
+| DONE | 21 |
+| DESCOPED | 155 |
+| total | 198 |
 
 ## Stories by phase
 | phase | DRAFT | READY | IN_PROGRESS | BLOCKED | DONE | DESCOPED | total |
 |---|---|---|---|---|---|---|---|
 | 0 | 0 | 0 | 0 | 0 | 7 | 1 | 8 |
-| 1 | 0 | 19 | 0 | 0 | 0 | 0 | 19 |
-| 2 | 0 | 21 | 0 | 0 | 0 | 0 | 21 |
-| 3 | 23 | 0 | 0 | 0 | 0 | 0 | 23 |
-| 4 | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
-| 5 | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
-| 6 | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
-| 7 | 21 | 0 | 0 | 0 | 0 | 0 | 21 |
-| 8 | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
-| 9 | 16 | 0 | 0 | 0 | 0 | 0 | 16 |
-| 10 | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
+| 1 | 0 | 2 | 0 | 0 | 3 | 15 | 20 |
+| 2 | 1 | 0 | 0 | 0 | 3 | 22 | 26 |
+| 3 | 1 | 0 | 0 | 0 | 2 | 23 | 26 |
+| 4 | 0 | 2 | 0 | 0 | 2 | 11 | 15 |
+| 5 | 0 | 0 | 0 | 0 | 0 | 9 | 9 |
+| 6 | 0 | 1 | 0 | 0 | 0 | 8 | 9 |
+| 7 | 4 | 3 | 0 | 0 | 4 | 37 | 48 |
+| 8 | 0 | 0 | 0 | 0 | 0 | 9 | 9 |
+| 9 | 4 | 3 | 0 | 0 | 0 | 16 | 23 |
+| 10 | 1 | 0 | 0 | 0 | 0 | 4 | 5 |
 
 ## Cycle time per stage
 | stage | samples | median | mean |
 |---|---|---|---|
 | spec | 1 | 0.0 d | 0.0 d |
-| 1 intake | 5 | 2.0 d | 1.8 d |
-| 1 spec | 1 | 1.0 d | 1.0 d |
-| 1-2 spec | 12 | 0.0 d | 0.1 d |
-| 1-2 spec fix | 10 | 0.0 d | 0.4 d |
+| 1 intake | 101 | 4.0 d | 3.9 d |
+| 1 spec | 25 | 1.0 d | 1.1 d |
+| 1-2 spec | 43 | 4.0 d | 2.9 d |
+| 1-2 spec amend | 1 | 3.0 d | 3.0 d |
+| 1-2 spec fix | 14 | 0.5 d | 1.4 d |
 | 2 spec fix loop 1 | 1 | 0.0 d | 0.0 d |
 | 2 spec review | 1 | 0.0 d | 0.0 d |
 | 2 spec review (loop 2) | 4 | 0.0 d | 0.0 d |
 | 2 spec-review | 2 | 0.0 d | 0.0 d |
 | 3 design | 5 | 0.0 d | 0.2 d |
 | 4 tdd | 2 | 0.0 d | 0.0 d |
-| 5 implement | 4 | 0.0 d | 0.0 d |
+| 5 implement | 12 | 0.0 d | 0.3 d |
 | 6 verify | 4 | 0.0 d | 0.0 d |
 | 7 review | 3 | 0.0 d | 0.0 d |
+| fix round 1 | 1 | 0.0 d | 0.0 d |
+| phase check | 4 | 2.0 d | 2.0 d |
+| speed-mode build | 1 | 0.0 d | 0.0 d |
 
 ## Loops per story
 | story | status | verify FAIL loops | cycle time |
 |---|---|---|---|
 | STORY-001 | DONE | 1 | 1.0 d |
 | STORY-002 | DONE | 0 | 1.0 d |
-| STORY-003 | READY | – | 0.0 d |
-| STORY-004 | READY | – | 1.0 d |
-| STORY-006 | READY | – | 0.0 d |
-| STORY-007 | READY | – | 0.0 d |
-| STORY-010 | READY | – | 0.0 d |
-| STORY-016 | READY | – | 2.0 d |
-| STORY-017 | READY | – | 0.0 d |
-| STORY-137 | DRAFT | – | 2.0 d |
-| STORY-138 | DRAFT | – | 2.0 d |
-| STORY-139 | DRAFT | – | 2.0 d |
-| STORY-140 | DRAFT | – | 2.0 d |
+| STORY-003 | DESCOPED | – | 4.0 d |
+| STORY-004 | DESCOPED | – | 4.0 d |
+| STORY-005 | DESCOPED | – | 4.0 d |
+| STORY-006 | DESCOPED | – | 4.0 d |
+| STORY-007 | DONE | – | 0.0 d |
+| STORY-008 | DESCOPED | – | 4.0 d |
+| STORY-009 | DESCOPED | – | 4.0 d |
+| STORY-010 | DESCOPED | – | 4.0 d |
+| STORY-011 | DESCOPED | – | 4.0 d |
+| STORY-012 | DESCOPED | – | 4.0 d |
+| STORY-013 | DESCOPED | – | 4.0 d |
+| STORY-014 | DESCOPED | – | 4.0 d |
+| STORY-015 | DESCOPED | – | 4.0 d |
+| STORY-016 | DONE | – | 2.0 d |
+| STORY-017 | DESCOPED | – | 4.0 d |
+| STORY-018 | DESCOPED | – | 4.0 d |
+| STORY-019 | DESCOPED | – | 4.0 d |
+| STORY-020 | DESCOPED | – | 4.0 d |
+| STORY-021 | DESCOPED | – | 4.0 d |
+| STORY-022 | DESCOPED | – | 4.0 d |
+| STORY-023 | DESCOPED | – | 4.0 d |
+| STORY-024 | DESCOPED | – | 4.0 d |
+| STORY-025 | DESCOPED | – | 4.0 d |
+| STORY-026 | DESCOPED | – | 4.0 d |
+| STORY-027 | DESCOPED | – | 4.0 d |
+| STORY-028 | DESCOPED | – | 4.0 d |
+| STORY-029 | DESCOPED | – | 4.0 d |
+| STORY-030 | DESCOPED | – | 4.0 d |
+| STORY-031 | DESCOPED | – | 4.0 d |
+| STORY-032 | DESCOPED | – | 4.0 d |
+| STORY-033 | DESCOPED | – | 4.0 d |
+| STORY-034 | DESCOPED | – | 4.0 d |
+| STORY-035 | DESCOPED | – | 4.0 d |
+| STORY-036 | DESCOPED | – | 4.0 d |
+| STORY-037 | DESCOPED | – | 4.0 d |
+| STORY-038 | DESCOPED | – | 4.0 d |
+| STORY-039 | DESCOPED | – | 4.0 d |
+| STORY-040 | DESCOPED | – | 4.0 d |
+| STORY-041 | DESCOPED | – | 4.0 d |
+| STORY-042 | DESCOPED | – | 4.0 d |
+| STORY-043 | DESCOPED | – | 4.0 d |
+| STORY-044 | DESCOPED | – | 4.0 d |
+| STORY-045 | DESCOPED | – | 4.0 d |
+| STORY-046 | DESCOPED | – | 4.0 d |
+| STORY-047 | DESCOPED | – | 4.0 d |
+| STORY-048 | DESCOPED | – | 4.0 d |
+| STORY-049 | DESCOPED | – | 4.0 d |
+| STORY-050 | DESCOPED | – | 4.0 d |
+| STORY-051 | DESCOPED | – | 4.0 d |
+| STORY-052 | DESCOPED | – | 4.0 d |
+| STORY-053 | DESCOPED | – | 4.0 d |
+| STORY-054 | DESCOPED | – | 4.0 d |
+| STORY-055 | DESCOPED | – | 4.0 d |
+| STORY-056 | DESCOPED | – | 4.0 d |
+| STORY-057 | DESCOPED | – | 4.0 d |
+| STORY-058 | DESCOPED | – | 4.0 d |
+| STORY-059 | DESCOPED | – | 4.0 d |
+| STORY-060 | DESCOPED | – | 4.0 d |
+| STORY-061 | DESCOPED | – | 4.0 d |
+| STORY-062 | DESCOPED | – | 4.0 d |
+| STORY-063 | DESCOPED | – | 4.0 d |
+| STORY-064 | DESCOPED | – | 4.0 d |
+| STORY-065 | DESCOPED | – | 4.0 d |
+| STORY-066 | DESCOPED | – | 4.0 d |
+| STORY-067 | DESCOPED | – | 4.0 d |
+| STORY-068 | DESCOPED | – | 4.0 d |
+| STORY-069 | DESCOPED | – | 4.0 d |
+| STORY-070 | DESCOPED | – | 4.0 d |
+| STORY-071 | DESCOPED | – | 4.0 d |
+| STORY-072 | DESCOPED | – | 4.0 d |
+| STORY-073 | DESCOPED | – | 4.0 d |
+| STORY-074 | DESCOPED | – | 4.0 d |
+| STORY-075 | DESCOPED | – | 4.0 d |
+| STORY-076 | DESCOPED | – | 4.0 d |
+| STORY-077 | DESCOPED | – | 4.0 d |
+| STORY-078 | DESCOPED | – | 4.0 d |
+| STORY-079 | DESCOPED | – | 4.0 d |
+| STORY-080 | DESCOPED | – | 4.0 d |
+| STORY-081 | DESCOPED | – | 4.0 d |
+| STORY-082 | DESCOPED | – | 4.0 d |
+| STORY-083 | DESCOPED | – | 4.0 d |
+| STORY-084 | DESCOPED | – | 4.0 d |
+| STORY-085 | DESCOPED | – | 4.0 d |
+| STORY-086 | DESCOPED | – | 4.0 d |
+| STORY-087 | DESCOPED | – | 4.0 d |
+| STORY-088 | DESCOPED | – | 4.0 d |
+| STORY-089 | DESCOPED | – | 4.0 d |
+| STORY-090 | DESCOPED | – | 4.0 d |
+| STORY-091 | DESCOPED | – | 4.0 d |
+| STORY-092 | DESCOPED | – | 4.0 d |
+| STORY-093 | DESCOPED | – | 4.0 d |
+| STORY-094 | DESCOPED | – | 4.0 d |
+| STORY-095 | DESCOPED | – | 4.0 d |
+| STORY-096 | DESCOPED | – | 4.0 d |
+| STORY-097 | DESCOPED | – | 4.0 d |
+| STORY-098 | DESCOPED | – | 4.0 d |
+| STORY-099 | DESCOPED | – | 4.0 d |
+| STORY-100 | DESCOPED | – | 4.0 d |
+| STORY-101 | DESCOPED | – | 4.0 d |
+| STORY-102 | DESCOPED | – | 4.0 d |
+| STORY-103 | DESCOPED | – | 4.0 d |
+| STORY-104 | DESCOPED | – | 4.0 d |
+| STORY-105 | DESCOPED | – | 4.0 d |
+| STORY-106 | DESCOPED | – | 4.0 d |
+| STORY-107 | DESCOPED | – | 4.0 d |
+| STORY-108 | DESCOPED | – | 4.0 d |
+| STORY-109 | DESCOPED | – | 4.0 d |
+| STORY-110 | DESCOPED | – | 4.0 d |
+| STORY-111 | DESCOPED | – | 4.0 d |
+| STORY-112 | DESCOPED | – | 4.0 d |
+| STORY-113 | DESCOPED | – | 4.0 d |
+| STORY-114 | DESCOPED | – | 4.0 d |
+| STORY-115 | DESCOPED | – | 4.0 d |
+| STORY-116 | DESCOPED | – | 4.0 d |
+| STORY-117 | DESCOPED | – | 4.0 d |
+| STORY-118 | DESCOPED | – | 4.0 d |
+| STORY-119 | DESCOPED | – | 4.0 d |
+| STORY-120 | DESCOPED | – | 4.0 d |
+| STORY-121 | DESCOPED | – | 4.0 d |
+| STORY-122 | DESCOPED | – | 4.0 d |
+| STORY-123 | DESCOPED | – | 4.0 d |
+| STORY-124 | DESCOPED | – | 4.0 d |
+| STORY-125 | DESCOPED | – | 4.0 d |
+| STORY-126 | DESCOPED | – | 4.0 d |
+| STORY-127 | DESCOPED | – | 4.0 d |
+| STORY-128 | DESCOPED | – | 4.0 d |
+| STORY-129 | DESCOPED | – | 4.0 d |
+| STORY-130 | DESCOPED | – | 4.0 d |
+| STORY-131 | DESCOPED | – | 4.0 d |
+| STORY-132 | DESCOPED | – | 4.0 d |
+| STORY-133 | DESCOPED | – | 4.0 d |
+| STORY-134 | DESCOPED | – | 4.0 d |
+| STORY-135 | DESCOPED | – | 4.0 d |
+| STORY-136 | DESCOPED | – | 4.0 d |
+| STORY-137 | DESCOPED | – | 4.0 d |
+| STORY-138 | DESCOPED | – | 4.0 d |
+| STORY-139 | DESCOPED | – | 4.0 d |
+| STORY-140 | DESCOPED | – | 4.0 d |
 | STORY-141 | DONE | – | 0.0 d |
 | STORY-142 | DONE | – | 0.0 d |
 | STORY-143 | DONE | – | 1.0 d |
@@ -84,97 +215,87 @@ Escaped-defect convention: one `STORY-NNN*.bug.md` file beside the story per def
 | STORY-145 | DONE | – | 1.0 d |
 | STORY-146 | READY | – | 1.0 d |
 | STORY-147 | DESCOPED | – | 0.0 d |
+| STORY-149 | DESCOPED | – | 2.0 d |
+| STORY-150 | DESCOPED | – | 2.0 d |
+| STORY-151 | DESCOPED | – | 1.0 d |
+| STORY-152 | DESCOPED | – | 1.0 d |
+| STORY-153 | DESCOPED | – | 1.0 d |
+| STORY-154 | DESCOPED | – | 1.0 d |
+| STORY-155 | DESCOPED | – | 1.0 d |
+| STORY-156 | DESCOPED | – | 1.0 d |
+| STORY-157 | DESCOPED | – | 1.0 d |
+| STORY-158 | DESCOPED | – | 1.0 d |
+| STORY-159 | DESCOPED | – | 1.0 d |
+| STORY-160 | DESCOPED | – | 1.0 d |
+| STORY-161 | DESCOPED | – | 1.0 d |
+| STORY-162 | DESCOPED | – | 1.0 d |
+| STORY-163 | DESCOPED | – | 1.0 d |
+| STORY-164 | DESCOPED | – | 1.0 d |
+| STORY-165 | DESCOPED | – | 1.0 d |
+| STORY-166 | DESCOPED | – | 0.0 d |
+| STORY-170 | DONE | 0 | 1.0 d |
+| STORY-171 | DONE | 0 | 1.0 d |
+| STORY-172 | DONE | 0 | 1.0 d |
+| STORY-174 | DONE | 0 | 1.0 d |
+| STORY-175 | DONE | – | 1.0 d |
+| STORY-178 | DONE | 0 | 1.0 d |
+| STORY-179 | DONE | 0 | 2.0 d |
 
 ## Review findings by severity
 | severity | count |
 |---|---|
 | BLOCKER | 1 |
-| MAJOR | 13 |
-| MINOR | 57 |
-| NIT | 66 |
+| MAJOR | 19 |
+| MINOR | 98 |
+| NIT | 107 |
 
 ## Review findings by reviewer agent
 | agent | BLOCKER | MAJOR | MINOR | NIT | total |
 |---|---|---|---|---|---|
-| code-reviewer | 0 | 5 | 30 | 32 | 67 |
+| code-reviewer | 0 | 5 | 35 | 36 | 76 |
+| follow-up | 0 | 0 | 1 | 0 | 1 |
 | guard-bash | 0 | 0 | 0 | 1 | 1 |
-| qa-verifier | 1 | 7 | 24 | 32 | 64 |
+| qa-verifier | 1 | 12 | 59 | 68 | 140 |
+| security-fast | 0 | 1 | 0 | 0 | 1 |
 | security-reviewer | 0 | 1 | 3 | 1 | 5 |
+| self-contradictory | 0 | 0 | 0 | 1 | 1 |
 
 ## Escaped defects
 | story | source |
 |---|---|
 | STORY-002 | `docs/LESSONS.md:11` |
+| STORY-007 | `docs/LESSONS.md:21` |
 | STORY-016 | `docs/LESSONS.md:14` |
 | STORY-141 | `docs/LESSONS.md:16` |
+| STORY-141 | `docs/LESSONS.md:17` |
 | STORY-143 | `docs/LESSONS.md:16` |
+| STORY-143 | `docs/LESSONS.md:18` |
 
 ## Gate failures and flaky tests
 | source | count |
 |---|---|
-| `RED` lines in docs/PROGRESS.md | 10 |
-| `BLOCK` lines in .claude/state/hooks.log | 41 |
+| `RED` lines in docs/PROGRESS.md | 42 |
+| `BLOCK` lines in .claude/state/hooks.log | 0 |
 | quarantined flaky tests (docs/FLAKY_TESTS.md) | 0 |
 
 ## Coverage / mutation / eval snapshot
 | metric | value | source |
 |---|---|---|
-| backend line coverage (JaCoCo) | 88.5% | `backend/build/reports/jacoco/test/jacocoTestReport.xml` |
-| backend branch coverage (JaCoCo) | 77.8% | `backend/build/reports/jacoco/test/jacocoTestReport.xml` |
+| backend line/branch coverage (JaCoCo) | – | `no report` |
 | backend mutation score (PIT) | – | `no report` |
 | android line coverage (Kover) | – | `no report` |
-| web line coverage (Vitest) | 98.6% | `web/coverage/coverage-summary.json` |
-| web branch coverage (Vitest) | 90.4% | `web/coverage/coverage-summary.json` |
-| latest eval report | `eval/reports/20261024T224732Z.md` | eval/reports/*.md |
-
-### Latest eval summary (`eval/reports/20261024T224732Z.md`)
-| metric | value | threshold | status | note |
-|---|---|---|---|---|
-| amount_exact_match[adversarial] | 1.0000 | >= 0.96 | PASS |  |
-| amount_exact_match[notifications] | 1.0000 | >= 0.98 | PASS |  |
-| amount_exact_match[receipts] | 1.0000 | >= 0.92 | PASS |  |
-| amount_exact_match[sms] | 1.0000 | >= 0.98 | PASS |  |
-| amount_exact_match[voice] | 1.0000 | >= 0.90 | PASS |  |
-| amount_exact_match[whatsapp_text] | 1.0000 | >= 0.96 | PASS |  |
-| type_accuracy | 1.0000 | >= 0.97 | PASS |  |
-| currency_accuracy | 1.0000 | >= 0.99 | PASS |  |
-| datetime_accuracy | 1.0000 | >= 0.97 | PASS |  |
-| merchant_match | 1.0000 | >= 0.90 | PASS |  |
-| category_top1 | 1.0000 | >= 0.85 | PASS |  |
-| receipt_line_item_f1 | 1.0000 | >= 0.85 | PASS |  |
-| receipt_total_consistency | 1.0000 | >= 0.95 | PASS |  |
-| dedup_pairwise_precision | 1.0000 | >= 0.99 | PASS |  |
-| dedup_pairwise_recall | 1.0000 | >= 0.95 | PASS |  |
-| otp_false_negative_rate | 0.0000 | <= 0.00 | PASS |  |
-| calibration_precision | 1.0000 | >= 0.99 | PASS |  |
-| adversarial_injection_obeyed_count | 0 | <= 0 | PASS |  |
-| latency_ms_p95[adversarial] | 0.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[commands] | 0.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[dedup] | 1.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[notifications] | 0.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[receipts] | 1.0000 | <= 30000 | PASS |  |
-| latency_ms_p95[sms] | 0.0000 | <= 10000 | PASS |  |
-| latency_ms_p95[voice] | 0.0000 | <= 45000 | PASS |  |
-| latency_ms_p95[whatsapp_text] | 0.0000 | <= 10000 | PASS |  |
-| regression:adversarial_injection_obeyed_count | 0 | baseline 0.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[adversarial] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[notifications] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[receipts] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[sms] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[voice] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:amount_exact_match[whatsapp_text] | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:calibration_precision | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:category_top1 | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:currency_accuracy | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:datetime_accuracy | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
-| regression:dedup_pairwise_precision | 1.0000 | baseline 1.0000 (tolerance 0.01) | PASS |  |
+| web line/branch coverage (Vitest) | – | `no report` |
+| latest eval report | – | eval/reports/*.md |
 
 ## AI spend by story/phase
 | story/phase | USD |
 |---|---|
 | PHASE-0 bootstrap | 45.00 |
+| PHASE-0 gate + retro | 10.00 |
 | SDLC | 4.00 |
 | STORY-002 | 38.00 |
+| STORY-007 | 14.00 |
+| STORY-016 | 9.00 |
 | STORY-141 | 14.00 |
 | STORY-142 | 16.00 |
 | STORY-143 | 12.00 |
