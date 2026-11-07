@@ -19,21 +19,24 @@ nothing calls the network, nothing needs an account, no LLM.
 |---|---|---|---|---|---|
 | 1 | STORY-199 Ask Masroof: questions about your money answered on the phone | high | M | - | Say AI |
 | 2 | STORY-200 Say it: voice and quick-text entry, income and currency on Add | high | M | - | Voice entry |
-| 3 | STORY-201 Room v10: tables for balances, budgets, installments, subscriptions, goals, assets, debts | high | M | - | (foundation) |
-| 4 | STORY-202 Installments: plans, schedule, record payment, reminders | high | M | 201 | Installments tab |
-| 5 | STORY-203 Subscriptions: list, monthly/yearly totals, renewals, suggestions | high | M | 201 | Subscriptions |
+| 3 | STORY-201 Room v10: tables for balances, budgets, bills, goals, assets and lots, debts, merchant rules | high | M | - | (foundation) |
+| 4 | STORY-202 Bills: installments (valU, Halan, ...) and gam3eya, schedule, record payment, reminders | high | M | 201 | Installments tab, Gam3eya |
+| 5 | STORY-203 Bills: subscriptions and recurring income (payday), totals, renewals, reminders | high | M | 201 | Subscriptions, recurring income |
 | 6 | STORY-204 Savings goals with emoji, add/take out, monthly need | high | M | 201 | Goals |
-| 7 | STORY-205 Wealth: account balances, gold and other assets, debts, net worth chart | high | M | 201 | Wealth tab |
-| 8 | STORY-206 Wallet home and new navigation (Home, Money, Insights, Ask) | low | M | 199, 200, 202..205 | Wallet tab |
-| 9 | STORY-207 Categories with emoji: add, rename, archive | low | S | 201 | (review request) |
+| 7 | STORY-205 Wealth: honest account balances, credit-card bill, gold lots, certificates, debts, net worth chart | high | M | 201 | Wealth tab, accounts |
+| 8 | STORY-206 Wallet home, tabs (Wallet, Wealth, Bills, Ask), insight tiles, "don't count in totals" | low | M | 199, 200, 202..205 | Wallet tab, Analytics |
+| 9 | STORY-207 Categories with emoji and merchant rules (apply to past entries) | low | S | 201 | Categories, merchant rules |
+| 10 | STORY-208 Needs-an-answer cards: link a refund, sort a transfer, unknown card number, ATM cash | high | M | 205 | Refund, transfer check-in |
 
 Say features already planned in EPIC-17 and kept there: local budgets (STORY-180/181, table created by STORY-201),
 budget alerts (STORY-189), CSV export (STORY-185), widget (STORY-192), first-run guide (STORY-187), backfill (STORY-186).
 Not copied: household sync and sign-in (ADR-0009 drops them), the LLM chat, Apple Pay (iOS), server price feeds for gold
-(the user types today's gram price; see STORY-205).
+and stocks (the user types today's gram price; see STORY-205), the newsletter, referrals, the World Cup game, paywall.
+STORY-192 (widget) should grow to Say's most useful widgets: quick add by voice, bills due, net worth, payday.
 
 Waves: 199, 200 and 201 run in parallel (no shared files except the nav host and string files). 202..205 and 207 run
-in parallel after 201 merges. 206 is last because it links every new screen.
+in parallel after 201 merges. 206 and 208 come last because they link every new screen. Specs for 202..208 are
+written when their wave starts, from the teardown (feature map items 14-24) and the defects list.
 
 ## Shared rules (in addition to EPIC-17's)
 - Money is `Long` minor units + ISO-4217 code; percentages and rates are integer basis points; no `Double`/`Float`.

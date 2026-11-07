@@ -26,6 +26,8 @@ app updates **Then** `MIGRATION_9_10` (hand-written SQL) runs after the existing
 existing row and column is unchanged, and these are created (money `INTEGER` minor units + `TEXT` ISO currency, times
 UTC epoch millis, enums as `TEXT`, booleans `INTEGER 0/1`, foreign keys with indices):
 - `category.emoji TEXT NULL` (new column, existing rows NULL).
+- `expense.excludedFromTotals INTEGER NOT NULL DEFAULT 0` ("Don't count in totals"; analytics use it in STORY-206).
+- `account` new columns, all nullable: `creditLimitMinor`, `statementDay` (1..31), `dueDay` (1..31), `emoji`.
 - `account_balance` (id, accountId FK account CASCADE, balanceMinor, currency, atMillis, source `MANUAL`|`SMS`, createdAtMillis):
   a known balance at a moment; the current balance is the latest one plus entry flows after it (STORY-205).
 - `budget` (id, categoryId NULL FK category SET NULL - NULL means all spending, period `MONTHLY`|`WEEKLY`, amountMinor,
@@ -33,18 +35,28 @@ UTC epoch millis, enums as `TEXT`, booleans `INTEGER 0/1`, foreign keys with ind
   specifies.
 - `installment_plan` (id, title, provider, categoryId NULL, accountId NULL, currency, purchasePriceMinor NULL,
   downPaymentMinor, monthlyAmountMinor, paymentCount, firstDueAtMillis, reminderDaysBefore, status
-  `ACTIVE`|`COMPLETED`|`ARCHIVED`, notes NULL, createdAtMillis, completedAtMillis NULL).
+  `ACTIVE`|`COMPLETED`|`ARCHIVED`, notes NULL, createdAtMillis, completedAtMillis NULL, payoutAtMillis NULL,
+  payoutAmountMinor NULL, payoutReceivedAtMillis NULL). Provider is free text from a fixed suggestion list (valU,
+  Halan, Souhoola, Gam3eya, Money Fellows, Contact, Aman, Forsa, Sympl, bank card, store, none); the payout columns are
+  for a gam3eya (rotating savings circle).
 - `installment_payment` (id, planId FK CASCADE, seq, dueAtMillis, amountMinor, paidAtMillis NULL, expenseId NULL FK
   expense SET NULL; unique (planId, seq)).
-- `subscription` (id, name, amountMinor, currency, cadence `WEEKLY`|`MONTHLY`|`QUARTERLY`|`YEARLY`, nextRenewalAtMillis,
-  categoryId NULL, accountId NULL, merchantKey NULL, reminderDaysBefore, active, notes NULL, createdAtMillis).
+- `subscription` (id, kind `SUBSCRIPTION`|`BILL`|`INCOME`, name, amountMinor, currency, cadence
+  `WEEKLY`|`MONTHLY`|`QUARTERLY`|`YEARLY`, nextRenewalAtMillis, categoryId NULL, accountId NULL, merchantKey NULL,
+  reminderDaysBefore, active, notes NULL, createdAtMillis). `INCOME` rows are recurring income (salary, a certificate
+  payout) and drive "days to payday".
 - `savings_goal` (id, name, emoji NULL, targetMinor, currency, targetAtMillis NULL, sortOrder, createdAtMillis,
   completedAtMillis NULL, archivedAtMillis NULL).
 - `goal_movement` (id, goalId FK CASCADE, amountMinor signed - positive adds, negative takes out, atMillis, note NULL).
-- `asset` (id, kind `GOLD`|`SILVER`|`CERTIFICATE`|`INVESTMENT`|`PROPERTY`|`VEHICLE`|`CASH`|`OTHER`, name, currency,
-  valueMinor NULL, weightMilligrams NULL, karat NULL, principalMinor NULL, annualRateBp NULL, startAtMillis NULL,
-  maturityAtMillis NULL, goalId NULL FK savings_goal SET NULL, archived, createdAtMillis, updatedAtMillis).
+- `asset` (id, kind `GOLD`|`SILVER`|`CERTIFICATE`|`FUND`|`INVESTMENT`|`PROPERTY`|`VEHICLE`|`BUSINESS`|`OTHER`, name,
+  currency, valueMinor NULL - manual value, karat NULL - gold/silver purity, principalMinor NULL, annualRateBp NULL -
+  certificate or fund rate, startAtMillis NULL, maturityAtMillis NULL, goalId NULL FK savings_goal SET NULL,
+  hiddenFromTotals, archived, createdAtMillis, updatedAtMillis). Gold/silver quantity comes from `asset_lot`.
+- `asset_lot` (id, assetId FK asset CASCADE, side `BUY`|`SELL`, quantityMilli - grams or units x 1000,
+  totalMinor, currency, atMillis, expenseId NULL FK expense SET NULL, note NULL): gold bought in pieces, sold later.
 - `metal_price` (id, metal `GOLD`|`SILVER`, karat, pricePerGramMinor, currency, atMillis): prices the user types.
+- `merchant_rule` (id, merchantKey unique - normalised, digit-free, categoryId FK category CASCADE, createdAtMillis):
+  "always file this merchant under this category".
 - `debt` (id, name, kind `LOAN`|`CREDIT_CARD`|`PERSON`|`OTHER`, direction `I_OWE`|`OWED_TO_ME`, amountMinor, currency,
   dueAtMillis NULL, settledAtMillis NULL, notes NULL, createdAtMillis).
 - `net_worth_snapshot` (id, cairoDate TEXT `yyyy-MM-dd` unique, assetsMinor, debtsMinor, netMinor, currency,
@@ -95,7 +107,7 @@ None.
 - [x] Data / migration impact
 - [x] Security / privacy / LLM-safety impact
 - [x] Eval impact
-- [x] Size: M (entities/DAOs ~300, migration ~120, tests ~250)
+- [x] Size: M+ (14 tables and 3 altered ones, mechanical: entities/DAOs ~400, migration ~160, tests ~300)
 - [x] Dependencies listed
 
 ## Status log

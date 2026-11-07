@@ -65,8 +65,11 @@ existing `Projections` code). Without income in the period it shows days left, s
 Unhappy path: **Given** no entries at all **Then** a friendly empty answer, never a zero-division or a crash.
 
 ### REQ-AN-165 - Unknown questions, suggestions, a light "roast", privacy
-**Given** the Ask screen **When** it opens **Then** suggestion chips are shown (where did my money go, this month vs last
-month, top places, what's left until payday, roast me) in the app language. **When** a question is not understood
+**Given** the Ask screen **When** it opens **Then** it greets with one fact from the data ("4 visits to Amazon this
+month, 16,460 EGP" - the top merchant by total this period) and suggestion chips built from the data (how often do I go
+to <top merchant>, why is <top category> so high, this month vs last month, where did my money go, what's left until
+payday, roast me) in the app language. Every answer ends with 2-3 follow-up chips (e.g. after a category total: "show
+these entries", "compare with last month"). **When** a question is not understood
 **Then** the answer says so and shows the chips; it never guesses a number. **When** the user asks "roast me" /
 "اتريق عليا" **Then** 2-3 playful lines built only from their own figures (most frequent merchant, biggest category,
 late-night count), polite, no insults about the person. The conversation lives in memory only (cleared when the screen
