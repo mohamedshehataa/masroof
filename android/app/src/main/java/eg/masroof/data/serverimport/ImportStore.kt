@@ -2,6 +2,7 @@ package eg.masroof.data.serverimport
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
+import androidx.core.content.edit
 
 /**
  * What the one-time import remembers between runs (STORY-182): which phone category / member each server id was mapped to (decided
@@ -44,7 +45,7 @@ class PrefsImportStore(
         serverId: String,
         localId: String,
     ) {
-        prefs.edit().putString(CATEGORY + serverId, localId).commit()
+        prefs.edit(commit = true) { putString(CATEGORY + serverId, localId) }
     }
 
     override fun memberOf(serverId: String): String? = prefs.getString(MEMBER + serverId, null)
@@ -53,23 +54,23 @@ class PrefsImportStore(
         serverId: String,
         localId: String,
     ) {
-        prefs.edit().putString(MEMBER + serverId, localId).commit()
+        prefs.edit(commit = true) { putString(MEMBER + serverId, localId) }
     }
 
     override var pending: Boolean
         get() = prefs.getBoolean(PENDING, false)
         set(value) {
-            prefs.edit().putBoolean(PENDING, value).commit()
+            prefs.edit(commit = true) { putBoolean(PENDING, value) }
         }
 
     override var forgetPending: Boolean
         get() = prefs.getBoolean(FORGET, false)
         set(value) {
-            prefs.edit().putBoolean(FORGET, value).commit()
+            prefs.edit(commit = true) { putBoolean(FORGET, value) }
         }
 
     override fun clear() {
-        prefs.edit().clear().commit()
+        prefs.edit(commit = true) { clear() }
     }
 
     private companion object {
