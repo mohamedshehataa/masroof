@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="answers_title">محتاجة ردّك</string>
+    <plurals name="answers_row_desc">
+        <item quantity="zero">مفيش أسئلة محتاجة رد</item>
+        <item quantity="one">سؤال واحد محتاج رد</item>
+        <item quantity="two">سؤالين محتاجين رد</item>
+        <item quantity="few">%1$d أسئلة محتاجة رد</item>
+        <item quantity="many">%1$d سؤال محتاج رد</item>
+        <item quantity="other">%1$d سؤال محتاج رد</item>
+    </plurals>
+    <string name="answers_excerpt">%1$s · %2$s</string>
+    <string name="answers_excerpt_merchant">%1$s · %2$s · %3$s</string>
+
+    <string name="answers_refund_q_none">هل ده استرداد؟</string>
+    <string name="answers_refund_q_one">هل ده استرداد لـ %1$s؟</string>
+    <string name="answers_refund_q_many">ده استرداد لأنهي عملية شراء؟</string>
+    <string name="answers_candidate">%1$s %2$s في %3$s</string>
+    <string name="answers_candidate_no_merchant">%1$s في %2$s</string>
+    <string name="answers_refund_link">أيوه، اربطه</string>
+    <string name="answers_refund_yes">أيوه، استرداد</string>
+    <string name="answers_pick_another">اختار حاجة تانية</string>
+    <string name="answers_delete_refund_title">فيه استرداد مربوط بالعملية دي</string>
+    <string name="answers_delete_refund_body">تمسح الاسترداد كمان ولا تسيبه كدخل؟</string>
+    <string name="answers_delete_keep_refund">سيب الاسترداد كدخل</string>
+    <string name="answers_links_title">الكروت المربوطة</string>
+    <string name="answers_link_item">•••• %1$s ← %2$s</string>
+    <string name="answers_remove">شيل الربط</string>
+    <string name="answers_unlink">فك الربط</string>
+    <string name="answers_unlinked">اتفك الربط</string>
+    <string name="answers_edit_linked_refund">دي جزء من تحويل أو استرداد. فك الربط الأول عشان تغيّر المبلغ أو التاريخ أو النوع.</string>
+    <string name="answers_remove_desc">شيل ربط الكارت اللي بينتهي بـ %1$s</string>
+    <string name="answers_not_refund">مش استرداد</string>
+    <string name="answers_pick_title">أنهي عملية شراء؟</string>
+    <string name="answers_pick_empty">مفيش مشتريات في آخر ٦٠ يوم</string>
+
+    <string name="answers_transfer_out_q">هل ده راح لحساب من حساباتك؟</string>
+    <string name="answers_transfer_in_q">هل ده جه من حساب من حساباتك؟</string>
+    <string name="answers_transfer_to">إلى %1$s</string>
+    <string name="answers_transfer_from">من %1$s</string>
+    <string name="answers_transfer_choose">اختار الحساب</string>
+    <string name="answers_transfer_other_out">لحد تاني</string>
+    <string name="answers_transfer_other_in">من حد تاني</string>
+    <string name="answers_account_picker_title">أنهي حساب؟</string>
+
+    <string name="answers_card_q">•••• %1$s مش موجود في مصروف</string>
+    <string name="answers_card_add">أضف حساب</string>
+    <string name="answers_card_link">اربطه بحساب</string>
+    <string name="answers_card_ignore">تجاهل الكارت ده</string>
+    <string name="answers_card_link_title">تربط •••• %1$s بأنهي حساب؟</string>
+    <string name="answers_card_no_accounts">أضف حساب الأول وبعدين اربط الكارت بيه.</string>
+
+    <string name="answers_atm_q">تتابع الكاش ده؟</string>
+    <string name="answers_atm_track">تابعه</string>
+    <string name="answers_atm_count">احسبه مصروف</string>
+    <string name="answers_cash_account">كاش</string>
+
+    <string name="answers_done">تمام</string>
+    <string name="answers_undo">تراجع</string>
+    <string name="answers_cancel">إلغاء</string>
+
+    <string name="answers_delete_both">امسح الاتنين</string>
+    <string name="edit_type_transfer_in">تحويل وارد</string>
+
+    <string name="review_reason_ignored_card">كارت متجاهل. احفظه لو عايز تسجله كعملية.</string>
+
+    <string name="answers_settings_title">محتاجة ردّك</string>
+    <string name="answers_atm_setting">السحب من الـATM</string>
+    <string name="answers_atm_opt_ask">اسألني كل مرة</string>
+    <string name="answers_atm_opt_track">تابع الكاش</string>
+    <string name="answers_atm_opt_count">احسبه مصروف</string>
+    <string name="answers_ignored_title">الكروت المتجاهلة</string>
+    <string name="answers_ignored_empty">مفيش كروت متجاهلة</string>
+    <plurals name="answers_ignored_count">
+        <item quantity="zero">مفيش كروت متجاهلة</item>
+        <item quantity="one">كارت واحد متجاهل</item>
+        <item quantity="two">كارتين متجاهلين</item>
+        <item quantity="few">%1$d كروت متجاهلة</item>
+        <item quantity="many">%1$d كارت متجاهل</item>
+        <item quantity="other">%1$d كارت متجاهل</item>
+    </plurals>
+    <string name="answers_ignored_item">•••• %1$s</string>
+    <string name="answers_restore">رجّعه</string>
+    <string name="answers_restore_desc">رجّع الكارت اللي بينتهي بـ %1$s</string>
+</resources>

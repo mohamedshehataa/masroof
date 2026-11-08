@@ -54,6 +54,8 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.core.analytics.AnalyticsPeriod
 import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
+import eg.masroof.ui.answers.AnswerCardsSection
+import eg.masroof.ui.answers.AnswerCardsViewModel
 import eg.masroof.ui.ask.AskIcon
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.HomeBudgetsCard
@@ -109,8 +111,13 @@ fun WalletRoute(
     budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
     captured: CapturedViewModel = hiltViewModel(),
     receipts: ReceiptListViewModel = hiltViewModel(),
+    answerCards: AnswerCardsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val cards by answerCards.cards.collectAsStateWithLifecycle()
+    val answerAccounts by answerCards.accounts.collectAsStateWithLifecycle()
+    val answerUndo by answerCards.undo.collectAsStateWithLifecycle()
+    val refundPick by answerCards.pick.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
     val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
     val stored by receipts.state.collectAsStateWithLifecycle()
@@ -149,6 +156,12 @@ fun WalletRoute(
             ),
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
+        answers =
+            if (cards.isEmpty() && answerUndo == null && refundPick == null) {
+                null
+            } else {
+                { AnswerCardsSection(answerCards, cards, answerAccounts, hasUndo = answerUndo != null, pick = refundPick) }
+            },
     )
     StopLearningDialog(captured)
 }
@@ -161,6 +174,8 @@ fun WalletContent(
     modifier: Modifier = Modifier,
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
+    /** The "Needs an answer" row (STORY-208); null = nothing to ask, so no row and no gap. */
+    answers: (@Composable () -> Unit)? = null,
 ) {
     // rememberLazyListState is saved: the tab keeps its scroll position when the user switches tabs and comes back.
     val listState = rememberLazyListState()
@@ -185,6 +200,7 @@ fun WalletContent(
         if (pending > 0) {
             item(key = "review") { ReviewBanner(pending, actions.onOpenInsights) }
         }
+        if (answers != null) item(key = "answers") { answers() }
         if (budgets.isNotEmpty()) {
             item(key = "budgets") { HomeBudgetsCard(budgets, actions.onOpenBudgets) }
         }

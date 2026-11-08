@@ -88,7 +88,9 @@ internal fun toRows(
             notes = it.notes,
             source = it.source,
             income = it.type == "INCOME",
-            transfer = it.type == "TRANSFER",
+            transfer =
+                eg.masroof.data.answers.ExpenseTypes
+                    .isTransfer(it.type),
             reviewPending = it.status == "PENDING_REVIEW",
             serverId = it.serverId,
             paidBy = it.paidByMemberId?.let(memberNames::get),

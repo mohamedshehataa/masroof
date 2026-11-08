@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.core.CairoTime
 import eg.masroof.core.MoneyFormat
+import eg.masroof.data.answers.AnswerUndo
+import eg.masroof.data.answers.LinkKind
+import eg.masroof.data.answers.NoPairLookup
+import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MemberEntity
@@ -23,7 +27,7 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 /** Why the last Save / Confirm / Delete did not go through; shown above the buttons. The user's edits stay as typed. */
-enum class EditError { FAILED, }
+enum class EditError { FAILED, LINKED_REFUND }
 
 data class EditFormState(
     val loaded: Boolean = false,
@@ -47,6 +51,14 @@ data class EditFormState(
     val busy: Boolean = false,
     val error: EditError? = null,
     val confirmDelete: Boolean = false,
+    /** The entry is one side of a linked transfer between own accounts: Delete asks whether to delete both. */
+    val hasPartner: Boolean = false,
+    /** The partner is the refund linked to this purchase: Delete asks to delete both or to keep the refund as income. */
+    val partnerIsRefund: Boolean = false,
+    /** The entry is part of a live transfer or refund link: money fields are locked, "Unlink" is offered. */
+    val linked: Boolean = false,
+    /** Just unlinked: "Undo" is offered. */
+    val unlinked: Boolean = false,
     /** The entry was deleted while the screen was open: "This entry no longer exists", then the screen closes. */
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
@@ -76,6 +88,7 @@ data class EditUiState(
 const val TYPE_EXPENSE = "EXPENSE"
 const val TYPE_INCOME = "INCOME"
 const val TYPE_TRANSFER = "TRANSFER"
+const val TYPE_TRANSFER_IN = "TRANSFER_IN"
 const val TYPE_REFUND = "REFUND"
 private const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
 private const val STATUS_CONFIRMED = "CONFIRMED"
@@ -118,6 +131,7 @@ class EditExpenseViewModel
     constructor(
         private val editor: ExpenseEditor,
         savedState: SavedStateHandle,
+        private val pairs: PairLookup = NoPairLookup,
     ) : ViewModel() {
         private val id: String = savedState.get<String>("id").orEmpty()
         private val form = MutableStateFlow(EditFormState())
@@ -137,7 +151,18 @@ class EditExpenseViewModel
                     form.update { it.copy(done = true, gone = true) } // missing or deleted: nothing to edit
                 } else {
                     original = found
-                    form.value = found.toForm()
+                    // REQ-EXP-064: a purchase with a linked refund asks whether to delete the refund too or keep it as income
+                    val partner =
+                        pairs.linksOf(id).firstOrNull { l ->
+                            l.kind == LinkKind.REFUND && l.deletablePartnerOf(id)?.let { editor.find(it) } != null
+                        }
+                    val linked = pairs.linksOf(id).isNotEmpty()
+                    form.value =
+                        found.toForm().copy(
+                            hasPartner = partner != null,
+                            partnerIsRefund = partner?.kind == LinkKind.REFUND,
+                            linked = linked,
+                        )
                 }
             }
         }
@@ -202,6 +227,34 @@ class EditExpenseViewModel
             submit(null) { editor.delete(id) }
         }
 
+        /** "Delete both" on a linked transfer pair (REQ-EXP-065). */
+        fun deleteBoth() {
+            if (original == null || inFlight || form.value.done) return
+            form.update { it.copy(confirmDelete = false) }
+            submit(null) { editor.deleteWithPartner(id) }
+        }
+
+        private var lastUnlink: AnswerUndo? = null
+
+        /** "Unlink": both rows go back to their unlinked state in one transaction; the Undo link relinks them. */
+        fun unlink() {
+            if (original == null || inFlight || form.value.done) return
+            viewModelScope.launch {
+                val token = pairs.unlink(id) ?: return@launch
+                lastUnlink = token
+                form.update { it.copy(linked = false, unlinked = true, hasPartner = false) }
+            }
+        }
+
+        fun undoUnlink() {
+            val token = lastUnlink ?: return
+            lastUnlink = null
+            viewModelScope.launch {
+                pairs.undoUnlink(token)
+                form.update { it.copy(linked = true, unlinked = false) }
+            }
+        }
+
         private fun changesOf(
             o: ExpenseEntity,
             f: EditFormState,
@@ -257,6 +310,7 @@ class EditExpenseViewModel
                 EditOutcome.Deleted -> form.update { it.copy(done = true) }
                 EditOutcome.NotFound -> form.update { it.copy(done = true, gone = true) }
                 EditOutcome.Failed -> form.update { it.copy(error = EditError.FAILED) }
+                EditOutcome.LinkedRefund -> form.update { it.copy(error = EditError.LINKED_REFUND) }
             }
         }
     }

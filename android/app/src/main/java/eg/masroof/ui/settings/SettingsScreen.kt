@@ -66,6 +66,7 @@ fun SettingsRoute(
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
+            AnswersSettingsSection()
             MembersRoute()
         },
     )

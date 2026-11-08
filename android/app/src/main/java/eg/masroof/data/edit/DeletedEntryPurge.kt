@@ -13,6 +13,8 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
@@ -35,7 +37,21 @@ class DeletedEntryPurger
         private val clock: Clock,
         private val eraseLock: EraseLock,
         @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) {
+        /** A pair or refund link whose row was purged has nothing left to restore: drop it, and let the survivor ask again. */
+        private suspend fun dropLinksOfPurgedRows() {
+            val dead =
+                answers
+                    .current()
+                    .links
+                    .filter { db.expenses().find(it.first) == null || db.expenses().find(it.second) == null }
+                    .toSet()
+            if (dead.isEmpty()) return
+            val ids = dead.flatMapTo(HashSet()) { listOf(it.first, it.second) }
+            answers.edit { s -> s.copy(links = s.links - dead, answered = s.answered - ids) }
+        }
+
         /** Returns how many entries were removed. Their receipt rows go in the same transaction, then the files (REQ-RCPT-019). */
         suspend fun purge(): Int {
             val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(PURGE_AFTER_DAYS)
@@ -45,6 +61,7 @@ class DeletedEntryPurger
                 val removed = db.expenses().purgeDeletedBefore(cutoff)
                 // a file that cannot be deleted here has no row any more: the startup sweeper removes it
                 files.forEach { runCatching { File(receiptsDir, it.fileName).delete() } }
+                if (removed > 0) dropLinksOfPurgedRows()
                 removed
             }
         }

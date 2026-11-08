@@ -16,4 +16,9 @@ class EditActions(
     val onDismissDelete: () -> Unit = {},
     val onPaidBy: (String?) -> Unit = {},
     val onExcluded: (Boolean) -> Unit = {},
+    /** "Delete both" on one side of a linked transfer between own accounts (STORY-208). */
+    val onDeleteBoth: () -> Unit = {},
+    /** "Unlink" a transfer or refund (STORY-208) and its Undo. */
+    val onUnlink: () -> Unit = {},
+    val onUndoUnlink: () -> Unit = {},
 )

@@ -68,6 +68,7 @@ import eg.masroof.ui.viewmodel.TYPE_EXPENSE
 import eg.masroof.ui.viewmodel.TYPE_INCOME
 import eg.masroof.ui.viewmodel.TYPE_REFUND
 import eg.masroof.ui.viewmodel.TYPE_TRANSFER
+import eg.masroof.ui.viewmodel.TYPE_TRANSFER_IN
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -104,6 +105,9 @@ fun EditExpenseRoute(
             viewModel::dismissDelete,
             viewModel::onPaidBy,
             viewModel::onExcluded,
+            viewModel::deleteBoth,
+            viewModel::unlink,
+            viewModel::undoUnlink,
         ),
         receipts = { ReceiptsSection(enabled = !state.form.locked) },
     )
@@ -141,11 +145,26 @@ fun EditExpenseContent(
     if (form.confirmDelete) {
         AlertDialog(
             onDismissRequest = actions.onDismissDelete,
-            title = { Text(stringResource(R.string.edit_delete_title)) },
-            text = { Text(stringResource(R.string.edit_delete_body)) },
+            title = { Text(stringResource(deleteTitle(form))) },
+            text = { Text(stringResource(deleteBody(form))) },
             confirmButton = {
-                TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.edit_delete), color = MaterialTheme.colorScheme.error)
+                Column(horizontalAlignment = Alignment.End) {
+                    if (form.hasPartner) {
+                        TextButton(onClick = actions.onDeleteBoth, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.answers_delete_both), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(
+                            stringResource(
+                                when {
+                                    form.partnerIsRefund -> R.string.answers_delete_keep_refund
+                                    else -> R.string.edit_delete
+                                },
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             },
             dismissButton = {
@@ -156,6 +175,18 @@ fun EditExpenseContent(
         )
     }
 }
+
+private fun deleteTitle(form: eg.masroof.ui.viewmodel.EditFormState) =
+    when {
+        form.partnerIsRefund -> R.string.answers_delete_refund_title
+        else -> R.string.edit_delete_title
+    }
+
+private fun deleteBody(form: eg.masroof.ui.viewmodel.EditFormState) =
+    when {
+        form.partnerIsRefund -> R.string.answers_delete_refund_body
+        else -> R.string.edit_delete_body
+    }
 
 @Composable
 private fun EditFields(
@@ -191,7 +222,7 @@ private fun EditFields(
             TYPE_INCOME to stringResource(R.string.edit_type_income),
             TYPE_TRANSFER to stringResource(R.string.edit_type_transfer),
             TYPE_REFUND to stringResource(R.string.edit_type_refund),
-        ),
+        ) + if (form.type == TYPE_TRANSFER_IN) listOf(TYPE_TRANSFER_IN to stringResource(R.string.edit_type_transfer_in)) else emptyList(),
         selected = form.type,
         enabled = !form.locked,
         onSelect = { actions.onType(it) },
@@ -288,6 +319,7 @@ private fun EditBar(
             val message =
                 when {
                     form.error == EditError.FAILED -> R.string.edit_error_failed
+                    form.error == EditError.LINKED_REFUND -> R.string.answers_edit_linked_refund
                     form.busy -> R.string.edit_working
                     else -> null
                 }
@@ -297,6 +329,23 @@ private fun EditBar(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (form.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (form.linked) {
+                TextButton(onClick = actions.onUnlink, enabled = !form.locked, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.answers_unlink))
+                }
+            }
+            if (form.unlinked) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.answers_unlinked), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = actions.onUndoUnlink, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.answers_undo))
+                    }
+                }
             }
             if (form.reviewPending) {
                 Button(

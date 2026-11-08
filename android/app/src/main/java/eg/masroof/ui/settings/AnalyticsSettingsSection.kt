@@ -27,12 +27,17 @@ import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.data.AppSettings
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.AtmChoice
+import eg.masroof.data.answers.NoAnswerPrefs
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.theme.LocalMoneyStyle
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -43,6 +48,8 @@ class AnalyticsSettingsViewModel
     @Inject
     constructor(
         private val settings: SettingsRepository,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
+        private val eraseLock: EraseLock = EraseLock(),
     ) : ViewModel() {
         val state: StateFlow<AppSettings> =
             settings.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AppSettings())
@@ -54,7 +61,19 @@ class AnalyticsSettingsViewModel
         }
 
         fun setCountCash(on: Boolean) {
-            viewModelScope.launch { settings.update { it.copy(includeCashWithdrawals = on) } }
+            viewModelScope.launch {
+                settings.update { it.copy(includeCashWithdrawals = on) }
+                // one source of truth with "Needs an answer" -> ATM withdrawals: counting stops the cash tracking
+                eraseLock.mutex.withLock {
+                    answers.edit { s ->
+                        when {
+                            on -> s.copy(atmChoice = AtmChoice.COUNT)
+                            s.atmChoice == AtmChoice.COUNT -> s.copy(atmChoice = null)
+                            else -> s
+                        }
+                    }
+                }
+            }
         }
     }
 

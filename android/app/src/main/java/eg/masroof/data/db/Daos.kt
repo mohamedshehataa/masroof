@@ -149,6 +149,19 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE id = :id")
     suspend fun find(id: String): ExpenseEntity?
 
+    /** STORY-208: the live entries since [since] that the "Needs an answer" cards and their matching read (typed columns only). */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since
+            ORDER BY occurredAtMillis DESC, id""",
+    )
+    fun observeLiveSince(since: Long): Flow<List<ExpenseEntity>>
+
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since
+            ORDER BY occurredAtMillis DESC, id""",
+    )
+    suspend fun liveSince(since: Long): List<ExpenseEntity>
+
     /** Soft delete for Undo (ADR-0009 D3): the row and its sources stay until the 30-day purge. Returns the rows changed. */
     @Query("UPDATE expense SET deletedAtMillis = :nowMillis, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
     suspend fun softDelete(
@@ -521,6 +534,19 @@ interface ReviewDao {
 
     @Query("DELETE FROM review_item WHERE createdAtMillis < :olderThanMillis")
     suspend fun purgeBefore(olderThanMillis: Long)
+
+    /** STORY-208: an ignored card's capture already waits in the list (the other channel's copy of the same purchase). */
+    @Query(
+        """SELECT COUNT(*) FROM review_item WHERE reason = 'ignored_card' AND sugLast4 = :last4
+            AND sugAmountMinor = :amountMinor AND sugCurrency = :currency AND receivedAtMillis BETWEEN :from AND :to""",
+    )
+    suspend fun countIgnoredTwins(
+        last4: String,
+        amountMinor: Long,
+        currency: String,
+        from: Long,
+        to: Long,
+    ): Int
 
     @Query("SELECT * FROM review_item")
     suspend fun all(): List<ReviewItemEntity>

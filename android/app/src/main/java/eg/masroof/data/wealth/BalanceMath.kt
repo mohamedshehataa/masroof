@@ -1,29 +1,26 @@
 package eg.masroof.data.wealth
 
+import eg.masroof.data.answers.ExpenseTypes
 import eg.masroof.data.db.AccountBalanceEntity
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AccountFlowRow
 
 /** Balance of an account: the last confirmed check plus the money that moved after it. A card's balance is what is owed. */
 object BalanceMath {
-    private const val EXPENSE = "EXPENSE"
-    private const val REFUND = "REFUND"
-    private const val INCOME = "INCOME"
-    private const val CASH = "CASH_WITHDRAWAL"
-    private const val TRANSFER = "TRANSFER"
-
     /** The D2 status rule: a confirmed entry and one waiting for review both moved money. */
     fun counts(status: String): Boolean = status == "CONFIRMED" || status == "PENDING_REVIEW"
 
-    /** Money in (+) or out (-) of a bank, cash or wallet account for one entry; unknown types move nothing. */
+    /**
+     * Money in (+) or out (-) of a bank, cash or wallet account for one entry. TRANSFER_IN is money in (the other side of a
+     * transfer between own accounts); a type this version does not know is a TRANSFER, money out (STORY-208).
+     */
     fun bankDelta(
         type: String,
         amountMinor: Long,
     ): Long =
-        when (type) {
-            INCOME, REFUND -> amountMinor
-            EXPENSE, CASH, TRANSFER -> -amountMinor
-            else -> 0L
+        when (ExpenseTypes.normalize(type)) {
+            ExpenseTypes.INCOME, ExpenseTypes.REFUND, ExpenseTypes.TRANSFER_IN -> amountMinor
+            else -> -amountMinor
         }
 
     /** The latest check wins; a tie on time goes to the one written last. */

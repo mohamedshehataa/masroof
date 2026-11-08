@@ -100,7 +100,10 @@ class WealthRepository
 
         /** Card spending after a statement: purchases, cash and transfers add; refunds subtract; payments are not spending. */
         private fun spendDelta(row: AccountFlowRow): Long =
-            when (row.type) {
+            when (
+                eg.masroof.data.answers.ExpenseTypes
+                    .normalize(row.type)
+            ) {
                 "EXPENSE", "CASH_WITHDRAWAL", "TRANSFER" -> row.amountMinor
                 "REFUND" -> -row.amountMinor
                 else -> 0L

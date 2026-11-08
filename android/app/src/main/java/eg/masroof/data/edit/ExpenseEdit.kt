@@ -3,6 +3,10 @@ package eg.masroof.data.edit
 import android.database.sqlite.SQLiteException
 import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.EntryLink
+import eg.masroof.data.answers.NoPairLookup
+import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -68,6 +72,9 @@ sealed interface EditOutcome {
 
     /** The local write threw; the row is unchanged. */
     data object Failed : EditOutcome
+
+    /** The row is part of a live pair or refund link: its amount, currency, type and date are locked until it is unlinked. */
+    data object LinkedRefund : EditOutcome
 }
 
 interface ExpenseEditor {
@@ -89,6 +96,9 @@ interface ExpenseEditor {
     /** Soft delete (ADR-0009 D3); [restore] brings it back. */
     suspend fun delete(id: String): EditOutcome
 
+    /** STORY-208: deletes the entry and the other side of its linked transfer pair together; [restore] brings both back. */
+    suspend fun deleteWithPartner(id: String): EditOutcome = delete(id)
+
     /** Undo of [delete]. Returns false when there was nothing to restore. */
     suspend fun restore(id: String): Boolean
 }
@@ -104,6 +114,7 @@ class DefaultExpenseEditor
         private val signal: LocalDataSignal,
         private val clock: Clock,
         private val eraseLock: EraseLock,
+        private val pairs: PairLookup = NoPairLookup,
     ) : ExpenseEditor {
         private val deletions = MutableSharedFlow<String>(extraBufferCapacity = DELETION_BUFFER)
 
@@ -121,6 +132,7 @@ class DefaultExpenseEditor
         ): EditOutcome =
             guarded {
                 val now = clock.millis()
+                val links = pairs.linksOf(id)
                 val outcome =
                     eraseLock.mutex.withLock {
                         db.withTransaction {
@@ -128,9 +140,21 @@ class DefaultExpenseEditor
                             when {
                                 old == null || old.deletedAtMillis != null -> EditOutcome.NotFound
                                 changes.isEmpty -> EditOutcome.Saved(old)
+                                lockedByLink(old, changes, links) -> EditOutcome.LinkedRefund
                                 else -> {
                                     val updated = old.withChanges(changes, now)
                                     db.expenses().update(updated)
+                                    // confirming a pending withdrawal confirms the cash side the app added for it
+                                    if (old.status != updated.status) {
+                                        links.mapNotNull { it.deletablePartnerOf(id) }.forEach { partner ->
+                                            val row = db.expenses().find(partner)
+                                            if (row != null && row.status == old.status) {
+                                                db.expenses().update(row.copy(status = updated.status, updatedAtMillis = now))
+                                            }
+                                        }
+                                    }
+                                    // a linked row's fields follow the link (a purchase's new category moves its refund)
+                                    AnswerWrites.reconcile(db, links)
                                     EditOutcome.Saved(updated)
                                 }
                             }
@@ -140,9 +164,65 @@ class DefaultExpenseEditor
                 outcome
             }
 
-        override suspend fun delete(id: String): EditOutcome =
+        /**
+         * Rule 1: while a row is part of a live pair or a live refund link, its money fields (amount, currency, type, date) are
+         * locked: changing them would leave the other side with phantom money. Notes, merchant and category stay editable (a
+         * purchase's category moves its refund). "Unlink" releases the row.
+         */
+        private suspend fun lockedByLink(
+            old: ExpenseEntity,
+            changes: ExpenseChanges,
+            links: List<EntryLink>,
+        ): Boolean {
+            val touchesMoney =
+                (changes.amountMinor != null && changes.amountMinor != old.amountMinor) ||
+                    (changes.currency != null && changes.currency != old.currency) ||
+                    (changes.type != null && changes.type != old.type) ||
+                    (changes.occurredAtMillis != null && changes.occurredAtMillis != old.occurredAtMillis) ||
+                    // "Don't count in totals" on one side would leave the other side netting alone
+                    (changes.excludedFromTotals != null && changes.excludedFromTotals != old.excludedFromTotals)
+            // the survivor of a broken pair keeps its type until it is unlinked: a type edit would be written back by the link rules
+            val typeOfConverted = changes.type != null && changes.type != old.type && links.any { it.converted == old.id }
+            if (typeOfConverted) return true
+            if (!touchesMoney) return false
+            return links.any { link ->
+                val a = db.expenses().find(link.first)
+                val b = db.expenses().find(link.second)
+                a != null && b != null && a.deletedAtMillis == null && b.deletedAtMillis == null
+            }
+        }
+
+        /** Deletes this entry. What the pair or refund link implies for the other rows is applied by [AnswerWrites.reconcile]. */
+        override suspend fun delete(id: String): EditOutcome = remove(id, withPartner = false)
+
+        override suspend fun deleteWithPartner(id: String): EditOutcome = remove(id, withPartner = true)
+
+        private suspend fun remove(
+            id: String,
+            withPartner: Boolean,
+        ): EditOutcome =
             guarded {
-                val changed = eraseLock.mutex.withLock { db.expenses().softDelete(id, clock.millis()) }
+                val links = pairs.linksOf(id)
+                val changed =
+                    eraseLock.mutex.withLock {
+                        db.withTransaction {
+                            // one timestamp for the rows that go together: Undo restores them only if they went at the same moment
+                            val now = clock.millis()
+                            val first = db.expenses().softDelete(id, now)
+                            if (first > 0) {
+                                if (withPartner) {
+                                    links
+                                        .mapNotNull {
+                                            it.deletablePartnerOf(
+                                                id,
+                                            )
+                                        }.forEach { db.expenses().softDelete(it, now) }
+                                }
+                                AnswerWrites.reconcile(db, links)
+                            }
+                            first
+                        }
+                    }
                 if (changed == 0) {
                     EditOutcome.NotFound
                 } else {
@@ -153,9 +233,24 @@ class DefaultExpenseEditor
             }
 
         override suspend fun restore(id: String): Boolean {
+            val links = pairs.linksOf(id)
+            val partners = links.mapNotNull { it.deletablePartnerOf(id) }
             val changed =
                 try {
-                    eraseLock.mutex.withLock { db.expenses().restore(id, clock.millis()) }
+                    eraseLock.mutex.withLock {
+                        db.withTransaction {
+                            val now = clock.millis()
+                            val deletedAt = db.expenses().find(id)?.deletedAtMillis
+                            val first = db.expenses().restore(id, now)
+                            if (first > 0) {
+                                partners.filter { db.expenses().find(it)?.deletedAtMillis == deletedAt }.forEach {
+                                    db.expenses().restore(it, now)
+                                }
+                                AnswerWrites.reconcile(db, links)
+                            }
+                            first
+                        }
+                    }
                 } catch (_: SQLiteException) {
                     0
                 } catch (_: IllegalStateException) {

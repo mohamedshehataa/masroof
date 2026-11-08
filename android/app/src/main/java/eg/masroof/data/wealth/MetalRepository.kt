@@ -146,6 +146,7 @@ class MetalRepository
         private val clock: Clock,
         private val eraseLock: EraseLock,
         private val wealth: WealthRepository,
+        private val answers: eg.masroof.data.answers.AnswerPrefs = eg.masroof.data.answers.NoAnswerPrefs,
     ) {
         fun observeHolding(id: String): Flow<HoldingDetail?> =
             combine(
@@ -393,7 +394,9 @@ class MetalRepository
         }
 
         /** Excludes the entry from totals; false when the entry is gone. */
-        private suspend fun claim(expenseId: String): Boolean = db.expenses().claimExcluded(expenseId, clock.millis()) > 0
+        private suspend fun claim(expenseId: String): Boolean =
+            // an entry that an answer linked (transfer pair, refund) cannot be claimed: it would leave its other side netting alone
+            expenseId !in answers.current().linkedIds() && db.expenses().claimExcluded(expenseId, clock.millis()) > 0
 
         /** The entry counts as spending again unless another lot still points at it. */
         private suspend fun release(

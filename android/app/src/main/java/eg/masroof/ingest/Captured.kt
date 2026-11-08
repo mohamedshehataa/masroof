@@ -24,6 +24,9 @@ import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
@@ -291,16 +294,29 @@ class CapturedActions
         private val signal: LocalDataSignal = LocalDataSignal(),
         private val eraseLock: EraseLock = EraseLock(),
         private val notifier: CapturedNotifier = NoCapturedNotifier,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
         suspend fun undo(localId: String): UndoResult {
             val item =
                 eraseLock.mutex.withLock {
+                    // under the erase lock like every write: the links are read in step with the rows they describe
+                    val links = answers.current().links
                     db.withTransaction {
                         val found = db.captured().find(localId)
                         if (found != null) {
-                            found.expenseId?.let { db.expenses().softDelete(it, clock.millis()) }
+                            found.expenseId?.let { id ->
+                                val now = clock.millis()
+                                val mine = links.filter { it.involves(id) }
+                                db.expenses().softDelete(id, now)
+                                // the pair follows from the links: the app-inserted side goes, a converted real entry is put back
+                                AnswerWrites.reconcile(db, mine)
+                                // a Cash account the capture created goes too, unless something else uses it now
+                                mine.filter { it.newAccountId.isNotEmpty() }.forEach {
+                                    AnswerWrites.settleCreatedCash(db, it.newAccountId, listOf(it.inserted))
+                                }
+                            }
                             db.captured().requestUndo(localId)
                         }
                         found
