@@ -8,10 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -34,7 +35,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -50,6 +50,7 @@ import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.ask.AskIcon
 import eg.masroof.ui.ask.AskRoute
 import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
@@ -59,9 +60,8 @@ import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.goals.GoalDetailRoute
 import eg.masroof.ui.goals.GoalFormRoute
 import eg.masroof.ui.goals.GoalsRoute
-import eg.masroof.ui.home.HomeRoute
-import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
+import eg.masroof.ui.plan.PlanScreen
 import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
 import eg.masroof.ui.review.ReviewRoute
@@ -70,6 +70,8 @@ import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.ui.viewmodel.UndoDeleteViewModel
+import eg.masroof.ui.wallet.WalletActions
+import eg.masroof.ui.wallet.WalletRoute
 import eg.masroof.ui.wealth.WealthRoute
 import eg.masroof.work.EXTRA_OPEN_ROUTE
 import eg.masroof.work.ForegroundSync
@@ -79,23 +81,39 @@ import javax.inject.Inject
 /** The first destination, always Home (REQ-AND-130). */
 internal const val START_ROUTE = "home"
 
+/** The bottom bar (REQ-UI-081). Insights, Transactions and Settings are opened from Wallet, not from the bar. */
 private enum class Tab(
     val route: String,
     val label: Int,
     val icon: ImageVector,
 ) {
-    Home(START_ROUTE, R.string.nav_home, Icons.Filled.Home),
-    Transactions("transactions", R.string.nav_transactions, Icons.AutoMirrored.Filled.List),
-    Insights("insights", R.string.nav_insights, InsightsIcon),
-    Settings("settings", R.string.nav_settings, Icons.Filled.Settings),
+    Wallet(START_ROUTE, R.string.nav_wallet, Icons.Filled.Home),
+    Bills("bills", R.string.bills_title, Icons.Filled.Notifications),
+    Plan("plan", R.string.nav_plan, Icons.Filled.CheckCircle),
+    Wealth("wealth", R.string.wealth_title, Icons.Filled.AccountBox),
+    Ask("ask", R.string.nav_ask, AskIcon),
 }
 
+private const val INSIGHTS_ROUTE = "insights"
+private const val TRANSACTIONS_ROUTE = "transactions"
+private const val SETTINGS_ROUTE = "settings"
+
+/** The tab a destination belongs to, so a sub-screen keeps its tab highlighted. Anything else lives under Wallet. */
+internal fun tabRouteOf(route: String?): String =
+    when {
+        route == null -> START_ROUTE
+        route == "bills" || route.startsWith("bills/") -> "bills"
+        route == "plan" || route == "budgets" || route == "goals" || route.startsWith("goals/") || route == "goals-new" -> "plan"
+        route == "wealth" || route == "accounts" -> "wealth"
+        route == "ask" -> "ask"
+        else -> START_ROUTE
+    }
+
 // "add" opens a blank form; "add?receipt=<id>" opens it with a waiting receipt that is attached on Save (REQ-RCPT-023).
-private const val ADD_ROUTE = "add?receipt={receipt}"
+private const val ADD_ROUTE = "add?receipt={receipt}&mic={mic}"
 private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
 private const val ASK_ROUTE = "ask"
-private const val WEALTH_ROUTE = "wealth"
 private const val ACCOUNTS_ROUTE = "accounts"
 private const val EDIT_ROUTE = "edit/{id}"
 private const val GOALS_ROUTE = "goals"
@@ -104,15 +122,14 @@ private const val GOAL_DETAIL_ROUTE = "goals/{id}"
 private const val GOAL_EDIT_ROUTE = "goals/{id}/edit"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
-private const val BILLS_ROUTE = "bills"
 private const val BILL_ADD_ROUTE = "bills/add"
 private const val BILL_DETAIL_ROUTE = "bills/{id}"
 
 /** The only route a notification may open: a bills plan by its UUID (the shape UuidIdFactory makes). */
 private val OPENABLE_ROUTE = Regex("""bills/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
 
-// No floating add button on screens with their own primary action or an input field at the bottom.
-private val FAB_HIDDEN_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE, ASK_ROUTE)
+// No floating add button on screens with their own primary action or an input field at the bottom (Wallet has its Add action).
+private val FAB_HIDDEN_ROUTES = setOf(START_ROUTE, ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE, ASK_ROUTE)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -237,20 +254,23 @@ private fun MasroofRoot(
             if (result == SnackbarResult.ActionPerformed) undo.undo(id)
         }
     }
+
+    // Switching tabs saves the tab being left (scroll position, selections) and restores the one being opened.
+    fun openTab(route: String) {
+        nav.navigate(route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
-                        selected = destination?.hierarchy?.any { it.route == tab.route } == true,
-                        onClick = {
-                            nav.navigate(tab.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        selected = tabRouteOf(destination?.route) == tab.route,
+                        onClick = { openTab(tab.route) },
                         icon = { Icon(tab.icon, contentDescription = null) },
                         label = { Text(stringResource(tab.label)) },
                     )
@@ -265,36 +285,49 @@ private fun MasroofRoot(
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = Tab.Home.route, modifier = Modifier.padding(padding)) {
-            composable(Tab.Home.route) {
-                HomeRoute(
-                    onSeeAll = { nav.navigate(Tab.Transactions.route) },
-                    onOpenInsights = { nav.navigate(Tab.Insights.route) },
-                    onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
-                    onOpenExpense = { id -> nav.navigate("edit/$id") },
-                    onOpenAsk = { nav.navigate(ASK_ROUTE) },
+        NavHost(nav, startDestination = Tab.Wallet.route, modifier = Modifier.padding(padding)) {
+            composable(Tab.Wallet.route) {
+                WalletRoute(
+                    actions =
+                        WalletActions(
+                            onOpenSettings = { nav.navigate(SETTINGS_ROUTE) },
+                            onOpenInsights = { nav.navigate(INSIGHTS_ROUTE) },
+                            onOpenTransactions = { nav.navigate(TRANSACTIONS_ROUTE) },
+                            onOpenExpense = { id -> nav.navigate("edit/$id") },
+                            onAdd = { nav.navigate("add") },
+                            onSayIt = { nav.navigate("add?mic=true") },
+                            onAsk = { openTab(Tab.Ask.route) },
+                            onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) },
+                            onOpenWealth = { openTab(Tab.Wealth.route) },
+                            onOpenBills = { openTab(Tab.Bills.route) },
+                            onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
+                            onOpenGoals = { nav.navigate(GOALS_ROUTE) },
+                            onTurnOnCapture = { nav.navigate(SETTINGS_ROUTE) },
+                            onAddBill = { nav.navigate(BILL_ADD_ROUTE) },
+                        ),
+                    onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
                 )
             }
-            composable(Tab.Insights.route) {
-                InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }, onOpenAsk = { nav.navigate(ASK_ROUTE) })
+            composable(INSIGHTS_ROUTE) {
+                InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }, onOpenAsk = { openTab(Tab.Ask.route) })
             }
-            composable(ASK_ROUTE) { AskRoute(onBack = { nav.popBackStack() }, onOpenExpense = { id -> nav.navigate("edit/$id") }) }
+            composable(Tab.Ask.route) { AskRoute(onBack = { nav.popBackStack() }, onOpenExpense = { id -> nav.navigate("edit/$id") }) }
+            composable(Tab.Plan.route) {
+                PlanScreen(onOpenGoal = { id -> nav.navigate("goals/$id") }, onNewGoal = { nav.navigate(GOAL_NEW_ROUTE) })
+            }
             composable(BUDGETS_ROUTE) { BudgetsRoute() }
-            composable(Tab.Transactions.route) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
+            composable(TRANSACTIONS_ROUTE) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(EDIT_ROUTE) { EditExpenseRoute(onDone = { nav.popBackStack() }) }
-            composable(Tab.Settings.route) {
+            composable(SETTINGS_ROUTE) {
                 SettingsRoute(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
-                    onOpenWealth = { nav.navigate(WEALTH_ROUTE) },
-                    onOpenBills = { nav.navigate(BILLS_ROUTE) },
-                    onOpenGoals = { nav.navigate(GOALS_ROUTE) },
                 )
             }
-            composable(WEALTH_ROUTE) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
+            composable(Tab.Wealth.route) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
             composable(ACCOUNTS_ROUTE) { AccountsRoute() }
-            composable(BILLS_ROUTE) {
+            composable(Tab.Bills.route) {
                 BillsRoute(onAdd = { nav.navigate(BILL_ADD_ROUTE) }, onOpenPlan = { id -> nav.navigate("bills/$id") })
             }
             composable(BILL_ADD_ROUTE) {
@@ -323,16 +356,17 @@ private fun MasroofRoot(
                             nullable = true
                             defaultValue = null
                         },
+                        navArgument("mic") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
                     ),
-            ) {
-                AddExpenseRoute(onDone = { nav.popBackStack() }, onOpenReceipts = {
-                    nav.navigate(RECEIPTS_ROUTE) {
-                        popUpTo("add?receipt={receipt}") {
-                            inclusive =
-                                true
-                        }
-                    }
-                })
+            ) { entry ->
+                AddExpenseRoute(
+                    onDone = { nav.popBackStack() },
+                    onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) { popUpTo(ADD_ROUTE) { inclusive = true } } },
+                    startWithMic = entry.arguments?.getBoolean("mic") == true,
+                )
             }
         }
     }

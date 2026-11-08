@@ -44,7 +44,8 @@ interface ExpenseDao {
     @Query(
         """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
             WHERE failed = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
-            AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+            AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND excludedFromTotals = 0
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
         from: Long,
@@ -54,7 +55,7 @@ interface ExpenseDao {
     /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND excludedFromTotals = 0
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeAnalyticsRows(
@@ -64,7 +65,7 @@ interface ExpenseDao {
 
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND excludedFromTotals = 0
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun analyticsRows(
@@ -75,13 +76,24 @@ interface ExpenseDao {
     /** The same rows as [analyticsRows] plus the id and account, for Ask Masroof (STORY-199): read-only, the same filter. */
     @Query(
         """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND excludedFromTotals = 0
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun askRows(
         from: Long,
         to: Long,
     ): List<AskRow>
+
+    /** [askRows] as a live query: Wallet (STORY-206) filters it by account and computes with the same calculator as Insights. */
+    @Query(
+        """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND excludedFromTotals = 0
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    fun observeAskRows(
+        from: Long,
+        to: Long,
+    ): Flow<List<AskRow>>
 
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.

@@ -62,6 +62,8 @@ data class ExpenseRow(
     val serverId: String? = null,
     /** Display name of the member who paid; null = not set or the member no longer exists (no chip). */
     val paidBy: String? = null,
+    /** "Don't count in totals" (REQ-AN-175): listed with a marker, never part of spending. */
+    val excluded: Boolean = false,
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
@@ -95,6 +97,7 @@ internal fun toRows(
             reviewPending = it.status == "PENDING_REVIEW",
             serverId = it.serverId,
             paidBy = it.paidByMemberId?.let(memberNames::get),
+            excluded = it.excludedFromTotals,
         )
     }
 }

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_wallet">Wallet</string>
+    <string name="nav_plan">Plan</string>
+    <string name="nav_ask">Ask</string>
+
+    <string name="wallet_title">Wallet</string>
+    <string name="wallet_profile_desc">Settings</string>
+    <string name="wallet_analytics">Analytics</string>
+    <string name="wallet_spent">Spent</string>
+    <string name="wallet_today">%1$s today</string>
+    <string name="wallet_period_range">%1$s - %2$s</string>
+    <string name="wallet_all_accounts">All accounts</string>
+    <string name="wallet_balance">Balance</string>
+    <string name="wallet_set_balances">Set your balances</string>
+    <plurals name="wallet_uncounted">
+        <item quantity="one">%1$s account without a balance</item>
+        <item quantity="other">%1$s accounts without a balance</item>
+    </plurals>
+    <string name="wallet_owe">You owe %1$s</string>
+    <string name="wallet_action_add">Add</string>
+    <string name="wallet_action_say">Say it</string>
+    <string name="wallet_action_receipt">Receipt</string>
+    <string name="wallet_action_ask">Ask</string>
+    <string name="wallet_accounts">Accounts</string>
+    <string name="wallet_set_balance">Set balance</string>
+    <string name="wallet_coming_up">Coming up</string>
+    <string name="wallet_coming_up_empty">Nothing due in the next 7 days</string>
+    <string name="wallet_coming_installment">Installment</string>
+    <string name="wallet_coming_subscription">Renews</string>
+    <string name="wallet_coming_payout">Payout</string>
+    <string name="wallet_coming_payday">Payday</string>
+    <string name="wallet_recent">Recent</string>
+    <string name="wallet_recent_empty">No entries yet</string>
+    <string name="wallet_view_all">View all</string>
+
+    <string name="wallet_tiles_title">Insights</string>
+    <string name="tile_top_spending">Top spending</string>
+    <string name="tile_top_spending_empty">No spending in this period</string>
+    <string name="tile_bills_due">Bills due</string>
+    <string name="tile_bills_none">Nothing due</string>
+    <plurals name="tile_bills_count">
+        <item quantity="one">%1$s due this week</item>
+        <item quantity="other">%1$s due this week</item>
+    </plurals>
+    <string name="tile_budget">Budget</string>
+    <string name="tile_in_out">Money in vs out</string>
+    <string name="tile_in">In</string>
+    <string name="tile_out">Out</string>
+    <string name="tile_kept">Income kept</string>
+    <string name="tile_kept_none">Add your income to see this</string>
+    <string name="tile_kept_hint">of your income this period</string>
+    <string name="tile_goal">Top goal</string>
+    <string name="tile_goal_cta">Add a goal</string>
+
+    <string name="wallet_start_title">Get started</string>
+    <string name="wallet_start_capture">Turn on capture</string>
+    <string name="wallet_start_capture_body">Record bank and wallet messages automatically</string>
+    <string name="wallet_start_balances_body">Add what is in each account to see your balance</string>
+    <string name="wallet_start_bill">Add a bill</string>
+    <string name="wallet_start_bill_body">Installments and subscriptions, with reminders</string>
+
+    <string name="plan_tab_budgets">Budgets</string>
+    <string name="plan_tab_goals">Goals</string>
+
+    <string name="wallet_exclude_title">Don\'t count in totals</string>
+    <string name="wallet_exclude_hint">Leaves this entry out of spending and income. It stays in your lists and still moves its account.</string>
+    <string name="wallet_excluded_marker">Not counted in totals</string>
+</resources>

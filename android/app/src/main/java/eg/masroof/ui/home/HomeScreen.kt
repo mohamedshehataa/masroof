@@ -16,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -24,8 +23,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.core.MoneyFormat
@@ -37,53 +34,14 @@ import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.StatusBanner
-import eg.masroof.ui.components.StopLearningDialog
 import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.theme.LocalMoneyStyle
-import eg.masroof.ui.viewmodel.CapturedViewModel
-import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
 import eg.masroof.ui.viewmodel.HomeInsight
-import eg.masroof.ui.viewmodel.HomeInsightsViewModel
 import eg.masroof.ui.viewmodel.HomeUiState
-import eg.masroof.ui.viewmodel.HomeViewModel
 import eg.masroof.ui.viewmodel.LoadStatus
 
-@Composable
-fun HomeRoute(
-    onSeeAll: () -> Unit,
-    onOpenInsights: () -> Unit = {},
-    viewModel: HomeViewModel = hiltViewModel(),
-    insightsViewModel: HomeInsightsViewModel = hiltViewModel(),
-    onOpenBudgets: () -> Unit = {},
-    budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
-    captured: CapturedViewModel = hiltViewModel(),
-    onOpenExpense: (String) -> Unit = {},
-    onOpenAsk: (() -> Unit)? = null,
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val insight by insightsViewModel.state.collectAsStateWithLifecycle()
-    val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
-    val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
-    HomeContent(
-        state,
-        onRetry = {
-            insightsViewModel.refresh()
-            budgetsViewModel.refresh()
-        },
-        onSeeAll = onSeeAll,
-        insight = insight,
-        onOpenInsights = onOpenInsights,
-        budgets = budgets,
-        onOpenBudgets = onOpenBudgets,
-        capturedIds = capturedIds,
-        onUndoCaptured = captured::undo,
-        onOpenExpense = onOpenExpense,
-        onOpenAsk = onOpenAsk,
-    )
-    StopLearningDialog(captured)
-}
-
+/** The pre-Wallet Home list. The app opens Wallet now (STORY-206); tests still pin its states and nothing navigates here. */
 @Composable
 fun HomeContent(
     state: HomeUiState,

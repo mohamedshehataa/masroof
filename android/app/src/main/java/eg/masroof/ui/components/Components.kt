@@ -86,6 +86,7 @@ fun CategoryAvatar(
     key: String?,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
+    emoji: String? = null,
 ) {
     val color = CategoryPalette.colorFor(key)
     Box(
@@ -97,7 +98,7 @@ fun CategoryAvatar(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            name.trim().take(1).uppercase(),
+            emoji?.takeIf { it.isNotBlank() } ?: name.trim().take(1).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -218,7 +219,7 @@ fun ExpenseListItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CategoryAvatar(categoryName, row.category?.id)
+            CategoryAvatar(categoryName, row.category?.id, emoji = row.category?.emoji)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -247,6 +248,13 @@ fun ExpenseListItem(
                         stringResource(kindLabel),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                if (row.excluded) {
+                    Text(
+                        stringResource(R.string.wallet_excluded_marker),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (row.paidBy != null) {

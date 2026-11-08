@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="goals_settings_section">فلوسك</string>
-    <string name="goals_settings_row">الأهداف</string>
 
     <string name="goals_title">الأهداف</string>
     <string name="goals_new">هدف جديد</string>
