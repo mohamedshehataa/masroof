@@ -111,9 +111,13 @@ class RoomV10MigrationTest {
             failed: Int,
             source: String,
         ) = execSQL(
-            "INSERT INTO expense (id, amountMinor, currency, occurredAtMillis, merchant, categoryId, accountId, notes, pending, failed" +
-                "$src$cols) VALUES ('$id', $amount, '$currency', $at, ${merchant?.let { "'$it'" }}, 'c1', 'a1', 'n', $pending, $failed" +
-                "${if (version >= 3) ", '$source'" else ""}$tail)",
+            oneLine(
+                """
+                INSERT INTO expense (id, amountMinor, currency, occurredAtMillis, merchant, categoryId, accountId, notes, pending,
+                failed$src$cols) VALUES ('$id', $amount, '$currency', $at, ${merchant?.let { "'$it'" }}, 'c1', 'a1', 'n', $pending,
+                $failed${if (version >= 3) ", '$source'" else ""}$tail)
+                """,
+            ),
         )
         expense("e-123", 12_500, "EGP", 5_000, "Shop", 0, 0, "SMS")
         expense("q-1", 700, "EGP", 6_000, null, 1, 0, "MANUAL")
@@ -121,39 +125,67 @@ class RoomV10MigrationTest {
         execSQL("INSERT INTO category (id, nameEn, nameAr, sortOrder) VALUES ('c1', 'Food', 'أكل', 3)")
         execSQL("INSERT INTO account (id, label, currency) VALUES ('a1', 'Card', 'EGP')")
         execSQL(
-            "INSERT INTO outbox (clientId, amountMinor, currency, occurredAtMillis, categoryId, accountId, notes, attempts, failed, " +
-                "createdAtMillis) VALUES ('q-1', 700, 'EGP', 6000, NULL, NULL, NULL, 1, 0, 6000)",
+            oneLine(
+                """
+                INSERT INTO outbox (clientId, amountMinor, currency, occurredAtMillis, categoryId, accountId, notes, attempts, failed,
+                createdAtMillis) VALUES ('q-1', 700, 'EGP', 6000, NULL, NULL, NULL, 1, 0, 6000)
+                """,
+            ),
         )
     }
 
     /** What exists from v8 on: captured, learned and review rows (plus v9's member, receipt and source). */
     private fun SupportSQLiteDatabase.seedPhoneRows(version: Int) {
         execSQL(
-            "INSERT INTO parsed_outbox (localId, source, kind, amountMinor, currency, occurredAtMillis, instrumentLast4, senderId, " +
-                "institution, paymentMethod, merchant, attempts, failed, createdAtMillis, claimedAtMillis, claims) " +
-                "VALUES ('p1', 'SMS', 'CARD_PURCHASE', 100, 'EGP', 1, '1234', 'CIB', 'CIB', 'CARD', 'Shop', 0, 0, 1, 0, 0)",
+            oneLine(
+                """
+                INSERT INTO parsed_outbox (localId, source, kind, amountMinor, currency, occurredAtMillis, instrumentLast4, senderId,
+                institution, paymentMethod, merchant, attempts, failed, createdAtMillis, claimedAtMillis, claims)
+                VALUES ('p1', 'SMS', 'CARD_PURCHASE', 100, 'EGP', 1, '1234', 'CIB', 'CIB', 'CARD', 'Shop', 0, 0, 1, 0, 0)
+                """,
+            ),
         )
         execSQL(
-            "INSERT INTO review_item (id, source, sender, text, reason, receivedAtMillis, createdAtMillis) " +
-                "VALUES ('r1', 'SMS', 'CIB', 'body', 'AMBIGUOUS', 1, 1)",
+            oneLine(
+                """
+                INSERT INTO review_item (id, source, sender, text, reason, receivedAtMillis, createdAtMillis)
+                VALUES ('r1', 'SMS', 'CIB', 'body', 'AMBIGUOUS', 1, 1)
+                """,
+            ),
         )
         execSQL(
-            "INSERT INTO learned_template (id, sender, shape, kind, amountSlot, last4Slot, createdAtMillis) " +
-                "VALUES ('t1', 'CIB', 'shape', 'CARD_PURCHASE', 0, 1, 1)",
+            oneLine(
+                """
+                INSERT INTO learned_template (id, sender, shape, kind, amountSlot, last4Slot, createdAtMillis)
+                VALUES ('t1', 'CIB', 'shape', 'CARD_PURCHASE', 0, 1, 1)
+                """,
+            ),
         )
         execSQL(
-            "INSERT INTO captured_tx (localId, expenseId, amountMinor, currency, label, source, templateId, capturedAtMillis) " +
-                "VALUES ('l1', 'e-123', 100, 'EGP', 'Shop', 'SMS', NULL, 1)",
+            oneLine(
+                """
+                INSERT INTO captured_tx (localId, expenseId, amountMinor, currency, label, source, templateId, capturedAtMillis)
+                VALUES ('l1', 'e-123', 100, 'EGP', 'Shop', 'SMS', NULL, 1)
+                """,
+            ),
         )
         if (version >= 9) {
             execSQL("INSERT INTO member (id, displayName, sortOrder) VALUES ('m1', 'Sara', 1)")
             execSQL(
-                "INSERT INTO receipt (id, expenseId, fileName, mimeType, sizeBytes, sha256, pageCount, createdAtMillis) " +
-                    "VALUES ('rc1', 'e-123', 'f.jpg', 'image/jpeg', 10, 'abc', NULL, 2)",
+                oneLine(
+                    """
+                    INSERT INTO receipt (id, expenseId, fileName, mimeType, sizeBytes, sha256, pageCount, createdAtMillis)
+                    VALUES ('rc1', 'e-123', 'f.jpg', 'image/jpeg', 10, 'abc', NULL, 2)
+                    """,
+                ),
             )
             execSQL(
-                "INSERT INTO expense_source (id, expenseId, channel, localSourceId, receivedAtMillis, senderId, instrumentLast4) " +
-                    "VALUES ('s1', 'e-123', 'SMS', 'local-1', 3, 'CIB', '1234')",
+                oneLine(
+                    """
+                    INSERT INTO expense_source (id, expenseId, channel, localSourceId, receivedAtMillis, senderId, instrumentLast4)
+                    VALUES ('s1', 'e-123', 'SMS', 'local-1', 3, 'CIB', '1234')
+                    """,
+                ),
             )
         }
     }
@@ -173,8 +205,12 @@ class RoomV10MigrationTest {
         assertEquals("v$from accounts", 1L, count("account"))
         assertEquals("v$from outbox", 1L, count("outbox"))
         query(
-            "SELECT amountMinor, currency, occurredAtMillis, merchant, categoryId, accountId, notes, pending, failed, " +
-                "excludedFromTotals FROM expense WHERE id = 'e-123'",
+            oneLine(
+                """
+                SELECT amountMinor, currency, occurredAtMillis, merchant, categoryId, accountId, notes, pending, failed,
+                excludedFromTotals FROM expense WHERE id = 'e-123'
+                """,
+            ),
         ).use {
             assertTrue(it.moveToFirst())
             assertEquals(12_500L, it.getLong(0))
@@ -583,8 +619,12 @@ class RoomV10MigrationTest {
             val db = freshDb()
             val sql = db.openHelper.writableDatabase
             sql.execSQL(
-                "INSERT INTO account (id, label, currency, archived, creditLimitMinor, statementDay, dueDay, emoji) " +
-                    "VALUES ('a9', 'Visa', 'EGP', 0, 5000000, 25, 12, 'x')",
+                oneLine(
+                    """
+                    INSERT INTO account (id, label, currency, archived, creditLimitMinor, statementDay, dueDay, emoji)
+                    VALUES ('a9', 'Visa', 'EGP', 0, 5000000, 25, 12, 'x')
+                    """,
+                ),
             )
             sql.execSQL("UPDATE category SET emoji = 'y' WHERE id = '$cat'")
             db.expenses().insert(ExpenseEntity("e9", 1, "EGP", 1, null, null, null, null, pending = false, excludedFromTotals = true))
@@ -779,8 +819,12 @@ class RoomV10MigrationTest {
                 "the account keeps its card facts",
                 1L,
                 sql.count(
-                    "account WHERE id = 'a1' AND label = 'CIB renamed' AND creditLimitMinor = 5000000 AND statementDay = 25 " +
-                        "AND dueDay = 12 AND emoji = 'x'",
+                    oneLine(
+                        """
+                        account WHERE id = 'a1' AND label = 'CIB renamed' AND creditLimitMinor = 5000000 AND statementDay = 25
+                        AND dueDay = 12 AND emoji = 'x'
+                        """,
+                    ),
                 ),
             )
             assertEquals("a new id is inserted", 1L, sql.count("account WHERE id = 'a-new'"))
@@ -846,3 +890,6 @@ class RoomV10MigrationTest {
             }
         }
 }
+
+/** A statement written over several lines is joined with single spaces. */
+private fun oneLine(sql: String): String = sql.trimIndent().replace("\n", " ")

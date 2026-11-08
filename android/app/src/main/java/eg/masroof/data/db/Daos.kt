@@ -354,8 +354,10 @@ abstract class LookupDao {
 
     @Suppress("LongParameterList")
     @Query(
-        "UPDATE category SET nameEn = :nameEn, nameAr = :nameAr, sortOrder = :sortOrder, parentId = :parentId, color = :color, " +
-            "archived = :archived, system = :system WHERE id = :id",
+        """
+        UPDATE category SET nameEn = :nameEn, nameAr = :nameAr, sortOrder = :sortOrder, parentId = :parentId,
+        color = :color, archived = :archived, system = :system WHERE id = :id
+        """,
     )
     protected abstract suspend fun updateCategory(
         id: String,
@@ -370,8 +372,10 @@ abstract class LookupDao {
 
     @Suppress("LongParameterList")
     @Query(
-        "UPDATE account SET label = :label, currency = :currency, kind = :kind, institution = :institution, last4 = :last4, " +
-            "archived = :archived WHERE id = :id",
+        """
+        UPDATE account SET label = :label, currency = :currency, kind = :kind, institution = :institution,
+        last4 = :last4, archived = :archived WHERE id = :id
+        """,
     )
     protected abstract suspend fun updateAccount(
         id: String,
