@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="goals_settings_section">Your money</string>
+    <string name="goals_settings_row">Goals</string>
+
+    <string name="goals_title">Goals</string>
+    <string name="goals_new">New goal</string>
+    <string name="goals_empty_title">Save towards something</string>
+    <string name="goals_empty_body">Add a goal such as a new car, Sahel or school fees. Record the money you set aside and see what you need each month.</string>
+    <string name="goals_error">Couldn\'t load your goals</string>
+    <string name="goals_total_title">All goals</string>
+    <string name="goals_of">%1$s of %2$s</string>
+    <string name="goals_ring_desc">%1$s, %2$s of the target saved</string>
+    <string name="goals_total_desc">Total saved %1$s</string>
+    <plurals name="goals_other_currency">
+        <item quantity="one">%1$s goal in another currency is not included</item>
+        <item quantity="other">%1$s goals in another currency are not included</item>
+    </plurals>
+
+    <plurals name="goals_days_to_go">
+        <item quantity="one">%1$s day to go</item>
+        <item quantity="other">%1$s days to go</item>
+    </plurals>
+    <string name="goals_needs_month">Needs %1$s a month to make it</string>
+    <string name="goals_on_track">On track</string>
+    <string name="goals_behind">Behind by %1$s</string>
+    <string name="goals_past_date">Past the date - %1$s left</string>
+    <string name="goals_reached">Reached</string>
+    <string name="goals_add_money">Add money</string>
+    <string name="goals_take_out">Take out</string>
+    <string name="goals_chart_title">Money you\'ve added</string>
+    <string name="goals_chart_desc">Step chart of the running total saved, now %1$s</string>
+    <string name="goals_history">History</string>
+    <string name="goals_history_empty">No money recorded yet</string>
+    <string name="goals_history_added">Added %1$s</string>
+    <string name="goals_history_taken">Took out %1$s</string>
+    <string name="goals_edit">Edit</string>
+    <string name="goals_archive">Archive</string>
+    <string name="goals_delete">Delete</string>
+    <string name="goals_delete_title">Delete this goal?</string>
+    <string name="goals_delete_body">The goal and its money records are removed. Your entries are not affected.</string>
+    <string name="goals_reached_title">Goal reached!</string>
+    <string name="goals_reached_body">You saved %1$s for %2$s.</string>
+    <string name="goals_not_found">This goal no longer exists</string>
+    <string name="goals_nothing_moves">Nothing moves in a bank. This only records money you set aside.</string>
+
+    <string name="goals_amount">Amount</string>
+    <string name="goals_note">Note (optional)</string>
+    <string name="goals_date">Date, yyyy-mm-dd (optional)</string>
+    <string name="goals_save">Save</string>
+    <string name="goals_done">Done</string>
+    <string name="goals_cancel">Cancel</string>
+    <string name="goals_err_amount">Enter an amount above zero</string>
+    <string name="goals_err_too_large">That amount is too large</string>
+    <string name="goals_err_date">Use the format yyyy-mm-dd</string>
+    <string name="goals_err_only_have">You only have %1$s in this goal</string>
+
+    <string name="goals_form_new_title">New goal</string>
+    <string name="goals_form_edit_title">Edit goal</string>
+    <string name="goals_name">Name</string>
+    <string name="goals_name_error">Enter a name</string>
+    <string name="goals_target">Target amount</string>
+    <string name="goals_target_date">Target date, yyyy-mm-dd (optional)</string>
+    <string name="goals_pick_emoji">Pick an emoji</string>
+    <string name="goals_emoji_desc">Emoji %1$s</string>
+</resources>
