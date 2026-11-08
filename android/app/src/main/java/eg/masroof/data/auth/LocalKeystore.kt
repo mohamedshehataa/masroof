@@ -1,6 +1,7 @@
 package eg.masroof.data.auth
 
 import android.content.Context
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import androidx.core.content.edit
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeyTemplates
@@ -11,6 +12,7 @@ import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.security.ProviderException
+import java.security.UnrecoverableKeyException
 
 /**
  * The key for data that belongs to the phone, not to a server session (STORY-186: the sealed memory of "Read past SMS"; the
@@ -23,10 +25,52 @@ object LocalKeystore {
     internal const val KEYSET_PREFS = "masroof_local_keyset"
     internal const val KEYSET_NAME = "masroof_local_keyset_entry"
     internal const val MASTER_KEY_ALIAS = "masroof_local_master"
+    private const val MAX_CAUSES = 5
     private const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
 
     /** An AEAD that recovers by itself from a lost key and is reset only by [RecoveringAead.reset] (Erase all data). */
-    fun aead(context: Context): RecoveringAead = RecoveringAead(build = { build(context) }, destroy = { destroy(context) })
+    fun aead(context: Context): RecoveringAead =
+        RecoveringAead(build = { buildRecovering(context) }, destroy = { destroy(context) }, recoverIfLost = { recoverIfLost(context) })
+
+    /** The "Erase all data" step: destroys the keyset entry and the master key unconditionally; a new pair is made at the next use. */
+    fun reset(context: Context) = destroy(context)
+
+    /** True only when the key is provably gone: a keyset entry exists but the Keystore has no master key for it. */
+    internal fun needsRecovery(
+        hasKeyset: Boolean,
+        masterPresent: Boolean,
+    ): Boolean = hasKeyset && !masterPresent
+
+    /** True for the failures that mean the master key can never work again (invalidated or unrecoverable), not for transient ones. */
+    internal fun isKeyLost(e: Throwable): Boolean =
+        generateSequence(
+            e,
+        ) { it.cause }.take(MAX_CAUSES).any { it is KeyPermanentlyInvalidatedException || it is UnrecoverableKeyException }
+
+    private fun recoverIfLost(context: Context) {
+        val hasKeyset = context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).contains(KEYSET_NAME)
+        // when the Keystore cannot be asked, the key is not known to be gone: nothing is destroyed
+        val present =
+            try {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(MASTER_KEY_ALIAS)
+            } catch (_: GeneralSecurityException) {
+                true
+            } catch (_: IOException) {
+                true
+            } catch (_: ProviderException) {
+                true
+            }
+        if (needsRecovery(hasKeyset, present)) destroy(context)
+    }
+
+    private fun buildRecovering(context: Context): Aead =
+        try {
+            build(context)
+        } catch (e: GeneralSecurityException) {
+            if (!isKeyLost(e)) throw e
+            destroy(context)
+            build(context)
+        }
 
     private fun build(context: Context): Aead {
         AeadConfig.register()
@@ -57,18 +101,24 @@ object LocalKeystore {
 }
 
 /**
- * An [Aead] that builds its key lazily and, when sealing fails (the key is gone: Keystore reset by the OS), destroys the key, makes a
- * new one and seals again. Opening with a key that no longer exists fails (the caller treats the value as absent). [reset] is the
- * "Erase all data" step: the key is destroyed and a new one is made at the next use.
+ * An [Aead] that builds its key lazily. A failing seal or open never destroys the key: the cached primitive is dropped, rebuilt once
+ * and tried once more, and if that fails too the failure is thrown (callers treat it as "not remembered"). The key is destroyed
+ * and recreated only when it is provably gone ([recoverIfLost], run before every build) and, unconditionally, by [reset] (the
+ * "Erase all data" step): a transient Keystore error must never change a key that already seals something else.
  */
 class RecoveringAead(
     private val build: () -> Aead,
     private val destroy: () -> Unit,
+    private val recoverIfLost: () -> Unit = {},
 ) : Aead {
     private var current: Aead? = null
 
     @Synchronized
-    private fun aead(): Aead = current ?: build().also { current = it }
+    private fun aead(): Aead =
+        current ?: run {
+            recoverIfLost()
+            build().also { current = it }
+        }
 
     @Synchronized
     fun reset() {
@@ -77,22 +127,23 @@ class RecoveringAead(
     }
 
     @Synchronized
-    @Suppress("TooGenericExceptionCaught") // a Keystore provider can fail with any RuntimeException: all mean "the key is unusable"
     override fun encrypt(
         plaintext: ByteArray,
         associatedData: ByteArray,
-    ): ByteArray =
-        try {
-            aead().encrypt(plaintext, associatedData)
-        } catch (_: Exception) {
-            current = null
-            runCatching { destroy() }
-            aead().encrypt(plaintext, associatedData)
-        }
+    ): ByteArray = retryOnce { it.encrypt(plaintext, associatedData) }
 
     @Synchronized
     override fun decrypt(
         ciphertext: ByteArray,
         associatedData: ByteArray,
-    ): ByteArray = aead().decrypt(ciphertext, associatedData)
+    ): ByteArray = retryOnce { it.decrypt(ciphertext, associatedData) }
+
+    @Suppress("TooGenericExceptionCaught") // a Keystore provider can fail with any RuntimeException: one rebuild, then give up
+    private fun retryOnce(use: (Aead) -> ByteArray): ByteArray =
+        try {
+            use(aead())
+        } catch (_: Exception) {
+            current = null
+            use(aead())
+        }
 }

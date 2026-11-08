@@ -87,25 +87,85 @@ class BackfillRound4Test {
         assertTrue("nothing readable was written", prefs("r4-broken").all.isEmpty())
     }
 
+    /** An AEAD that fails its next [failures] calls, then works (a transient Keystore error). */
+    private class Flaky(
+        private val inner: Aead,
+        var failures: Int,
+    ) : Aead {
+        override fun encrypt(
+            plaintext: ByteArray,
+            associatedData: ByteArray,
+        ): ByteArray = if (failures-- > 0) throw GeneralSecurityException("transient") else inner.encrypt(plaintext, associatedData)
+
+        override fun decrypt(
+            ciphertext: ByteArray,
+            associatedData: ByteArray,
+        ): ByteArray = if (failures-- > 0) throw GeneralSecurityException("transient") else inner.decrypt(ciphertext, associatedData)
+    }
+
     @Test
-    fun `REQ-SMS-102 a key the OS lost is recreated at the next seal and what was sealed before reads as absent`() {
-        var builds = 0
+    fun `REQ-SMS-102 a transient seal failure never destroys the key and what was sealed before still opens`() {
         var destroyed = 0
+        val flaky = Flaky(inMemoryAead(), failures = 0)
+        val aead = RecoveringAead(build = { flaky }, destroy = { destroyed++ })
+        val store = BackfillStore(prefs("r4-transient"), aead)
+        store.mark("before", BACKFILL_NOW)
+        flaky.failures = 1
+        store.mark("during", BACKFILL_NOW)
+        assertEquals("the key was not destroyed", 0, destroyed)
+        assertTrue(store.handled("before", BACKFILL_NOW))
+        assertTrue(store.handled("during", BACKFILL_NOW))
+    }
+
+    @Test
+    fun `REQ-SMS-102 a permanent seal failure throws and still never destroys the key`() {
+        var destroyed = 0
+        val aead = RecoveringAead(build = { BrokenAead }, destroy = { destroyed++ })
+        try {
+            aead.encrypt(byteArrayOf(1), byteArrayOf())
+            fail("a permanent failure must be thrown")
+        } catch (_: GeneralSecurityException) {
+            // expected: the store treats it as "not remembered"
+        }
+        assertEquals(0, destroyed)
+    }
+
+    @Test
+    fun `REQ-SMS-102 a keyset whose master key is gone from the Keystore is recreated and old values read as absent`() {
+        assertTrue(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = false))
+        assertFalse("a first start has nothing to recover", LocalKeystore.needsRecovery(hasKeyset = false, masterPresent = false))
+        assertFalse(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = true))
+        var destroyed = 0
+        var lost = true
+        val oldKey = inMemoryAead()
+        val newKey = inMemoryAead()
+        val oldStore = BackfillStore(prefs("r4-lost"), oldKey)
+        oldStore.mark("old", BACKFILL_NOW)
         val aead =
             RecoveringAead(
-                build = {
-                    builds++
-                    if (builds == 1) BrokenAead else inMemoryAead()
-                },
+                build = { newKey },
                 destroy = { destroyed++ },
+                recoverIfLost = {
+                    if (lost) {
+                        lost = false
+                        destroyed++
+                    }
+                },
             )
-        val store = BackfillStore(prefs("r4-recover"), aead)
-        store.mark("id", BACKFILL_NOW)
-        assertEquals("the lost key was destroyed once and a new one made", 1, destroyed)
-        assertTrue("the memory works again with the new key", store.handled("id", BACKFILL_NOW))
-        // a value sealed by the old key cannot be read: absent, not an error
-        prefs("r4-recover").edit().putString("seen:old", "bm90LXNlYWxlZA==").commit()
-        assertFalse(store.handled("old", BACKFILL_NOW))
+        val store = BackfillStore(prefs("r4-lost"), aead)
+        assertFalse("sealed under the lost key: absent, not an error", store.handled("old", BACKFILL_NOW))
+        store.mark("new", BACKFILL_NOW)
+        assertTrue(store.handled("new", BACKFILL_NOW))
+        assertEquals("recreated once", 1, destroyed)
+    }
+
+    @Test
+    fun `REQ-SMS-102 only an invalidated or unrecoverable master key counts as a lost key`() {
+        assertTrue(LocalKeystore.isKeyLost(java.security.UnrecoverableKeyException("x")))
+        assertTrue(LocalKeystore.isKeyLost(GeneralSecurityException("wrapped", java.security.UnrecoverableKeyException("x"))))
+        assertTrue(LocalKeystore.isKeyLost(RuntimeException(android.security.keystore.KeyPermanentlyInvalidatedException())))
+        assertFalse(LocalKeystore.isKeyLost(GeneralSecurityException("transient")))
+        assertFalse(LocalKeystore.isKeyLost(java.io.IOException("busy")))
     }
 
     @Test
