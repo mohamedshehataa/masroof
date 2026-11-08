@@ -60,6 +60,8 @@ data class EditFormState(
 data class RuleOffer(
     val merchant: String,
     val categoryId: String,
+    /** The saved entry: the rule is only offered for an EXPENSE whose merchant is not its institution's name. */
+    val expenseId: String,
 )
 
 data class EditUiState(
@@ -185,7 +187,7 @@ class EditExpenseViewModel
                 return
             }
             val changedTo = changes.categoryId
-            val offer = if (changedTo != null && f.merchant.trim().isNotEmpty()) RuleOffer(f.merchant.trim(), changedTo) else null
+            val offer = if (changedTo != null && f.merchant.trim().isNotEmpty()) RuleOffer(f.merchant.trim(), changedTo, id) else null
             submit(offer) { editor.update(id, changes) }
         }
 

@@ -78,7 +78,7 @@ internal class CaptureQueueConverter(
             }
         } else {
             val expenseId = ids.next()
-            val entry = CaptureRows.expense(expenseId, record, now).filedByRule(db)
+            val entry = CaptureRows.expense(expenseId, record, now).filedByRule(db, record.merchant)
             // a row nobody can trust (corrupt kind, amount or time) is kept for the user to check, never dropped;
             // totals only sum CONFIRMED rows, so an absurd amount cannot overflow them
             db.expenses().insert(if (suspicious(row, kind, now)) entry.copy(status = "PENDING_REVIEW") else entry)

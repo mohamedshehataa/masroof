@@ -211,7 +211,7 @@ class RulePromptViewModel
             begun = true
             offer = offered
             viewModelScope.launch {
-                if (rules.hasRule(offered.merchant, offered.categoryId)) {
+                if (!rules.isOfferable(offered.expenseId) || rules.hasRule(offered.merchant, offered.categoryId)) {
                     mutableFinished.value = true
                 } else {
                     mutableStage.value = RulePromptStage.AskRule
@@ -219,12 +219,16 @@ class RulePromptViewModel
             }
         }
 
+        /** A write is running: a second tap is ignored, so the first one's Undo is never lost. */
+        private var busy = false
+
         fun yes() {
             val o = offer ?: return
+            if (busy) return
             when (val s = mutableStage.value) {
-                RulePromptStage.AskRule -> viewModelScope.launch { saveRule(o) }
+                RulePromptStage.AskRule -> write { saveRule(o) }
                 is RulePromptStage.AskPast ->
-                    viewModelScope.launch {
+                    write {
                         val c = rules.applyToPast(s.merchantKey, o.categoryId)
                         change = c
                         if (c.count > 0) {
@@ -234,6 +238,17 @@ class RulePromptViewModel
                         }
                     }
                 else -> Unit
+            }
+        }
+
+        private fun write(block: suspend () -> Unit) {
+            busy = true
+            viewModelScope.launch {
+                try {
+                    block()
+                } finally {
+                    busy = false
+                }
             }
         }
 

@@ -95,6 +95,7 @@ class CategoriesAndRulesTest {
         merchant: String?,
         categoryId: String? = null,
         deleted: Boolean = false,
+        type: String = "EXPENSE",
         amount: Long = 12_500,
     ) = db.expenses().insert(
         ExpenseEntity(
@@ -111,6 +112,7 @@ class CategoriesAndRulesTest {
             createdAtMillis = 1,
             updatedAtMillis = 1,
             deletedAtMillis = if (deleted) 5L else null,
+            type = type,
         ),
     )
 
@@ -302,12 +304,14 @@ class CategoriesAndRulesTest {
     fun `REQ-EXP-061 the merchant key is normalised and digit free, and empty keys get no rule`() =
         runTest {
             assertEquals("talabat eg", MerchantKey.of("TALABAT EG"))
-            assertEquals("talabat", MerchantKey.of("  Talabat 123 "))
+            assertEquals("talabat 123", MerchantKey.of("  Talabat   123 "))
+            assertEquals("3m", MerchantKey.of("3M"))
+            assertEquals("7-eleven", MerchantKey.of("7-Eleven"))
             assertEquals(MerchantKey.of("طلبات"), MerchantKey.of("طَلبات"))
-            assertEquals("", MerchantKey.of("12345"))
+
             assertEquals("", MerchantKey.of("   "))
             assertEquals("", MerchantKey.of(null))
-            assertEquals(RuleResult.EmptyKey, rules().addRule("0000", "cat-dining"))
+            assertEquals(RuleResult.EmptyKey, rules().addRule("   ", "cat-dining"))
             assertEquals(RuleResult.NoCategory, rules().addRule("Talabat", "no-such"))
             assertTrue(
                 db
@@ -362,7 +366,7 @@ class CategoriesAndRulesTest {
             rules().addRule("Talabat", "cat-dining")
             val repo = DefaultExpenseRepository(db, clock, Counter(), signal)
             val today = LocalDate.of(2026, 10, 15)
-            val filed = repo.add(NewExpense(Money(9_900), today, null, null, null, merchant = "TALABAT 42"))
+            val filed = repo.add(NewExpense(Money(9_900), today, null, null, null, merchant = "TALABAT"))
             val chosen = repo.add(NewExpense(Money(9_900), today, "cat-groceries", null, null, merchant = "Talabat"))
             val noMerchant = repo.add(NewExpense(Money(9_900), today, null, null, null))
             assertEquals("cat-dining", db.expenses().find(filed)!!.categoryId)
@@ -376,7 +380,7 @@ class CategoriesAndRulesTest {
         runTest {
             insertEntry("a", "Talabat", "cat-groceries")
             insertEntry("b", "TALABAT", null)
-            insertEntry("c", "talabat 22", "cat-health", amount = 777)
+            insertEntry("c", " tAlAbAt ", "cat-health", amount = 777)
             insertEntry("gone", "Talabat", "cat-groceries", deleted = true)
             insertEntry("other", "Noon", "cat-groceries")
             insertEntry("done", "Talabat", "cat-dining")
@@ -400,7 +404,7 @@ class CategoriesAndRulesTest {
     fun `REQ-EXP-061 one rule per merchant, a new category replaces the old rule, and delete removes it`() =
         runTest {
             val first = rules().addRule("Talabat", "cat-dining") as RuleResult.Saved
-            val second = rules().addRule("TALABAT 7", "cat-groceries") as RuleResult.Saved
+            val second = rules().addRule("TALABAT", "cat-groceries") as RuleResult.Saved
             val all = db.merchantRules().observeAll().first()
             assertEquals(1, all.size)
             assertEquals("cat-groceries", all.single().categoryId)
@@ -435,7 +439,7 @@ class CategoriesAndRulesTest {
             vm.onCategory("cat-dining")
             vm.save()
             val form = vm.state.first { it.form.done }.form
-            assertEquals(RuleOffer("TALABAT EG", "cat-dining"), form.ruleOffer)
+            assertEquals(RuleOffer("TALABAT EG", "cat-dining", "t1"), form.ruleOffer)
 
             val noChange = editVm("t1")
             noChange.onMerchant("TALABAT EG 2")
@@ -462,7 +466,7 @@ class CategoriesAndRulesTest {
             insertEntry("t1", "Talabat", "cat-dining")
             repeat(2) { insertEntry("p$it", "Talabat", "cat-groceries") }
             val vm = RulePromptViewModel(rules(), categories())
-            vm.begin(RuleOffer("Talabat", "cat-dining"))
+            vm.begin(RuleOffer("Talabat", "cat-dining", "t1"))
             assertEquals(RulePromptStage.AskRule, vm.stage.first { it != RulePromptStage.Idle })
             vm.yes()
             assertEquals(RulePromptStage.AskPast("talabat", 2), vm.stage.first { it is RulePromptStage.AskPast })
@@ -494,8 +498,9 @@ class CategoriesAndRulesTest {
     @Test
     fun `REQ-EXP-061 declining stores nothing, and an existing rule is not asked again`() =
         runTest {
+            insertEntry("t1", "Talabat", "cat-dining")
             val declined = RulePromptViewModel(rules(), categories())
-            declined.begin(RuleOffer("Talabat", "cat-dining"))
+            declined.begin(RuleOffer("Talabat", "cat-dining", "t1"))
             declined.no()
             assertTrue(declined.finished.value)
             assertTrue(
@@ -508,13 +513,13 @@ class CategoriesAndRulesTest {
 
             rules().addRule("Talabat", "cat-dining")
             val again = RulePromptViewModel(rules(), categories())
-            again.begin(RuleOffer("TALABAT", "cat-dining"))
+            again.begin(RuleOffer("TALABAT", "cat-dining", "t1"))
             again.finished.first { it }
             assertEquals(RulePromptStage.Idle, again.stage.value)
 
             insertEntry("only", "Solo", "cat-dining")
             val noPast = RulePromptViewModel(rules(), categories())
-            noPast.begin(RuleOffer("Solo", "cat-dining"))
+            noPast.begin(RuleOffer("Solo", "cat-dining", "only"))
             noPast.stage.first { it == RulePromptStage.AskRule }
             noPast.yes()
             // no past entries: no second question

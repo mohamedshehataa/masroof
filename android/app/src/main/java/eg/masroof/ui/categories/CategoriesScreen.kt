@@ -40,12 +40,14 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.data.categories.CategoryResult
+import eg.masroof.data.categories.MAX_NAME
 import eg.masroof.data.categories.searchEmoji
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.ui.components.CategoryAvatar
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.CategoriesUiState
 import eg.masroof.ui.viewmodel.CategoriesViewModel
+import eg.masroof.ui.viewmodel.takeCodePoints
 
 private const val EMOJI_COLUMNS = 8
 
@@ -278,7 +280,7 @@ fun CategoryEditorContent(
         OutlinedTextField(
             value = nameEn,
             onValueChange = {
-                nameEn = it
+                nameEn = it.takeCodePoints(MAX_NAME)
                 error = null
             },
             label = { Text(stringResource(R.string.cat_name_en)) },
@@ -290,7 +292,7 @@ fun CategoryEditorContent(
         OutlinedTextField(
             value = nameAr,
             onValueChange = {
-                nameAr = it
+                nameAr = it.takeCodePoints(MAX_NAME)
                 error = null
             },
             label = { Text(stringResource(R.string.cat_name_ar)) },

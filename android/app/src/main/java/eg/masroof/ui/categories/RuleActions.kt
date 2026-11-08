@@ -31,10 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
+import eg.masroof.data.categories.MAX_MERCHANT
 import eg.masroof.ui.components.CategoryAvatar
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.MerchantRulesUiState
 import eg.masroof.ui.viewmodel.MerchantRulesViewModel
+import eg.masroof.ui.viewmodel.takeCodePoints
 
 class RuleActions(
     val onAdd: (merchant: String, categoryId: String?, onSaved: () -> Unit) -> Unit = { _, _, _ -> },
@@ -69,7 +71,7 @@ fun MerchantRulesContent(
         OutlinedTextField(
             value = merchant,
             onValueChange = {
-                merchant = it
+                merchant = it.takeCodePoints(MAX_MERCHANT)
                 actions.onClearError()
             },
             label = { Text(stringResource(R.string.rules_merchant)) },

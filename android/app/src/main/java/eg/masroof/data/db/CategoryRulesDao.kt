@@ -11,6 +11,7 @@ data class MerchantCategoryRow(
     val id: String,
     val merchant: String?,
     val categoryId: String?,
+    val updatedAtMillis: Long,
 )
 
 /**
@@ -80,8 +81,27 @@ abstract class CategoryRulesDao {
         insertRule(row)
     }
 
-    @Query("SELECT id, merchant, categoryId FROM expense WHERE deletedAtMillis IS NULL AND merchant IS NOT NULL")
+    /** Live EXPENSE entries only: income, transfers and refunds are never filed by a rule. */
+    @Query(
+        """SELECT id, merchant, categoryId, updatedAtMillis FROM expense
+            WHERE deletedAtMillis IS NULL AND merchant IS NOT NULL AND type = 'EXPENSE'""",
+    )
     abstract suspend fun liveMerchantRows(): List<MerchantCategoryRow>
+
+    /** Puts one entry back, only while it still has the category the bulk change gave it. Returns the rows changed. */
+    @Query(
+        """UPDATE expense SET categoryId = :previous, updatedAtMillis = :previousUpdatedAt
+            WHERE id = :id AND categoryId = :applied AND deletedAtMillis IS NULL""",
+    )
+    abstract suspend fun restoreCategory(
+        id: String,
+        applied: String,
+        previous: String?,
+        previousUpdatedAt: Long,
+    ): Int
+
+    @Query("SELECT senderId FROM expense_source WHERE expenseId = :expenseId AND senderId IS NOT NULL")
+    abstract suspend fun senderIdsOf(expenseId: String): List<String>
 
     @Query("UPDATE expense SET categoryId = :categoryId, updatedAtMillis = :now WHERE id = :id AND deletedAtMillis IS NULL")
     abstract suspend fun setEntryCategory(

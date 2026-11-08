@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import eg.masroof.core.CairoTime
 import eg.masroof.core.Money
 import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.categories.CUSTOM_ID_PREFIX
+import eg.masroof.data.categories.CategoryNameKey
 import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
@@ -118,9 +120,7 @@ class DefaultExpenseRepository
                 emitAll(db.expenses().observeTotal(from, to).map { Money(it, Money.EGP) })
             }
 
-        // The budget picker: the same active categories the Add sheet offers (the phone's defaults are `system = 1`, so the old
-        // `system = 0` query left the picker empty on a phone that never talked to a server).
-        override fun observeCategories() = observePickerCategories()
+        override fun observeCategories() = db.lookups().observeCategories()
 
         override fun observeLabelCategories() = db.lookups().observeLabelCategories()
 
@@ -183,12 +183,17 @@ class DefaultExpenseRepository
         }
 
         /**
-         * Two chips with the same name would confuse the user. The phone's own default wins over a server category of the
-         * same English name (case-insensitive); among equals the first by sort order stays.
+         * Only a server copy of a category the phone already has (same normalised name) is dropped. A custom category is never
+         * dropped, so "Fuel" under Dining out stays even though "Fuel" exists under Car.
          */
-        private fun oneChipPerName(all: List<CategoryEntity>): List<CategoryEntity> =
-            all
-                .sortedByDescending { it.system }
-                .distinctBy { it.nameEn.trim().lowercase() }
-                .sortedWith(compareBy({ it.sortOrder }, { it.nameEn }))
+        private fun oneChipPerName(all: List<CategoryEntity>): List<CategoryEntity> {
+            val systemNames = all.filter { it.system }.mapTo(HashSet()) { CategoryNameKey.of(it.nameEn) }
+            // the phone's own and the user's custom categories are always kept; only server copies can be duplicates
+            val own = all.filter { it.system || it.id.startsWith(CUSTOM_ID_PREFIX) }
+            val servers =
+                all
+                    .filter { !it.system && !it.id.startsWith(CUSTOM_ID_PREFIX) && CategoryNameKey.of(it.nameEn) !in systemNames }
+                    .distinctBy { CategoryNameKey.of(it.nameEn) }
+            return (own + servers).sortedWith(compareBy({ it.sortOrder }, { it.nameEn }))
+        }
     }

@@ -65,6 +65,11 @@ interface CategoryRepository {
     suspend fun delete(id: String): CategoryResult
 }
 
+/** Ids of categories the user made start with this; they are never dropped from a picker. */
+const val CUSTOM_ID_PREFIX = "custom-"
+
+/** Longest category name, in code points. */
+const val MAX_NAME = 40
 private const val ORDER_STEP = 10
 private const val PINNED_LAST = 900
 
@@ -95,7 +100,7 @@ class DefaultCategoryRepository
                             parentId != null && dao.findCategory(parentId) == null -> CategoryResult.NotFound
                             isDuplicate(names, parentId, null) -> CategoryResult.Duplicate
                             else -> {
-                                val id = "custom-${ids.next()}"
+                                val id = "$CUSTOM_ID_PREFIX${ids.next()}"
                                 dao.insertCategory(
                                     CategoryEntity(
                                         id = id,
@@ -207,8 +212,8 @@ class DefaultCategoryRepository
             en: String,
             ar: String,
         ): Pair<String, String>? {
-            val e = en.trim()
-            val a = ar.trim()
+            val e = en.trim().capCodePoints(MAX_NAME)
+            val a = ar.trim().capCodePoints(MAX_NAME)
             if (e.isEmpty() && a.isEmpty()) return null
             return (e.ifEmpty { a }) to (a.ifEmpty { e })
         }

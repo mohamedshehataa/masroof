@@ -7,6 +7,7 @@ import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MerchantRuleEntity
+import eg.masroof.ingest.parse.MessageParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.withLock
 import java.time.Clock
@@ -17,13 +18,20 @@ import javax.inject.Singleton
  * The category a rule files this record under, or null. Run on the structured record's merchant field only (never on message
  * text) and only when no category is set: a category the user chose always wins. Never changes amount, date, type or account.
  */
-internal suspend fun ExpenseEntity.filedByRule(db: AppDatabase): ExpenseEntity {
-    if (categoryId != null) return this
-    val key = MerchantKey.of(merchant)
+internal suspend fun ExpenseEntity.filedByRule(
+    db: AppDatabase,
+    realMerchant: String? = merchant,
+): ExpenseEntity {
+    // EXPENSE entries only; [realMerchant] is the parsed merchant, never the institution name a capture falls back to.
+    if (categoryId != null || type != "EXPENSE") return this
+    val key = MerchantKey.of(realMerchant)
     if (key.isEmpty()) return this
     val rule = db.categoryRules().ruleFor(key) ?: return this
     return copy(categoryId = rule.categoryId)
 }
+
+/** Longest merchant text a rule takes, in code points. */
+const val MAX_MERCHANT = 80
 
 /** The outcome of "Always file X under Y". */
 sealed interface RuleResult {
@@ -43,10 +51,16 @@ sealed interface RuleResult {
 /** The entries a bulk change touched and what each had before, so Undo puts it back. */
 class PastChange(
     val categoryId: String,
-    val previous: Map<String, String?>,
+    val previous: Map<String, PriorState>,
 ) {
     val count: Int get() = previous.size
 }
+
+/** What an entry had before a bulk change. */
+class PriorState(
+    val categoryId: String?,
+    val updatedAtMillis: Long,
+)
 
 /** Merchant rules on Room only (REQ-EXP-061). */
 interface MerchantRuleRepository {
@@ -57,6 +71,9 @@ interface MerchantRuleRepository {
         merchant: String,
         categoryId: String,
     ): RuleResult
+
+    /** False for a non-EXPENSE entry and for one whose merchant is only its institution's name (the capture fallback). */
+    suspend fun isOfferable(expenseId: String): Boolean
 
     /** True when a rule already files this merchant under this category (no prompt needed). */
     suspend fun hasRule(
@@ -94,7 +111,7 @@ class DefaultMerchantRuleRepository
             merchant: String,
             categoryId: String,
         ): RuleResult {
-            val key = MerchantKey.of(merchant)
+            val key = MerchantKey.of(merchant.capCodePoints(MAX_MERCHANT))
             if (key.isEmpty()) return RuleResult.EmptyKey
             val result =
                 eraseLock.mutex.withLock {
@@ -110,6 +127,16 @@ class DefaultMerchantRuleRepository
                 }
             if (result is RuleResult.Saved) signal.changed()
             return result
+        }
+
+        override suspend fun isOfferable(expenseId: String): Boolean {
+            val e = db.expenses().find(expenseId) ?: return false
+            if (e.type != "EXPENSE") return false
+            val key = MerchantKey.of(e.merchant)
+            if (key.isEmpty()) return false
+            return dao.senderIdsOf(expenseId).none { sender ->
+                key == MerchantKey.of(MessageParser.institutionOf(sender)) || key == MerchantKey.of(sender)
+            }
         }
 
         override suspend fun hasRule(
@@ -130,7 +157,7 @@ class DefaultMerchantRuleRepository
                         val rows = pastRows(merchantKey, categoryId)
                         val now = clock.millis()
                         rows.forEach { dao.setEntryCategory(it.id, categoryId, now) }
-                        PastChange(categoryId, rows.associate { it.id to it.categoryId })
+                        PastChange(categoryId, rows.associate { it.id to PriorState(it.categoryId, it.updatedAtMillis) })
                     }
                 }
             if (change.count > 0) signal.changed()
@@ -140,8 +167,8 @@ class DefaultMerchantRuleRepository
         override suspend fun undo(change: PastChange) {
             eraseLock.mutex.withLock {
                 db.withTransaction {
-                    val now = clock.millis()
-                    change.previous.forEach { (id, old) -> dao.setEntryCategory(id, old, now) }
+                    // only entries that still have the applied category: a later edit of one is never undone
+                    change.previous.forEach { (id, old) -> dao.restoreCategory(id, change.categoryId, old.categoryId, old.updatedAtMillis) }
                 }
             }
             if (change.count > 0) signal.changed()

@@ -147,7 +147,7 @@ class ReviewViewModel
                     db.expenses().enrichFromTwin(expenseId, record.instrumentLast4, CaptureRows.label(record))
                 }
             } else {
-                db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true).filedByRule(db))
+                db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true).filedByRule(db, record.merchant))
                 db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, id, item.receivedAtMillis))
             }
             // Later twins of the other channel find this entry through this row; it shows no Undo chip (CaptureRows.REVIEW_SAVED)

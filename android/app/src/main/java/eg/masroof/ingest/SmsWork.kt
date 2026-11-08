@@ -193,7 +193,7 @@ class SmsPipeline
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
             val expenseId = ids.next()
-            db.expenses().insert(CaptureRows.expense(expenseId, r, now).filedByRule(db))
+            db.expenses().insert(CaptureRows.expense(expenseId, r, now).filedByRule(db, r.merchant))
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             // the safety net: a record the phone made by itself can be undone for a while
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
