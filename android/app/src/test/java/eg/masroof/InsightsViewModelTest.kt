@@ -191,6 +191,33 @@ class InsightsViewModelTest {
         }
 
     @Test
+    fun `REQ-AND-074 retry after a failed load clears the error and shows the figures`() =
+        runTest {
+            var calls = 0
+            val rows =
+                kotlinx.coroutines.flow.flow {
+                    calls++
+                    if (calls == 1) error("first load fails")
+                    emit(listOf(walletRow("a", 7_000L, "2026-11-05T10:00:00Z")))
+                }
+            val vm = walletVm(FakeWalletSource(rows), FakeRepository(), fixedClock("2026-11-10T10:00:00Z"))
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            assertEquals(LoadStatus.ERROR, vm.state.value.status)
+            assertNull(vm.state.value.figures)
+
+            vm.retry()
+            runCurrent()
+            assertEquals(LoadStatus.READY, vm.state.value.status)
+            assertEquals(
+                7_000L,
+                vm.state.value.figures
+                    ?.spentMinor,
+            )
+            assertEquals(2, calls)
+        }
+
+    @Test
     fun `REQ-AN-147 a computation failure after data was shown moves the screen to the error state`() =
         runTest {
             val failures = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
