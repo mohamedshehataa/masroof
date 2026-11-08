@@ -46,7 +46,7 @@ class WealthMathTest {
         at: Long = checkAt + 1,
         status: String = "CONFIRMED",
         currency: String = "EGP",
-    ) = AccountFlowRow("acc", type, status, minor, currency, at)
+    ) = AccountFlowRow("acc", null, type, status, minor, currency, at)
 
     private val story =
         listOf(
@@ -227,7 +227,7 @@ class WealthMathTest {
         assertEquals(LocalDate.of(2026, 12, 5), CardCycle.nextDue(LocalDate.of(2026, 11, 25), 20, 5))
         // before the statement day this month the statement is last month's
         assertEquals(LocalDate.of(2026, 10, 20), CardCycle.lastStatement(LocalDate.of(2026, 11, 8), 20))
-        assertEquals(LocalDate.of(2026, 11, 5), CardCycle.nextDue(LocalDate.of(2026, 11, 8), 20, 5))
+        assertEquals(LocalDate.of(2026, 12, 5), CardCycle.nextDue(LocalDate.of(2026, 11, 8), 20, 5))
         // due day after statement day lands in the same month
         assertEquals(LocalDate.of(2026, 11, 28), CardCycle.nextDue(LocalDate.of(2026, 11, 21), 10, 28))
         // day 31 clamps
@@ -257,14 +257,104 @@ class WealthMathTest {
     }
 
     @Test
-    fun `REQ-EXP-059 half way interest rounds up and a certificate stops at maturity`() {
+    fun `REQ-EXP-059 half way interest rounds up`() {
         // 73,000 * 5000 * 1 / 3,650,000 = 100 exactly; 36,500 * 5000 * 1 / 3,650,000 = 50 ; use 365 * 5000 * 1 / 3,650,000 = 0.5 -> 1
         assertEquals(366L, AssetValuation.simpleValue(365, 5_000, 1))
-        val start = LocalDate.of(2026, 1, 1)
-        val maturity = LocalDate.of(2026, 7, 1)
-        val atMaturity = AssetValuation.certificate(10_000_000, 1_800, start, maturity, maturity)
-        assertEquals(atMaturity, AssetValuation.certificate(10_000_000, 1_800, start, maturity, LocalDate.of(2027, 5, 5)))
-        assertEquals(10_000_000L, AssetValuation.certificate(10_000_000, 1_800, start, maturity, LocalDate.of(2025, 12, 1)))
+    }
+
+    @Test
+    fun `REQ-EXP-059 a certificate is valued at its principal and is matured on and after its maturity date`() {
+        assertEquals(10_000_000L, AssetValuation.certificate(10_000_000))
+        val cert = asset("CERTIFICATE", null).copy(principalMinor = 10_000_000, annualRateBp = 1_800, maturityAtMillis = 1_798_800_000_000)
+        val dateOf = { millis: Long ->
+            java.time.Instant
+                .ofEpochMilli(millis)
+                .atZone(eg.masroof.core.CairoTime.zone)
+                .toLocalDate()
+        }
+        val maturity = dateOf(cert.maturityAtMillis!!)
+        assertEquals(10_000_000L, AssetValuation.valueOf(cert, maturity.plusYears(1), dateOf))
+        assertTrue(AssetValuation.isMatured(cert, maturity, dateOf))
+        assertFalse(AssetValuation.isMatured(cert, maturity.minusDays(1), dateOf))
+    }
+
+    @Test
+    fun `REQ-AN-169 shares always add up to exactly 10000 basis points`() {
+        val three =
+            NetWorthMath.largestRemainderShares(
+                mapOf(
+                    AssetBucket.SPENDABLE to 100L,
+                    AssetBucket.FUND to 100L,
+                    AssetBucket.OTHER to 100L,
+                ),
+            )
+        assertEquals(listOf(3_334, 3_333, 3_333), three.filter { it.amountMinor > 0 }.map { it.shareBps })
+        val odd = NetWorthMath.largestRemainderShares(AssetBucket.entries.associateWith { (it.ordinal + 1) * 7L })
+        assertEquals(10_000, odd.sumOf { it.shareBps })
+        assertEquals(0, NetWorthMath.largestRemainderShares(AssetBucket.entries.associateWith { 0L }).sumOf { it.shareBps })
+    }
+
+    @Test
+    fun `REQ-AN-169 a huge year change does not crash and shows as capped`() {
+        val s = listOf(snap("2026-01-02", 1_000))
+        val change = NetWorthHistory.yearChange(s, 300_000_000, today)
+        assertEquals(true, change?.percentCapped)
+        assertEquals(99_900, change?.percentBps)
+        val extreme = NetWorthHistory.yearChange(listOf(snap("2026-01-02", 1)), Long.MAX_VALUE, today)
+        assertEquals(true, extreme?.percentCapped)
+        assertEquals(false, NetWorthHistory.yearChange(s, 1_500, today)?.percentCapped)
+    }
+
+    @Test
+    fun `REQ-AN-169 sums near the Long limit saturate instead of wrapping`() {
+        val w = NetWorthMath.compute(listOf(view(Long.MAX_VALUE, id = "a"), view(Long.MAX_VALUE, id = "b")), emptyList(), emptyList(), 0)
+        assertEquals(Long.MAX_VALUE, w.assetsMinor)
+        assertEquals(Long.MAX_VALUE, w.netMinor)
+    }
+
+    @Test
+    fun `REQ-AN-168 an SMS entry with only the last four moves the matching account once`() {
+        val card = account("c1", AccountKinds.CREDIT_CARD).copy(last4 = "1234")
+        val other = account("c2").copy(last4 = "1234", currency = "USD")
+        val sms = AccountFlowRow(null, "1234", "EXPENSE", "CONFIRMED", 30_000, "EGP", checkAt + 1)
+        val byAccount = BalanceMath.attribute(listOf(card, other), listOf(sms))
+        assertEquals(listOf(sms), byAccount["c1"])
+        assertNull(byAccount["c2"])
+        assertEquals(480_000L + 30_000, BalanceMath.balance(check(480_000), byAccount.getValue("c1"), creditCard = true))
+    }
+
+    @Test
+    fun `REQ-AN-168 an SMS last four matching two active accounts is counted for none, an archived one is ignored`() {
+        val a = account("a").copy(last4 = "1234")
+        val b = account("b").copy(last4 = "1234")
+        val sms = AccountFlowRow(null, "1234", "EXPENSE", "CONFIRMED", 100, "EGP", checkAt + 1)
+        assertTrue(BalanceMath.attribute(listOf(a, b), listOf(sms)).isEmpty())
+        assertEquals(listOf(sms), BalanceMath.attribute(listOf(a, b.copy(archived = true)), listOf(sms))["a"])
+    }
+
+    @Test
+    fun `REQ-EXP-057 amounts above the app cap and a balance moment in the future are rejected`() {
+        assertEquals(
+            setOf(DebtField.AMOUNT),
+            WealthValidation.debt(DebtForm("x", amount = "10000000001")).errors,
+        )
+        assertNull(WealthValidation.parseBalance("10000000001"))
+        assertEquals(setOf(AssetField.VALUE), WealthValidation.asset(AssetForm("PROPERTY", "Flat", value = "99999999999999")).errors)
+        val now = 1_800_000_000_000L
+        assertEquals(now, WealthValidation.balanceMoment("", "", now).value)
+        assertEquals(setOf(eg.masroof.data.wealth.BalanceField.FUTURE), WealthValidation.balanceMoment("2999-01-01", "10:00", now).errors)
+        assertEquals(setOf(eg.masroof.data.wealth.BalanceField.TIME), WealthValidation.balanceMoment("", "25:99", now).errors)
+        assertNotNull(WealthValidation.balanceMoment("2020-05-05", "14:30", now).value)
+        assertEquals(
+            setOf(AccountField.CURRENCY),
+            WealthValidation.account(AccountForm(label = "x", last4 = "1234", currency = "JPY"), emptyList()).errors,
+        )
+    }
+
+    @Test
+    fun `REQ-EXP-059 maturity equal to the start is rejected`() {
+        val cert = AssetForm("CERTIFICATE", "NBE", principal = "1000", rate = "10", start = "2026-01-01", maturity = "2026-01-01")
+        assertEquals(setOf(AssetField.MATURITY), WealthValidation.asset(cert).errors)
     }
 
     @Test

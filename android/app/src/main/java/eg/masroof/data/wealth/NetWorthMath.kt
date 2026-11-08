@@ -1,12 +1,12 @@
 package eg.masroof.data.wealth
 
 import eg.masroof.core.Money
-import eg.masroof.core.analytics.Projections
 import eg.masroof.data.db.AccountBalanceEntity
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AssetEntity
 import eg.masroof.data.db.DebtEntity
 import eg.masroof.data.db.NetWorthSnapshotEntity
+import java.math.BigInteger
 import java.time.LocalDate
 
 const val KIND_CREDIT_CARD = "CREDIT_CARD"
@@ -62,7 +62,7 @@ data class NetWorth(
     /** True when at least one thing was counted: an empty wealth is not a zero. */
     val hasData: Boolean,
 ) {
-    val netMinor: Long get() = assetsMinor - debtsMinor
+    val netMinor: Long get() = saturatingAdd(assetsMinor, -debtsMinor)
 
     /** `KIND=minor;KIND=minor` for the snapshot row (asset buckets, then DEBTS). */
     fun breakdown(): String = (buckets.map { "${it.bucket.name}=${it.amountMinor}" } + "DEBTS=$debtsMinor").joinToString(";")
@@ -108,20 +108,20 @@ object NetWorthMath {
             counted++
             when {
                 a.isCreditCard && balance > 0 -> lines += DebtLine(a.account.id, DebtSource.CARD, a.account.label, balance)
-                a.isCreditCard -> amounts.merge(AssetBucket.SPENDABLE, -balance, Long::plus)
+                a.isCreditCard -> amounts.merge(AssetBucket.SPENDABLE, -balance, ::saturatingAdd)
                 balance < 0 -> lines += DebtLine(a.account.id, DebtSource.OVERDRAWN, a.account.label, -balance)
-                else -> amounts.merge(AssetBucket.SPENDABLE, balance, Long::plus)
+                else -> amounts.merge(AssetBucket.SPENDABLE, balance, ::saturatingAdd)
             }
         }
         baseAssets.forEach { v ->
             val value = v.valueMinor ?: return@forEach
             counted++
-            amounts.merge(bucketOf(v.asset.kind), value, Long::plus)
+            amounts.merge(bucketOf(v.asset.kind), value, ::saturatingAdd)
         }
         baseDebts.forEach { d ->
             counted++
             if (d.direction == "OWED_TO_ME") {
-                amounts.merge(AssetBucket.OTHER, d.amountMinor, Long::plus)
+                amounts.merge(AssetBucket.OTHER, d.amountMinor, ::saturatingAdd)
             } else {
                 lines += DebtLine(d.id, DebtSource.DEBT, d.name, d.amountMinor)
             }
@@ -130,13 +130,29 @@ object NetWorthMath {
             counted++
             lines += DebtLine(null, DebtSource.INSTALLMENTS, null, installmentsLeftMinor)
         }
-        val assetsTotal = amounts.values.sum()
-        val shares =
-            AssetBucket.entries.map { b ->
-                BucketShare(b, amounts.getValue(b), Projections.shareBps(amounts.getValue(b), assetsTotal))
-            }
-        return NetWorth(assetsTotal, lines.sumOf { it.amountMinor }, shares, lines, uncounted, otherCurrency, counted > 0)
+        val assetsTotal = amounts.values.fold(0L, ::saturatingAdd)
+        val shares = largestRemainderShares(amounts)
+        val debtsTotal = lines.fold(0L) { acc, l -> saturatingAdd(acc, l.amountMinor) }
+        return NetWorth(assetsTotal, debtsTotal, shares, lines, uncounted, otherCurrency, counted > 0)
     }
+
+    /** Basis-point shares of the positive buckets that always add up to exactly 10,000 (largest remainder, ties by order). */
+    internal fun largestRemainderShares(amounts: Map<AssetBucket, Long>): List<BucketShare> {
+        val positive = AssetBucket.entries.associateWith { maxOf((amounts[it] ?: 0L), 0L).toBigInteger() }
+        val total = positive.values.fold(BigInteger.ZERO, BigInteger::add)
+        if (total.signum() == 0) return AssetBucket.entries.map { BucketShare(it, (amounts[it] ?: 0L), 0) }
+        val scaled = positive.mapValues { it.value * BigInteger.valueOf(BPS) }
+        val floors = scaled.mapValues { (it.value / total).toInt() }.toMutableMap()
+        val leftover = BPS.toInt() - floors.values.sum()
+        AssetBucket.entries
+            .filter { positive.getValue(it).signum() > 0 }
+            .sortedByDescending { scaled.getValue(it).mod(total) }
+            .take(leftover)
+            .forEach { floors[it] = floors.getValue(it) + 1 }
+        return AssetBucket.entries.map { BucketShare(it, (amounts[it] ?: 0L), floors.getValue(it)) }
+    }
+
+    private const val BPS = 10_000L
 }
 
 enum class ChartRange(
@@ -152,7 +168,11 @@ data class YearChange(
     val absoluteMinor: Long,
     /** Basis points; null unless the first value was above 0 and the current value is not negative. */
     val percentBps: Int?,
+    /** True when the real percent is beyond the cap: show ">999%" instead of a huge number. */
+    val percentCapped: Boolean = false,
 )
+
+private const val PERCENT_CAP_BPS = 99_900
 
 object NetWorthHistory {
     fun points(
@@ -171,13 +191,14 @@ object NetWorthHistory {
         today: LocalDate,
     ): YearChange? {
         val first = snapshots.filter { it.cairoDate >= "${today.year}-01-01" }.minByOrNull { it.cairoDate } ?: return null
-        val diff = currentMinor - first.netMinor
-        val bps =
-            if (first.netMinor > 0 && currentMinor >= 0) {
-                Math.toIntExact(Projections.divideRounded(Math.multiplyExact(diff, 10_000L), first.netMinor))
-            } else {
-                null
-            }
-        return YearChange(diff, bps)
+        val diff = BigInteger.valueOf(currentMinor) - BigInteger.valueOf(first.netMinor)
+        val absolute = diff.max(BigInteger.valueOf(Long.MIN_VALUE)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
+        if (first.netMinor <= 0 || currentMinor < 0) return YearChange(absolute, null)
+        val first0 = BigInteger.valueOf(first.netMinor)
+        val twice = BigInteger.valueOf(2)
+        val bps = (diff.abs() * BigInteger.valueOf(10_000) * twice + first0) / (first0 * twice) * BigInteger.valueOf(diff.signum().toLong())
+        val capped = bps.abs() > BigInteger.valueOf(PERCENT_CAP_BPS.toLong())
+        val shown = if (capped) PERCENT_CAP_BPS * diff.signum() else bps.toInt()
+        return YearChange(absolute, shown, capped)
     }
 }

@@ -128,4 +128,11 @@
     <string name="accounts_balance_hint">الرصيد بالسالب مسموح للحساب المكشوف.</string>
     <string name="accounts_save">حفظ</string>
     <string name="accounts_cancel">إلغاء</string>
+    <string name="wealth_cert_monthly">بتدفع عائد كل شهر (بيدخل كدخل في حسابك)</string>
+    <string name="wealth_cert_matured">استحقت</string>
+    <string name="wealth_change_capped">&gt;%1$s</string>
+    <string name="wealth_chart_summary">صافي الثروة عبر الوقت (%1$s). الأحدث %2$s، الأقل %3$s، الأعلى %4$s</string>
+    <string name="accounts_balance_time">الوقت، اختياري (HH:mm)</string>
+    <string name="accounts_balance_time_error">اكتب وقت زي 14:30</string>
+    <string name="accounts_balance_future">التاريخ والوقت مينفعش يكونوا في المستقبل</string>
 </resources>

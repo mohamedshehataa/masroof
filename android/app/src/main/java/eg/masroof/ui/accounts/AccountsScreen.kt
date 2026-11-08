@@ -40,6 +40,7 @@ import eg.masroof.data.wealth.AccountForm
 import eg.masroof.data.wealth.AccountKinds
 import eg.masroof.data.wealth.AccountView
 import eg.masroof.data.wealth.BalanceField
+import eg.masroof.data.wealth.SUPPORTED_CURRENCIES
 import eg.masroof.data.wealth.WealthValidation
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.MessageState
@@ -244,7 +245,20 @@ private fun AccountFormDialog(
                     keyboard = KeyboardType.Number,
                 )
                 FormField(form.emoji, { form = form.copy(emoji = it) }, R.string.accounts_field_emoji)
-                FormField(form.currency, { form = form.copy(currency = it) }, R.string.accounts_field_currency, enabled = editing == null)
+                Text(stringResource(R.string.accounts_field_currency), style = MaterialTheme.typography.labelMedium)
+                SUPPORTED_CURRENCIES.chunked(4).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { code ->
+                            FilterChip(
+                                selected = form.currency == code,
+                                onClick = { form = form.copy(currency = code) },
+                                label = { Text(code) },
+                                enabled = editing == null,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            )
+                        }
+                    }
+                }
                 if (form.kind == AccountKinds.CREDIT_CARD) {
                     FormField(
                         form.limit,
@@ -296,6 +310,7 @@ private fun SetBalanceDialog(
 ) {
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf("") }
     var errors by remember { mutableStateOf(emptySet<BalanceField>()) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -315,6 +330,17 @@ private fun SetBalanceDialog(
                     R.string.accounts_balance_date,
                     error = R.string.accounts_balance_date_error.takeIf { BalanceField.DATE in errors },
                 )
+                FormField(
+                    time,
+                    { time = it },
+                    R.string.accounts_balance_time,
+                    error =
+                        when {
+                            BalanceField.TIME in errors -> R.string.accounts_balance_time_error
+                            BalanceField.FUTURE in errors -> R.string.accounts_balance_future
+                            else -> null
+                        },
+                )
                 Text(stringResource(R.string.accounts_balance_hint), style = MaterialTheme.typography.bodySmall)
             }
         },
@@ -322,13 +348,10 @@ private fun SetBalanceDialog(
             TextButton(
                 onClick = {
                     val minor = WealthValidation.parseBalance(amount)
-                    val day = if (date.isBlank()) null else WealthValidation.parseDate(date)
-                    errors =
-                        buildSet {
-                            if (minor == null) add(BalanceField.AMOUNT)
-                            if (date.isNotBlank() && day == null) add(BalanceField.DATE)
-                        }
-                    if (minor != null && errors.isEmpty()) onSave(minor, day?.let { CairoTime.noonOf(it).toEpochMilli() })
+                    val moment = WealthValidation.balanceMoment(date, time, System.currentTimeMillis())
+                    errors = moment.errors + if (minor == null) setOf(BalanceField.AMOUNT) else emptySet()
+                    val at = moment.value
+                    if (minor != null && at != null) onSave(minor, at)
                 },
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.accounts_save)) }

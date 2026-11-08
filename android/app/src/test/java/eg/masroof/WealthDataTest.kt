@@ -66,11 +66,11 @@ class WealthDataTest {
 
     private suspend fun entry(
         id: String,
-        accountId: String,
+        accountId: String?,
         type: String,
         minor: Long,
         at: Long,
-        status: String = "CONFIRMED",
+        instrumentLast4: String? = null,
         deleted: Long? = null,
     ) = db.expenses().insert(
         ExpenseEntity(
@@ -84,7 +84,7 @@ class WealthDataTest {
             notes = null,
             pending = false,
             type = type,
-            status = status,
+            instrumentLast4 = instrumentLast4,
             deletedAtMillis = deleted,
         ),
     )
@@ -110,6 +110,99 @@ class WealthDataTest {
             entry("e7", id, "EXPENSE", 70_000, cairo(2026, 10, 30))
             val view = repo.observeAccountViews().first().first { it.account.id == id }
             assertEquals(1_250_000L, view.balanceMinor)
+        }
+
+    @Test
+    fun `REQ-AN-168 a captured SMS with only the last four moves the card balance, once`() =
+        runTest {
+            val id = repo.addAccount(draft("Visa", AccountKinds.CREDIT_CARD, "1234"))
+            val account =
+                db
+                    .lookups()
+                    .observeAccounts()
+                    .first()
+                    .first { it.id == id }
+            repo.setBalance(account, 480_000, cairo(2026, 11, 1))
+            entry("s1", null, "EXPENSE", 30_000, cairo(2026, 11, 3), instrumentLast4 = "1234")
+            assertEquals(
+                510_000L,
+                repo
+                    .observeAccountViews()
+                    .first()
+                    .first { it.account.id == id }
+                    .balanceMinor,
+            )
+            // a second active account with the same last four makes the entry ambiguous: counted for neither
+            repo.addAccount(draft("Other", AccountKinds.DEBIT, "1234"))
+            assertEquals(
+                480_000L,
+                repo
+                    .observeAccountViews()
+                    .first()
+                    .first { it.account.id == id }
+                    .balanceMinor,
+            )
+        }
+
+    @Test
+    fun `REQ-EXP-057 archived accounts are not offered to pickers but keep their history`() =
+        runTest {
+            val keep = repo.addAccount(draft("Keep", last4 = "1111"))
+            val gone = repo.addAccount(draft("Gone", last4 = "2222"))
+            repo.archiveAccount(gone, true)
+            assertEquals(
+                listOf(keep),
+                db
+                    .accountBalances()
+                    .observeActiveAccounts()
+                    .first()
+                    .map { it.id },
+            )
+            assertEquals(
+                2,
+                db
+                    .lookups()
+                    .observeAccounts()
+                    .first()
+                    .size,
+            )
+        }
+
+    @Test
+    fun `REQ-AN-169 the first counted item writes today's snapshot at once and a future balance time is clamped`() =
+        runTest {
+            val id = repo.addAccount(draft())
+            val account =
+                db
+                    .lookups()
+                    .observeAccounts()
+                    .first()
+                    .first { it.id == id }
+            assertTrue(
+                db
+                    .netWorthSnapshots()
+                    .observeAll()
+                    .first()
+                    .isEmpty(),
+            )
+            repo.setBalance(account, 100_000, nowInstant.toEpochMilli() + 10_000_000)
+            assertEquals(
+                1,
+                db
+                    .netWorthSnapshots()
+                    .observeAll()
+                    .first()
+                    .size,
+            )
+            assertEquals(
+                nowInstant.toEpochMilli(),
+                db
+                    .accountBalances()
+                    .observeAll()
+                    .first()
+                    .single()
+                    .atMillis,
+            )
         }
 
     @Test
@@ -186,7 +279,7 @@ class WealthDataTest {
             assertEquals(1_830_000L + 40_000 + 10_000, card.outstandingMinor)
             assertEquals(5_000_000L - card.outstandingMinor, card.availableMinor)
             assertEquals(40_000L, card.spentSinceStatementMinor)
-            assertEquals(java.time.LocalDate.of(2026, 11, 5), card.nextDue)
+            assertEquals(java.time.LocalDate.of(2026, 12, 5), card.nextDue)
             val worth = repo.observeNetWorth().first()
             assertEquals(card.outstandingMinor, worth.debtsMinor)
             assertEquals(-card.outstandingMinor, worth.netMinor)
@@ -230,7 +323,7 @@ class WealthDataTest {
             repo.addAsset(AssetDraft("FUND", "Fund", null, 5_000_000, 1_000, cairo(2026, 5, 1), null))
             val views = repo.observeAssetViews().first()
             // 2026-01-01 to 2026-11-08 is 311 days
-            assertEquals(10_000_000L + 1_533_699, views.first { it.asset.kind == "CERTIFICATE" }.valueMinor)
+            assertEquals(10_000_000L, views.first { it.asset.kind == "CERTIFICATE" }.valueMinor)
             // 2026-05-01 to 2026-11-08 is 191 days: 5,000,000 * 1000 * 191 / 3,650,000 = 261,643.8 -> 261,644
             assertEquals(5_000_000L + 261_644, views.first { it.asset.kind == "FUND" }.valueMinor)
             db.installmentPlans().insert(

@@ -165,6 +165,9 @@ private fun AssetFields(
                     errors
             },
     )
+    if (form.kind == "CERTIFICATE") {
+        Text(stringResource(R.string.wealth_cert_monthly), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+    }
     if (form.kind in MANUAL_ASSET_KINDS) {
         FormField(
             form.value,

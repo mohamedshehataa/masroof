@@ -12,13 +12,16 @@ data class Checked<T, F>(
     val errors: Set<F>,
 )
 
-enum class AccountField { LABEL, LAST4, DUPLICATE, LIMIT, STATEMENT_DAY, DUE_DAY }
+enum class AccountField { LABEL, LAST4, DUPLICATE, LIMIT, STATEMENT_DAY, DUE_DAY, CURRENCY }
 
 enum class AssetField { NAME, VALUE, PRINCIPAL, RATE, START, MATURITY }
 
 enum class DebtField { NAME, AMOUNT, DUE }
 
-enum class BalanceField { AMOUNT, DATE }
+enum class BalanceField { AMOUNT, DATE, TIME, FUTURE }
+
+/** The currencies the app supports (ISO 4217). */
+val SUPPORTED_CURRENCIES = listOf("EGP", "USD", "EUR", "SAR", "AED", "GBP", "QAR")
 
 object AccountKinds {
     const val DEBIT = "DEBIT"
@@ -117,8 +120,38 @@ object WealthValidation {
         val negative = t.startsWith("-")
         val body = t.removePrefix("-").trim()
         if (isZeroText(body)) return 0L
-        val minor = MoneyFormat.parseMinor(body) ?: return null
+        val minor = amount(body) ?: return null
         return if (negative) -minor else minor
+    }
+
+    /** A positive amount up to the app-wide cap (10 billion), in minor units; null otherwise. */
+    private fun amount(text: String): Long? = (MoneyFormat.parseEntry(text) as? MoneyFormat.EntryAmount.Valid)?.minor
+
+    /**
+     * The moment of a balance check in Cairo: both blank is [nowMillis]; a date alone means 12:00 that day; a time alone is
+     * today. Returns the millis, or the fields that are wrong (a moment after [nowMillis] is FUTURE).
+     */
+    fun balanceMoment(
+        date: String,
+        time: String,
+        nowMillis: Long,
+    ): Checked<Long, BalanceField> {
+        if (date.isBlank() && time.isBlank()) return Checked(nowMillis, emptySet())
+        val day = if (date.isBlank()) CairoTime.dateOf(nowMillis) else parseDate(date)
+        val clock = if (time.isBlank()) java.time.LocalTime.NOON else runCatching { java.time.LocalTime.parse(western(time)) }.getOrNull()
+        val errors =
+            buildSet {
+                if (day == null) add(BalanceField.DATE)
+                if (clock == null) add(BalanceField.TIME)
+            }
+        if (day == null || clock == null) return Checked(null, errors)
+        val millis =
+            day
+                .atTime(clock)
+                .atZone(CairoTime.zone)
+                .toInstant()
+                .toEpochMilli()
+        return if (millis > nowMillis) Checked(null, setOf(BalanceField.FUTURE)) else Checked(millis, emptySet())
     }
 
     /** Percent text to basis points: `18.5` is 1850. Null when it is not a percent. */
@@ -155,7 +188,7 @@ object WealthValidation {
 
     /** The optional credit-card fields: a blank one is fine, a filled one must be valid. */
     private fun cardFields(form: AccountForm): CardFields {
-        val limit = MoneyFormat.parseMinor(form.limit)
+        val limit = amount(form.limit)
         val statement = dayOrNull(form.statementDay)
         val due = dayOrNull(form.dueDay)
         val errors =
@@ -181,6 +214,7 @@ object WealthValidation {
         } else if (isDuplicate(form, last4, existing, editingId)) {
             errors += AccountField.DUPLICATE
         }
+        if (form.currency.trim().uppercase() !in SUPPORTED_CURRENCIES) errors += AccountField.CURRENCY
         val card = if (form.kind == AccountKinds.CREDIT_CARD) cardFields(form) else CardFields()
         errors += card.errors
         val (limit, statement, due) = Triple(card.limit, card.statement, card.due)
@@ -214,10 +248,10 @@ object WealthValidation {
         var start: LocalDate? = null
         var maturity: LocalDate? = null
         if (form.kind in MANUAL_ASSET_KINDS) {
-            value = MoneyFormat.parseMinor(form.value)
+            value = amount(form.value)
             if (value == null) errors += AssetField.VALUE
         } else {
-            principal = MoneyFormat.parseMinor(form.principal)
+            principal = amount(form.principal)
             if (principal == null) errors += AssetField.PRINCIPAL
             rate = parseRateBp(form.rate)
             if (rate == null) errors += AssetField.RATE
@@ -225,7 +259,7 @@ object WealthValidation {
             if (start == null) errors += AssetField.START
             if (form.kind == "CERTIFICATE") {
                 maturity = parseDate(form.maturity)
-                if (maturity == null || (start != null && maturity < start)) errors += AssetField.MATURITY
+                if (maturity == null || (start != null && maturity <= start)) errors += AssetField.MATURITY
             }
         }
         if (errors.isNotEmpty()) return Checked(null, errors)

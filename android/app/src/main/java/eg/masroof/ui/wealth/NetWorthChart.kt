@@ -16,9 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import eg.masroof.R
 import eg.masroof.core.DateFormat
@@ -26,38 +28,53 @@ import eg.masroof.data.db.NetWorthSnapshotEntity
 import eg.masroof.ui.theme.LocalMoneyStyle
 import java.time.LocalDate
 
-private const val TAP_SLOP_FRACTION = 1f
-
-/** The daily net worth line. Tap near a point to read its date and value; one point shows "History starts today". */
+/**
+ * The daily net worth line, [points] oldest first (never empty: the caller passes the current value as the one point when
+ * there is no history). Tap near a point to read its date and value; the x-axis mirrors in RTL.
+ */
 @Composable
-fun NetWorthChart(points: List<NetWorthSnapshotEntity>) {
+fun NetWorthChart(
+    points: List<NetWorthSnapshotEntity>,
+    rangeLabel: String,
+) {
+    if (points.isEmpty()) return
     val style = LocalMoneyStyle.current
     val line = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var selected by remember(points) { mutableStateOf<Int?>(null) }
-    val index = (selected ?: points.lastIndex).coerceIn(0, maxOf(points.lastIndex, 0))
-    val description = stringResource(R.string.wealth_chart_desc)
+    val index = (selected ?: points.lastIndex).coerceIn(0, points.lastIndex)
+    val description =
+        stringResource(
+            R.string.wealth_chart_summary,
+            rangeLabel,
+            moneyText(points.last().netMinor),
+            moneyText(points.minOf { it.netMinor }),
+            moneyText(points.maxOf { it.netMinor }),
+        )
     Column(modifier = Modifier.fillMaxWidth()) {
         Canvas(
             Modifier
                 .fillMaxWidth()
                 .height(160.dp)
                 .semantics { contentDescription = description }
-                .pointerInput(points) {
+                .pointerInput(points, rtl) {
                     detectTapGestures { tap ->
                         if (points.size > 1) {
                             val step = size.width / (points.size - 1).toFloat()
-                            selected = (tap.x / (step * TAP_SLOP_FRACTION)).let { Math.round(it) }.coerceIn(0, points.lastIndex)
+                            val fromStart = if (rtl) size.width - tap.x else tap.x
+                            selected = Math.round(fromStart / step).coerceIn(0, points.lastIndex)
                         }
                     }
                 },
         ) {
-            if (points.isEmpty()) return@Canvas
             val min = points.minOf { it.netMinor }
-            val max = points.maxOf { it.netMinor }
-            val span = (max - min).coerceAtLeast(1L)
+            val span = (points.maxOf { it.netMinor } - min).coerceAtLeast(1L)
 
-            fun x(i: Int) = if (points.size == 1) size.width / 2f else size.width * i / (points.size - 1).toFloat()
+            fun x(i: Int): Float {
+                val f = if (points.size == 1) size.width / 2f else size.width * i / (points.size - 1).toFloat()
+                return if (rtl) size.width - f else f
+            }
 
             fun y(v: Long) = size.height - (size.height * (v - min).toFloat() / span.toFloat()).coerceIn(0f, size.height)
             drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 2f)
@@ -66,7 +83,6 @@ fun NetWorthChart(points: List<NetWorthSnapshotEntity>) {
             }
             drawCircle(line, 10f, Offset(x(index), y(points[index].netMinor)))
         }
-        if (points.isEmpty()) return@Column
         if (points.size == 1) Text(stringResource(R.string.wealth_history_starts), style = MaterialTheme.typography.bodySmall)
         val point = points[index]
         val date = DateFormat.shortDate(LocalDate.parse(point.cairoDate), style.arabic, style.digits)

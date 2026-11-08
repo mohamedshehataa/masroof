@@ -37,7 +37,7 @@ class WealthRepository
                 flows,
                 ->
                 val today = today()
-                val byAccount = flows.groupBy { it.accountId }
+                val byAccount = BalanceMath.attribute(accounts, flows)
                 accounts.map {
                     accountView(
                         it,
@@ -178,11 +178,17 @@ class WealthRepository
                     account.id,
                     balanceMinor,
                     account.currency,
-                    atMillis ?: now,
+                    minOf(atMillis ?: now, now),
                     "MANUAL",
                     now,
                 ),
             )
+            refreshSnapshot()
+        }
+
+        /** The first counted item (and every later change) updates today's point at once, not at the next start. */
+        private suspend fun refreshSnapshot() {
+            runCatching { snapshotToday() }
         }
 
         suspend fun addAsset(draft: AssetDraft) {
@@ -204,19 +210,29 @@ class WealthRepository
                     updatedAtMillis = now,
                 ),
             )
+            refreshSnapshot()
         }
 
         suspend fun updateAssetValue(
             asset: AssetEntity,
             valueMinor: Long,
-        ) = db.assets().update(asset.copy(valueMinor = valueMinor, updatedAtMillis = clock.millis()))
+        ) {
+            db.assets().update(asset.copy(valueMinor = valueMinor, updatedAtMillis = clock.millis()))
+            refreshSnapshot()
+        }
 
         suspend fun setAssetHidden(
             asset: AssetEntity,
             hidden: Boolean,
-        ) = db.assets().update(asset.copy(hiddenFromTotals = hidden, updatedAtMillis = clock.millis()))
+        ) {
+            db.assets().update(asset.copy(hiddenFromTotals = hidden, updatedAtMillis = clock.millis()))
+            refreshSnapshot()
+        }
 
-        suspend fun deleteAsset(asset: AssetEntity) = db.assets().delete(asset)
+        suspend fun deleteAsset(asset: AssetEntity) {
+            db.assets().delete(asset)
+            refreshSnapshot()
+        }
 
         suspend fun addDebt(draft: DebtDraft) {
             db.debts().insert(
@@ -233,11 +249,18 @@ class WealthRepository
                     createdAtMillis = clock.millis(),
                 ),
             )
+            refreshSnapshot()
         }
 
-        suspend fun settleDebt(debt: DebtEntity) = db.debts().update(debt.copy(settledAtMillis = clock.millis()))
+        suspend fun settleDebt(debt: DebtEntity) {
+            db.debts().update(debt.copy(settledAtMillis = clock.millis()))
+            refreshSnapshot()
+        }
 
-        suspend fun deleteDebt(debt: DebtEntity) = db.debts().delete(debt)
+        suspend fun deleteDebt(debt: DebtEntity) {
+            db.debts().delete(debt)
+            refreshSnapshot()
+        }
 
         /**
          * Writes today's (Cairo) net worth point: the row for the day is created or updated, never duplicated. Nothing is

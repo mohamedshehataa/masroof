@@ -19,14 +19,19 @@ object CardCycle {
         return if (thisMonth <= today) thisMonth else clamp(statementDay, YearMonth.from(today).minusMonths(1))
     }
 
-    /** The first due date after the latest statement date. */
+    /** The first due date after the latest statement date that is on or after [today] (a due date already past is not "next"). */
     fun nextDue(
         today: LocalDate,
         statementDay: Int,
         dueDay: Int,
     ): LocalDate {
         val statement = lastStatement(today, statementDay)
-        val sameMonth = clamp(dueDay, YearMonth.from(statement))
-        return if (sameMonth > statement) sameMonth else clamp(dueDay, YearMonth.from(statement).plusMonths(1))
+        var month = YearMonth.from(statement)
+        var due = clamp(dueDay, month)
+        while (due <= statement || due < today) {
+            month = month.plusMonths(1)
+            due = clamp(dueDay, month)
+        }
+        return due
     }
 }

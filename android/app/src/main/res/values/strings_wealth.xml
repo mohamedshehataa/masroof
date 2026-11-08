@@ -120,4 +120,11 @@
     <string name="accounts_balance_hint">Balances below zero are allowed for an overdrawn account.</string>
     <string name="accounts_save">Save</string>
     <string name="accounts_cancel">Cancel</string>
+    <string name="wealth_cert_monthly">Pays interest monthly (counted as income in your account)</string>
+    <string name="wealth_cert_matured">Matured</string>
+    <string name="wealth_change_capped">&gt;%1$s</string>
+    <string name="wealth_chart_summary">Net worth over time (%1$s). Latest %2$s, lowest %3$s, highest %4$s</string>
+    <string name="accounts_balance_time">Time, optional (HH:mm)</string>
+    <string name="accounts_balance_time_error">Enter a time such as 14:30</string>
+    <string name="accounts_balance_future">The date and time cannot be in the future</string>
 </resources>

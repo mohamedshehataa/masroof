@@ -46,7 +46,9 @@ import eg.masroof.core.DateFormat
 import eg.masroof.core.Money
 import eg.masroof.core.PercentFormat
 import eg.masroof.data.db.DebtEntity
+import eg.masroof.data.db.NetWorthSnapshotEntity
 import eg.masroof.data.wealth.AssetBucket
+import eg.masroof.data.wealth.AssetValuation
 import eg.masroof.data.wealth.AssetView
 import eg.masroof.data.wealth.ChartRange
 import eg.masroof.data.wealth.DebtLine
@@ -182,7 +184,8 @@ private fun NetWorthTab(state: WealthUiState) {
             val abs = moneyText(change.absoluteMinor).let { if (change.absoluteMinor > 0) "+$it" else it }
             val text =
                 change.percentBps?.let {
-                    val pct = PercentFormat.format(kotlin.math.abs(it), style.arabic, style.digits)
+                    val plain = PercentFormat.format(kotlin.math.abs(it), style.arabic, style.digits)
+                    val pct = if (change.percentCapped) stringResource(R.string.wealth_change_capped, plain) else plain
                     stringResource(
                         R.string.wealth_change_year_percent,
                         abs,
@@ -200,14 +203,14 @@ private fun NetWorthTab(state: WealthUiState) {
         }
     }
     SectionCard(stringResource(R.string.wealth_chart_desc)) {
+        val labels =
+            listOf(
+                ChartRange.MONTH_1 to R.string.wealth_range_1m,
+                ChartRange.MONTH_3 to R.string.wealth_range_3m,
+                ChartRange.YEAR_1 to R.string.wealth_range_1y,
+                ChartRange.ALL to R.string.wealth_range_all,
+            )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val labels =
-                listOf(
-                    ChartRange.MONTH_1 to R.string.wealth_range_1m,
-                    ChartRange.MONTH_3 to R.string.wealth_range_3m,
-                    ChartRange.YEAR_1 to R.string.wealth_range_1y,
-                    ChartRange.ALL to R.string.wealth_range_all,
-                )
             labels.forEach { (r, label) ->
                 FilterChip(
                     selected = range == r,
@@ -217,7 +220,11 @@ private fun NetWorthTab(state: WealthUiState) {
                 )
             }
         }
-        NetWorthChart(NetWorthHistory.points(state.snapshots, range, state.today))
+        val history = NetWorthHistory.points(state.snapshots, range, state.today)
+        val current =
+            NetWorthSnapshotEntity("current", state.today.toString(), net.assetsMinor, net.debtsMinor, net.netMinor, Money.EGP, "", 0)
+        val rangeLabel = stringResource(labels.first { it.first == range }.second)
+        NetWorthChart(if (history.size <= 1) listOf(current) else history, rangeLabel)
     }
 }
 
@@ -286,7 +293,7 @@ private fun AssetsTab(
     }
     SectionCard(stringResource(R.string.wealth_assets_list)) {
         if (state.assets.isEmpty()) Text(stringResource(R.string.wealth_assets_none))
-        state.assets.forEach { AssetRow(it, actions, style.arabic, style.digits) }
+        state.assets.forEach { AssetRow(it, actions, style.arabic, style.digits, state.today) }
     }
 }
 
@@ -296,6 +303,7 @@ private fun AssetRow(
     actions: WealthActions,
     arabic: Boolean,
     digits: eg.masroof.core.DigitStyle,
+    today: java.time.LocalDate,
 ) {
     val asset = view.asset
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -309,6 +317,14 @@ private fun AssetRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (asset.kind == "CERTIFICATE") {
+            val matured = AssetValuation.isMatured(asset, today, CairoTime::dateOf)
+            Text(
+                stringResource(if (matured) R.string.wealth_cert_matured else R.string.wealth_cert_monthly),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(if (asset.hiddenFromTotals) R.string.wealth_asset_hidden else R.string.wealth_asset_hide),

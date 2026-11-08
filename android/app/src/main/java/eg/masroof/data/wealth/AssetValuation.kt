@@ -25,17 +25,17 @@ object AssetValuation {
         return principalMinor + sign * interest.toLong()
     }
 
-    /** A certificate accrues until its maturity and no further. */
-    fun certificate(
-        principalMinor: Long,
-        rateBp: Int,
-        start: LocalDate,
-        maturity: LocalDate,
+    /**
+     * A certificate is worth its principal. Most Egyptian certificates pay interest monthly into the bank account, where it
+     * arrives as income, so accruing it here as well would count it twice. (Accrual at maturity needs a payout-type column.)
+     */
+    fun certificate(principalMinor: Long): Long = principalMinor
+
+    fun isMatured(
+        asset: AssetEntity,
         today: LocalDate,
-    ): Long {
-        val end = if (today < maturity) today else maturity
-        return simpleValue(principalMinor, rateBp, ChronoUnit.DAYS.between(start, end))
-    }
+        dateOf: (Long) -> LocalDate,
+    ): Boolean = asset.kind == "CERTIFICATE" && asset.maturityAtMillis?.let(dateOf)?.let { it <= today } == true
 
     /** A fund grows pro rata by days since its start, with no end date. */
     fun fund(
@@ -54,8 +54,7 @@ object AssetValuation {
         val principal = asset.principalMinor
         val start = asset.startAtMillis?.let(dateOf)
         return when {
-            asset.kind == "CERTIFICATE" && principal != null && start != null ->
-                certificate(principal, asset.annualRateBp ?: 0, start, asset.maturityAtMillis?.let(dateOf) ?: today, today)
+            asset.kind == "CERTIFICATE" && principal != null -> certificate(principal)
             asset.kind == "FUND" && principal != null && start != null -> fund(principal, asset.annualRateBp ?: 0, start, today)
             else -> asset.valueMinor ?: principal
         }
