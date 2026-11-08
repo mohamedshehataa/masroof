@@ -3,7 +3,7 @@ id: STORY-199
 epic: EPIC-18
 title: Ask Masroof - questions about your money answered on the phone, with a chart
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -119,3 +119,6 @@ None (STORY-178/179 analytics are on main).
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 (Say teardown), speed mode |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 09088e0; fix rounds cdb3bf8, fff9a57, ebc3a86, 82933ac, ca36cf0 |
+| 2026-11-08 | 6 verify | qa-verifier | FAIL loops 1-5 (each fixed), PASS loop 6 (792 tests; parity exact) - past the 3-loop limit by owner rule, see DECISIONS |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

@@ -45,7 +45,7 @@ enum class SubscriptionService(
     WE("we", "🌐", KIND_BILL, "bills.internet", "we"),
     VODAFONE("vodafone", "📱", KIND_BILL, "bills.mobile", "vodafone"),
     ORANGE("orange", "📱", KIND_BILL, "bills.mobile", "orange"),
-    ETISALAT("etisalat", "📱", KIND_BILL, "bills.mobile", "e&"),
+    ETISALAT("etisalat", "📱", KIND_BILL, "bills.mobile", "etisalat"),
     GYM("gym", "💪", KIND_SUBSCRIPTION, "subscriptions", null),
     OTHER("other", "🔁", KIND_SUBSCRIPTION, "subscriptions", null),
     ;
@@ -350,54 +350,55 @@ class DefaultSubscriptionRepository
                 val rows = dao.all().filter { it.active && (onlyId == null || it.id == onlyId) }
                 val earliest = rows.minOfOrNull { CairoTime.dateOf(it.nextRenewalAtMillis) } ?: return@withTransaction
                 val entries = dao.entriesSince(sinceMillis(minOf(earliest, today))).mapNotNull(::factOf)
-                val used = mutableSetOf<String>()
-                for (row in rows) {
-                    val cutoff = anchors["$SINCE_PREFIX${row.id}"]?.let { LocalDate.ofEpochDay(it.toLong()) }
-                    val visible = if (cutoff == null) entries else entries.filter { !it.date.isBefore(cutoff) }
-                    val settled = settleOne(row, visible, used, today, changes, anchors[row.id])
-                    if (settled != row) dao.update(settled)
-                }
+                settleAll(rows, entries, today, anchors, changes)
             }
             changes.forEach { prefs.addNotice(it) }
         }
 
-        private fun settleOne(
-            row: SubscriptionEntity,
-            entries: List<EntryFact>,
-            used: MutableSet<String>,
-            today: LocalDate,
-            notices: MutableList<PriceNotice>,
-            storedAnchor: Int?,
-        ): SubscriptionEntity {
-            val cadence = Cadence.of(row.cadence)
-            val income = row.kind == KIND_INCOME
-            val pool = entries.filter { it.income == income }
-            var cur = row
-            var date = CairoTime.dateOf(row.nextRenewalAtMillis)
-            val anchor = storedAnchor ?: RenewalMath.anchorOf(date)
-            var guard = 0
-            var hit = findHit(cur, date, pool, used)
-            while (hit != null && guard++ < MAX_MATCHES) {
-                used += hit.id
-                if (hit.amountMinor != cur.amountMinor) {
-                    notices += PriceNotice(cur.id, cur.name, cur.amountMinor, hit.amountMinor, cur.currency)
-                }
-                date = RenewalMath.nextAfter(date, cadence, anchor)
-                cur = cur.copy(amountMinor = hit.amountMinor, merchantKey = cur.merchantKey ?: hit.merchantKey)
-                hit = findHit(cur, date, pool, used)
-            }
-            date = RenewalMath.rollPastGrace(date, cadence, today, anchor)
-            return cur.copy(nextRenewalAtMillis = CairoTime.noonOf(date).toEpochMilli())
-        }
+        private class RowState(
+            var row: SubscriptionEntity,
+            var date: LocalDate,
+            val anchor: Int,
+            val pool: List<EntryFact>,
+        )
 
-        private fun findHit(
-            row: SubscriptionEntity,
-            renewal: LocalDate,
-            pool: List<EntryFact>,
-            used: Set<String>,
-        ): EntryFact? {
-            val key = SubscriptionMatcher.keyOfRow(row.merchantKey, row.name) ?: return null
-            return SubscriptionMatcher.match(key, row.amountMinor, row.currency, renewal, pool, used)
+        /** Matches every row against the entries in one global pass order (see [SubscriptionMatcher.bestMatch]), then rolls dates. */
+        private suspend fun settleAll(
+            rows: List<SubscriptionEntity>,
+            entries: List<EntryFact>,
+            today: LocalDate,
+            anchors: Map<String, Int>,
+            notices: MutableList<PriceNotice>,
+        ) {
+            val states =
+                rows.associate { row ->
+                    val date = CairoTime.dateOf(row.nextRenewalAtMillis)
+                    val cutoff = anchors["$SINCE_PREFIX${row.id}"]?.let { LocalDate.ofEpochDay(it.toLong()) }
+                    val pool = entries.filter { it.income == (row.kind == KIND_INCOME) && (cutoff == null || !it.date.isBefore(cutoff)) }
+                    row.id to RowState(row, date, anchors[row.id] ?: RenewalMath.anchorOf(date), pool)
+                }
+            val used = mutableSetOf<String>()
+            var guard = 0
+            while (guard++ < MAX_MATCHES * rows.size.coerceAtLeast(1)) {
+                val facts =
+                    states.values.mapNotNull { st ->
+                        val key = SubscriptionMatcher.keyOfRow(st.row.merchantKey, st.row.name) ?: return@mapNotNull null
+                        SubscriptionMatcher.RowFacts(st.row.id, key, st.row.amountMinor, st.row.currency, st.date, st.pool)
+                    }
+                val (id, hit) = SubscriptionMatcher.bestMatch(facts, used) ?: break
+                val st = states.getValue(id)
+                used += hit.id
+                if (hit.amountMinor != st.row.amountMinor) {
+                    notices += PriceNotice(st.row.id, st.row.name, st.row.amountMinor, hit.amountMinor, st.row.currency)
+                }
+                st.date = RenewalMath.nextAfter(st.date, Cadence.of(st.row.cadence), st.anchor)
+                st.row = st.row.copy(amountMinor = hit.amountMinor, merchantKey = st.row.merchantKey ?: hit.merchantKey)
+            }
+            for ((id, st) in states) {
+                val rolled = RenewalMath.rollPastGrace(st.date, Cadence.of(st.row.cadence), today, st.anchor)
+                val settled = st.row.copy(nextRenewalAtMillis = CairoTime.noonOf(rolled).toEpochMilli())
+                if (settled != rows.first { it.id == id }) dao.update(settled)
+            }
         }
 
         override suspend fun dismissSuggestion(key: String) = prefs.dismissKey(key)

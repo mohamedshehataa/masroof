@@ -265,8 +265,8 @@ class SubscriptionFixRoundTest {
         assertEquals("netflix", SubscriptionMatcher.keyOf("  www.Netflix.com "))
         assertEquals("watch it", SubscriptionMatcher.keyOf("Watch iT"))
         assertNull(SubscriptionMatcher.keyOf(" .com "))
-        assertTrue(SubscriptionMatcher.keysMatch("netflix", "netflix subscription"))
-        assertTrue(!SubscriptionMatcher.keysMatch("net", "netflix"))
+        assertTrue(SubscriptionMatcher.entryKeyMatches("netflix com amsterdam".let { SubscriptionMatcher.keyOf(it)!! }, "netflix"))
+        assertTrue(!SubscriptionMatcher.entryKeyMatches("netflix", "net"))
     }
 
     @Test

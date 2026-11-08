@@ -52,11 +52,23 @@ object SubscriptionMatcher {
         name: String,
     ): String? = keyOf(merchantKey) ?: keyOf(name)
 
-    /** Equal keys, or one a whole-word prefix of the other ("netflix" ~ "netflix subscription"). */
-    fun keysMatch(
-        a: String,
-        b: String,
-    ): Boolean = a == b || a.startsWith("$b ") || b.startsWith("$a ")
+    /** Words after a brand that make an entry a different merchant ("Orange Money", "Netflix Gift Card"). */
+    private val DIFFERENT_MERCHANT_WORDS = setOf("money", "cash", "pay", "wallet", "gift", "card")
+    private const val MIN_PREFIX_KEY = 3
+
+    /**
+     * Whether an entry's key stands for the subscription's key: equal, or (only this direction) the entry key extends the
+     * subscription key by whole words ("netflix amsterdam" for "netflix"). Keys under 3 characters never extend, and a wallet or
+     * gift-card word after the brand makes it another merchant.
+     */
+    fun entryKeyMatches(
+        entryKey: String,
+        subKey: String,
+    ): Boolean {
+        if (entryKey == subKey) return true
+        if (subKey.length < MIN_PREFIX_KEY || !entryKey.startsWith("$subKey ")) return false
+        return entryKey.removePrefix("$subKey ").split(' ').none { it in DIFFERENT_MERCHANT_WORDS }
+    }
 
     /** [candidate] is within 10% of [reference] (integer maths, the boundary included). */
     fun withinTolerance(
@@ -64,10 +76,78 @@ object SubscriptionMatcher {
         reference: Long,
     ): Boolean = reference > 0 && abs(candidate - reference) * PERCENT <= reference * AMOUNT_TOLERANCE_PERCENT
 
+    /** A subscription as the matcher sees it: its key, stored amount, next renewal and the entries it may be paid by. */
+    data class RowFacts(
+        val id: String,
+        val key: String,
+        val amountMinor: Long,
+        val currency: String,
+        val renewal: LocalDate,
+        val entries: List<EntryFact>,
+    )
+
     /**
-     * The entry that paid the renewal due on [renewal]: same merchant key and currency, amount within 10%, date within 3 days;
-     * the closest date wins (the lower id on a tie). Entries in [used] already paid another renewal and are skipped.
+     * The best (row id, entry) pair over ALL rows, so one row cannot take an entry that is another row's exact match.
+     * First pass: amount within 10%. Only when that finds nothing anywhere, the price-change pass: exact key equality and an
+     * amount between half and double. Both need the same currency and a date within 3 days; ranking is exact key, then closest
+     * date, then ids. Entries in [used] are skipped.
      */
+    fun bestMatch(
+        rows: List<RowFacts>,
+        used: Set<String>,
+    ): Pair<String, EntryFact>? = bestPair(rows, used, false) ?: bestPair(rows, used, true)
+
+    private fun bestPair(
+        rows: List<RowFacts>,
+        used: Set<String>,
+        priceChange: Boolean,
+    ): Pair<String, EntryFact>? =
+        rows
+            .flatMap { row -> row.entries.mapNotNull { e -> rankOf(row, e, used, priceChange)?.let { it to (row.id to e) } } }
+            .minWithOrNull { x, y -> compareKeys(x.first, y.first) }
+            ?.second
+
+    /** Sort key (exact key first, closest date, entry id, row id) when [e] can pay [row] in this pass, else null. */
+    private fun rankOf(
+        row: RowFacts,
+        e: EntryFact,
+        used: Set<String>,
+        priceChange: Boolean,
+    ): List<Comparable<*>>? {
+        val days = abs(ChronoUnit.DAYS.between(row.renewal, e.date))
+        val exact = e.merchantKey == row.key
+        val fits = e.id !in used && e.currency == row.currency && days <= DATE_WINDOW_DAYS && entryKeyMatches(e.merchantKey, row.key)
+        val amountOk =
+            if (priceChange) {
+                exact &&
+                    inPriceBand(
+                        e.amountMinor,
+                        row.amountMinor,
+                    )
+            } else {
+                withinTolerance(e.amountMinor, row.amountMinor)
+            }
+        return if (fits && amountOk) listOf(if (exact) 0 else 1, days, e.id, row.id) else null
+    }
+
+    private fun inPriceBand(
+        candidate: Long,
+        stored: Long,
+    ): Boolean = stored > 0 && candidate * 2 >= stored && candidate <= stored * 2
+
+    @Suppress("UNCHECKED_CAST")
+    private fun compareKeys(
+        a: List<Comparable<*>>,
+        b: List<Comparable<*>>,
+    ): Int {
+        for (i in a.indices) {
+            val c = (a[i] as Comparable<Any>).compareTo(b[i])
+            if (c != 0) return c
+        }
+        return 0
+    }
+
+    /** The entry that would pay the single renewal due on [renewal] (see [bestMatch]); used by tests and one-row callers. */
     fun match(
         key: String,
         amountMinor: Long,
@@ -75,21 +155,7 @@ object SubscriptionMatcher {
         renewal: LocalDate,
         entries: List<EntryFact>,
         used: Set<String>,
-    ): EntryFact? {
-        val near =
-            entries.filter {
-                it.id !in used &&
-                    keysMatch(it.merchantKey, key) &&
-                    it.currency == currency &&
-                    abs(ChronoUnit.DAYS.between(renewal, it.date)) <= DATE_WINDOW_DAYS
-            }
-        val byDate = compareBy<EntryFact>({ abs(ChronoUnit.DAYS.between(renewal, it.date)) }, { it.id })
-        // First pass: the amount is within 10%. Second pass (a price change): between half and double the stored amount.
-        return near.filter { withinTolerance(it.amountMinor, amountMinor) }.minWithOrNull(byDate)
-            ?: near.filter { amountMinor > 0 && it.amountMinor * 2 >= amountMinor && it.amountMinor <= amountMinor * 2 }.minWithOrNull(
-                byDate,
-            )
-    }
+    ): EntryFact? = bestMatch(listOf(RowFacts("row", key, amountMinor, currency, renewal, entries)), used)?.second
 
     /**
      * Merchants with at least 3 entries in the last 120 days, each 25 to 35 days after the one before, with amounts within 10%
@@ -107,7 +173,7 @@ object SubscriptionMatcher {
             .groupBy { it.merchantKey to it.currency }
             .mapNotNull { (group, rows) ->
                 val key = group.first
-                if (existingKeys.any { keysMatch(it, key) } || dismissedKeys.any { keysMatch(it, key) }) return@mapNotNull null
+                if (existingKeys.any { entryKeyMatches(key, it) } || dismissedKeys.any { entryKeyMatches(key, it) }) return@mapNotNull null
                 suggestionOf(key, group.second, rows, today)
             }.sortedBy { it.key }
     }

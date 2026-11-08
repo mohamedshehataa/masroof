@@ -138,7 +138,7 @@ class RenewalMathTest {
     @Test
     fun `REQ-AN-172 days to payday come from the next active income row`() {
         val rows = listOf(subRow("s", "Salary", 2_000_000, next = "2026-11-25", kind = KIND_INCOME))
-        val p = PaydayMath.next(d("2026-11-08"), rows, 1, CairoTime::dateOf)
+        val p = PaydayMath.next(d("2026-11-08"), rows, 1, CairoTime::dateOf, emptyMap())
         assertEquals(17, p.days)
         assertEquals(PaydaySource.INCOME, p.source)
         assertEquals("Salary", p.name)
@@ -152,19 +152,19 @@ class RenewalMathTest {
                 subRow("c", "Certificate", 500_000, next = "2026-11-12", kind = KIND_INCOME),
                 subRow("x", "Old", 1, next = "2026-11-09", kind = KIND_INCOME).copy(active = false),
             )
-        val p = PaydayMath.next(d("2026-11-08"), rows, 1, CairoTime::dateOf)
+        val p = PaydayMath.next(d("2026-11-08"), rows, 1, CairoTime::dateOf, emptyMap())
         assertEquals(4, p.days)
         assertEquals("Certificate", p.name)
     }
 
     @Test
     fun `REQ-AN-172 without income the month start day is used`() {
-        val p = PaydayMath.next(d("2026-11-08"), emptyList(), 1, CairoTime::dateOf)
+        val p = PaydayMath.next(d("2026-11-08"), emptyList(), 1, CairoTime::dateOf, emptyMap())
         assertEquals(PaydaySource.MONTH_START, p.source)
         assertEquals(d("2026-12-01"), p.date)
         assertEquals(23, p.days)
-        assertEquals(0, PaydayMath.next(d("2026-11-25"), emptyList(), 25, CairoTime::dateOf).days)
-        assertEquals(d("2027-02-28"), PaydayMath.next(d("2027-02-10"), emptyList(), 28, CairoTime::dateOf).date)
+        assertEquals(0, PaydayMath.next(d("2026-11-25"), emptyList(), 25, CairoTime::dateOf, emptyMap()).days)
+        assertEquals(d("2027-02-28"), PaydayMath.next(d("2027-02-10"), emptyList(), 28, CairoTime::dateOf, emptyMap()).date)
     }
 }
 

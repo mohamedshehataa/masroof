@@ -178,7 +178,7 @@ object PaydayMath {
         rows: List<SubscriptionEntity>,
         monthStartDay: Int,
         dateOf: (Long) -> LocalDate,
-        anchors: Map<String, Int> = emptyMap(),
+        anchors: Map<String, Int>,
     ): Payday {
         val best =
             rows

@@ -181,7 +181,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 create stores a subscription row with its cadence, renewal, category and reminder`() =
         runTest {
-            val id = raw(netflix("2026-11-20").copy(categoryId = seededCategoryId("subscriptions"), reminderDaysBefore = 3))
+            val id = repo.create(netflix("2026-11-20").copy(categoryId = seededCategoryId("subscriptions"), reminderDaysBefore = 3))
             val row = db.subscriptions().find(id)!!
             assertEquals(KIND_SUBSCRIPTION, row.kind)
             assertEquals(19_900L, row.amountMinor)
@@ -195,7 +195,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 recurring income is stored as a kind INCOME row`() =
         runTest {
-            val id = raw(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
+            val id = repo.create(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
             assertEquals(KIND_INCOME, db.subscriptions().find(id)!!.kind)
         }
 
@@ -344,7 +344,7 @@ class SubscriptionRepositoryTest {
         }
 
     @Test
-    fun `REQ-AN-171 an amount beyond 10 percent or a date beyond 3 days does not match`() =
+    fun `REQ-AN-171 an amount beyond 200 percent of the stored one or a date beyond 3 days does not match`() =
         runTest {
             val id = raw(netflix("2026-11-02"))
             entry("far-amount", "Netflix", 50_000, "2026-11-02")
