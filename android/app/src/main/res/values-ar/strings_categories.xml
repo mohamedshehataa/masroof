@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cat_settings_title">الأقسام والقواعد</string>
+    <string name="cat_open">الأقسام</string>
+    <string name="rules_open">قواعد التجار</string>
+
+    <string name="cat_title">الأقسام</string>
+    <string name="cat_add">إضافة قسم</string>
+    <string name="cat_loading">جاري تحميل الأقسام</string>
+    <string name="cat_empty">مفيش أقسام لسه</string>
+    <string name="cat_archived">مؤرشف</string>
+    <string name="cat_edit">تعديل</string>
+    <string name="cat_archive">أرشفة</string>
+    <string name="cat_restore">استرجاع</string>
+    <string name="cat_delete">حذف</string>
+    <string name="cat_cancel">إلغاء</string>
+    <string name="cat_save">حفظ</string>
+    <string name="cat_move_up_desc">انقل %1$s لفوق</string>
+    <string name="cat_move_down_desc">انقل %1$s لتحت</string>
+    <string name="cat_edit_desc">عدّل %1$s</string>
+    <string name="cat_editor_add_title">قسم جديد</string>
+    <string name="cat_editor_edit_title">تعديل القسم</string>
+    <string name="cat_name_en">الاسم (إنجليزي)</string>
+    <string name="cat_name_ar">الاسم (عربي)</string>
+    <string name="cat_parent">تحت</string>
+    <string name="cat_parent_none">المستوى الأول</string>
+    <string name="cat_emoji_search">ابحث عن إيموجي</string>
+    <string name="cat_emoji_none">مفيش إيموجي بالبحث ده</string>
+    <string name="cat_emoji_desc">إيموجي %1$s</string>
+    <string name="cat_error_empty">اكتب اسم</string>
+    <string name="cat_error_duplicate">فيه قسم بنفس الاسم هنا</string>
+    <string name="cat_error_in_use">القسم ده مستخدم. أرشفه بدل ما تحذفه.</string>
+    <string name="cat_error_system">الأقسام الأساسية مينفعش تتحذف. أرشفها بدل كده.</string>
+    <string name="cat_archive_title">تأرشف %1$s؟</string>
+    <string name="cat_archive_body">المصاريف القديمة هتفضل بيه وبتتحسب في التحليلات. ومش هيظهر في المصاريف الجديدة.</string>
+    <string name="cat_delete_title">تحذف %1$s؟</string>
+    <string name="cat_delete_body">القسم ده مش مستخدم في أي مكان، فهيتشال.</string>
+
+    <string name="rules_title">قواعد التجار</string>
+    <string name="rules_add_title">إضافة قاعدة</string>
+    <string name="rules_merchant">اسم التاجر</string>
+    <string name="rules_category">صنّفه تحت</string>
+    <string name="rules_add">إضافة القاعدة</string>
+    <string name="rules_loading">جاري تحميل القواعد</string>
+    <string name="rules_empty">مفيش قواعد لسه. غيّر قسم أي مصروف والتطبيق هيعرض يفتكرها.</string>
+    <string name="rules_error_empty">اكتب اسم تاجر بحروف</string>
+    <string name="rules_delete_desc">احذف قاعدة %1$s</string>
+    <string name="rules_line">%1$s ← %2$s</string>
+
+    <string name="prompt_rule_title">دايمًا تصنّف %1$s تحت %2$s؟</string>
+    <string name="prompt_rule_body">المصاريف الجديدة من التاجر ده هتروح هناك لوحدها.</string>
+    <string name="prompt_yes_always">أيوه، دايمًا</string>
+    <string name="prompt_not_now">مش دلوقتي</string>
+    <string name="prompt_change_them">غيّرهم</string>
+    <string name="prompt_leave_them">سيبهم</string>
+    <string name="prompt_done">تمام</string>
+    <string name="prompt_undo">تراجع</string>
+    <plurals name="prompt_past_title">
+        <item quantity="zero">تغيّر %1$s مصروف قديم من %2$s كمان؟</item>
+        <item quantity="one">تغيّر مصروف قديم واحد من %2$s كمان؟</item>
+        <item quantity="two">تغيّر مصروفين قديمين من %2$s كمان؟</item>
+        <item quantity="few">تغيّر %1$s مصاريف قديمة من %2$s كمان؟</item>
+        <item quantity="many">تغيّر %1$s مصروف قديم من %2$s كمان؟</item>
+        <item quantity="other">تغيّر %1$s مصروف قديم من %2$s كمان؟</item>
+    </plurals>
+    <plurals name="prompt_changed">
+        <item quantity="zero">اتغيّر %1$s مصروف</item>
+        <item quantity="one">اتغيّر مصروف واحد</item>
+        <item quantity="two">اتغيّر مصروفين</item>
+        <item quantity="few">اتغيّرت %1$s مصاريف</item>
+        <item quantity="many">اتغيّر %1$s مصروف</item>
+        <item quantity="other">اتغيّر %1$s مصروف</item>
+    </plurals>
+</resources>

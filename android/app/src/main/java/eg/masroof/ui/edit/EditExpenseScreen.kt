@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.categories.RulePromptHost
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
@@ -79,12 +80,14 @@ fun EditExpenseRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     SecureWindow()
     val context = LocalContext.current
-    LaunchedEffect(state.form.done) {
-        if (state.form.done) {
+    val offer = state.form.ruleOffer
+    LaunchedEffect(state.form.done, offer) {
+        if (state.form.done && (offer == null || state.form.gone)) {
             if (state.form.gone) Toast.makeText(context, R.string.edit_gone, Toast.LENGTH_SHORT).show()
             onDone()
         }
     }
+    if (state.form.done && offer != null && !state.form.gone) RulePromptHost(offer, onFinished = onDone)
     EditExpenseContent(
         state,
         EditActions(
@@ -209,7 +212,9 @@ private fun EditFields(
     DateField(form.date, form.dateInvalid, !form.locked, actions.onDate)
     Text(stringResource(R.string.add_category), style = MaterialTheme.typography.titleSmall)
     ChipRow(
-        state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
+        state.categories
+            .filter { !it.archived || it.id == form.categoryId }
+            .map { c -> c.id to listOfNotNull(c.emoji, if (arabic) c.nameAr else c.nameEn).joinToString(" ") },
         selected = form.categoryId,
         enabled = !form.locked,
         tinted = true,

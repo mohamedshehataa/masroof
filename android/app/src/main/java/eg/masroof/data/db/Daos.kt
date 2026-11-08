@@ -671,6 +671,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun merchantRules(): MerchantRuleDao
 
+    abstract fun categoryRules(): CategoryRulesDao
+
     abstract fun debts(): DebtDao
 
     abstract fun netWorthSnapshots(): NetWorthSnapshotDao

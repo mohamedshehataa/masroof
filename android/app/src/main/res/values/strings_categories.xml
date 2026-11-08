@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cat_settings_title">Categories and rules</string>
+    <string name="cat_open">Categories</string>
+    <string name="rules_open">Merchant rules</string>
+
+    <string name="cat_title">Categories</string>
+    <string name="cat_add">Add category</string>
+    <string name="cat_loading">Loading categories</string>
+    <string name="cat_empty">No categories yet</string>
+    <string name="cat_archived">Archived</string>
+    <string name="cat_edit">Edit</string>
+    <string name="cat_archive">Archive</string>
+    <string name="cat_restore">Restore</string>
+    <string name="cat_delete">Delete</string>
+    <string name="cat_cancel">Cancel</string>
+    <string name="cat_save">Save</string>
+    <string name="cat_move_up_desc">Move %1$s up</string>
+    <string name="cat_move_down_desc">Move %1$s down</string>
+    <string name="cat_edit_desc">Edit %1$s</string>
+    <string name="cat_editor_add_title">New category</string>
+    <string name="cat_editor_edit_title">Edit category</string>
+    <string name="cat_name_en">Name (English)</string>
+    <string name="cat_name_ar">Name (Arabic)</string>
+    <string name="cat_parent">Under</string>
+    <string name="cat_parent_none">Top level</string>
+    <string name="cat_emoji_search">Search emoji</string>
+    <string name="cat_emoji_none">No emoji matches your search</string>
+    <string name="cat_emoji_desc">Emoji %1$s</string>
+    <string name="cat_error_empty">Enter a name</string>
+    <string name="cat_error_duplicate">A category with this name already exists here</string>
+    <string name="cat_error_in_use">This category is in use. Archive it instead of deleting it.</string>
+    <string name="cat_error_system">Built-in categories cannot be deleted. Archive it instead.</string>
+    <string name="cat_archive_title">Archive %1$s?</string>
+    <string name="cat_archive_body">Past entries keep it and still count in Insights. It will not be offered for new entries.</string>
+    <string name="cat_delete_title">Delete %1$s?</string>
+    <string name="cat_delete_body">This category is not used anywhere, so it will be removed.</string>
+
+    <string name="rules_title">Merchant rules</string>
+    <string name="rules_add_title">Add rule</string>
+    <string name="rules_merchant">Merchant name</string>
+    <string name="rules_category">File under</string>
+    <string name="rules_add">Add rule</string>
+    <string name="rules_loading">Loading rules</string>
+    <string name="rules_empty">No rules yet. Change an entry\'s category and the app offers to remember it.</string>
+    <string name="rules_error_empty">Enter a merchant name with letters</string>
+    <string name="rules_delete_desc">Delete the rule for %1$s</string>
+    <string name="rules_line">%1$s → %2$s</string>
+
+    <string name="prompt_rule_title">Always file %1$s under %2$s?</string>
+    <string name="prompt_rule_body">New entries from this merchant will go there automatically.</string>
+    <string name="prompt_yes_always">Yes, always</string>
+    <string name="prompt_not_now">Not now</string>
+    <string name="prompt_change_them">Change them</string>
+    <string name="prompt_leave_them">Leave them</string>
+    <string name="prompt_done">Done</string>
+    <string name="prompt_undo">Undo</string>
+    <plurals name="prompt_past_title">
+        <item quantity="one">Also change the %1$s past %2$s entry?</item>
+        <item quantity="other">Also change the %1$s past %2$s entries?</item>
+    </plurals>
+    <plurals name="prompt_changed">
+        <item quantity="one">Changed %1$s entry</item>
+        <item quantity="other">Changed %1$s entries</item>
+    </plurals>
+</resources>

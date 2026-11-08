@@ -44,6 +44,8 @@ fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
     onOpenReview: () -> Unit = {},
     onOpenReceipts: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    onOpenRules: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -63,6 +65,7 @@ fun SettingsRoute(
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
+            CategoriesSettingsSection(onOpenCategories, onOpenRules)
             MembersRoute()
         },
     )

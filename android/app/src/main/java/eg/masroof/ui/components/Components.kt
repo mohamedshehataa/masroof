@@ -79,7 +79,7 @@ fun AmountText(
     )
 }
 
-/** Colored circle with the first letter of the category: the stand-in for a category icon. */
+/** Colored circle with the category's emoji; the first letter of the name when it has none (STORY-207). */
 @Composable
 fun CategoryAvatar(
     name: String,
