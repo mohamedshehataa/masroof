@@ -15,12 +15,19 @@
     <!-- Runtime permission (Android 13+), requested from Settings only when the user turns on the "Recorded ... Undo"
          notification for transactions the phone captured by itself. The app works fully without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Runtime permission, requested only when the user taps the mic on the Add form (STORY-200, REQ-AND-144). The phone's
+         speech recognizer turns speech into text; the app never records or stores audio. The app works fully without it. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Package visibility (API 30+): only to find out whether a camera app exists, so "Camera" is hidden when none does. Masroof
          declares no camera permission (the system camera app takes the photo). -->
     <queries>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <!-- Package visibility (API 30+): only to find out whether a speech recognizer exists, so the mic is hidden when none does. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 
