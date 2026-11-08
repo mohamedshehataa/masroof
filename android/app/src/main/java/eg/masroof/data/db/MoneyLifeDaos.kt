@@ -152,6 +152,25 @@ interface SubscriptionDao {
 
     @Query("SELECT * FROM subscription WHERE id = :id")
     fun observeById(id: String): Flow<SubscriptionEntity?>
+
+    @Query("SELECT * FROM subscription WHERE id = :id")
+    suspend fun find(id: String): SubscriptionEntity?
+
+    @Query("SELECT * FROM subscription ORDER BY nextRenewalAtMillis, id")
+    suspend fun all(): List<SubscriptionEntity>
+
+    /** Live expense and income entries on or after [since]: what renewals are matched against and suggestions come from. */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND type IN ('EXPENSE', 'INCOME') AND occurredAtMillis >= :since ORDER BY occurredAtMillis, id""",
+    )
+    suspend fun entriesSince(since: Long): List<ExpenseEntity>
+
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND type IN ('EXPENSE', 'INCOME') AND occurredAtMillis >= :since ORDER BY occurredAtMillis, id""",
+    )
+    fun observeEntriesSince(since: Long): Flow<List<ExpenseEntity>>
 }
 
 @Dao

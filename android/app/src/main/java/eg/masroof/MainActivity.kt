@@ -2,6 +2,7 @@ package eg.masroof
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,6 +53,8 @@ import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
 import eg.masroof.ui.bills.PlanDetailRoute
+import eg.masroof.ui.bills.SubscriptionDetailRoute
+import eg.masroof.ui.bills.SubscriptionFormRoute
 import eg.masroof.ui.budgets.BudgetsRoute
 import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.goals.GoalDetailRoute
@@ -101,12 +104,15 @@ private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 private const val BILLS_ROUTE = "bills"
 private const val BILL_ADD_ROUTE = "bills/add"
 private const val BILL_DETAIL_ROUTE = "bills/{id}"
+private const val SUB_ADD_ROUTE = "subscriptions/add?name={name}&amount={amount}&cur={cur}&date={date}&merchant={merchant}"
+private const val SUB_DETAIL_ROUTE = "subscriptions/{id}"
+private const val SUB_EDIT_ROUTE = "subscriptions/{id}/edit"
 
 /** Forms that have their own Save: the global add button is hidden there. */
-private val FORM_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE)
+private val FORM_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE, SUB_ADD_ROUTE, SUB_EDIT_ROUTE)
 
 /** The only route a notification may open: a bills plan by its UUID (the shape UuidIdFactory makes). */
-private val OPENABLE_ROUTE = Regex("""bills/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
+private val OPENABLE_ROUTE = Regex("""(bills|subscriptions)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -282,7 +288,50 @@ private fun MasroofRoot(
                 )
             }
             composable(BILLS_ROUTE) {
-                BillsRoute(onAdd = { nav.navigate(BILL_ADD_ROUTE) }, onOpenPlan = { id -> nav.navigate("bills/$id") })
+                BillsRoute(
+                    onAdd = { nav.navigate(BILL_ADD_ROUTE) },
+                    onOpenPlan = { id -> nav.navigate("bills/$id") },
+                    onAddSubscription = { nav.navigate("subscriptions/add") },
+                    onOpenSubscription = { id -> nav.navigate("subscriptions/$id") },
+                    onAddSuggestion = { s ->
+                        val name = Uri.encode(s.name)
+                        val merchant = Uri.encode(s.key)
+                        val query = "name=$name&amount=${s.amountMinor}&cur=${s.currency}&date=${s.nextRenewal}&merchant=$merchant"
+                        nav.navigate("subscriptions/add?$query")
+                    },
+                )
+            }
+            composable(
+                SUB_ADD_ROUTE,
+                arguments =
+                    listOf(
+                        navArgument("name") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                        navArgument("amount") {
+                            type = NavType.LongType
+                            defaultValue = 0L
+                        },
+                        navArgument("cur") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                        navArgument("date") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                        navArgument("merchant") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                    ),
+            ) {
+                SubscriptionFormRoute(onSaved = { nav.popBackStack() })
+            }
+            composable(SUB_EDIT_ROUTE) { SubscriptionFormRoute(onSaved = { nav.popBackStack() }) }
+            composable(SUB_DETAIL_ROUTE) {
+                SubscriptionDetailRoute(onClose = { nav.popBackStack() }, onEdit = { id -> nav.navigate("subscriptions/$id/edit") })
             }
             composable(BILL_ADD_ROUTE) {
                 AddPlanRoute(onSaved = { id -> nav.navigate("bills/$id") { popUpTo(BILL_ADD_ROUTE) { inclusive = true } } })
