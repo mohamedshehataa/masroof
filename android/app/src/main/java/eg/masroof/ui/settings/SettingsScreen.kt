@@ -67,6 +67,7 @@ fun SettingsRoute(
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
+            ExportCsvSection()
             MembersRoute()
         },
     )
