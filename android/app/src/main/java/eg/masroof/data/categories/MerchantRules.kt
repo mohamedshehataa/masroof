@@ -3,6 +3,9 @@ package eg.masroof.data.categories
 import androidx.room.withTransaction
 import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
@@ -102,6 +105,7 @@ class DefaultMerchantRuleRepository
         private val ids: IdFactory,
         private val signal: LocalDataSignal,
         private val eraseLock: EraseLock,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) : MerchantRuleRepository {
         private val dao get() = db.categoryRules()
 
@@ -157,6 +161,7 @@ class DefaultMerchantRuleRepository
                         val rows = pastRows(merchantKey, categoryId)
                         val now = clock.millis()
                         rows.forEach { dao.setEntryCategory(it.id, categoryId, now) }
+                        reconcileLinked(rows.map { it.id })
                         PastChange(categoryId, rows.associate { it.id to PriorState(it.categoryId, it.updatedAtMillis) })
                     }
                 }
@@ -169,6 +174,7 @@ class DefaultMerchantRuleRepository
                 db.withTransaction {
                     // only entries that still have the applied category: a later edit of one is never undone
                     change.previous.forEach { (id, old) -> dao.restoreCategory(id, change.categoryId, old.categoryId, old.updatedAtMillis) }
+                    reconcileLinked(change.previous.keys)
                 }
             }
             if (change.count > 0) signal.changed()
@@ -177,6 +183,12 @@ class DefaultMerchantRuleRepository
         override suspend fun delete(ruleId: String) {
             eraseLock.mutex.withLock { dao.deleteRule(ruleId) }
             signal.changed()
+        }
+
+        /** A linked purchase moved to another category moves its refund with it: the link rules run in the same transaction. */
+        private suspend fun reconcileLinked(ids: Collection<String>) {
+            val state = answers.current()
+            AnswerWrites.reconcile(db, ids.flatMap { state.linksOf(it) }.toSet())
         }
 
         private suspend fun pastRows(

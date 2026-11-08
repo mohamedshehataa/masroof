@@ -106,6 +106,8 @@ fun EditExpenseRoute(
             viewModel::onPaidBy,
             viewModel::onExcluded,
             viewModel::deleteBoth,
+            viewModel::unlink,
+            viewModel::undoUnlink,
         ),
         receipts = { ReceiptsSection(enabled = !state.form.locked) },
     )
@@ -327,6 +329,23 @@ private fun EditBar(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (form.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (form.linked) {
+                TextButton(onClick = actions.onUnlink, enabled = !form.locked, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.answers_unlink))
+                }
+            }
+            if (form.unlinked) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.answers_unlinked), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = actions.onUndoUnlink, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.answers_undo))
+                    }
+                }
             }
             if (form.reviewPending) {
                 Button(

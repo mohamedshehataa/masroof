@@ -251,7 +251,7 @@ class SmsPipeline
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
             db.captured().insert(item)
             // REQ-EXP-067: "Track it" is remembered: the withdrawal is a transfer to Cash from the start
-            if (r.kind == TxKind.CASH_WITHDRAWAL && answerState.atmChoice == AtmChoice.TRACK) {
+            if (r.kind == TxKind.CASH_WITHDRAWAL && r.currency == "EGP" && answerState.atmChoice == AtmChoice.TRACK) {
                 val tracked = AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), now)
                 return Stored(Disposition.RECORDED, notice = item, changed = true, links = tracked.added.links)
             }

@@ -7,6 +7,8 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.data.CHANNEL_MANUAL
 import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
@@ -185,6 +187,7 @@ class DefaultInstallmentRepository
         private val ids: IdFactory,
         private val signal: LocalDataSignal,
         private val eraseLock: EraseLock,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) : InstallmentRepository {
         override fun observePlans() = db.installmentPlans().observeAll()
 
@@ -277,7 +280,9 @@ class DefaultInstallmentRepository
                     .toInstant()
                     .toEpochMilli()
             val types = if (plan.provider == PROVIDER_GAM3EYA) listOf(TYPE_EXPENSE, TYPE_TRANSFER) else listOf(TYPE_EXPENSE)
-            return db.installmentPayments().linkCandidates(types, payment.amountMinor, plan.currency, from, to)
+            // a row that an answer linked (transfer pair, refund) is locked: it is never converted or linked here
+            val linked = answers.current().linkedIds()
+            return db.installmentPayments().linkCandidates(types, payment.amountMinor, plan.currency, from, to).filter { it.id !in linked }
         }
 
         override suspend fun recordPayment(

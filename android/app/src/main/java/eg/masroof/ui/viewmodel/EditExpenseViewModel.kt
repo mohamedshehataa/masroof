@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.core.CairoTime
 import eg.masroof.core.MoneyFormat
+import eg.masroof.data.answers.AnswerUndo
 import eg.masroof.data.answers.LinkKind
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
@@ -54,6 +55,10 @@ data class EditFormState(
     val hasPartner: Boolean = false,
     /** The partner is the refund linked to this purchase: Delete asks to delete both or to keep the refund as income. */
     val partnerIsRefund: Boolean = false,
+    /** The entry is part of a live transfer or refund link: money fields are locked, "Unlink" is offered. */
+    val linked: Boolean = false,
+    /** Just unlinked: "Undo" is offered. */
+    val unlinked: Boolean = false,
     /** The entry was deleted while the screen was open: "This entry no longer exists", then the screen closes. */
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
@@ -151,7 +156,13 @@ class EditExpenseViewModel
                         pairs.linksOf(id).firstOrNull { l ->
                             l.kind == LinkKind.REFUND && l.deletablePartnerOf(id)?.let { editor.find(it) } != null
                         }
-                    form.value = found.toForm().copy(hasPartner = partner != null, partnerIsRefund = partner?.kind == LinkKind.REFUND)
+                    val linked = pairs.linksOf(id).any { l -> editor.find(l.first) != null && editor.find(l.second) != null }
+                    form.value =
+                        found.toForm().copy(
+                            hasPartner = partner != null,
+                            partnerIsRefund = partner?.kind == LinkKind.REFUND,
+                            linked = linked,
+                        )
                 }
             }
         }
@@ -221,6 +232,27 @@ class EditExpenseViewModel
             if (original == null || inFlight || form.value.done) return
             form.update { it.copy(confirmDelete = false) }
             submit(null) { editor.deleteWithPartner(id) }
+        }
+
+        private var lastUnlink: AnswerUndo? = null
+
+        /** "Unlink": both rows go back to their unlinked state in one transaction; the Undo link relinks them. */
+        fun unlink() {
+            if (original == null || inFlight || form.value.done) return
+            viewModelScope.launch {
+                val token = pairs.unlink(id) ?: return@launch
+                lastUnlink = token
+                form.update { it.copy(linked = false, unlinked = true, hasPartner = false) }
+            }
+        }
+
+        fun undoUnlink() {
+            val token = lastUnlink ?: return
+            lastUnlink = null
+            viewModelScope.launch {
+                pairs.undoUnlink(token)
+                form.update { it.copy(linked = true, unlinked = false) }
+            }
         }
 
         private fun changesOf(

@@ -132,7 +132,10 @@ object AnswerCards {
         nowMillis: Long,
     ): List<AnswerCard> {
         val since = CairoTime.dateOf(nowMillis).minusDays(CARD_WINDOW_DAYS)
-        val done = state.settledIds(entries.filter { it.live() }.mapTo(HashSet()) { it.id })
+        val liveRows = entries.filter { it.live() }
+        // an entry that already has its app-inserted side never asks again, whatever the remembered state says
+        val withSide = liveRows.filter { it.id.endsWith(":pair") }.mapTo(HashSet()) { it.id.removeSuffix(":pair") }
+        val done = state.settledIds(liveRows.mapTo(HashSet()) { it.id }) + withSide
         val live = entries.filter { it.live() }
         val fresh = live.filter { it.captured() && !CairoTime.dateOf(it.occurredAtMillis).isBefore(since) && it.id !in done }
         val active = accounts.filter { !it.archived }
@@ -264,10 +267,11 @@ object AnswerCards {
         state: AnswerState,
         outgoing: Boolean,
     ): ExpenseEntity? {
-        val wanted = if (outgoing) ExpenseTypes.INCOME else ExpenseTypes.TRANSFER
+        // an arrival already converted by an answer whose link was lost (TRANSFER_IN) is found again, never duplicated
+        val wanted = if (outgoing) setOf(ExpenseTypes.INCOME, ExpenseTypes.TRANSFER_IN) else setOf(ExpenseTypes.TRANSFER)
         val taken = state.settledIds(live.filter { it.live() }.mapTo(HashSet()) { it.id })
         return live
-            .filter { c -> c.type == wanted && c.id != entry.id && c.id !in taken && isMirror(entry, c, outgoing) }
+            .filter { c -> c.type in wanted && c.id != entry.id && c.id !in taken && isMirror(entry, c, outgoing) }
             .filter { c -> ownerOf(accounts, c, state.aliases) == accountId }
             .minWithOrNull(compareBy<ExpenseEntity> { kotlin.math.abs(it.occurredAtMillis - entry.occurredAtMillis) }.thenBy { it.id })
     }

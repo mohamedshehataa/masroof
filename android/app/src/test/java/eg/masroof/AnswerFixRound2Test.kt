@@ -221,7 +221,11 @@ class AnswerFixRound2Test {
             val refused = editor.update("p", ExpenseChanges(amountMinor = 10_000))
             assertFalse(refused is EditOutcome.Saved)
             assertEquals(120_000L, db.expenses().find("p")!!.amountMinor)
-            assertTrue(editor.update("p", ExpenseChanges(amountMinor = 60_000)) is EditOutcome.Saved)
+            assertFalse(
+                "money fields of a linked row are locked",
+                editor.update("p", ExpenseChanges(amountMinor = 60_000)) is EditOutcome.Saved,
+            )
+            assertTrue(editor.update("p", ExpenseChanges(categoryId = "cat-elec")) is EditOutcome.Saved)
             assertFalse(editor.update("r", ExpenseChanges(amountMinor = 90_000)) is EditOutcome.Saved)
         }
 
@@ -232,11 +236,11 @@ class AnswerFixRound2Test {
         runTest {
             bothBanksAnnounced()
             val token = repo.transferToOwn("out", "nbe")!!
-            editor.update("in", ExpenseChanges(amountMinor = 400_000))
+            editor.update("in", ExpenseChanges(notes = "rent"))
             repo.undo(token)
             val back = db.expenses().find("in")!!
             assertEquals("INCOME", back.type)
-            assertEquals(400_000L, back.amountMinor)
+            assertEquals("rent", back.notes)
         }
 
     // ---- F7

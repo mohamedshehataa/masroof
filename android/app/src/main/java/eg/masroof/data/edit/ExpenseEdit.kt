@@ -5,8 +5,6 @@ import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.answers.AnswerWrites
 import eg.masroof.data.answers.EntryLink
-import eg.masroof.data.answers.ExpenseTypes
-import eg.masroof.data.answers.LinkKind
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.auth.EraseLock
@@ -75,7 +73,7 @@ sealed interface EditOutcome {
     /** The local write threw; the row is unchanged. */
     data object Failed : EditOutcome
 
-    /** The edit would make a linked refund bigger than its purchase (or take the purchase away from being a purchase). */
+    /** The row is part of a live pair or refund link: its amount, currency, type and date are locked until it is unlinked. */
     data object LinkedRefund : EditOutcome
 }
 
@@ -142,7 +140,7 @@ class DefaultExpenseEditor
                             when {
                                 old == null || old.deletedAtMillis != null -> EditOutcome.NotFound
                                 changes.isEmpty -> EditOutcome.Saved(old)
-                                breaksRefundLink(id, old, changes, links) -> EditOutcome.LinkedRefund
+                                lockedByLink(old, changes, links) -> EditOutcome.LinkedRefund
                                 else -> {
                                     val updated = old.withChanges(changes, now)
                                     db.expenses().update(updated)
@@ -156,7 +154,7 @@ class DefaultExpenseEditor
                                         }
                                     }
                                     // a linked row's fields follow the link (a purchase's new category moves its refund)
-                                    AnswerWrites.reconcile(db, links, now)
+                                    AnswerWrites.reconcile(db, links)
                                     EditOutcome.Saved(updated)
                                 }
                             }
@@ -166,25 +164,26 @@ class DefaultExpenseEditor
                 outcome
             }
 
-        /** A purchase may not go below its linked refund (or stop being one), nor a refund above its purchase. */
-        private suspend fun breaksRefundLink(
-            id: String,
+        /**
+         * Rule 1: while a row is part of a live pair or a live refund link, its money fields (amount, currency, type, date) are
+         * locked: changing them would leave the other side with phantom money. Notes, merchant and category stay editable (a
+         * purchase's category moves its refund). "Unlink" releases the row.
+         */
+        private suspend fun lockedByLink(
             old: ExpenseEntity,
             changes: ExpenseChanges,
             links: List<EntryLink>,
         ): Boolean {
-            val newAmount = changes.amountMinor ?: old.amountMinor
-            val newType = changes.type ?: old.type
-            val newCurrency = changes.currency ?: old.currency
-            return links.filter { it.kind == LinkKind.REFUND }.any { link ->
-                if (id == link.second) {
-                    val refund = db.expenses().find(link.first)?.takeIf { it.deletedAtMillis == null }
-                    refund != null &&
-                        (newAmount < refund.amountMinor || newType != ExpenseTypes.EXPENSE || newCurrency != refund.currency)
-                } else {
-                    val purchase = db.expenses().find(link.second)?.takeIf { it.deletedAtMillis == null }
-                    purchase != null && (newAmount > purchase.amountMinor || newCurrency != purchase.currency)
-                }
+            val touchesMoney =
+                (changes.amountMinor != null && changes.amountMinor != old.amountMinor) ||
+                    (changes.currency != null && changes.currency != old.currency) ||
+                    (changes.type != null && changes.type != old.type) ||
+                    (changes.occurredAtMillis != null && changes.occurredAtMillis != old.occurredAtMillis)
+            if (!touchesMoney) return false
+            return links.any { link ->
+                val a = db.expenses().find(link.first)
+                val b = db.expenses().find(link.second)
+                a != null && b != null && a.deletedAtMillis == null && b.deletedAtMillis == null
             }
         }
 
@@ -214,7 +213,7 @@ class DefaultExpenseEditor
                                             )
                                         }.forEach { db.expenses().softDelete(it, now) }
                                 }
-                                AnswerWrites.reconcile(db, links, now)
+                                AnswerWrites.reconcile(db, links)
                             }
                             first
                         }
@@ -242,7 +241,7 @@ class DefaultExpenseEditor
                                 partners.filter { db.expenses().find(it)?.deletedAtMillis == deletedAt }.forEach {
                                     db.expenses().restore(it, now)
                                 }
-                                AnswerWrites.reconcile(db, links, now)
+                                AnswerWrites.reconcile(db, links)
                             }
                             first
                         }

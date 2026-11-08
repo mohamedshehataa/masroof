@@ -84,6 +84,10 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // AnswerGeneratedTest: `-Danswer.seed=N` replays from another start (the default is fixed); the failure prints its seed
+        unitTests.all { test ->
+            System.getProperty("answer.seed")?.let { test.systemProperty("answer.seed", it) }
+        }
     }
 
     // MigrationTestHelper (Robolectric) reads the exported schema JSONs as assets. Debug builds only: the release APK does not carry them.

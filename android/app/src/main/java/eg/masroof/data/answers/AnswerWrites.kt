@@ -25,6 +25,9 @@ data class AnswerUndo(
     val includeCashBefore: Boolean? = null,
     /** Older links of the entries this answer is about (a pair whose other side was deleted): the new link replaces them. */
     val replacedLinks: Set<EntryLink> = emptySet(),
+    /** Rows of the replaced (or unlinked) links that were fixed in their original type, and inserted rows that were deleted. */
+    val settledRows: List<RowChange> = emptyList(),
+    val settledInserted: List<String> = emptyList(),
 ) {
     // Never prints entries (merchants, amounts).
     override fun toString() = "AnswerUndo(restore=${restore.size}, inserted=${deleteExpenses.size})"
@@ -104,12 +107,11 @@ internal object AnswerWrites {
     suspend fun reconcile(
         db: AppDatabase,
         links: Collection<EntryLink>,
-        now: Long,
     ) {
         for (link in links) {
             when (link.kind) {
-                LinkKind.TRANSFER -> reconcileTransfer(db, link, now)
-                LinkKind.REFUND -> reconcileRefund(db, link, now)
+                LinkKind.TRANSFER -> reconcileTransfer(db, link)
+                LinkKind.REFUND -> reconcileRefund(db, link)
             }
         }
     }
@@ -117,58 +119,123 @@ internal object AnswerWrites {
     private suspend fun reconcileTransfer(
         db: AppDatabase,
         link: EntryLink,
-        now: Long,
     ) {
-        val a = db.expenses().find(link.first) ?: return
-        val b = db.expenses().find(link.second) ?: return
+        var a = db.expenses().find(link.first) ?: return
+        var b = db.expenses().find(link.second) ?: return
         if (link.inserted.isNotEmpty()) {
-            val (inserted, source) = if (link.inserted == a.id) a to b else b to a
-            val sourceGone = source.deletedAtMillis
-            if (sourceGone != null && inserted.deletedAtMillis == null) db.expenses().softDelete(inserted.id, sourceGone)
+            reconcileInserted(db, if (link.inserted == a.id) a else b, if (link.inserted == a.id) b else a)
+            a = db.expenses().find(link.first) ?: return
+            b = db.expenses().find(link.second) ?: return
         }
         if (link.converted.isEmpty() || link.pairType.isEmpty()) return
-        val c = (if (link.converted == a.id) a else b).let { db.expenses().find(it.id) } ?: return
+        val (c, other) = if (link.converted == a.id) a to b else b to a
         if (c.deletedAtMillis != null) return
-        val other = db.expenses().find(if (link.converted == a.id) b.id else a.id)
-        val paired = other != null && other.deletedAtMillis == null
-        val type = if (paired) link.pairType else link.origType
-        val account = (if (paired) link.pairAccountId else link.origAccountId).ifEmpty { null }
-        if (c.type != type || c.accountId != account) db.expenses().update(c.copy(type = type, accountId = account, updatedAtMillis = now))
+        // whole = both sides live and the same money (an edit made while one side was deleted cannot rebuild a lopsided pair)
+        val whole = other.deletedAtMillis == null && c.amountMinor == other.amountMinor && c.currency == other.currency
+        val type = if (whole) link.pairType else link.origType
+        val account = (if (whole) link.pairAccountId else link.origAccountId).ifEmpty { null }
+        if (c.type != type || c.accountId != account) db.expenses().update(c.copy(type = type, accountId = account))
     }
+
+    /** The app-inserted side follows its source: deleted with it (same timestamp, so a restore finds it) and the same money. */
+    private suspend fun reconcileInserted(
+        db: AppDatabase,
+        inserted: ExpenseEntity,
+        source: ExpenseEntity,
+    ) {
+        if (inserted.deletedAtMillis != null) return
+        val sourceGone = source.deletedAtMillis
+        when {
+            sourceGone != null -> db.expenses().softDelete(inserted.id, sourceGone)
+            !sameMoney(inserted, source) ->
+                // safety net: the editor refuses money edits of linked rows, so this only repairs what could not be refused
+                db.expenses().update(
+                    inserted.copy(
+                        amountMinor = source.amountMinor,
+                        currency = source.currency,
+                        occurredAtMillis = source.occurredAtMillis,
+                        timeKnown = source.timeKnown,
+                    ),
+                )
+        }
+    }
+
+    private fun sameMoney(
+        x: ExpenseEntity,
+        y: ExpenseEntity,
+    ) = x.amountMinor == y.amountMinor && x.currency == y.currency && x.occurredAtMillis == y.occurredAtMillis
 
     private suspend fun reconcileRefund(
         db: AppDatabase,
         link: EntryLink,
-        now: Long,
     ) {
         val refund = db.expenses().find(link.first)?.takeIf { it.deletedAtMillis == null } ?: return
         val purchase = db.expenses().find(link.second) ?: return
-        val whole = purchase.deletedAtMillis == null
+        val whole = purchase.deletedAtMillis == null && refund.currency == purchase.currency && refund.amountMinor <= purchase.amountMinor
         val type = if (whole) ExpenseTypes.REFUND else ExpenseTypes.INCOME
         val category = if (whole) purchase.categoryId ?: refund.categoryId else refund.categoryId
         if (refund.type != type || refund.categoryId != category) {
-            db.expenses().update(refund.copy(type = type, categoryId = category, updatedAtMillis = now))
+            db.expenses().update(refund.copy(type = type, categoryId = category))
         }
     }
 
-    /** Undo of the answer that made [link]: the converted entry goes back to what it was. The rest of the row keeps later edits. */
+    /** Undo of the answer that made [link] (or Unlink): the converted entry goes back to what it was; edits of the rest are kept. */
     suspend fun unlink(
         db: AppDatabase,
         link: EntryLink,
-        now: Long,
     ) {
         if (link.converted.isEmpty()) return
-        val row = db.expenses().find(link.converted)?.takeIf { it.deletedAtMillis == null } ?: return
+        // live or deleted: a deleted entry that comes back later must come back as it was, not as half of a pair
+        val row = db.expenses().find(link.converted) ?: return
+        db.expenses().update(originalOf(link, row))
+    }
+
+    private fun originalOf(
+        link: EntryLink,
+        row: ExpenseEntity,
+    ): ExpenseEntity {
         val refund = link.kind == LinkKind.REFUND
-        db.expenses().update(
-            row.copy(
-                type = link.origType.ifEmpty { row.type },
-                accountId = if (refund) row.accountId else link.origAccountId.ifEmpty { null },
-                status = link.origStatus.ifEmpty { row.status },
-                categoryId = if (refund) link.origCategoryId.ifEmpty { null } else row.categoryId,
-                updatedAtMillis = now,
-            ),
+        return row.copy(
+            type = link.origType.ifEmpty { row.type },
+            accountId = if (refund) row.accountId else link.origAccountId.ifEmpty { null },
+            status = link.origStatus.ifEmpty { row.status },
+            categoryId = if (refund) link.origCategoryId.ifEmpty { null } else row.categoryId,
         )
+    }
+
+    /** What settling links did: the converted rows (before/after) and the app-inserted rows it soft-deleted. */
+    data class Settled(
+        val rows: List<RowChange>,
+        val insertedDeleted: List<String>,
+    )
+
+    /**
+     * Makes [links] final: the app-inserted row is deleted, the converted real entry (live or deleted) is fixed in its ORIGINAL
+     * type. A later restore of an old deleted side then brings back a plain entry, never a half of a pair that no longer exists.
+     * Used when a new answer replaces a link that lost a side, and by Unlink.
+     */
+    suspend fun settle(
+        db: AppDatabase,
+        links: Collection<EntryLink>,
+        now: Long,
+    ): Settled {
+        val rows = mutableListOf<RowChange>()
+        val deleted = mutableListOf<String>()
+        for (link in links) {
+            if (link.inserted.isNotEmpty()) {
+                val inserted = db.expenses().find(link.inserted)
+                if (inserted != null && inserted.deletedAtMillis == null) {
+                    db.expenses().softDelete(link.inserted, now)
+                    deleted += link.inserted
+                }
+            }
+            val converted = if (link.converted.isEmpty()) null else db.expenses().find(link.converted)
+            if (converted != null) {
+                val original = originalOf(link, converted)
+                if (original != converted) rows += change(db, converted, original)
+            }
+        }
+        return Settled(rows, deleted)
     }
 
     /** Writes [after] over [before] and remembers both, so Undo can revert exactly the fields this change touched. */
@@ -188,7 +255,6 @@ internal object AnswerWrites {
     suspend fun revert(
         db: AppDatabase,
         c: RowChange,
-        now: Long,
     ) {
         val cur = db.expenses().find(c.before.id) ?: return
         if (cur == c.after) {
@@ -201,7 +267,6 @@ internal object AnswerWrites {
                 categoryId = if (cur.categoryId == c.after.categoryId) c.before.categoryId else cur.categoryId,
                 accountId = if (cur.accountId == c.after.accountId) c.before.accountId else cur.accountId,
                 status = if (cur.status == c.after.status) c.before.status else cur.status,
-                updatedAtMillis = now,
             ),
         )
     }
@@ -226,7 +291,7 @@ internal object AnswerWrites {
                 AccountBalanceEntity(ids.next(), cashId, 0L, entry.currency, minOf(entry.occurredAtMillis - 1, now), "MANUAL", now),
             )
         }
-        db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER, updatedAtMillis = now))
+        db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER))
         val inId = insertPairSide(db, entry, ExpenseTypes.TRANSFER_IN, cashId, null, now)
         val link =
             EntryLink(

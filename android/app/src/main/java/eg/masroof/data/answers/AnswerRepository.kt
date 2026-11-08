@@ -78,9 +78,14 @@ interface AnswerRepository {
 
     /** The links of an entry, for "Delete both?" and for releasing a converted entry. */
     suspend fun linksOf(entryId: String): List<EntryLink>
+
+    suspend fun unlink(entryId: String): AnswerUndo?
+
+    suspend fun undoUnlink(token: AnswerUndo)
 }
 
 private const val CONFIRMED = "CONFIRMED"
+private const val CASH_KIND = "CASH"
 
 @Suppress("TooManyFunctions", "LongParameterList") // one function per answer; one seam per concern
 @Singleton
@@ -133,18 +138,21 @@ class DefaultAnswerRepository
             purchaseId: String,
         ): AnswerUndo? =
             answer(done(refundId)) { state ->
+                if (live(refundId) == null) return@answer null
+                val now = clock.millis()
+                val old = state.links.filter { it.involves(refundId) }.toSet()
+                // a new answer makes the old link final: its converted entry is back in its original type
+                val settled = AnswerWrites.settle(db, old, now)
                 val refund = live(refundId)
                 val purchase = live(purchaseId)
                 if (refund == null || purchase == null) return@answer null
                 if (refund.type !in refundable || refund.currency != purchase.currency) return@answer null
                 if (purchase.type != ExpenseTypes.EXPENSE || purchase.amountMinor < refund.amountMinor) return@answer null
-                val now = clock.millis()
                 db.expenses().update(
                     refund.copy(
                         type = ExpenseTypes.REFUND,
                         categoryId = purchase.categoryId ?: refund.categoryId,
                         status = CONFIRMED,
-                        updatedAtMillis = now,
                     ),
                 )
                 val link =
@@ -159,14 +167,16 @@ class DefaultAnswerRepository
                     )
                 AnswerUndo(
                     added = AnswerState(answered = setOf(refundId), links = setOf(link)),
-                    replacedLinks = state.links.filter { it.involves(refundId) }.toSet(),
+                    replacedLinks = old,
+                    settledRows = settled.rows,
+                    settledInserted = settled.insertedDeleted,
                 )
             }
 
         override suspend fun confirmRefund(entryId: String): AnswerUndo? =
             answer(done(entryId)) {
                 val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.REFUND } ?: return@answer null
-                val changed = AnswerWrites.change(db, entry, entry.copy(status = CONFIRMED, updatedAtMillis = clock.millis()))
+                val changed = AnswerWrites.change(db, entry, entry.copy(status = CONFIRMED))
                 AnswerUndo(restore = listOf(changed), added = AnswerState(answered = setOf(entryId)))
             }
 
@@ -181,7 +191,7 @@ class DefaultAnswerRepository
                             AnswerWrites.change(
                                 db,
                                 entry,
-                                entry.copy(type = ExpenseTypes.INCOME, status = CONFIRMED, updatedAtMillis = clock.millis()),
+                                entry.copy(type = ExpenseTypes.INCOME, status = CONFIRMED),
                             ),
                         )
                     } else {
@@ -195,18 +205,33 @@ class DefaultAnswerRepository
             accountId: String,
         ): AnswerUndo? =
             answer(done(entryId)) { state ->
-                val entry = live(entryId) ?: return@answer null
+                val first = live(entryId) ?: return@answer null
                 val accounts = db.accountBalances().accounts()
-                val target = accounts.firstOrNull { it.id == accountId && !it.archived && it.currency == entry.currency }
-                val outgoing = entry.type == ExpenseTypes.TRANSFER
-                if (target == null || (!outgoing && entry.type != ExpenseTypes.INCOME)) return@answer null
+                // The Room rows are the truth: a pair side this entry already has (the answer was cut short before the remembered
+                // state was written) is adopted again, never added a second time.
+                val existingSide = db.expenses().find(AnswerWrites.pairSideId(entryId))?.takeIf { it.deletedAtMillis == null }
+                if (existingSide != null) return@answer adoptedPair(first, existingSide, accounts)
+                val outgoing = first.type == ExpenseTypes.TRANSFER
+                if (!canAnswer(first, accountId, accounts)) return@answer null
                 // Both sides must be known, or one balance moves alone and net worth changes.
-                val own = AnswerCards.ownerOf(accounts, entry, state.aliases)
+                val own = AnswerCards.ownerOf(accounts, first, state.aliases)
                 if (own == null || own == accountId) return@answer null
                 val now = clock.millis()
-                val live = db.expenses().liveSince(AnswerCards.lookbackStart(now))
+                val candidate =
+                    AnswerCards.counterpart(
+                        first,
+                        accountId,
+                        db.expenses().liveSince(AnswerCards.lookbackStart(now)),
+                        accounts,
+                        state,
+                        outgoing,
+                    )
+                // a new answer makes every older link of these entries final (their converted entries are back in their original type)
+                val old = state.links.filter { it.involves(entryId) || (candidate != null && it.involves(candidate.id)) }.toSet()
+                val settled = AnswerWrites.settle(db, old, now)
+                val entry = live(entryId) ?: return@answer null
+                val partner = candidate?.let { live(it.id) }
                 val ownLabel = accounts.firstOrNull { it.id == own }?.label
-                val partner = AnswerCards.counterpart(entry, accountId, live, accounts, state, outgoing)
                 val confirmed = entry.copy(status = CONFIRMED)
                 val inserted = mutableListOf<String>()
                 var converted: ExpenseEntity? = null
@@ -218,9 +243,7 @@ class DefaultAnswerRepository
                         // the other bank's own entry, attributed to the chosen account and arriving after the send
                         converted = partner
                         pairAccount = accountId
-                        db.expenses().update(
-                            partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId, status = CONFIRMED, updatedAtMillis = now),
-                        )
+                        db.expenses().update(partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId, status = CONFIRMED))
                     }
                 } else {
                     val type = if (outgoing) ExpenseTypes.TRANSFER_IN else ExpenseTypes.TRANSFER
@@ -230,30 +253,89 @@ class DefaultAnswerRepository
                 if (!outgoing) {
                     converted = entry
                     pairAccount = entry.accountId ?: own
-                    db.expenses().update(
-                        entry.copy(type = ExpenseTypes.TRANSFER_IN, accountId = pairAccount, status = CONFIRMED, updatedAtMillis = now),
-                    )
+                    db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER_IN, accountId = pairAccount, status = CONFIRMED))
                 }
                 val (out, inn) = if (outgoing) entryId to partnerId else partnerId to entryId
-                val link =
-                    EntryLink(
-                        LinkKind.TRANSFER,
-                        out,
-                        inn,
-                        inserted = inserted.firstOrNull().orEmpty(),
-                        converted = converted?.id.orEmpty(),
-                        origType = converted?.type.orEmpty(),
-                        origAccountId = converted?.accountId.orEmpty(),
-                        pairType = if (converted == null) "" else ExpenseTypes.TRANSFER_IN,
-                        pairAccountId = pairAccount,
-                        origStatus = converted?.status.orEmpty(),
-                    )
+                val link = transferLink(out, inn, inserted.firstOrNull().orEmpty(), converted, pairAccount)
                 AnswerUndo(
                     deleteExpenses = inserted,
                     added = AnswerState(answered = setOf(entryId, partnerId), links = setOf(link)),
-                    replacedLinks = state.links.filter { it.involves(entryId) || it.involves(partnerId) }.toSet(),
+                    replacedLinks = old,
+                    settledRows = settled.rows,
+                    settledInserted = settled.insertedDeleted,
                 )
             }
+
+        /** The chosen account exists, is active and in the entry's currency; the entry is a transfer out or received money. */
+        private fun canAnswer(
+            entry: ExpenseEntity,
+            accountId: String,
+            accounts: List<eg.masroof.data.db.AccountEntity>,
+        ): Boolean {
+            val target = accounts.firstOrNull { it.id == accountId && !it.archived && it.currency == entry.currency }
+            return target != null && (entry.type == ExpenseTypes.TRANSFER || entry.type == ExpenseTypes.INCOME)
+        }
+
+        private fun transferLink(
+            out: String,
+            inn: String,
+            inserted: String,
+            converted: ExpenseEntity?,
+            pairAccount: String,
+        ) = EntryLink(
+            LinkKind.TRANSFER,
+            out,
+            inn,
+            inserted = inserted,
+            converted = converted?.id.orEmpty(),
+            origType = converted?.let { originalTypeOf(it) }.orEmpty(),
+            origAccountId = converted?.let { if (it.type == ExpenseTypes.TRANSFER_IN) "" else it.accountId }.orEmpty(),
+            pairType = if (converted == null) "" else ExpenseTypes.TRANSFER_IN,
+            pairAccountId = pairAccount,
+            origStatus = converted?.status.orEmpty(),
+        )
+
+        /** A captured entry that is already a TRANSFER_IN was converted by an answer that lost its link: it was an INCOME. */
+        private fun originalTypeOf(e: ExpenseEntity) = if (e.type == ExpenseTypes.TRANSFER_IN) ExpenseTypes.INCOME else e.type
+
+        private fun adoptedPair(
+            entry: ExpenseEntity,
+            side: ExpenseEntity,
+            accounts: List<eg.masroof.data.db.AccountEntity>,
+        ): AnswerUndo {
+            val mirror = side.type == ExpenseTypes.TRANSFER
+            val cash = accounts.firstOrNull { it.id == side.accountId }?.kind == CASH_KIND
+            val converted = mirror || cash
+            val (out, inn) = if (mirror) side.id to entry.id else entry.id to side.id
+            val link =
+                EntryLink(
+                    LinkKind.TRANSFER,
+                    out,
+                    inn,
+                    inserted = side.id,
+                    converted = if (converted) entry.id else "",
+                    origType =
+                        if (mirror) {
+                            ExpenseTypes.INCOME
+                        } else if (cash) {
+                            ExpenseTypes.CASH_WITHDRAWAL
+                        } else {
+                            ""
+                        },
+                    origAccountId = if (mirror) "" else entry.accountId.orEmpty(),
+                    pairType =
+                        if (mirror) {
+                            ExpenseTypes.TRANSFER_IN
+                        } else if (cash) {
+                            ExpenseTypes.TRANSFER
+                        } else {
+                            ""
+                        },
+                    pairAccountId = entry.accountId.orEmpty(),
+                    origStatus = entry.status,
+                )
+            return AnswerUndo(added = AnswerState(answered = setOf(entry.id, side.id), links = setOf(link)))
+        }
 
         override suspend fun transferToOther(entryId: String): AnswerUndo? =
             answer(done(entryId)) {
@@ -280,7 +362,7 @@ class DefaultAnswerRepository
                     val now = clock.millis()
                     // Entries already captured from this card join the account; later ones are filed by the alias at capture.
                     val rows = db.expenses().liveSince(0L).filter { it.instrumentLast4 == last4 && it.accountId == null }
-                    val changed = rows.map { AnswerWrites.change(db, it, it.copy(accountId = account.id, updatedAtMillis = now)) }
+                    val changed = rows.map { AnswerWrites.change(db, it, it.copy(accountId = account.id)) }
                     AnswerUndo(restore = changed, added = AnswerState(aliases = mapOf(last4 to account.id)))
                 }
             }
@@ -289,7 +371,8 @@ class DefaultAnswerRepository
             val before = settings.current().includeCashWithdrawals
             val undo =
                 answer(done(entryId)) {
-                    val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
+                    val entry =
+                        live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL && it.currency == "EGP" } ?: return@answer null
                     val tracked =
                         AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), clock.millis())
                     tracked.copy(added = tracked.added.copy(atmChoice = AtmChoice.TRACK), includeCashBefore = before)
@@ -335,20 +418,25 @@ class DefaultAnswerRepository
         override suspend fun undo(token: AnswerUndo): Boolean {
             val ok =
                 eraseLock.mutex.withLock {
+                    // an answer that a newer one replaced (or that was unlinked) can no longer be undone: its rows belong to the new link
+                    if (!prefs.current().links.containsAll(token.added.links)) return@withLock false
                     val done =
                         db.withTransaction {
                             val now = clock.millis()
-                            token.restore.forEach { AnswerWrites.revert(db, it, now) }
-                            token.added.links.forEach { AnswerWrites.unlink(db, it, now) }
+                            token.restore.forEach { AnswerWrites.revert(db, it) }
+                            token.added.links.forEach { AnswerWrites.unlink(db, it) }
                             token.deleteExpenses.forEach { db.expenses().delete(it) }
                             token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
+                            // the links this answer replaced come back exactly as they were
+                            restoreSettled(token, now)
                             true
                         }
                     val a = token.added
+                    val replacedIds = token.replacedLinks.flatMapTo(HashSet()) { listOf(it.first, it.second) }
                     prefs.edit { s ->
                         s.copy(
-                            answered = s.answered - a.answered,
-                            links = s.links - a.links,
+                            answered = s.answered - (a.answered - replacedIds),
+                            links = s.links - a.links + token.replacedLinks,
                             ignoredCards = s.ignoredCards - a.ignoredCards,
                             aliases = s.aliases.filterNot { (k, v) -> a.aliases[k] == v },
                             atmChoice = if (a.atmChoice != null && s.atmChoice == a.atmChoice) token.atmBefore else s.atmChoice,
@@ -356,12 +444,47 @@ class DefaultAnswerRepository
                     }
                     done
                 }
-            token.includeCashBefore?.let { before -> settings.update { it.copy(includeCashWithdrawals = before) } }
+            if (ok) token.includeCashBefore?.let { before -> settings.update { it.copy(includeCashWithdrawals = before) } }
             signal.changed()
             return ok
         }
 
+        /** Puts back what settling links changed (the converted rows, the inserted rows) and re-applies the links to them. */
+        private suspend fun restoreSettled(
+            token: AnswerUndo,
+            now: Long,
+        ) {
+            token.settledInserted.forEach { id -> if (db.expenses().find(id) != null) db.expenses().restore(id, now) }
+            token.settledRows.forEach { AnswerWrites.revert(db, it) }
+            AnswerWrites.reconcile(db, token.replacedLinks)
+        }
+
         override suspend fun linksOf(entryId: String): List<EntryLink> = prefs.current().linksOf(entryId)
+
+        override suspend fun unlink(entryId: String): AnswerUndo? {
+            val token =
+                eraseLock.mutex.withLock {
+                    val links = prefs.current().linksOf(entryId).toSet()
+                    if (links.isEmpty()) return@withLock null
+                    val settled = db.withTransaction { AnswerWrites.settle(db, links, clock.millis()) }
+                    val ids = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
+                    prefs.edit { s -> s.copy(links = s.links - links, answered = s.answered - ids) }
+                    AnswerUndo(replacedLinks = links, settledRows = settled.rows, settledInserted = settled.insertedDeleted)
+                } ?: return null
+            signal.changed()
+            return token
+        }
+
+        override suspend fun undoUnlink(token: AnswerUndo) {
+            eraseLock.mutex.withLock {
+                val ids = token.replacedLinks.flatMapTo(HashSet()) { listOf(it.first, it.second) }
+                // the entries were answered again meanwhile: the old pair is gone for good
+                if (prefs.current().links.any { it.first in ids || it.second in ids }) return@withLock
+                db.withTransaction { restoreSettled(token, clock.millis()) }
+                prefs.edit { s -> s.copy(links = s.links + token.replacedLinks, answered = s.answered + ids) }
+            }
+            signal.changed()
+        }
 
         private suspend fun live(id: String): ExpenseEntity? = db.expenses().find(id)?.takeIf { it.deletedAtMillis == null }
 
@@ -384,7 +507,7 @@ class DefaultAnswerRepository
                     val atmBefore = prefs.current().atmChoice
                     prefs.edit { s ->
                         s.copy(
-                            answered = s.answered + a.answered,
+                            answered = s.answered - done.replacedLinks.flatMapTo(HashSet()) { listOf(it.first, it.second) } + a.answered,
                             links = s.links - done.replacedLinks + a.links,
                             ignoredCards = s.ignoredCards + a.ignoredCards,
                             aliases = s.aliases + a.aliases,
@@ -414,6 +537,11 @@ class ResourceCashAccountLabel
 /** The links of an entry (live or deleted). The editor deletes, releases and restores pairs with them. */
 interface PairLookup {
     suspend fun linksOf(entryId: String): List<EntryLink>
+
+    /** "Unlink" on the Edit screen: both rows go back to their unlinked state; the token undoes it. Null = nothing linked. */
+    suspend fun unlink(entryId: String): AnswerUndo? = null
+
+    suspend fun undoUnlink(token: AnswerUndo) = Unit
 }
 
 object NoPairLookup : PairLookup {
@@ -427,4 +555,8 @@ class AnswerPairLookup
         private val repository: AnswerRepository,
     ) : PairLookup {
         override suspend fun linksOf(entryId: String): List<EntryLink> = repository.linksOf(entryId)
+
+        override suspend fun unlink(entryId: String): AnswerUndo? = repository.unlink(entryId)
+
+        override suspend fun undoUnlink(token: AnswerUndo) = repository.undoUnlink(token)
     }

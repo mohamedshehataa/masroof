@@ -23,7 +23,9 @@
     <string name="answers_links_title">Linked cards</string>
     <string name="answers_link_item">•••• %1$s → %2$s</string>
     <string name="answers_remove">Remove</string>
-    <string name="answers_edit_linked_refund">A refund is linked to this purchase, so the amount cannot go below it. Change the refund first.</string>
+    <string name="answers_unlink">Unlink</string>
+    <string name="answers_unlinked">Unlinked</string>
+    <string name="answers_edit_linked_refund">This is part of a transfer or a refund. Unlink it first to change the amount, date or type.</string>
     <string name="answers_remove_desc">Remove the link of the card ending %1$s</string>
     <string name="answers_not_refund">Not a refund</string>
     <string name="answers_pick_title">Which purchase?</string>
