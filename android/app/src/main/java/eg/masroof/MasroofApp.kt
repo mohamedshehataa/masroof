@@ -13,6 +13,7 @@ import eg.masroof.data.insights.deleteLegacyInsightsCache
 import eg.masroof.data.receipts.ReceiptStore
 import eg.masroof.di.AppScope
 import eg.masroof.ingest.cancelLeftoverUploadWork
+import eg.masroof.work.BillsReminderScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +32,8 @@ class MasroofApp :
     @Inject lateinit var workManager: WorkManager
 
     @Inject lateinit var receipts: ReceiptStore
+
+    @Inject lateinit var billsReminders: BillsReminderScheduler
 
     @Inject @AppScope
     lateinit var appScope: CoroutineScope
@@ -54,6 +57,8 @@ class MasroofApp :
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
         purgeScheduler.schedule()
+        // One local reminder per due bill payment, from one daily worker around 09:00 Cairo (STORY-202).
+        billsReminders.schedule()
         // Camera temp photos a killed session left in the cache (older than an hour, so one being copied stays).
         appScope.launch(Dispatchers.IO) {
             runCatching {
