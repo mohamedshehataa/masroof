@@ -10,15 +10,15 @@
     <string name="goals_error">مقدرناش نحمّل أهدافك</string>
     <string name="goals_total_title">كل الأهداف</string>
     <string name="goals_of">%1$s من %2$s</string>
-    <string name="goals_ring_desc">%1$s، تم توفير %2$s من الهدف</string>
+    <string name="goals_ring_desc">%1$s - وفّرت %2$s من الهدف</string>
     <string name="goals_total_desc">إجمالي اللي اتوفّر %1$s</string>
     <plurals name="goals_other_currency">
         <item quantity="zero">%1$s هدف بعملة تانية مش محسوب</item>
         <item quantity="one">هدف واحد بعملة تانية مش محسوب</item>
         <item quantity="two">هدفين بعملة تانية مش محسوبين</item>
         <item quantity="few">%1$s أهداف بعملة تانية مش محسوبة</item>
-        <item quantity="many">%1$s هدف بعملة تانية مش محسوبة</item>
-        <item quantity="other">%1$s هدف بعملة تانية مش محسوبة</item>
+        <item quantity="many">%1$s هدف بعملة تانية مش محسوب</item>
+        <item quantity="other">%1$s هدف بعملة تانية مش محسوب</item>
     </plurals>
 
     <plurals name="goals_days_to_go">
@@ -56,6 +56,7 @@
     <string name="goals_note">ملاحظة (اختياري)</string>
     <string name="goals_date">التاريخ yyyy-mm-dd (اختياري)</string>
     <string name="goals_save">حفظ</string>
+    <string name="goals_done">تمام</string>
     <string name="goals_cancel">إلغاء</string>
     <string name="goals_err_amount">اكتب مبلغ أكبر من صفر</string>
     <string name="goals_err_too_large">المبلغ ده كبير أوي</string>

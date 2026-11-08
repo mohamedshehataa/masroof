@@ -152,16 +152,44 @@ class GoalRepositoryTest {
         }
 
     @Test
-    fun `REQ-AN-167 reaching the target sets completedAtMillis once and a take out clears it`() =
+    fun `REQ-AN-167 the celebration fires the first time only and completedAtMillis is never overwritten`() =
         runTest {
             val id = newCar()
             val first = repo.record(id, 85_000_000L, null) as GoalOutcome.Saved
             assertTrue(first.reachedNow)
-            assertEquals(clock.millis(), db.savingsGoals().find(id)!!.completedAtMillis)
-            val again = repo.record(id, 100L, null) as GoalOutcome.Saved
-            assertFalse(again.reachedNow)
+            val stamp = db.savingsGoals().find(id)!!.completedAtMillis
+            assertEquals(clock.millis(), stamp)
+            assertFalse((repo.record(id, 100L, null) as GoalOutcome.Saved).reachedNow)
             repo.record(id, -10_000_000L, null)
-            assertNull(db.savingsGoals().find(id)!!.completedAtMillis)
+            val again = repo.record(id, 10_000_000L, null) as GoalOutcome.Saved
+            assertFalse(again.reachedNow)
+            assertEquals(stamp, db.savingsGoals().find(id)!!.completedAtMillis)
+        }
+
+    @Test
+    fun `REQ-EXP-056 movement dates cannot be in the future or before the goal was created`() =
+        runTest {
+            val id = newCar()
+            val tomorrow = Instant.parse("2026-11-09T10:00:00Z").toEpochMilli()
+            val yesterday = Instant.parse("2026-11-07T10:00:00Z").toEpochMilli()
+            assertEquals(GoalOutcome.InvalidDate, repo.record(id, 100L, null, tomorrow))
+            assertEquals(GoalOutcome.InvalidDate, repo.record(id, 100L, null, yesterday))
+            assertTrue(repo.record(id, 100L, null, clock.millis()) is GoalOutcome.Saved)
+            assertEquals(1, db.goalMovements().forGoal(id).size)
+        }
+
+    @Test
+    fun `REQ-EXP-056 a take out is checked against the total at its date so the chart never goes below zero`() =
+        runTest {
+            val id = newCar()
+            repo.record(id, 100_000L, null, Instant.parse("2026-11-08T10:00:00Z").toEpochMilli())
+            val earlier = Instant.parse("2026-11-08T00:30:00Z").toEpochMilli()
+            assertEquals(GoalOutcome.OnlyHave(0L), repo.record(id, -50_000L, null, earlier))
+            assertTrue(repo.record(id, -50_000L, null, Instant.parse("2026-11-08T11:00:00Z").toEpochMilli()) is GoalOutcome.Saved)
+            val steps =
+                eg.masroof.data.goals.GoalMath
+                    .runningTotals(db.goalMovements().forGoal(id).map { it.amountMinor })
+            assertTrue(steps.all { it >= 0L })
         }
 
     @Test
@@ -318,8 +346,50 @@ class GoalRepositoryTest {
             assertEquals("School fees", saved.name)
             assertEquals(2_500_000L, saved.targetMinor)
             assertNotNull(saved.targetAtMillis)
+            vm.onName("x".repeat(80))
+            assertEquals(60, vm.state.value.name.length)
             vm.onDate("2027-13-40")
             vm.save { fail("invalid date must not finish") }
             assertTrue(vm.state.value.dateError)
         }
+
+    @Test
+    fun `REQ-EXP-056 the form view model rejects a name over 60 characters with the field error`() =
+        runTest {
+            val vm = GoalFormViewModel(SavedStateHandle(), repo)
+            vm.onName("a".repeat(60))
+            vm.onTarget("100")
+            vm.save { }
+            assertFalse(vm.state.value.nameError)
+            assertEquals(GoalOutcome.InvalidName, repo.create(GoalDraft("a".repeat(61), null, 100L)))
+        }
+
+    @Test
+    fun `REQ-AN-167 below the target the percent never rounds up to 100`() {
+        assertEquals(
+            99,
+            eg.masroof.data.goals.GoalMath
+                .displayPercent(9950),
+        )
+        assertEquals(
+            99,
+            eg.masroof.data.goals.GoalMath
+                .displayPercent(9999),
+        )
+        assertEquals(
+            100,
+            eg.masroof.data.goals.GoalMath
+                .displayPercent(10_000),
+        )
+        assertEquals(
+            16,
+            eg.masroof.data.goals.GoalMath
+                .displayPercent(1588),
+        )
+        assertEquals(
+            0,
+            eg.masroof.data.goals.GoalMath
+                .displayPercent(0),
+        )
+    }
 }

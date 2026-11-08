@@ -1,6 +1,7 @@
 package eg.masroof.data.goals
 
 import androidx.room.withTransaction
+import eg.masroof.core.CairoTime
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.IdFactory
@@ -54,6 +55,9 @@ sealed interface GoalOutcome {
     data class OnlyHave(
         val savedMinor: Long,
     ) : GoalOutcome
+
+    /** A movement dated after today or before the goal was created (Cairo days). */
+    data object InvalidDate : GoalOutcome
 
     data object NotFound : GoalOutcome
 }
@@ -142,13 +146,23 @@ class GoalRepository
                         db.withTransaction {
                             val goal = db.savingsGoals().find(goalId) ?: return@withTransaction GoalOutcome.NotFound
                             val saved = db.goalMovements().total(goalId)
-                            if (deltaMinor < 0 && size > saved) return@withTransaction GoalOutcome.OnlyHave(saved)
+                            val at = atMillis ?: clock.millis()
+                            val day = CairoTime.dateOf(at)
+                            if (day.isAfter(CairoTime.today(clock.instant())) || day.isBefore(CairoTime.dateOf(goal.createdAtMillis))) {
+                                return@withTransaction GoalOutcome.InvalidDate
+                            }
+                            val existing = db.goalMovements().forGoal(goalId)
+                            // The running total must stay at or above zero at every point in time, not only now.
+                            val heldAtDate = existing.filter { it.atMillis <= at }.sumOf { it.amountMinor }
+                            if (deltaMinor < 0 && !staysNonNegative(existing, at, deltaMinor)) {
+                                return@withTransaction GoalOutcome.OnlyHave(heldAtDate)
+                            }
                             db.goalMovements().insert(
                                 GoalMovementEntity(
                                     id = ids.next(),
                                     goalId = goalId,
                                     amountMinor = deltaMinor,
-                                    atMillis = atMillis ?: clock.millis(),
+                                    atMillis = at,
                                     note = note?.trim()?.take(MAX_NOTE)?.ifBlank { null },
                                 ),
                             )
@@ -172,20 +186,27 @@ class GoalRepository
             }
         }
 
-        // Writes the goal with completedAtMillis set once it holds its target, cleared again when it no longer does.
+        private fun staysNonNegative(
+            existing: List<GoalMovementEntity>,
+            at: Long,
+            delta: Long,
+        ): Boolean {
+            var sum = 0L
+            val merged = existing.map { it.atMillis to it.amountMinor } + (at to delta)
+            return merged.sortedBy { it.first }.all {
+                sum += it.second
+                sum >= 0L
+            }
+        }
+
+        // Celebrates and stamps completedAtMillis the first time only: a take-out and a re-reach never fire again.
         private suspend fun settle(
             goal: SavingsGoalEntity,
             savedMinor: Long,
         ): Boolean {
-            val reached = savedMinor >= goal.targetMinor
-            val completed =
-                when {
-                    reached && goal.completedAtMillis == null -> clock.millis()
-                    !reached -> null
-                    else -> goal.completedAtMillis
-                }
-            db.savingsGoals().update(goal.copy(completedAtMillis = completed))
-            return reached && goal.completedAtMillis == null
+            val first = savedMinor >= goal.targetMinor && goal.completedAtMillis == null
+            if (first) db.savingsGoals().update(goal.copy(completedAtMillis = clock.millis()))
+            return first
         }
 
         private fun invalid(draft: GoalDraft): GoalOutcome? =

@@ -124,6 +124,7 @@ class GoalDetailViewModel
                     }
                     is GoalOutcome.OnlyHave -> dialogState.value = MoneyDialogState(take, MoneyError.ONLY_HAVE, out.savedMinor)
                     GoalOutcome.TooLarge -> dialogState.value = MoneyDialogState(take, MoneyError.TOO_LARGE)
+                    GoalOutcome.InvalidDate -> dialogState.value = MoneyDialogState(take, MoneyError.DATE)
                     else -> dialogState.value = MoneyDialogState(take, MoneyError.AMOUNT)
                 }
             }
@@ -184,7 +185,7 @@ class GoalFormViewModel
             }
         }
 
-        fun onName(text: String) = form.update { it.copy(name = text, nameError = false) }
+        fun onName(text: String) = form.update { it.copy(name = text.take(MAX_NAME), nameError = false) }
 
         fun onEmoji(emoji: String) = form.update { it.copy(emoji = emoji) }
 
@@ -196,7 +197,7 @@ class GoalFormViewModel
             val f = form.value
             val target = MoneyFormat.parseEntry(f.targetText)
             val date = if (f.dateText.isBlank()) null else GoalInput.parseDate(f.dateText)
-            val nameBad = f.name.isBlank()
+            val nameBad = f.name.isBlank() || f.name.trim().length > MAX_NAME
             val targetBad =
                 when (target) {
                     is MoneyFormat.EntryAmount.Invalid -> MoneyError.AMOUNT
@@ -224,5 +225,6 @@ class GoalFormViewModel
 
         private companion object {
             const val MINOR = 100L
+            const val MAX_NAME = 60
         }
     }

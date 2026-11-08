@@ -48,6 +48,7 @@
     <string name="goals_note">Note (optional)</string>
     <string name="goals_date">Date, yyyy-mm-dd (optional)</string>
     <string name="goals_save">Save</string>
+    <string name="goals_done">Done</string>
     <string name="goals_cancel">Cancel</string>
     <string name="goals_err_amount">Enter an amount above zero</string>
     <string name="goals_err_too_large">That amount is too large</string>

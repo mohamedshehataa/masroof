@@ -142,7 +142,7 @@ fun GoalDetailContent(
                         val saved = goalMoney(card.progress.savedMinor, card.currency)
                         Text(stringResource(R.string.goals_reached_body, saved, card.name))
                     },
-                    confirmButton = { TextButton(onDismissCelebration) { Text(stringResource(R.string.goals_save)) } },
+                    confirmButton = { TextButton(onDismissCelebration) { Text(stringResource(R.string.goals_done)) } },
                 )
             }
         }

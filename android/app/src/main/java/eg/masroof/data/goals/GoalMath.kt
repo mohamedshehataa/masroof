@@ -14,6 +14,9 @@ object GoalMath {
     private const val BPS = 10_000L
     private const val MAX_PERIODS = 1_200
     private const val MINOR_PER_MAJOR = 100L
+    private const val HALF_PERCENT_BP = 50
+    private const val BP_PER_PERCENT = 100
+    private const val FULL_PERCENT = 100
 
     data class Input(
         val targetMinor: Long,
@@ -83,6 +86,12 @@ object GoalMath {
             monthlyNeedMinor = if (periods != null && !reached) ceilDiv(remaining, periods * MINOR_PER_MAJOR) * MINOR_PER_MAJOR else null,
             pace = pace,
         )
+    }
+
+    /** Whole percent for display: rounds half up, but never shows 100 until the target is reached (9,950 bp reads 99). */
+    fun displayPercent(bp: Int): Int {
+        val rounded = (bp + HALF_PERCENT_BP) / BP_PER_PERCENT
+        return if (bp < BPS.toInt() && rounded >= FULL_PERCENT) FULL_PERCENT - 1 else rounded
     }
 
     /** The current household period plus every later one that starts before [due]; at least 1. */

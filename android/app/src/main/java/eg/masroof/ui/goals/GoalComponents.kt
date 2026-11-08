@@ -47,10 +47,9 @@ internal fun goalMoney(
 @Composable
 internal fun wholePercent(bp: Int): String {
     val s = LocalMoneyStyle.current
-    return PercentFormat.format((bp + HALF_PERCENT_BP) / BP_PER_PERCENT * BP_PER_PERCENT, s.arabic, s.digits)
+    return PercentFormat.format(GoalMath.displayPercent(bp) * BP_PER_PERCENT, s.arabic, s.digits)
 }
 
-private const val HALF_PERCENT_BP = 50
 private const val BP_PER_PERCENT = 100
 private const val RING_START = -90f
 private const val FULL_CIRCLE = 360f

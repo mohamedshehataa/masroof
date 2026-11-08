@@ -81,7 +81,7 @@ private fun cardOf(
         name = goal.name,
         emoji = goal.emoji,
         currency = goal.currency,
-        completed = goal.completedAtMillis != null,
+        completed = savedMinor + extraSavedMinor >= goal.targetMinor,
         progress =
             GoalMath.progress(
                 GoalMath.Input(
