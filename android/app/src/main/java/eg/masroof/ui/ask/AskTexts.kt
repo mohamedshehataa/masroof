@@ -162,6 +162,7 @@ class AskTexts(
                     AnswerText(null, roastLine(answer.lines.first()), answer.lines.drop(1).map(::roastLine))
                 }
             is AskAnswer.PeriodUnreadable -> AnswerText(null, res.getString(R.string.ask_period_unreadable), emptyList())
+            is AskAnswer.SamePeriod -> AnswerText(null, res.getString(R.string.ask_same_period), emptyList())
             is AskAnswer.OneAtATime -> AnswerText(null, res.getString(R.string.ask_one_at_a_time), emptyList())
             is AskAnswer.NotUnderstood -> AnswerText(null, res.getString(R.string.ask_not_understood), emptyList())
             AskAnswer.Failed -> AnswerText(null, res.getString(R.string.ask_failed), emptyList())

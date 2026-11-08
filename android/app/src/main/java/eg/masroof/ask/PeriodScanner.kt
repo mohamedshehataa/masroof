@@ -24,7 +24,7 @@ internal object PeriodScanner {
     private const val MONTHS = 12
     private const val LEAP_YEAR = 2024
     private const val TWO = 2
-    private const val YEAR = "(20[0-9]{2})"
+    private const val YEAR = "((?:19|20)[0-9]{2})"
     private const val PREFIX = "(?:ب|ل)?(?:ال)?"
     private val CUES = setOf("in", "on", "during", "for", "since", "last", "this", "of", "from", "to", "until", "till", "by")
 
@@ -131,44 +131,53 @@ internal object PeriodScanner {
     }
 
     private const val YEAR_WINDOW = 30
-    private val AMOUNT_WORDS = setOf("over", "under", "above", "below")
-    private val AMOUNT_PHRASES = setOf("more than", "less than", "اكتر من", "اقل من")
-
-    private fun precedingWords(
-        m: MatchResult,
-        text: String,
-    ): List<String> =
-        text
-            .substring(0, m.range.first)
-            .trim()
-            .split(' ')
-            .filter { it.isNotEmpty() }
-            .takeLast(2)
+    private val YEAR_CUES = setOf("in", "during", "for", "of", "since", "في")
+    private const val CONNECTOR =
+        "(?:vs|versus|against|than|compared to|compared with|compared|مقارنه ب|مقارنه|قصاد ب|قصاد)"
+    private const val YEAR_WORD = "(?:(?:ب|ل)?(?:year|سنه|عام) )?(?:19|20)[0-9]{2}"
+    private val afterConnector = Regex("^$CONNECTOR $YEAR_WORD$E")
+    private val beforeConnector = Regex("$B$YEAR_WORD $CONNECTOR$")
 
     /**
-     * A 4-digit 19xx/20xx that no currency word follows is a year, anywhere in the question, when it lies within
-     * [currentYear] - 30 .. [currentYear]. A future or older year cannot be read. After "more than", "less than", "over"
-     * and "under" it is an amount and is left alone.
+     * A 4-digit number is a year only when a cue is directly before it (in, during, for, of, since, في, or year / سنة / عام with
+     * an optional ب or ل), or when it is one side of an explicit "2025 vs 2024". Any other number is an amount and is ignored as
+     * a period. A year that is read must lie within [currentYear] - 30 .. [currentYear], else the period cannot be read.
      */
     private fun yearRule(currentYear: Int) =
         Rule(
-            Regex("$B(?:(?:year|سنه|عام) )?((?:19|20)[0-9]{2})(?! (?:egp|le|جنيه|pound|pounds))$E"),
+            Regex("$B(?:(?:ب|ل)?(?:year|سنه|عام) )?((?:19|20)[0-9]{2})(?! (?:egp|le|جنيه|pound|pounds))$E"),
             accept = { m, text ->
-                val before = precedingWords(m, text)
-                val amount = before.lastOrNull() in AMOUNT_WORDS || before.joinToString(" ") in AMOUNT_PHRASES
+                val before = text.substring(0, m.range.first).trim()
+                val after = text.substring(m.range.last + 1).trim()
+                val cued = m.value != m.groupValues[1] || before.split(' ').lastOrNull() in YEAR_CUES
+                val compared = beforeConnector.containsMatchIn(before) || afterConnector.containsMatchIn(after)
                 val year = m.groupValues[1].toInt()
                 when {
-                    amount -> Verdict.SKIP
+                    !cued && !compared -> Verdict.SKIP
                     year in (currentYear - YEAR_WINDOW)..currentYear -> Verdict.TAKE
                     else -> Verdict.UNREADABLE
                 }
             },
         ) { m -> AskPeriod.year(m.groupValues[1].toInt()) }
 
+    /** "31 may 2026" and "may 31 2026": one day. [dayGroup] / [monthGroup] say where each part sits in the match. */
+    private fun dateRule(
+        pattern: String,
+        dayGroup: Int,
+        monthGroup: Int,
+    ) = Rule(Regex(pattern)) { m ->
+        val month = monthNames.getValue(m.groupValues[monthGroup])
+        val year = m.groupValues[3].toInt()
+        val day = m.groupValues[dayGroup].toInt()
+        day.takeIf { it in 1..YearMonth.of(year, month).lengthOfMonth() }?.let { AskPeriod.dayRange(it, it, month, year) }
+    }
+
     private fun yearOf(m: MatchResult, group: Int) = m.groups[group]?.value?.toInt()
 
     private val rules: List<Rule> =
         listOf(
+            dateRule("$B([0-9]{1,2}) ($anyMonth) $YEAR$E", dayGroup = 1, monthGroup = 2),
+            dateRule("$B($anyMonth) ([0-9]{1,2}) $YEAR$E", dayGroup = 2, monthGroup = 1),
             Rule(Regex("$B(?:last|past|akher|akhir|اخر) ([0-9]{1,4}) (?:days|day|ايام|يوم|ayam|yom)$E")) { m ->
                 m.groupValues[1]
                     .toInt()
@@ -260,8 +269,10 @@ internal object PeriodScanner {
         val found = ArrayList<Pair<Int, AskPeriod>>()
         var invalid = false
         for (rule in rules + yearRule(currentYear)) {
-            for (m in rule.regex.findAll(String(chars)).toList()) {
-                val verdict = rule.accept(m, String(chars))
+            // One snapshot per rule: a year already taken by this rule must still be visible to its neighbour ("2025 vs 2024").
+            val snapshot = String(chars)
+            for (m in rule.regex.findAll(snapshot).toList()) {
+                val verdict = rule.accept(m, snapshot)
                 if (verdict == Verdict.UNREADABLE) invalid = true
                 if (verdict != Verdict.TAKE) continue
                 val period = rule.build(m)
@@ -269,6 +280,8 @@ internal object PeriodScanner {
                 for (i in m.range) chars[i] = ' '
             }
         }
+        val window = (currentYear - YEAR_WINDOW)..currentYear
+        if (found.any { (_, p) -> p.year != null && p.year !in window }) invalid = true
         val left = String(chars)
         if (unreadable.any { it.containsMatchIn(left) }) invalid = true
         return Result(found.sortedBy { it.first }.map { it.second }, left, invalid)

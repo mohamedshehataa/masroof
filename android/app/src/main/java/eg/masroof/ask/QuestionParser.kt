@@ -48,12 +48,12 @@ object QuestionParser {
         return roast(facts)
             ?: payday(facts)
             ?: compare(facts)
+            ?: manyPeriods(facts)
             ?: topMerchants(facts)
             ?: frequency(facts)
             ?: why(facts)
             ?: biggest(facts)
             ?: breakdown(facts)
-            ?: manyPeriods(facts)
             ?: spend(facts)
             ?: bare(facts)
     }
@@ -107,9 +107,8 @@ object QuestionParser {
         return if (strong || weak) AskQuery.Breakdown(f.period) else null
     }
 
-    /** Two periods and no word that says what to do with them ("groceries 2025 and 2024"): compare them, never drop one. */
-    private fun manyPeriods(f: Facts): AskQuery? =
-        if (f.periods.size >= 2) AskQuery.Compare(f.periods[0], f.periods[1], f.subjectOrNull()) else null
+    /** Two periods and no compare word ("april may june"): never a compare and never one dropped, so it cannot be read. */
+    private fun manyPeriods(f: Facts): AskQuery? = if (f.periods.size >= 2) AskQuery.PeriodUnreadable else null
 
     private fun spend(f: Facts): AskQuery? {
         if (!f.hasAny(ParserLexicon.SPEND_WORDS) && !f.has(ParserLexicon.SPEND_PHRASES)) return null

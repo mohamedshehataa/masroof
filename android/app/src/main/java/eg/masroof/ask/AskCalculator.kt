@@ -396,12 +396,23 @@ object AskCalculator {
 
     // region REQ-AN-162
 
+    /** A comparison that has no sensible answer: a period against itself, or several different subjects at once. */
+    private fun refuseCompare(
+        q: AskQuery.Compare,
+        ctx: AskContext,
+    ): AskAnswer? {
+        val first = AskPeriods.resolve(q.current, ctx.today, ctx.monthStartDay)
+        val second = q.previous?.let { AskPeriods.resolve(it, ctx.today, ctx.monthStartDay) }
+        if (second != null && first.from == second.from && first.to == second.to) return AskAnswer.SamePeriod(intro(ctx).chips)
+        val several = severalParts(q.subject, ctx)
+        return if (several.isEmpty()) null else oneAtATime(several, q.current) { AskQuery.Compare(q.current, q.previous, it) }
+    }
+
     private fun compare(
         q: AskQuery.Compare,
         ctx: AskContext,
     ): AskAnswer {
-        val several = severalParts(q.subject, ctx)
-        if (several.isNotEmpty()) return oneAtATime(several, q.current) { AskQuery.Compare(q.current, q.previous, it) }
+        refuseCompare(q, ctx)?.let { return it }
         val subject =
             when (val r = resolveSubject(q.subject, q.current, ctx)) {
                 is Resolution.Found -> r.subject

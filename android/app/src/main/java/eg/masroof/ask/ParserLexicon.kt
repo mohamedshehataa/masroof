@@ -26,7 +26,7 @@ internal object ParserLexicon {
         )
 
     val COMPARE_WORDS: Set<String> =
-        words("vs versus compare compared comparison مقارنه قارن قارنلي قارنها moqarna mo2arna mqarna")
+        words("vs versus against قصاد compare compared comparison مقارنه قارن قارنلي قارنها moqarna mo2arna mqarna")
     val COMPARE_PHRASES: List<String> = phrases("compared to|compared with|difference between|الفرق بين")
 
     /** "more than last month": a comparison only when a "last ..." period is also named. */

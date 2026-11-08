@@ -193,6 +193,11 @@ sealed interface AskAnswer {
         override val followUps: List<AskChip>,
     ) : AskAnswer
 
+    /** Both sides of a comparison are the same period; there is nothing to compare. */
+    data class SamePeriod(
+        override val followUps: List<AskChip>,
+    ) : AskAnswer
+
     /** The question names a period that could not be read; no number, only the suggestion chips. */
     data class PeriodUnreadable(
         override val followUps: List<AskChip>,

@@ -309,10 +309,10 @@ class AskSpendTest : AskEngineFixture() {
             val future = spend("did I spend more than 2050 on groceries this month") as AskAnswer.SpendTotal
             assertEquals(AskPeriod.THIS_MONTH, future.period.period)
             assertEquals(1_000L, future.totalMinor)
-            val amount = spend("spent 2000 on groceries more than 1500") as AskAnswer.SpendTotal
-            assertEquals(LocalDate.of(2000, 1, 1), amount.period.from)
+            val amount = spend("spent 2000 on groceries") as AskAnswer.SpendTotal
+            assertEquals(AskPeriod.THIS_MONTH, amount.period.period)
             assertTrue(spend("groceries in 2050") is AskAnswer.PeriodUnreadable)
-            assertTrue(spend("groceries 2027") is AskAnswer.PeriodUnreadable)
+            assertTrue(spend("groceries in 2027") is AskAnswer.PeriodUnreadable)
         }
 
     @Test
@@ -377,6 +377,29 @@ class AskSpendTest : AskEngineFixture() {
             assertEquals(5_000L, answer.currentMinor)
             assertEquals(2_000L, answer.previousMinor)
             assertEquals("Groceries: 50 EGP in 2025 vs 20 EGP in 2024", en().text(answer).headline)
-            assertTrue(spend("groceries 2027") is AskAnswer.PeriodUnreadable)
+            assertTrue(spend("groceries in 2027") is AskAnswer.PeriodUnreadable)
+        }
+
+    @Test
+    fun `REQ-AN-162 both sides the same period say so instead of comparing a period with itself`() =
+        runTest {
+            seedCategories()
+            put("a", 5_000, "2025-03-10T10:00:00Z", category = GROCERIES)
+            val same = spend("groceries in 2025 vs last year") as AskAnswer.SamePeriod
+            assertEquals("Those are the same period, so there is nothing to compare. Try two different periods.", en().text(same).headline)
+            assertTrue(spend("groceries this month vs this month") is AskAnswer.SamePeriod)
+        }
+
+    @Test
+    fun `REQ-AN-160 a single date with its year is one day, and two periods without compare word are not read`() =
+        runTest {
+            seedCategories()
+            put("d", 4_000, "2026-05-31T10:00:00Z", category = GROCERIES)
+            put("e", 9_000, "2026-05-30T10:00:00Z", category = GROCERIES)
+            val day = spend("groceries may 31 2026") as AskAnswer.SpendTotal
+            assertEquals(4_000L, day.totalMinor)
+            assertEquals(LocalDate.of(2026, 5, 31), day.period.to)
+            assertTrue(spend("april may june") is AskAnswer.PeriodUnreadable)
+            assertTrue(spend("groceries october 2030") is AskAnswer.PeriodUnreadable)
         }
 }
