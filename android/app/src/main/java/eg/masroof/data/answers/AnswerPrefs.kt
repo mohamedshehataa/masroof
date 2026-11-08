@@ -124,7 +124,7 @@ object NoAnswerPrefs : AnswerPrefs {
     override suspend fun clear() = Unit
 }
 
-private val Context.answerStore: DataStore<Preferences> by preferencesDataStore(name = "answers")
+internal val Context.answerStore: DataStore<Preferences> by preferencesDataStore(name = "answers")
 
 private val answeredKey = stringSetPreferencesKey("answered_entries")
 private val linksKey = stringSetPreferencesKey("entry_links")

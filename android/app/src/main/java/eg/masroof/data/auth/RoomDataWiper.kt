@@ -106,6 +106,18 @@ class RoomDataWiper
                 listOf(
                     { withContext(io) { deleteReceipts() } },
                     { withContext(io) { deleteSafetyCopies() } },
+                    // staged backup rows a killed backup left behind (encrypted, but still data)
+                    {
+                        withContext(io) {
+                            check(
+                                eg.masroof.data.backup.BackupStage
+                                    .sweep(
+                                        eg.masroof.data.backup.BackupStage
+                                            .dir(safetyCopyDir),
+                                    ) == 0,
+                            )
+                        }
+                    },
                     { withContext(io) { capture.clear() } },
                     { withContext(io) { insights.clear() } },
                     // nothing stays on the lock screen: every "Recorded ... Undo" notification goes
