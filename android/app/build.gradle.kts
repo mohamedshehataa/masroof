@@ -87,6 +87,8 @@ android {
         // AnswerGeneratedTest: `-Danswer.seed=N` replays from another start (the default is fixed); the failure prints its seed
         unitTests.all { test ->
             System.getProperty("answer.seed")?.let { test.systemProperty("answer.seed", it) }
+            // DuplicateGeneratedTest (STORY-173): `-Dduplicate.seed=N`
+            System.getProperty("duplicate.seed")?.let { test.systemProperty("duplicate.seed", it) }
         }
     }
 

@@ -68,6 +68,7 @@ object DuplicateMatcher {
             usable(capture) &&
             manual.id !in blocked &&
             capture.id !in blocked &&
+            manual.amountMinor > 0 &&
             manual.currency == capture.currency &&
             manual.amountMinor == capture.amountMinor &&
             manual.type == capture.type &&

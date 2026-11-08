@@ -1,9 +1,11 @@
 package eg.masroof
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -115,6 +117,36 @@ class DuplicateCardScreenTest {
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], fontScale = 1.5f)
+class DuplicateCardScreenLargeFontTest {
+    @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun `REQ-DEDUP-063 at font scale 1-5 the card still shows both sides and both buttons at 48dp`() {
+        compose.setContent {
+            MasroofTheme {
+                ReviewContent(
+                    items = emptyList(),
+                    onCreate = {},
+                    onDismiss = {},
+                    duplicates = listOf(card),
+                    categoryNames =
+                        mapOf(
+                            "food" to "Food",
+                        ),
+                )
+            }
+        }
+        compose.onNodeWithText("Possible duplicate", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Manual entry", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("SMS from CIB", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Merge").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("Keep both").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "ar")
 class DuplicateCardScreenArabicTest {
     @get:Rule val compose = createComposeRule()
@@ -133,7 +165,10 @@ class DuplicateCardScreenArabicTest {
         assertTrue(manual.left > capture.left)
         compose.onNodeWithText("دمج").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         compose.onNodeWithText("سيب الاتنين").assertIsDisplayed()
-        // Arabic-Indic digits for the amount (٠-٩), like everywhere else
-        compose.onNodeWithContentDescription("ممكن يكون مكرر", substring = true).assertIsDisplayed()
+        // Arabic-Indic digits everywhere: both amounts, the date and the time
+        compose.onAllNodesWithText("١٬٤٥٠ ج.م", useUnmergedTree = true).assertCountEquals(2)
+        compose.onNodeWithText("٦ نوفمبر، ١٤:٠٥", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("١٬٤٥٠ ج.م", substring = true).assertIsDisplayed()
+        compose.onAllNodesWithText("1,450", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 }

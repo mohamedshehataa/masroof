@@ -135,4 +135,39 @@ class DuplicateMatcherTest {
         val newer = captureEntry("c2", at = cairo(DUP_DAY, "20:00"))
         assertEquals(listOf("m|c2", "m|c1"), pairs(listOf(manualEntry("m"), older, newer)).map { it.key })
     }
+
+    @Test
+    fun `REQ-DEDUP-063 zero amounts never make a pair`() {
+        assertTrue(pairs(listOf(manualEntry("m", amount = 0), captureEntry("c", amount = 0))).isEmpty())
+    }
+
+    private fun startOfCairoDay(date: String) =
+        java.time.LocalDate
+            .parse(date)
+            .atStartOfDay(eg.masroof.core.CairoTime.zone)
+            .toInstant()
+            .toEpochMilli()
+
+    @Test
+    fun `REQ-DEDUP-063 around the end of Egypt summer time days are still Cairo calendar days`() {
+        // 30 Oct 2026: the clocks go back, so the days around it are not 24 hours long; the rule must not care
+        val noon30 = manualEntry("m", at = cairo("2026-10-30", "12:00"))
+        val first = startOfCairoDay("2026-10-30")
+        val next = startOfCairoDay("2026-10-31")
+        assertEquals(1, pairs(listOf(noon30, captureEntry("c", at = first))).size)
+        assertEquals(1, pairs(listOf(noon30, captureEntry("c", at = next - 1))).size)
+        assertTrue(pairs(listOf(noon30, captureEntry("c", at = first - 1))).isEmpty())
+        assertTrue(pairs(listOf(noon30, captureEntry("c", at = next))).isEmpty())
+        // and the same on the days before and after
+        val noon29 = manualEntry("m29", at = cairo("2026-10-29", "12:00"))
+        assertEquals(1, pairs(listOf(noon29, captureEntry("c29", at = first - 1))).size)
+    }
+
+    @Test
+    fun `REQ-DEDUP-063 two timed entries are two hours apart in elapsed time across the clock change`() {
+        val at = startOfCairoDay("2026-10-30") - 30 * 60 * 1000
+        val manual = manualEntry("m", at = at, timeKnown = true)
+        assertEquals(1, pairs(listOf(manual, captureEntry("c", at = at + DuplicateMatcher.MAX_GAP_MS))).size)
+        assertTrue(pairs(listOf(manual, captureEntry("c", at = at + DuplicateMatcher.MAX_GAP_MS + 1))).isEmpty())
+    }
 }

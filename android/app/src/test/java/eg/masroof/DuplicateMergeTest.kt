@@ -15,6 +15,7 @@ import eg.masroof.data.db.ReceiptEntity
 import eg.masroof.data.edit.DefaultDuplicateRepository
 import eg.masroof.data.edit.ExpenseChanges
 import eg.masroof.data.edit.MergeResult
+import eg.masroof.data.edit.RestoreOutcome
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -371,21 +372,175 @@ class DuplicateMergeTest {
         }
 
     @Test
-    fun `REQ-DEDUP-064 Undo is refused once the survivor was deleted or the typed entry was brought back by hand`() =
+    fun `REQ-DEDUP-064 Undo is refused once the survivor was deleted`() =
         runTest {
             add(manualEntry("m"), captureEntry("c"))
             val token = merged()
-            w.editor.restore("m")
+            w.editor.delete("c")
             assertFalse(repo.undo(token))
-            // the typed entry was restored by the trash Undo: it is live next to the survivor, sources untouched
-            assertNull(
+            assertNotNull(
                 w.db
                     .expenses()
                     .find("m")!!
                     .deletedAtMillis,
             )
-            w.editor.delete("c")
+        }
+
+    @Test
+    fun `REQ-DEDUP-064 a merged-away typed entry is never restored on its own, so the purchase is never counted twice`() =
+        runTest {
+            add(manualEntry("m"), captureEntry("c"))
+            val token = merged()
+            assertFalse(w.editor.restore("m"))
+            assertEquals(RestoreOutcome.MergedAway, w.editor.restoreOutcome("m"))
+            assertEquals(DUP_AMOUNT, total())
+            assertNotNull(
+                w.db
+                    .expenses()
+                    .find("m")!!
+                    .deletedAtMillis,
+            )
+            assertEquals(
+                setOf("m:src", "c:src"),
+                w.db
+                    .sources()
+                    .forExpense("c")
+                    .map { it.id }
+                    .toSet(),
+            )
+            // the merge itself is untouched: its Undo still brings both back, and then the typed entry restores like any other
+            assertTrue(repo.undo(token))
+            assertEquals(2 * DUP_AMOUNT, total())
+            w.editor.delete("m")
+            assertTrue(w.editor.restore("m"))
+            assertEquals(2 * DUP_AMOUNT, total())
+        }
+
+    @Test
+    fun `REQ-DEDUP-064 a refund linked to the survivor after the merge makes the Undo refuse`() =
+        runTest {
+            add(manualEntry("m"), captureEntry("c"), captureEntry("r", amount = 20_000, type = "REFUND", at = cairo(DUP_DAY, "18:00")))
+            val token = merged()
+            val before =
+                w.db
+                    .expenses()
+                    .all()
+                    .sortedBy { it.id }
+            assertNotNull(w.repo.linkRefund("r", "c"))
+            val linked =
+                w.db
+                    .expenses()
+                    .all()
+                    .sortedBy { it.id }
             assertFalse(repo.undo(token))
+            assertEquals(
+                linked,
+                w.db
+                    .expenses()
+                    .all()
+                    .sortedBy { it.id },
+            )
+            assertNotNull(
+                w.db
+                    .expenses()
+                    .find("m")!!
+                    .deletedAtMillis,
+            )
+            assertEquals(before.size, linked.size)
+        }
+
+    @Test
+    fun `REQ-DEDUP-064 a transfer pair made on the survivor after the merge makes the Undo refuse`() =
+        runTest {
+            w.twoBanks()
+            add(
+                manualEntry("m", type = "INCOME"),
+                captureEntry("c", type = "INCOME", last4 = "2222", method = "INSTAPAY"),
+            )
+            val token = merged()
+            assertNotNull(w.repo.transferToOwn("c", "cib"))
+            val linked =
+                w.db
+                    .expenses()
+                    .all()
+                    .sortedBy { it.id }
+            assertFalse(repo.undo(token))
+            assertEquals(
+                linked,
+                w.db
+                    .expenses()
+                    .all()
+                    .sortedBy { it.id },
+            )
+            assertNotNull(
+                w.db
+                    .expenses()
+                    .find("m")!!
+                    .deletedAtMillis,
+            )
+        }
+
+    @Test
+    fun `REQ-DEDUP-064 a gold lot pointing at the survivor after the merge makes the Undo refuse`() =
+        runTest {
+            add(manualEntry("m"), captureEntry("c"))
+            val token = merged()
+            w.db.assets().insert(
+                AssetEntity(
+                    "a",
+                    "GOLD",
+                    "Gold",
+                    "EGP",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    createdAtMillis = 1L,
+                    updatedAtMillis = 1L,
+                ),
+            )
+            w.db.assetLots().insert(AssetLotEntity("l", "a", "BUY", 1000, DUP_AMOUNT, "EGP", 1L, "c", null))
+            assertFalse(repo.undo(token))
+            assertNotNull(
+                w.db
+                    .expenses()
+                    .find("m")!!
+                    .deletedAtMillis,
+            )
+        }
+
+    @Test
+    fun `REQ-DEDUP-064 Merge carries the typed merchant over when the capture has none, and never overwrites its own`() =
+        runTest {
+            add(manualEntry("m", merchant = "Koshary"), captureEntry("c"))
+            add(manualEntry("m2", amount = 5_000, merchant = "Typed"), captureEntry("c2", amount = 5_000, merchant = "CIB card"))
+            merged()
+            merged("m2", "c2")
+            assertEquals(
+                "Koshary",
+                w.db
+                    .expenses()
+                    .find("c")!!
+                    .merchant,
+            )
+            assertEquals(
+                "CIB card",
+                w.db
+                    .expenses()
+                    .find("c2")!!
+                    .merchant,
+            )
+        }
+
+    @Test
+    fun `REQ-DEDUP-063 a pair of zero amounts gets no card`() =
+        runTest {
+            add(manualEntry("m", amount = 0), captureEntry("c", amount = 0))
+            assertEquals(emptyList<String>(), keys())
+            assertEquals(DuplicateOutcome.OUT_OF_DATE, outcome(repo.merge("m", "c")))
         }
 
     @Test
@@ -463,6 +618,8 @@ class DuplicateMergeTest {
                     .all()
                     .sortedBy { it.id }
             assertEquals(DuplicateOutcome.OUT_OF_DATE, outcome(repo.merge("m", "c")))
+            // the failed second tap must not forget that the typed entry was merged away
+            assertFalse(w.editor.restore("m"))
             assertEquals(
                 after,
                 w.db

@@ -77,6 +77,8 @@ data class AnswerState(
     val atmChoice: AtmChoice? = null,
     /** STORY-173: "Keep both" pairs (`manualId|captureId`): a look-alike pair the user said is two purchases never gets a card again. */
     val keptApart: Set<String> = emptySet(),
+    /** STORY-173: typed entries a merge folded into a capture. Their sources moved, so they are never restored on their own. */
+    val mergedAway: Set<String> = emptySet(),
 ) {
     fun linkedIds(): Set<String> = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
 
@@ -130,6 +132,7 @@ private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
 private val keptApartKey = stringSetPreferencesKey("kept_apart_pairs")
+private val mergedAwayKey = stringSetPreferencesKey("merged_away")
 
 private const val LINK_FIELDS = 13
 
@@ -183,6 +186,7 @@ private fun decode(p: Preferences) =
                 .toMap(),
         atmChoice = p[atmKey]?.let { runCatching { AtmChoice.valueOf(it) }.getOrNull() },
         keptApart = p[keptApartKey].orEmpty(),
+        mergedAway = p[mergedAwayKey].orEmpty(),
     )
 
 private fun encode(
@@ -200,6 +204,7 @@ private fun encode(
     val atm = s.atmChoice
     if (atm == null) p.remove(atmKey) else p[atmKey] = atm.name
     p[keptApartKey] = s.keptApart
+    p[mergedAwayKey] = s.mergedAway
 }
 
 @Singleton

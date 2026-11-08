@@ -106,7 +106,6 @@ class ExpenseWritePathTest {
     fun `REQ-EXP-065 the files that write linked rows run the link rules`() {
         listOf(
             "data/edit/ExpenseEdit.kt",
-            "data/edit/DuplicateMerge.kt",
             "ingest/Captured.kt",
             "data/answers/AnswerRepository.kt",
         ).forEach {

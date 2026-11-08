@@ -4,7 +4,6 @@ import android.database.sqlite.SQLiteException
 import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.answers.AnswerPrefs
-import eg.masroof.data.answers.AnswerWrites
 import eg.masroof.data.answers.DuplicateMatcher
 import eg.masroof.data.answers.EntrySources
 import eg.masroof.data.auth.EraseLock
@@ -142,7 +141,22 @@ class DefaultDuplicateRepository
                     eraseLock.mutex.withLock {
                         val state = prefs.current()
                         val epoch = prefs.epoch
-                        db.withTransaction { mergeLocked(manualId, captureId, state.linkedIds(), state.keptApart, epoch) }
+                        // an entry that was merged before keeps its mark whatever this attempt does
+                        val already = manualId in state.mergedAway
+                        // marked first: a crash after the commit must never leave a restorable, source-less typed entry
+                        prefs.edit { it.copy(mergedAway = it.mergedAway + manualId) }
+                        val r =
+                            try {
+                                db.withTransaction { mergeLocked(manualId, captureId, state.linkedIds(), state.keptApart, epoch) }
+                            } catch (e: SQLiteException) {
+                                if (!already) unmark(manualId)
+                                throw e
+                            } catch (e: IllegalStateException) {
+                                if (!already) unmark(manualId)
+                                throw e
+                            }
+                        if (r !is MergeResult.Merged && !already) unmark(manualId)
+                        r
                     }
                 } catch (_: SQLiteException) {
                     MergeResult.Failed
@@ -152,6 +166,8 @@ class DefaultDuplicateRepository
             if (result is MergeResult.Merged) signal.changed()
             return result
         }
+
+        private suspend fun unmark(manualId: String) = prefs.edit { it.copy(mergedAway = it.mergedAway - manualId) }
 
         /** Re-reads both entries and checks the whole rule again: a card that went stale merges nothing. */
         private suspend fun mergeLocked(
@@ -176,6 +192,7 @@ class DefaultDuplicateRepository
             val survivor =
                 capture.copy(
                     categoryId = capture.categoryId ?: manual.categoryId,
+                    merchant = capture.merchant ?: manual.merchant,
                     notes = capture.notes ?: manual.notes,
                     paidByMemberId = capture.paidByMemberId ?: manual.paidByMemberId,
                     updatedAtMillis = now,
@@ -203,8 +220,12 @@ class DefaultDuplicateRepository
                 try {
                     eraseLock.mutex.withLock {
                         if (token.epoch != prefs.epoch) return@withLock false
-                        val links = prefs.current().linksOf(token.captureBefore.id)
-                        db.withTransaction { undoLocked(token, links) }
+                        // an Undo applies only in the state it was made in: a link made since (STORY-208) owns the survivor now
+                        val linked = prefs.current().linkedIds()
+                        if (token.captureBefore.id in linked || token.manualBefore.id in linked) return@withLock false
+                        val done = db.withTransaction { undoLocked(token) }
+                        if (done) unmark(token.manualBefore.id)
+                        done
                     }
                 } catch (_: SQLiteException) {
                     false
@@ -218,8 +239,9 @@ class DefaultDuplicateRepository
         /** Only when both rows are exactly as the merge left them: an edit, a delete or an answer since means the Undo is gone. */
         private suspend fun undoLocked(
             token: MergeUndo,
-            links: List<eg.masroof.data.answers.EntryLink>,
         ): Boolean {
+            val referenced = db.expenses().referencedIds()
+            if (token.captureBefore.id in referenced || token.manualBefore.id in referenced) return false
             val manual = db.expenses().find(token.manualBefore.id)
             val capture = db.expenses().find(token.captureBefore.id)
             if (manual != token.manualAfter || capture != token.survivor) return false
@@ -230,8 +252,6 @@ class DefaultDuplicateRepository
             db.sources().repoint(token.sourceIds, manual.id)
             val stillThere = db.receipts().idsOf(capture.id).toSet()
             token.receiptIds.filter { it in stillThere }.forEach { db.receipts().moveTo(it, manual.id) }
-            // a refund linked to the survivor in the meantime follows its category again
-            AnswerWrites.reconcile(db, links)
             return true
         }
 
