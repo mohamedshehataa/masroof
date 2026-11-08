@@ -1,3 +1,5 @@
+@file:Suppress("MatchingDeclarationName") // the section and its actions class belong together
+
 package eg.masroof.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -162,18 +164,18 @@ private fun failureText(run: RestoreState.Failed): String =
 @Composable
 private fun Progress(
     label: String,
-    progress: Float?,
+    percent: Int?,
     onCancel: (() -> Unit)?,
 ) {
     val desc = stringResource(R.string.restore_progress_desc)
     Text(label)
     val modifier = Modifier.fillMaxWidth().semantics { contentDescription = desc }
-    if (progress ==
+    if (percent ==
         null
     ) {
         LinearProgressIndicator(modifier = modifier)
     } else {
-        LinearProgressIndicator(progress = { progress }, modifier = modifier)
+        LinearProgressIndicator(progress = { percent / PERCENT_MAX }, modifier = modifier)
     }
     if (onCancel != null) {
         OutlinedButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.restore_cancel)) }
@@ -284,3 +286,5 @@ internal fun restoreDate(
     val day = DateFormat.digitsAs(DateTimeFormatter.ofPattern("d MMM yyyy", locale).format(at), digits)
     return day + ", " + DateFormat.timeOfDay(millis, digits)
 }
+
+private const val PERCENT_MAX = 100f

@@ -1,10 +1,12 @@
+@file:Suppress("ThrowsCount", "NestedBlockDepth", "ComplexCondition") // one named failure per check of REQ-SEC-068
+
 package eg.masroof.data.backup
 
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-/** The settings of a checked backup: store name (see [BackupPrefsInventory]) to key to a typed value (Boolean, Int, String, Set<String>). */
+/** Settings of a checked backup: store name (see [BackupPrefsInventory]) to key to a typed value (Boolean, Int, String, Set). */
 class RestoredSettings(
     val stores: Map<String, Map<String, Any>>,
 )

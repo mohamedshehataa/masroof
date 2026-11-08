@@ -41,7 +41,7 @@ interface RestoreDatabase {
 
     /**
      * Replaces every table in ONE transaction: all backup and pipeline tables are emptied, then each of [tables] (table name to its
-     * JSON-lines file) is inserted, [nonce] is written to `application_id`, and [beforeCommit] runs last. Any failure rolls everything back.
+     * JSON-lines file) is inserted, [nonce] is written to `application_id`, and [beforeCommit] runs last. A failure rolls it all back.
      */
     fun replaceAll(
         nonce: Int,

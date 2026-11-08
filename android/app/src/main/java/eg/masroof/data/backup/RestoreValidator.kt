@@ -1,3 +1,5 @@
+@file:Suppress("ThrowsCount", "NestedBlockDepth", "ComplexCondition") // one named failure per check of REQ-SEC-068
+
 package eg.masroof.data.backup
 
 import org.json.JSONArray
@@ -188,7 +190,7 @@ class RestoreValidator(
             if (rows != manifest.rows.getValue(table.name)) throw fail(6)
             if (table.name in parents) ids[table.name] = pk
         }
-        // Every foreign key must resolve: a restored budget whose category is missing is refused, never "repaired" by dropping its category.
+        // Every foreign key must resolve: a budget whose category is missing is refused, never repaired by dropping the category.
         for ((parent, wanted) in refs) if (!ids.getValue(parent).containsAll(wanted)) throw fail(6)
         if (manifest.receipts.map { it.id }.toSet() != receiptRows || manifest.receipts.size != receiptRows.size) throw fail(6)
         if (manifest.receipts.map { it.fileName }.toSet() != receiptNames) throw fail(6)
@@ -308,7 +310,7 @@ class RestoreValidator(
             )
         private val CURRENCIES: Set<String> by lazy { Currency.getAvailableCurrencies().map { it.currencyCode }.toSet() }
 
-        /** Known enum columns; a value outside the list refuses the file. Budget periods stay open to the unsupported ones STORY-181 shows. */
+        /** Known enum columns; a value outside refuses the file. Budget periods stay open to the unsupported ones STORY-181 shows. */
         val ENUMS: Map<String, Set<String>> =
             mapOf(
                 "expense.type" to setOf("EXPENSE", "INCOME", "REFUND", "TRANSFER", "TRANSFER_IN", "CASH_WITHDRAWAL"),

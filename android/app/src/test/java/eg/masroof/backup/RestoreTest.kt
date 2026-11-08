@@ -647,7 +647,7 @@ class RestoreTest {
         val files = target.receiptHashes()
         val hooks =
             object : RestoreHooks {
-                override fun beforeCommit() = throw IllegalStateException("disk error")
+                override fun beforeCommit() = error("disk error")
             }
         val (restorer, staged) = stage(restorer = target.restorer(hooks = hooks))
         try {

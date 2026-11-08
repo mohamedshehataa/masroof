@@ -1,3 +1,5 @@
+@file:Suppress("CyclomaticComplexMethod") // one branch per preference type and store
+
 package eg.masroof.data.backup
 
 import android.content.Context

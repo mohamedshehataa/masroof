@@ -1,3 +1,12 @@
+@file:Suppress(
+    "ThrowsCount",
+    "NestedBlockDepth",
+    "ComplexCondition",
+    "SwallowedException",
+    "InstanceOfCheckForException",
+    "LoopWithTooManyJumpStatements",
+) // a streaming checker with one named failure per check
+
 package eg.masroof.data.backup
 
 import kotlinx.coroutines.currentCoroutineContext
@@ -35,7 +44,7 @@ class BackupRestorer(
 
     /** Checks 1 and 2: reads the header only, before any passphrase is asked for or any key derived. */
     fun checkHeader(source: InputStream): BackupHeader {
-        val bytes = source.readNBytes(BackupHeader.SIZE)
+        val bytes = readHeaderBytes(source)
         if (bytes.size < BackupFormat.MAGIC.size || !bytes.copyOfRange(0, BackupFormat.MAGIC.size).contentEquals(BackupFormat.MAGIC)) {
             throw RestoreException(RestoreFailure.NOT_A_BACKUP, 1)
         }
@@ -93,7 +102,7 @@ class BackupRestorer(
         sizeHint: Long,
         header: BackupHeader,
         passphrase: String,
-        progress: (Float?) -> Unit = {},
+        progress: (Int?) -> Unit = {},
     ): StagedRestore {
         val key = deriveKey(passphrase, header)
         try {
@@ -101,7 +110,7 @@ class BackupRestorer(
             var done = 0L
             val tick: (Long) -> Unit = { n ->
                 done += n
-                progress(if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null)
+                progress(if (total > 0) (done * PERCENT / total).toInt().coerceIn(0, PERCENT.toInt()) else null)
             }
             drain(openSource, header, key, tick)
             env.stageRoot.deleteRecursively()
@@ -114,7 +123,7 @@ class BackupRestorer(
                         context.ensureActive()
                     }
                 arrangeReceipts(extracted, validated)
-                progress(1f)
+                progress(PERCENT.toInt())
                 return StagedRestore(env.stageRoot, validated.info, validated)
             } catch (e: Throwable) {
                 env.stageRoot.deleteRecursively()
@@ -141,7 +150,7 @@ class BackupRestorer(
         key: ByteArray,
     ): InputStream {
         val expected = header.encode()
-        val head = tracking.readNBytes(BackupHeader.SIZE)
+        val head = readHeaderBytes(tracking)
         if (!head.contentEquals(expected)) throw RestoreException(RestoreFailure.WRONG_PASSPHRASE_OR_DAMAGED, 3)
         return BackupCipher.decrypt(tracking, key, expected)
     }
@@ -484,6 +493,7 @@ class BackupRestorer(
 
     private companion object {
         const val CHUNK = 8 * 1024
+        const val PERCENT = 100L
         const val NEW_RECEIPTS = "receipts-new"
         const val MB = 1024L * 1024L
         const val SPACE_MARGIN = 8L * 1024 * 1024

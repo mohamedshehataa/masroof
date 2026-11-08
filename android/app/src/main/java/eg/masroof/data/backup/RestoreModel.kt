@@ -1,3 +1,5 @@
+@file:Suppress("LongParameterList") // one injected seam per thing the restore touches
+
 package eg.masroof.data.backup
 
 import java.io.File
@@ -112,12 +114,28 @@ class RestoreEnvironment(
     val limits: RestoreLimits = RestoreLimits(),
     /** Where checked files wait: a sibling of the receipts directory, so the final swap is a rename on one file system. */
     val stageRoot: File = RestoreStage.dir(receiptsDir),
-    val freeSpace: (File) -> Long = { it.usableSpace },
+    val freeSpace: (File) -> Long = ::freeBytes,
     val openStageFile: (File) -> OutputStream = { FileOutputStream(it) },
     val hooks: RestoreHooks = RestoreHooks.None,
 )
 
-/** Where a restore stages and which file marks it as committed. All of it is removed by a cancel, a failure, a finished restore and by Erase. */
+/** The staging folder is checked against the plain free space on purpose: cached data is not something a restore may count on. */
+@android.annotation.SuppressLint("UsableSpace")
+internal fun freeBytes(dir: File): Long = dir.usableSpace
+
+/** Up to [BackupHeader.SIZE] bytes (fewer at the end of the file); `InputStream.readNBytes` needs API 33. */
+internal fun readHeaderBytes(source: java.io.InputStream): ByteArray {
+    val buf = ByteArray(BackupHeader.SIZE)
+    var n = 0
+    while (n < buf.size) {
+        val r = source.read(buf, n, buf.size - n)
+        if (r < 0) break
+        n += r
+    }
+    return buf.copyOf(n)
+}
+
+/** Where a restore stages and which file marks it as committed; a cancel, a failure, a finished restore and Erase remove all of it. */
 object RestoreStage {
     const val FOLDER = "restore-stage"
     const val MARKER = "restore-marker.json"

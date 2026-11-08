@@ -34,7 +34,7 @@ sealed interface RestoreState {
 
     /** [progress] is 0..1, null while the file size is unknown. */
     data class Checking(
-        val progress: Float?,
+        val progress: Int?,
     ) : RestoreState
 
     data class Confirm(
