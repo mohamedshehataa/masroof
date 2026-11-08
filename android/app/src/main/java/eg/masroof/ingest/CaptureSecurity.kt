@@ -144,7 +144,7 @@ object LocalIdHasher {
     }
 }
 
-/** Everything capture keeps outside Room, cleared with the rest on logout and account switch. */
+/** Everything capture keeps outside Room, cleared with the rest by "Erase all data" (a logout or a session change never clears it). */
 interface CaptureData {
     fun clear()
 }

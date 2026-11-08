@@ -132,9 +132,16 @@ class BackfillRound4Test {
 
     @Test
     fun `REQ-SMS-102 a keyset whose master key is gone from the Keystore is recreated and old values read as absent`() {
-        assertTrue(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = false))
-        assertFalse("a first start has nothing to recover", LocalKeystore.needsRecovery(hasKeyset = false, masterPresent = false))
-        assertFalse(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = true))
+        assertTrue(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = false, masterWasMade = true))
+        assertFalse(
+            "the Keystore never worked: keep the keyset",
+            LocalKeystore.needsRecovery(true, masterPresent = false, masterWasMade = false),
+        )
+        assertFalse(
+            "a first start has nothing to recover",
+            LocalKeystore.needsRecovery(hasKeyset = false, masterPresent = false, masterWasMade = true),
+        )
+        assertFalse(LocalKeystore.needsRecovery(hasKeyset = true, masterPresent = true, masterWasMade = true))
         var destroyed = 0
         var lost = true
         val oldKey = inMemoryAead()
@@ -149,6 +156,9 @@ class BackfillRound4Test {
                     if (lost) {
                         lost = false
                         destroyed++
+                        true
+                    } else {
+                        false
                     }
                 },
             )
@@ -191,7 +201,10 @@ class BackfillRound4Test {
         runTest {
             // the memory's key is the phone's own: a logout, a session clear or TinkKeystore.reset() only touch another keyset
             val local = inMemoryAead()
-            var sessionKeysetDestroyed = false
+            // the session keyset (TinkKeystore) is a different key: an injected equivalent is created, used, and destroyed here
+            var sessionDestroyed = 0
+            val session = RecoveringAead(build = { inMemoryAead() }, destroy = { sessionDestroyed++ })
+            session.encrypt(byteArrayOf(1), byteArrayOf())
             val store = BackfillStore(prefs("r4-session"), local)
             val t = BACKFILL_NOW - 20 * BACKFILL_DAY
             val settings = MemorySettings()
@@ -218,8 +231,8 @@ class BackfillRound4Test {
                     .id,
             )
             db.captured().all().forEach { db.captured().delete(it.localId) }
-            sessionKeysetDestroyed = true // TinkKeystore.reset(): another keyset, another master key
-            assertTrue(sessionKeysetDestroyed)
+            session.reset() // what a logout, a session clear or the server forget step does to the session keyset
+            assertEquals(1, sessionDestroyed)
             store.save(BackfillState(BackfillPhase.RUNNING, "D90", BACKFILL_NOW - 90 * BACKFILL_DAY, BACKFILL_NOW + 1))
             SmsBackfill(
                 db,

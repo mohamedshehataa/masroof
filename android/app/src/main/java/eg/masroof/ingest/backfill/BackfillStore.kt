@@ -59,16 +59,20 @@ class BackfillStore(
     }
 
     fun save(state: BackfillState) {
+        // the times of the run (range, last message read) are sealed like the memory; a value that cannot be sealed is not written
+        val from = seal(state.fromMillis.toString())
+        val to = seal(state.toMillis.toString())
+        val last = seal(state.lastDateMillis.toString())
         prefs.edit {
             putString(PHASE, state.phase.name)
             putString(KEY, state.rangeKey)
-            putLong(FROM, state.fromMillis)
-            putLong(TO, state.toMillis)
+            from?.let { putString(FROM, it) }
+            to?.let { putString(TO, it) }
             putInt(TOTAL, state.total)
             putInt(READ, state.read)
             putInt(ENTRIES, state.entries)
             putInt(REVIEW, state.review)
-            putLong(LAST_DATE, state.lastDateMillis)
+            last?.let { putString(LAST_DATE, it) }
             putLong(LAST_ID, state.lastId)
         }
         mutable.value = state
@@ -94,15 +98,27 @@ class BackfillStore(
         seal(nowMillis.toString())?.let { sealed -> prefs.edit { putString(SEEN + id, sealed) } }
     }
 
-    /** A signature with the times (of the message, of the mark) it was seen at; at most [MAX_TIMES] are kept per signature. */
+    /**
+     * A signature with the times (of the message, of the mark) it was seen at; at most [MAX_TIMES] are kept per signature. A value that
+     * cannot be opened (a Keystore error that may pass) is never overwritten or deleted: the new time goes to a second key that is
+     * merged back when the first one opens again.
+     */
     override fun markSignature(
         signature: String,
         atMillis: Long,
         nowMillis: Long,
     ) {
         pruneDaily(nowMillis)
-        val kept = times(signature).filter { it.marked >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1)
-        save(signature, kept + Seen(atMillis, nowMillis, false))
+        val fresh = Seen(atMillis, nowMillis, false)
+        val live = { l: List<Seen> -> l.filter { it.marked >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1) }
+        val main = slot(SIG + signature)
+        val aux = slot(AUX + signature)
+        if (main != null) {
+            val saved = write(SIG + signature, live(main + aux.orEmpty()) + fresh)
+            if (saved && aux != null) prefs.edit { remove(AUX + signature) }
+        } else if (aux != null) {
+            write(AUX + signature, live(aux) + fresh)
+        }
     }
 
     override fun seenSignature(
@@ -110,7 +126,9 @@ class BackfillStore(
         fromMillis: Long,
         toMillis: Long,
         nowMillis: Long,
-    ): Boolean = times(signature).any { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
+    ): Boolean =
+        (slot(SIG + signature).orEmpty() + slot(AUX + signature).orEmpty())
+            .any { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
 
     override fun claimSignature(
         signature: String,
@@ -119,11 +137,16 @@ class BackfillStore(
         atMillis: Long,
         nowMillis: Long,
     ): SignatureClaim {
-        val all = times(signature)
-        val inWindow = all.filter { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
+        val parts = listOf(SIG + signature, AUX + signature).mapNotNull { k -> slot(k)?.let { k to it } }
+        val inWindow =
+            parts
+                .flatMap { (k, l) -> l.map { k to it } }
+                .filter { (_, t) -> t.at in fromMillis..toMillis && t.marked >= nowMillis - MEMORY_MILLIS }
         if (inWindow.isEmpty()) return SignatureClaim.NONE
-        val closest = inWindow.filter { !it.used }.minByOrNull { abs(it.at - atMillis) } ?: return SignatureClaim.ALREADY_CLAIMED
-        save(signature, all.map { if (it === closest) it.copy(used = true) else it })
+        val closest =
+            inWindow.filter { !it.second.used }.minByOrNull { abs(it.second.at - atMillis) } ?: return SignatureClaim.ALREADY_CLAIMED
+        val list = parts.first { it.first == closest.first }.second
+        write(closest.first, list.map { if (it === closest.second) it.copy(used = true) else it })
         return SignatureClaim.CLAIMED
     }
 
@@ -134,24 +157,30 @@ class BackfillStore(
         val used: Boolean,
     )
 
-    private fun times(signature: String): List<Seen> =
-        prefs
-            .getString(SIG + signature, null)
-            ?.let(::open)
-            ?.split(',')
-            ?.mapNotNull { part ->
-                val f = part.split(':')
-                val at = f.getOrNull(0)?.toLongOrNull()
-                val marked = f.getOrNull(1)?.toLongOrNull()
-                if (at == null || marked == null) null else Seen(at, marked, f.getOrNull(2) == "1")
-            }.orEmpty()
+    /** The times under one key: empty when there is none, null when there is a value that cannot be opened (never touch it). */
+    private fun slot(key: String): List<Seen>? {
+        val raw = prefs.getString(key, null) ?: return emptyList()
+        val text = open(raw) ?: return null
+        return text.split(',').mapNotNull { part ->
+            val f = part.split(':')
+            val at = f.getOrNull(0)?.toLongOrNull()
+            val marked = f.getOrNull(1)?.toLongOrNull()
+            if (at == null || marked == null) null else Seen(at, marked, f.getOrNull(2) == "1")
+        }
+    }
 
-    private fun save(
-        signature: String,
+    /** Writes the times under [key] (removes it when none are left); false when they could not be sealed (nothing is written then). */
+    private fun write(
+        key: String,
         all: List<Seen>,
-    ) {
-        val text = all.joinToString(",") { "${it.at}:${it.marked}:${if (it.used) 1 else 0}" }
-        seal(text)?.let { sealed -> prefs.edit { putString(SIG + signature, sealed) } }
+    ): Boolean {
+        if (all.isEmpty()) {
+            prefs.edit { remove(key) }
+            return true
+        }
+        val sealed = seal(all.joinToString(",") { "${it.at}:${it.marked}:${if (it.used) 1 else 0}" }) ?: return false
+        prefs.edit { putString(key, sealed) }
+        return true
     }
 
     /** The values (times) are sealed with the keystore-backed AEAD when there is one: the file alone says nothing about when. */
@@ -173,6 +202,12 @@ class BackfillStore(
         prunedAt = null
     }
 
+    /** The key was provably lost and recreated: nothing in the memory can ever be opened again, so all of it goes at once (bounded). */
+    fun clearMemory() {
+        val keys = prefs.all.keys.filter { it.startsWith(SEEN) || it.startsWith(SIG) || it.startsWith(AUX) }
+        if (keys.isNotEmpty()) prefs.edit { keys.forEach { remove(it) } }
+    }
+
     private var prunedAt: Long? = null
 
     private fun pruneDaily(nowMillis: Long) {
@@ -181,47 +216,56 @@ class BackfillStore(
         forgetBefore(nowMillis - MEMORY_MILLIS)
     }
 
-    /** Forgets what is older than [cutoffMillis] (30 days), inside a signature too: after that a deleted message may be read in again. */
+    /**
+     * Forgets what is older than [cutoffMillis] (30 days), inside a signature too: after that a deleted message may be read in again.
+     * A value that cannot be opened is left alone (it may open again); only [clearMemory] removes those, when the key is provably lost.
+     */
     fun forgetBefore(cutoffMillis: Long) {
         val drop = mutableListOf<String>()
         val rewrite = mutableMapOf<String, List<Seen>>()
         for ((k, v) in prefs.all) {
             if (v !is String) continue
             when {
-                k.startsWith(SEEN) -> if ((open(v)?.toLongOrNull() ?: Long.MIN_VALUE) < cutoffMillis) drop += k
-                k.startsWith(SIG) -> {
-                    val all = times(k.removePrefix(SIG))
+                k.startsWith(SEEN) -> if ((open(v)?.toLongOrNull() ?: Long.MAX_VALUE) < cutoffMillis) drop += k
+                k.startsWith(SIG) || k.startsWith(AUX) -> {
+                    val all = slot(k) ?: continue
                     val fresh = all.filter { it.marked >= cutoffMillis }
                     if (fresh.isEmpty()) {
                         drop += k
                     } else if (fresh.size < all.size) {
-                        rewrite[k.removePrefix(SIG)] = fresh
+                        rewrite[k] = fresh
                     }
                 }
             }
         }
         if (drop.isNotEmpty()) prefs.edit { drop.forEach { remove(it) } }
-        rewrite.forEach { (signature, fresh) -> save(signature, fresh) }
+        rewrite.forEach { (key, fresh) -> write(key, fresh) }
     }
 
     private fun read(): BackfillState =
         BackfillState(
             phase = prefs.getString(PHASE, null)?.let { n -> BackfillPhase.entries.firstOrNull { it.name == n } } ?: BackfillPhase.IDLE,
             rangeKey = prefs.getString(KEY, "").orEmpty(),
-            fromMillis = prefs.getLong(FROM, 0L),
-            toMillis = prefs.getLong(TO, 0L),
+            fromMillis = sealedLong(FROM, 0L),
+            toMillis = sealedLong(TO, 0L),
             total = prefs.getInt(TOTAL, -1),
             read = prefs.getInt(READ, 0),
             entries = prefs.getInt(ENTRIES, 0),
             review = prefs.getInt(REVIEW, 0),
-            lastDateMillis = prefs.getLong(LAST_DATE, -1L),
+            lastDateMillis = sealedLong(LAST_DATE, -1L),
             lastId = prefs.getLong(LAST_ID, -1L),
         )
+
+    private fun sealedLong(
+        key: String,
+        default: Long,
+    ): Long = prefs.getString(key, null)?.let(::open)?.toLongOrNull() ?: default
 
     companion object {
         const val PREFS_NAME = "masroof_backfill"
         private const val SEEN = "seen:"
         private const val SIG = "sig:"
+        private const val AUX = "sig2:"
         private const val MAX_TIMES = 8
         private const val PRUNE_EVERY_MILLIS = 24L * 60 * 60 * 1000
         private val AAD = "masroof-backfill-memory".toByteArray()

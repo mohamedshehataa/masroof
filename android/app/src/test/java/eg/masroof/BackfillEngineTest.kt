@@ -9,7 +9,9 @@ import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.ingest.CaptureChannel
 import eg.masroof.ingest.CapturedNotifier
 import eg.masroof.ingest.Disposition
+import eg.masroof.ingest.IncomingSms
 import eg.masroof.ingest.SenderPolicy
+import eg.masroof.ingest.SmsHandoff
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.backfill.BackfillNotifier
 import eg.masroof.ingest.backfill.BackfillOutcome
@@ -330,15 +332,31 @@ class BackfillEngineTest {
     @Test
     fun `REQ-SMS-101 the outcome of a mixed set equals live capture of the same messages`() =
         runTest {
-            val bodies = listOf(purchase(10), UNKNOWN, "Your OTP is 889900, do not share it", ATM, purchase(77))
-            val rows = bodies.mapIndexed { i, b -> sms(i + 1L, b, sender = if (b == ATM) "HSBC" else "CIB") }
+            val bodies =
+                listOf(
+                    purchase(10),
+                    UNKNOWN,
+                    "Your OTP is 889900, do not share it",
+                    ATM,
+                    purchase(77),
+                    // two fixtures whose outcome once differed between live and backfill (a code next to a transaction)
+                    "تم تحويل 500 جنيه الى AHMED ALI، احذر من مشاركة الرمز 889900 مع اي شخص",
+                    "Approve purchase EGP 500.00 at AMAZON with 482913",
+                )
+            val senders = mapOf(ATM to "HSBC", bodies[5] to "NBE")
+            val rows = bodies.mapIndexed { i, b -> sms(i + 1L, b, sender = senders[b] ?: "CIB") }
             begin()
             runAll(FakeInbox(rows))
             val backfilled = snapshot()
             db.clearAllTables()
+            // live capture as the receiver does it: the hand-off (OTP drop, code masking), then the worker's pipeline
             val live = pipeline()
-            rows.forEach { live.accept(IncomingMessage(CaptureSource.SMS, it.address, it.body, it.stampMillis), CaptureChannel.LIVE) }
+            val scheduler = FakeSmsScheduler()
+            val handoff = SmsHandoff(settings, scheduler, gate)
+            rows.forEach { handoff.handOff(listOf(IncomingSms(it.address, it.body, it.stampMillis))) }
+            scheduler.intake.forEach { live.accept(it, CaptureChannel.LIVE) }
             assertEquals(snapshot(), backfilled)
+            assertTrue("no code stays readable in a review item", db.reviews().all().none { "889900" in it.text || "482913" in it.text })
         }
 
     private suspend fun snapshot(): Pair<List<String>, List<String>> =
@@ -350,7 +368,7 @@ class BackfillEngineTest {
             db
                 .reviews()
                 .all()
-                .map { "${it.reason}|${it.sugAmountMinor}" }
+                .map { "${it.reason}|${it.sugAmountMinor}|${it.text}" }
                 .sorted()
 
     @Test

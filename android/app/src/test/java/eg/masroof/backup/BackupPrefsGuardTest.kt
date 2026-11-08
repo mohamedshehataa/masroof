@@ -50,6 +50,7 @@ class BackupPrefsGuardTest {
             "BackupState.kt" to listOf("masroof_backup"),
             "AppModule.kt" to listOf("masroof_device"),
             "BackfillStore.kt" to listOf("masroof_backfill"),
+            "LocalKeystore.kt" to listOf("masroof_local_keyset"),
         )
 
     @Suppress("NestedBlockDepth", "CyclomaticComplexMethod")

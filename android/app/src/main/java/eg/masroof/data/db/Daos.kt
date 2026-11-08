@@ -351,13 +351,14 @@ interface ExpenseSourceDao {
     ): Int
 
     /**
-     * A notification entry (deleted ones too) that nobody paired with an SMS and that the user edited, close in time: its original
+     * A notification entry that nobody paired with an SMS and that the user edited, close in time (deleted ones are not "edited": a
+     * delete also sets the update time, and a deleted twin is found by [pushTwinOf]): its original
      * amount is not kept, so it cannot be told whether an SMS of another amount is the same transfer.
      */
     @Query(
         """SELECT COUNT(*) FROM expense_source s JOIN expense e ON e.id = s.expenseId
             WHERE s.channel = 'PUSH' AND e.type = :type AND e.currency = :currency AND e.updatedAtMillis <> e.createdAtMillis
-            AND s.receivedAtMillis BETWEEN :from AND :to
+            AND e.deletedAtMillis IS NULL AND s.receivedAtMillis BETWEEN :from AND :to
             AND NOT EXISTS (SELECT 1 FROM expense_source o WHERE o.expenseId = e.id AND o.channel IN ('SMS', 'BACKFILL'))""",
     )
     suspend fun editedPushNearCount(

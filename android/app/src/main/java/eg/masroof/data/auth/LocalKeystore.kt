@@ -24,22 +24,36 @@ import java.security.UnrecoverableKeyException
 object LocalKeystore {
     internal const val KEYSET_PREFS = "masroof_local_keyset"
     internal const val KEYSET_NAME = "masroof_local_keyset_entry"
+    private const val MASTER_MADE = "master_made"
     internal const val MASTER_KEY_ALIAS = "masroof_local_master"
     private const val MAX_CAUSES = 5
     private const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
 
     /** An AEAD that recovers by itself from a lost key and is reset only by [RecoveringAead.reset] (Erase all data). */
-    fun aead(context: Context): RecoveringAead =
-        RecoveringAead(build = { buildRecovering(context) }, destroy = { destroy(context) }, recoverIfLost = { recoverIfLost(context) })
+    fun aead(
+        context: Context,
+        onKeyRecreated: () -> Unit = {},
+    ): RecoveringAead =
+        RecoveringAead(
+            build = { buildRecovering(context, onKeyRecreated) },
+            destroy = { destroy(context) },
+            recoverIfLost = { recoverIfLost(context) },
+            onKeyRecreated = onKeyRecreated,
+        )
 
     /** The "Erase all data" step: destroys the keyset entry and the master key unconditionally; a new pair is made at the next use. */
     fun reset(context: Context) = destroy(context)
 
-    /** True only when the key is provably gone: a keyset entry exists but the Keystore has no master key for it. */
+    /**
+     * True only when the key is provably gone: a keyset entry exists, the Keystore once made its master key ([masterWasMade]) and now has
+     * none. If the Keystore never worked on this phone (Tink then keeps the keyset without a master key), nothing is lost: the keyset
+     * stays rather than being wiped at every start.
+     */
     internal fun needsRecovery(
         hasKeyset: Boolean,
         masterPresent: Boolean,
-    ): Boolean = hasKeyset && !masterPresent
+        masterWasMade: Boolean,
+    ): Boolean = hasKeyset && !masterPresent && masterWasMade
 
     /** True for the failures that mean the master key can never work again (invalidated or unrecoverable), not for transient ones. */
     internal fun isKeyLost(e: Throwable): Boolean =
@@ -47,8 +61,9 @@ object LocalKeystore {
             e,
         ) { it.cause }.take(MAX_CAUSES).any { it is KeyPermanentlyInvalidatedException || it is UnrecoverableKeyException }
 
-    private fun recoverIfLost(context: Context) {
-        val hasKeyset = context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).contains(KEYSET_NAME)
+    private fun recoverIfLost(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE)
+        val hasKeyset = prefs.contains(KEYSET_NAME)
         // when the Keystore cannot be asked, the key is not known to be gone: nothing is destroyed
         val present =
             try {
@@ -60,17 +75,34 @@ object LocalKeystore {
             } catch (_: ProviderException) {
                 true
             }
-        if (needsRecovery(hasKeyset, present)) destroy(context)
+        if (needsRecovery(hasKeyset, present, prefs.getBoolean(MASTER_MADE, false))) {
+            destroy(context)
+            return true
+        }
+        return false
     }
 
-    private fun buildRecovering(context: Context): Aead =
+    private fun buildRecovering(
+        context: Context,
+        onKeyRecreated: () -> Unit,
+    ): Aead =
         try {
-            build(context)
+            build(context).also { rememberMasterMade(context) }
         } catch (e: GeneralSecurityException) {
             if (!isKeyLost(e)) throw e
             destroy(context)
-            build(context)
+            onKeyRecreated()
+            build(context).also { rememberMasterMade(context) }
         }
+
+    /** Remembers that the Keystore made the master key (so "keyset without master key" later means lost, not "never worked"). */
+    private fun rememberMasterMade(context: Context) {
+        val present =
+            runCatching {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(MASTER_KEY_ALIAS)
+            }.getOrDefault(false)
+        if (present) context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).edit(commit = true) { putBoolean(MASTER_MADE, true) }
+    }
 
     private fun build(context: Context): Aead {
         AeadConfig.register()
@@ -87,7 +119,10 @@ object LocalKeystore {
 
     /** Deletes the keyset entry and the master key so the next [build] generates both afresh. */
     private fun destroy(context: Context) {
-        context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).edit(commit = true) { remove(KEYSET_NAME) }
+        context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).edit(commit = true) {
+            remove(KEYSET_NAME)
+            remove(MASTER_MADE)
+        }
         try {
             KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(MASTER_KEY_ALIAS)
         } catch (_: GeneralSecurityException) {
@@ -109,14 +144,17 @@ object LocalKeystore {
 class RecoveringAead(
     private val build: () -> Aead,
     private val destroy: () -> Unit,
-    private val recoverIfLost: () -> Unit = {},
+    /** Destroys the key when it is provably gone and says so (true); run before every build. */
+    private val recoverIfLost: () -> Boolean = { false },
+    /** Called after a lost key was destroyed: whatever was sealed under it can never be opened (the caller clears it at once). */
+    private val onKeyRecreated: () -> Unit = {},
 ) : Aead {
     private var current: Aead? = null
 
     @Synchronized
     private fun aead(): Aead =
         current ?: run {
-            recoverIfLost()
+            if (recoverIfLost()) onKeyRecreated()
             build().also { current = it }
         }
 
