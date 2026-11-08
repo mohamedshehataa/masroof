@@ -114,6 +114,25 @@ interface BudgetDao {
 
     @Query("SELECT * FROM budget WHERE id = :id")
     fun observeById(id: String): Flow<BudgetEntity?>
+
+    @Query("SELECT * FROM budget WHERE id = :id")
+    suspend fun byId(id: String): BudgetEntity?
+
+    @Query("SELECT * FROM budget ORDER BY createdAtMillis, id")
+    suspend fun all(): List<BudgetEntity>
+
+    /** Budgets of one scope: a null [categoryId] is the "All spending" budget. One per category and period (STORY-181). */
+    @Query(
+        """SELECT COUNT(*) FROM budget WHERE period = :period
+            AND ((categoryId IS NULL AND :categoryId IS NULL) OR categoryId = :categoryId)""",
+    )
+    suspend fun countInScope(
+        categoryId: String?,
+        period: String,
+    ): Int
+
+    @Query("SELECT COUNT(*) FROM category WHERE id = :id AND archived = 0")
+    suspend fun liveCategoryCount(id: String): Int
 }
 
 @Dao

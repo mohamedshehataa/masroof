@@ -462,6 +462,8 @@ class AnalyticsEngineTest {
                     override fun observe(spec: String): Flow<PeriodAnalytics> = flow { error("boom") }
 
                     override suspend fun compute(spec: String): PeriodAnalytics = error("boom")
+
+                    override fun observeBudgets(): Flow<List<eg.masroof.core.analytics.BudgetStatus>> = flow { error("boom") }
                 }
             val repo = LocalInsightsRepository(broken, clock)
             assertNull(repo.observe(InsightsPeriod.CURRENT).first())

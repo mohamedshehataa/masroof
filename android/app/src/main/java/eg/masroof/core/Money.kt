@@ -82,7 +82,12 @@ object MoneyFormat {
     // Digits, one decimal separator (`.`, `,` or `٫`) with at most two decimals, and `,` / `٬` as thousands grouping:
     // `1,450` is 1450 because three digits after a comma cannot be decimals.
     private fun parseBig(input: String): java.math.BigInteger? {
-        val western = input.trim().map { toWestern(it) }.joinToString("")
+        val western =
+            input
+                .filterNot { it in BIDI_MARKS }
+                .trim()
+                .map { toWestern(it) }
+                .joinToString("")
         val normalized = if (GROUPED.matches(western)) western.replace(",", "") else western.replace(',', '.')
         if (normalized.isEmpty() || !normalized.all { it.isDigit() || it == '.' }) return null
         val parts = normalized.split('.')
@@ -93,6 +98,9 @@ object MoneyFormat {
         val minor = fraction.padEnd(2, '0').toInt()
         return major * MINOR_PER_MAJOR.toBigInteger() + minor.toBigInteger()
     }
+
+    // Text pasted from Arabic sources often carries invisible direction marks: LRM, RLM, ALM, embeddings, isolates.
+    private val BIDI_MARKS = setOf('\u200E', '\u200F', '\u061C') + ('\u202A'..'\u202E') + ('\u2066'..'\u2069')
 
     private val GROUPED = Regex("""\d{1,3}(,\d{3})+(\.\d{1,2})?""")
 
