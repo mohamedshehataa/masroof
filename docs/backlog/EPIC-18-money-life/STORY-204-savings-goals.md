@@ -3,7 +3,7 @@ id: STORY-204
 epic: EPIC-18
 title: Savings goals - a target with an emoji, add or take out money, and what is needed each month
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -82,3 +82,6 @@ STORY-201
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 2, supersedes STORY-195 |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 3d4bf78; MINOR fixes 2f8da11 |
+| 2026-11-08 | 6 verify | qa-verifier | PASS loop 1 (691 tests; 20,000 random monthly-need cases; expense triggers 0 rows) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

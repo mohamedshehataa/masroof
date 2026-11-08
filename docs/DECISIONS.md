@@ -320,3 +320,4 @@ One line per non-obvious decision: **decision — why**. Significant ones also g
 2026-11-08 · STORY-201 · One additive Room migration v9 -> v10 creates every EPIC-18 table plus STORY-181's `budget` table so feature stories run in parallel without schema-version conflicts; the ADR-0009 D3 contract step (STORY-198) moves to v10 -> v11.
 2026-11-08 · STORY-199 · "Ask" is a bilingual rules parser over Room answered by core/analytics (same D2 spending rule as Insights), not an LLM; the conversation stays in memory only.
 2026-11-08 · STORY-200 · Voice and one-line text entry only pre-fill the Add form; nothing is saved without the Save tap. On-device speech recognition is preferred; RECORD_AUDIO is requested on tap.
+2026-11-08 · STORY-204 · A goal's "needs X a month" is ceil(remaining / remaining periods) rounded up to a whole pound (the story example 42,058.8 -> 42,059); goal movements live only in goal_movement and never touch expense rows.
