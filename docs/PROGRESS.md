@@ -133,3 +133,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 18:50 · P7 · STORY-180 · integrate · GREEN · budget progress port: verify loop 1 PASS (Java cases 1:1, 890-pair probe vs BigInteger and Java); PR to main
 2026-11-08 19:23 · P7 · STORY-173 · integrate · GREEN · duplicate suggestions: verify loop 1 PASS, MINOR fixes reviewed; PR to main
 2026-11-08 19:16 · P7 · STORY-185 · integrate · GREEN · CSV export: verify loop 1 PASS, security APPROVE, MINOR fixes reviewed; PR to main
+2026-11-08 19:50 · P7 · STORY-181 · integrate · GREEN · budgets on the phone: verify loop 1 PASS, MINOR fixes reviewed; PR to main
