@@ -29,3 +29,12 @@ FINDINGS:
 EXPLORATORY: 16 cases tried (migrated-DB replay, Long.MAX amount, duplicate and orphan inserts, every cascade, defaults, REPLACE on parents, createSql comparison, scope, DAO ordering), 2 problems (the two MINORs)
 TEST_INTEGRITY: OK
 STATUS: PASS
+
+## Loop 2 (re-verify after fix round 1) - head `20dcb70`
+Gate: `./gradlew --console=plain -q checkFast` exit 0; forced `testDebugUnitTest --rerun` -> 655 tests, 0 failures, 0 skipped.
+- Fix1-true upserts: PASS -- `Daos.kt:305-385` INSERT OR IGNORE + UPDATE of owned columns in one transaction; probe keeps budget link, merchant rule, balance and v10 columns; `REQ-AND-146 re-upserting a category and an account keeps their children and the v10 column values` passes
+- Fix2-exact SQL: PASS -- byte comparison of every CREATE with 10.json `createSql`: 24/24 equal; `REQ-AND-146 a database migrated from v9 has the same SQL as a fresh v10 database for every new table and index` passes
+- NIT rename: PASS; Scope: PASS (same 15 files, schema blobs unchanged); TEST_INTEGRITY: OK (224 -> 347 assertions, 0 skips)
+- REQ-AND-145 (5 tests), REQ-AND-146 (12), REQ-AND-147 (1): PASS
+FINDINGS: [NIT] upserts never write the v10 columns on existing rows (intended; later stories add their own update queries). [NIT] the text-equality limit for altered tables holds only for phones upgraded through the frozen ALTERs - no change needed.
+STATUS: PASS
