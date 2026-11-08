@@ -3,7 +3,7 @@ id: STORY-207
 epic: EPIC-18
 title: Categories with emoji you can add, rename and archive, and merchant rules that file entries for you
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -87,3 +87,6 @@ STORY-201
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 2 |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 6c0f228; fix rounds 4e2cae1, 8960731 |
+| 2026-11-08 | 6 verify | qa-verifier, security-reviewer | FAIL loop 1 (BLOCKER budget crash), FAIL loop 2 (same crash via custom ids), PASS loop 3; security APPROVE |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
