@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteOpenHelper
 import java.io.File
 
 const val DB_NAME = "masroof.db"
-const val DB_VERSION = 9
+const val DB_VERSION = 10
 
 /** What the app found when it opened the database at start (REQ-AND-127/128). */
 sealed interface DbStartup {

@@ -535,8 +535,21 @@ interface CapturedDao {
             MemberEntity::class,
             ReceiptEntity::class,
             ExpenseSourceEntity::class,
+            AccountBalanceEntity::class,
+            BudgetEntity::class,
+            InstallmentPlanEntity::class,
+            InstallmentPaymentEntity::class,
+            SubscriptionEntity::class,
+            SavingsGoalEntity::class,
+            GoalMovementEntity::class,
+            AssetEntity::class,
+            AssetLotEntity::class,
+            MetalPriceEntity::class,
+            MerchantRuleEntity::class,
+            DebtEntity::class,
+            NetWorthSnapshotEntity::class,
         ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -557,6 +570,32 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sources(): ExpenseSourceDao
 
     abstract fun receipts(): ReceiptDao
+
+    abstract fun accountBalances(): AccountBalanceDao
+
+    abstract fun budgets(): BudgetDao
+
+    abstract fun installmentPlans(): InstallmentPlanDao
+
+    abstract fun installmentPayments(): InstallmentPaymentDao
+
+    abstract fun subscriptions(): SubscriptionDao
+
+    abstract fun savingsGoals(): SavingsGoalDao
+
+    abstract fun goalMovements(): GoalMovementDao
+
+    abstract fun assets(): AssetDao
+
+    abstract fun assetLots(): AssetLotDao
+
+    abstract fun metalPrices(): MetalPriceDao
+
+    abstract fun merchantRules(): MerchantRuleDao
+
+    abstract fun debts(): DebtDao
+
+    abstract fun netWorthSnapshots(): NetWorthSnapshotDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction

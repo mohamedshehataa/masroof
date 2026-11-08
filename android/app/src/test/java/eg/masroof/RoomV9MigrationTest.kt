@@ -15,6 +15,7 @@ import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.db.ME_MEMBER_ID
+import eg.masroof.data.db.MIGRATION_8_9
 import eg.masroof.data.db.PreMigrationBackup
 import eg.masroof.data.db.seededCategoryId
 import kotlinx.serialization.json.Json
@@ -247,7 +248,7 @@ class RoomV9MigrationTest {
                 object : androidx.room.migration.Migration(8, 9) {
                     override fun migrate(db: SupportSQLiteDatabase) {
                         copiedBeforeMigration = File(context.noBackupFilesDir, "pre-migration-v8.db").exists()
-                        ALL_MIGRATIONS.last().migrate(db)
+                        MIGRATION_8_9.migrate(db)
                     }
                 },
             )
@@ -321,7 +322,7 @@ class RoomV9MigrationTest {
         context.deleteDatabase(name)
         val ready = DatabaseStartup.open(context, name) as DbStartup.Ready
         assertEquals(0, context.noBackupFilesDir.listFiles { f -> f.name.startsWith("pre-migration-") }!!.size)
-        assertEquals(9, ready.db.openHelper.writableDatabase.version)
+        assertEquals(DB_VERSION, ready.db.openHelper.writableDatabase.version)
         ready.db.close()
     }
 
