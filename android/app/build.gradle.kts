@@ -104,6 +104,9 @@ androidComponents {
     beforeVariants(selector().withBuildType("release")) { it.enableUnitTest = false }
 }
 
+// BackupManifestTest reads the merged manifest (what the APK really declares, libraries included).
+tasks.matching { it.name == "testDebugUnitTest" }.configureEach { dependsOn("processDebugMainManifest") }
+
 kotlin {
     jvmToolchain(21)
     compilerOptions {

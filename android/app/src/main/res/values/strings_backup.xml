@@ -32,6 +32,9 @@
     <string name="backup_reason_cannot_open">Reason: the chosen location could not be opened.</string>
     <string name="backup_reason_receipt_changed">Reason: a receipt changed while the backup was running. Try again.</string>
     <string name="backup_reason_key_lost">Reason: the backup was interrupted before it started. Try again.</string>
+    <string name="backup_interrupted">Backup was interrupted - please start again</string>
+    <string name="backup_start_failed">The backup could not start - please try again</string>
+    <string name="backup_already_running">A backup is already running</string>
     <string name="backup_reason_other">Reason: the file could not be written.</string>
 
     <string name="backup_explain_title">Before your first backup</string>
@@ -43,8 +46,8 @@
     <string name="backup_pass_title">Choose a passphrase</string>
     <string name="backup_pass_field">Passphrase</string>
     <string name="backup_pass_again">Type it again</string>
-    <string name="backup_pass_empty">Enter a passphrase of at least 12 characters</string>
-    <string name="backup_pass_too_short">Use at least 12 characters (now %1$s)</string>
+    <string name="backup_pass_empty">Enter a passphrase of at least %1$s characters</string>
+    <string name="backup_pass_too_short">Use at least %1$s characters (now %2$s)</string>
     <string name="backup_pass_mismatch">The two entries are different</string>
     <string name="backup_pass_not_saved">The passphrase is not saved on this phone. You type it again to restore.</string>
     <string name="backup_pass_not_covered">The passphrase protects the file only. It does not help if someone can unlock your phone or the phone has malware, and the file\'s size and date are not hidden.</string>

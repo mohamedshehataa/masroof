@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -24,7 +25,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import eg.masroof.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.Clock
@@ -48,7 +50,7 @@ class BackupWorker
         @Suppress("TooGenericExceptionCaught") // a provider can throw anything unchecked; all of it is a failed backup
         override suspend fun doWork(): Result {
             val destination = inputData.getString(KEY_URI)?.let(Uri::parse)
-            val input = pending.take()
+            val input = pending.take(id)
             if (destination == null || input == null) return failure(BackupFailure.KEY_LOST)
             try {
                 setForeground(foregroundInfo(context, id, 0))
@@ -157,6 +159,7 @@ class BackupEnvironmentFactory
                 receipts = DirectoryReceiptFiles(receiptsDir),
                 appVersion = eg.masroof.BuildConfig.VERSION_NAME,
                 nowMillis = nowMillis,
+                tempDir = context.cacheDir,
             )
     }
 
@@ -185,16 +188,22 @@ sealed interface BackupRun {
 
 /** What the screen needs from the backup task; the real one is WorkManager, tests use a fake. */
 interface BackupLauncher {
-    /** The key is derived already; the foreground task takes it from memory. A running backup is kept, not replaced. */
-    fun start(
+    /**
+     * The key is derived already; the foreground task takes it from memory. False when a backup is already queued or running: nothing is
+     * started and the key is not kept, so a queued request can never write with another request's passphrase.
+     */
+    suspend fun start(
         destination: Uri,
         input: BackupInput,
-    )
+    ): Boolean
 
     fun cancel()
 
-    /** Forgets a finished run so it is not shown again at the next visit. */
-    fun acknowledge()
+    /** The user has seen the result of the finished run: it is shown as idle from now on. Other work is not touched. */
+    suspend fun acknowledge()
+
+    /** Best effort: removes a document the picker created but that will never be written (the provider may refuse). */
+    fun discard(destination: Uri)
 
     val run: Flow<BackupRun>
 }
@@ -203,33 +212,51 @@ interface BackupLauncher {
 class WorkBackupLauncher
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val workManager: WorkManager,
         private val pending: PendingBackupKey,
+        private val status: BackupStatusStore,
     ) : BackupLauncher {
-        override fun start(
+        override suspend fun start(
             destination: Uri,
             input: BackupInput,
-        ) {
-            pending.put(input)
+        ): Boolean {
+            val active = workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME).first().any { !it.state.isFinished }
+            if (active) return false
             val request =
                 OneTimeWorkRequestBuilder<BackupWorker>()
                     .setInputData(Data.Builder().putString(BackupWorker.KEY_URI, destination.toString()).build())
                     // Local work, no network and no charging constraint: the user asked for it now and the provider uploads by itself.
                     .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                     .build()
-            workManager.enqueueUniqueWork(BackupWorker.UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
+            pending.put(request.id, input)
+            try {
+                workManager.enqueueUniqueWork(BackupWorker.UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
+            } catch (e: IllegalStateException) {
+                pending.discard(request.id)
+                throw e
+            }
+            return true
         }
 
         override fun cancel() {
             workManager.cancelUniqueWork(BackupWorker.UNIQUE_NAME)
         }
 
-        override fun acknowledge() {
-            workManager.pruneWork()
+        override suspend fun acknowledge() {
+            val latest = workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME).first().lastOrNull() ?: return
+            if (latest.state.isFinished) status.acknowledge(latest.id.toString())
+        }
+
+        override fun discard(destination: Uri) {
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, destination) }
         }
 
         override val run: Flow<BackupRun> =
-            workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME).map { infos -> infos.lastOrNull().toRun() }
+            combine(workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME), status.acknowledged) { infos, ack ->
+                val latest = infos.lastOrNull()
+                if (latest != null && latest.state.isFinished && latest.id.toString() == ack) BackupRun.Idle else latest.toRun()
+            }
     }
 
 internal fun WorkInfo?.toRun(): BackupRun =

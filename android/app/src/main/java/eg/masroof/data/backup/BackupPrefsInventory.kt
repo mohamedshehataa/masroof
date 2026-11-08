@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.first
  * IN (rebuild the phone):
  * - DataStore `settings`: arabic_digits, digits_set (digit setting), month_start_day, include_cash_withdrawals (ATM rule).
  * - DataStore `answers` (STORY-208): answered_entries, entry_links (refund/transfer links with their nonce), ignored_cards,
- *   card_aliases, atm_choice. Not the in-process erase epoch (it is not stored).
+ *   card_aliases, atm_choice, kept_apart_pairs and merged_away (STORY-173: they stop a restored phone re-flagging or double counting
+ *   merged duplicates). Not the in-process erase epoch (it is not stored).
  * - DataStore `subscriptions` (STORY-203): anchor_days (incl. `since:<id>` resume cutoffs), dismissed_suggestions, price_notices.
  * - SharedPreferences `masroof_senders`: sms_capture_enabled, added, disabled_defaults, suggested (sender allowlist and capture switch).
  * - SharedPreferences `masroof_notifications`: notifications_enabled, packages_added, packages_removed (notification capture).
@@ -32,6 +33,11 @@ import kotlinx.coroutines.flow.first
  * - `masroof_ui` voice_online_notice_seen: a one-time hint flag, shown again after a restore.
  * - `masroof_capture_key` (the local-id HMAC key): written as `keys/local-id.key`, not as a preference.
  * - `masroof_backup` (last backup line): it describes this phone's last file, not the data.
+ *
+ * Nothing is classified by hand only: BackupPrefsGuardTest scans the sources for every preference key and file and fails until each
+ * one is on [DATASTORE_KEYS] / [SHARED_KEYS] (in) or [OUT_KEYS] / [OUT_FILES] (out, with the reason).
+ * STORY-186's `masroof_backfill`: when it lands, its
+ * 30-day handled-ids memory is keyed with the local-id key the backup carries, so it goes IN; its run state and resume position go OUT.
  */
 object BackupPrefsInventory {
     const val STORE_SETTINGS = "datastore:settings"
@@ -41,7 +47,8 @@ object BackupPrefsInventory {
     val DATASTORE_KEYS: Map<String, Set<String>> =
         mapOf(
             STORE_SETTINGS to setOf("arabic_digits", "digits_set", "month_start_day", "include_cash_withdrawals"),
-            STORE_ANSWERS to setOf("answered_entries", "entry_links", "ignored_cards", "card_aliases", "atm_choice"),
+            STORE_ANSWERS to
+                setOf("answered_entries", "entry_links", "ignored_cards", "card_aliases", "atm_choice", "kept_apart_pairs", "merged_away"),
             STORE_SUBSCRIPTIONS to setOf("anchor_days", "dismissed_suggestions", "price_notices"),
         )
 
@@ -52,6 +59,36 @@ object BackupPrefsInventory {
             "masroof_notifications" to setOf("notifications_enabled", "packages_added", "packages_removed"),
             "masroof_captured_alerts" to setOf("captured_alerts"),
             "masroof_ui" to setOf("language"),
+        )
+
+    /** SharedPreferences files that are deliberately not in the backup, with the reason. */
+    val OUT_FILES: Map<String, String> =
+        mapOf(
+            "masroof_session" to "session tokens",
+            "masroof_keyset" to "Keystore-wrapped keyset, never exported",
+            "masroof_device" to "identity of this install for the frozen server upload",
+            "masroof_capture" to "erase-in-progress state",
+            "masroof_capture_key" to "the local-id key travels as keys/local-id.key, not as a preference",
+            "masroof_reminders" to "which reminders were shown; a repeat reminder is harmless",
+            "masroof_backup" to "describes this phone's last backup file, not the data",
+        )
+
+    /** Preference key names that are deliberately not in the backup (any store), with the reason. */
+    val OUT_KEYS: Map<String, String> =
+        mapOf(
+            "server_url" to "a server address belongs to one install",
+            "access_token" to "legacy plaintext token, removed at upgrade",
+            "session" to "session tokens",
+            "last_member" to "session state",
+            "device_id" to "install identity for the frozen server upload",
+            "erase_stage" to "erase-in-progress state",
+            "k" to "sealed local-id key; travels as keys/local-id.key",
+            "voice_online_notice_seen" to "one-time hint, shown again after a restore",
+            "last_at" to "last backup line",
+            "last_entries" to "last backup line",
+            "last_receipts" to "last backup line",
+            "last_bytes" to "last backup line",
+            "ack_id" to "which finished backup run the user has seen",
         )
 }
 

@@ -2,13 +2,17 @@ package eg.masroof.data.backup
 
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.Instant
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
@@ -67,6 +71,8 @@ class BackupEnvironment(
     val receipts: ReceiptFiles,
     val appVersion: String,
     val nowMillis: Long,
+    /** Where the rows are staged (encrypted, with a key that only lives in memory) while the database snapshot is open. */
+    val tempDir: File = File(System.getProperty("java.io.tmpdir").orEmpty()),
 )
 
 /**
@@ -138,40 +144,102 @@ class BackupWriter(
         val fingerprints = HashMap<String, Fingerprint?>()
         for (ref in firstList) fingerprints[ref.id] = measure(ref, progress, cancelled)
 
-        counting.write(headerBytes)
-        val zip = ZipOutputStream(BackupCipher.encrypt(counting, input.key, headerBytes))
-        var entries = 0L
-        var stored = 0
-        var missing = 0
-        var receiptList: List<BackupReceiptRef> = emptyList()
-        env.db.snapshot {
-            val counts = BackupTables.INCLUDED.map { it.name to env.db.count(it.name) }
-            receiptList = env.db.receipts()
+        // The rows are staged first: the snapshot (Room's write lock) is held only for local disk work, never while a provider is written.
+        val stage = StageArea(env.tempDir)
+        try {
+            var counts: List<Pair<String, Long>> = emptyList()
+            var entries = 0L
+            var receiptList: List<BackupReceiptRef> = emptyList()
+            env.db.snapshot {
+                counts = BackupTables.INCLUDED.map { it.name to env.db.count(it.name) }
+                receiptList = env.db.receipts()
+                entries = env.db.liveEntryCount()
+                for (table in BackupTables.INCLUDED) {
+                    stage.write(table.name, counts.first { it.first == table.name }.second, progress, cancelled)
+                }
+            }
             for (ref in receiptList) {
                 if (!fingerprints.containsKey(ref.id)) fingerprints[ref.id] = measure(ref, progress, cancelled)
             }
-            entries = env.db.liveEntryCount()
-            writeEntry(zip, BackupTables.MANIFEST) { it.write(manifest(counts, receiptList, fingerprints).toByteArray(UTF8)) }
+            val names = entryNames(receiptList)
+
+            counting.write(headerBytes)
+            val zip = ZipOutputStream(BackupCipher.encrypt(counting, input.key, headerBytes))
+            writeEntry(zip, BackupTables.MANIFEST) { it.write(manifest(counts, receiptList, fingerprints, names).toByteArray(UTF8)) }
             for (table in BackupTables.INCLUDED) {
-                val expected = counts.first { it.first == table.name }.second
-                writeEntry(zip, table.file) { out -> writeRows(out, table, expected, progress, cancelled) }
+                writeEntry(zip, table.file) { out -> stage.copyTo(table.name, out, cancelled) }
+            }
+            writeEntry(zip, BackupTables.SETTINGS) { it.write(settingsJson.toByteArray(UTF8)) }
+            writeEntry(zip, BackupTables.LOCAL_ID_KEY) { it.write(localIdKey) }
+            zip.setLevel(Deflater.NO_COMPRESSION) // JPEG and PDF do not shrink; do not spend the battery on it
+            var stored = 0
+            var missing = 0
+            for (ref in receiptList) {
+                val fp = fingerprints[ref.id]
+                if (fp == null) {
+                    missing++
+                    continue
+                }
+                writeEntry(zip, names.getValue(ref.id)) { copyReceipt(ref, fp, it, progress, cancelled) }
+                stored++
+            }
+            zip.close() // writes the final AEAD segment and closes the sink: a failure here is a failed backup
+            report(PERCENT_MAX)
+            return BackupResult(entries, stored, missing, counting.count)
+        } finally {
+            stage.delete()
+        }
+    }
+
+    /** Table rows as encrypted temp files (random in-memory key, removed in [delete]): the snapshot fills them. */
+    private inner class StageArea(
+        private val dir: File,
+    ) {
+        private val key = ByteArray(BackupFormat.KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        private val files = HashMap<String, File>()
+
+        fun write(
+            table: String,
+            expected: Long,
+            progress: Progress,
+            cancelled: () -> Unit,
+        ) {
+            dir.mkdirs()
+            val file = File.createTempFile("masroof-stage", ".bin", dir)
+            files[table] = file
+            var rows = 0L
+            BackupCipher.encrypt(FileOutputStream(file), key, NO_AAD).use { out ->
+                env.db.forEachRow(table) { columns, values ->
+                    if (rows % CANCEL_EVERY == 0L) cancelled()
+                    out.write(BackupJson.obj(columns.indices.map { columns[it] to BackupJson.value(values[it]) }).toByteArray(UTF8))
+                    out.write(NEWLINE)
+                    rows++
+                    progress.add(ROW_UNITS)
+                }
+            }
+            if (rows != expected) throw IOException("table changed during snapshot")
+        }
+
+        fun copyTo(
+            table: String,
+            out: OutputStream,
+            cancelled: () -> Unit,
+        ) {
+            BackupCipher.decrypt(FileInputStream(files.getValue(table)), key, NO_AAD).use { stream ->
+                val buf = ByteArray(CHUNK)
+                while (true) {
+                    cancelled()
+                    val n = stream.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                }
             }
         }
-        writeEntry(zip, BackupTables.SETTINGS) { it.write(settingsJson.toByteArray(UTF8)) }
-        writeEntry(zip, BackupTables.LOCAL_ID_KEY) { it.write(localIdKey) }
-        zip.setLevel(Deflater.NO_COMPRESSION) // JPEG and PDF do not shrink; do not spend the battery on it
-        for (ref in receiptList) {
-            val fp = fingerprints[ref.id]
-            if (fp == null) {
-                missing++
-                continue
-            }
-            writeEntry(zip, entryName(ref)) { copyReceipt(ref, fp, it, progress, cancelled) }
-            stored++
+
+        fun delete() {
+            key.fill(0)
+            files.values.forEach { runCatching { it.delete() } }
         }
-        zip.close() // writes the final AEAD segment and closes the sink: a failure here is a failed backup
-        report(PERCENT_MAX)
-        return BackupResult(entries, stored, missing, counting.count)
     }
 
     private fun progressTotal(refs: List<BackupReceiptRef>): Long {
@@ -233,30 +301,11 @@ class BackupWriter(
         if (size != fp.size || hex(digest.digest()) != fp.sha256) throw BackupSourceChangedException()
     }
 
-    private fun writeRows(
-        out: OutputStream,
-        table: BackupTable,
-        expected: Long,
-        progress: Progress,
-        cancelled: () -> Unit,
-    ) {
-        var rows = 0L
-        env.db.forEachRow(table.name) { columns, values ->
-            if (rows % CANCEL_EVERY == 0L) cancelled()
-            val line =
-                BackupJson.obj(columns.indices.map { columns[it] to BackupJson.value(values[it]) })
-            out.write(line.toByteArray(UTF8))
-            out.write(NEWLINE)
-            rows++
-            progress.add(ROW_UNITS)
-        }
-        if (rows != expected) throw IOException("table changed during snapshot")
-    }
-
     private fun manifest(
         counts: List<Pair<String, Long>>,
         receipts: List<BackupReceiptRef>,
         fingerprints: Map<String, Fingerprint?>,
+        names: Map<String, String>,
     ): String {
         val created = Instant.ofEpochMilli(env.nowMillis)
         val tables =
@@ -273,7 +322,7 @@ class BackupWriter(
                     BackupJson.obj(
                         listOf(
                             "id" to BackupJson.string(ref.id),
-                            "entry" to BackupJson.string(entryName(ref)),
+                            "entry" to BackupJson.string(names.getValue(ref.id)),
                             "fileName" to BackupJson.string(ref.fileName),
                             "missing" to (fp == null).toString(),
                             "size" to (fp?.size ?: 0L).toString(),
@@ -340,16 +389,30 @@ class BackupWriter(
         private const val ESTIMATED_ROWS = 2_000L
         private const val CANCEL_EVERY = 256L
 
-        /** `receipts/<id>.<ext>`: the id and extension are reduced to safe characters, so a restored name can never escape the folder. */
-        fun entryName(ref: BackupReceiptRef): String {
-            val safeId = ref.id.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.ifEmpty { "receipt" }
-            val ext =
-                ref.fileName
-                    .substringAfterLast('.', "")
-                    .lowercase()
-                    .filter { it in 'a'..'z' || it in '0'..'9' }
-                    .take(MAX_EXT)
-            return BackupTables.RECEIPTS_DIR + safeId + "." + ext.ifEmpty { "bin" }
+        private val NO_AAD = ByteArray(0)
+
+        /**
+         * `receipts/<id>.<ext>` per receipt: id and extension are reduced to safe characters so a restored name can never escape the
+         * folder, and two receipts that clean to the same name get a numbered suffix (the manifest records the entry name used).
+         */
+        fun entryNames(refs: List<BackupReceiptRef>): Map<String, String> {
+            val used = HashSet<String>()
+            val result = LinkedHashMap<String, String>()
+            for (ref in refs) {
+                val safeId = ref.id.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.ifEmpty { "receipt" }
+                val ext =
+                    ref.fileName
+                        .substringAfterLast('.', "")
+                        .lowercase()
+                        .filter { it in 'a'..'z' || it in '0'..'9' }
+                        .take(MAX_EXT)
+                val suffix = ext.ifEmpty { "bin" }
+                var name = BackupTables.RECEIPTS_DIR + safeId + "." + suffix
+                var n = 2
+                while (!used.add(name)) name = BackupTables.RECEIPTS_DIR + safeId + "-" + n++ + "." + suffix
+                result[ref.id] = name
+            }
+            return result
         }
 
         private const val MAX_EXT = 5

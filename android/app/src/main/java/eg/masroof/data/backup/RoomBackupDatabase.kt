@@ -1,28 +1,44 @@
 package eg.masroof.data.backup
 
 import android.database.Cursor
+import androidx.sqlite.db.SupportSQLiteQueryBuilder
 import eg.masroof.data.db.AppDatabase
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
+import java.nio.file.InvalidPathException
 import java.util.concurrent.Callable
 
-/** Reads the backup tables straight from Room's cursor, one row at a time, so no table is ever held in memory. */
+/**
+ * Reads the backup tables straight from Room's cursor, one row at a time, so no table is ever held in memory. Queries are built with
+ * [SupportSQLiteQueryBuilder] from the fixed table list, never from string templates.
+ */
 class RoomBackupDatabase(
     private val db: AppDatabase,
 ) : BackupDatabase {
     override fun <T> snapshot(block: () -> T): T = db.runInTransaction(Callable { block() })
 
-    override fun count(table: String): Long = scalar("SELECT COUNT(*) FROM ${known(table)}")
+    override fun count(table: String): Long {
+        val query = SupportSQLiteQueryBuilder.builder(known(table)).columns(arrayOf("COUNT(*)")).create()
+        return db.query(query).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+    }
 
-    override fun liveEntryCount(): Long = scalar("SELECT COUNT(*) FROM expense WHERE deletedAtMillis IS NULL")
-
-    private fun scalar(sql: String): Long = db.query(sql, null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+    override fun liveEntryCount(): Long {
+        val query =
+            SupportSQLiteQueryBuilder
+                .builder("expense")
+                .columns(arrayOf("COUNT(*)"))
+                .selection("deletedAtMillis IS NULL", null)
+                .create()
+        return db.query(query).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+    }
 
     override fun forEachRow(
         table: String,
         action: (columns: List<String>, values: List<Any?>) -> Unit,
     ) {
-        db.query("SELECT * FROM ${known(table)} ORDER BY rowid", null).use { c ->
+        val query = SupportSQLiteQueryBuilder.builder(known(table)).orderBy("rowid").create()
+        db.query(query).use { c ->
             val columns = c.columnNames.toList()
             val values = arrayOfNulls<Any?>(columns.size)
             while (c.moveToNext()) {
@@ -32,10 +48,17 @@ class RoomBackupDatabase(
         }
     }
 
-    override fun receipts(): List<BackupReceiptRef> =
-        db.query("SELECT id, fileName, sizeBytes FROM receipt ORDER BY createdAtMillis, id", null).use { c ->
+    override fun receipts(): List<BackupReceiptRef> {
+        val query =
+            SupportSQLiteQueryBuilder
+                .builder("receipt")
+                .columns(arrayOf("id", "fileName", "sizeBytes"))
+                .orderBy("createdAtMillis, id")
+                .create()
+        return db.query(query).use { c ->
             buildList { while (c.moveToNext()) add(BackupReceiptRef(c.getString(0), c.getString(1), c.getLong(2))) }
         }
+    }
 
     private fun known(table: String): String {
         require(BackupTables.INCLUDED.any { it.name == table }) { "not a backup table" }
@@ -56,13 +79,18 @@ class RoomBackupDatabase(
         }
 }
 
-/** Receipt files under the app-private receipts directory; a name that would leave the directory counts as missing. */
+/** Receipt files in the app-private receipts directory; a name that leaves it, or is not a valid path, counts as missing. */
 class DirectoryReceiptFiles(
     private val dir: File,
 ) : ReceiptFiles {
-    override fun open(ref: BackupReceiptRef): InputStream? {
-        val file = File(dir, ref.fileName)
-        val inside = file.canonicalFile.parentFile == dir.canonicalFile
-        return if (inside && file.isFile) file.inputStream() else null
-    }
+    override fun open(ref: BackupReceiptRef): InputStream? =
+        try {
+            val file = File(dir, ref.fileName)
+            val inside = file.canonicalFile.parentFile == dir.canonicalFile
+            if (inside && file.isFile) file.inputStream() else null
+        } catch (_: IOException) {
+            null
+        } catch (_: InvalidPathException) {
+            null
+        }
 }

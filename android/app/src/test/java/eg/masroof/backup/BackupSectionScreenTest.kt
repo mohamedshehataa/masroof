@@ -1,5 +1,6 @@
 package eg.masroof.backup
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -8,14 +9,18 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import eg.masroof.core.DigitStyle
 import eg.masroof.data.backup.BackupFailure
 import eg.masroof.data.backup.BackupRun
 import eg.masroof.data.backup.LastBackup
 import eg.masroof.ui.settings.BackupActions
+import eg.masroof.ui.settings.BackupNotice
 import eg.masroof.ui.settings.BackupSectionContent
 import eg.masroof.ui.settings.BackupStep
 import eg.masroof.ui.settings.BackupUiState
+import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.theme.MasroofTheme
+import eg.masroof.ui.theme.MoneyStyle
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -118,5 +123,30 @@ class BackupSectionScreenTest {
     fun `REQ-SEC-067 a valid passphrase enables Continue`() {
         show(BackupUiState(step = BackupStep.PASSPHRASE, passphrase = "كلمة سر طويلة جدا", again = "كلمة سر طويلة جدا"))
         compose.onNodeWithText("Continue").assertIsEnabled()
+    }
+
+    @Test
+    fun `REQ-SEC-067 the minimum length in the reason follows the digit setting`() {
+        compose.setContent {
+            MasroofTheme {
+                CompositionLocalProvider(LocalMoneyStyle provides MoneyStyle(arabic = false, digits = DigitStyle.ARABIC_INDIC)) {
+                    BackupSectionContent(
+                        BackupUiState(step = BackupStep.PASSPHRASE, passphrase = "12345678901", again = "x"),
+                        actions(),
+                        now,
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Use at least ١٢ characters (now ١١)").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-OPS-177 an interrupted backup says so and can be dismissed`() {
+        val log = mutableListOf<String>()
+        show(BackupUiState(notice = BackupNotice.INTERRUPTED), actions(log))
+        compose.onNodeWithText("Backup was interrupted - please start again").assertIsDisplayed()
+        compose.onNodeWithText("OK").performClick()
+        assertEquals(listOf("ack"), log)
     }
 }

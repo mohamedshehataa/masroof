@@ -19,7 +19,7 @@ object PassphraseRules {
         again: String,
     ): PassphraseProblem? =
         when {
-            passphrase.isEmpty() -> PassphraseProblem.Empty
+            passphrase.isBlank() -> PassphraseProblem.Empty
             !PassphraseKdf.isLongEnough(passphrase) -> PassphraseProblem.TooShort(PassphraseKdf.codePoints(passphrase))
             PassphraseKdf.normalise(passphrase) != PassphraseKdf.normalise(again) -> PassphraseProblem.Mismatch
             else -> null

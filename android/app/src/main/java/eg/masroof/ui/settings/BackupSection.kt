@@ -52,6 +52,7 @@ import eg.masroof.core.CairoTime
 import eg.masroof.core.DateFormat
 import eg.masroof.core.DigitStyle
 import eg.masroof.data.backup.BackupFailure
+import eg.masroof.data.backup.BackupFormat
 import eg.masroof.data.backup.BackupRun
 import eg.masroof.data.backup.LastBackup
 import eg.masroof.data.backup.PassphraseProblem
@@ -113,6 +114,22 @@ fun BackupSectionContent(
             Text(stringResource(R.string.backup_never), color = MaterialTheme.colorScheme.error)
         } else {
             Text(lastBackupLine(last, now, style.arabic, style.digits))
+        }
+        state.notice?.let { notice ->
+            Text(
+                stringResource(
+                    when (notice) {
+                        BackupNotice.INTERRUPTED -> R.string.backup_interrupted
+                        BackupNotice.START_FAILED -> R.string.backup_start_failed
+                        BackupNotice.ALREADY_RUNNING -> R.string.backup_already_running
+                    },
+                ),
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(
+                onClick = actions.onAcknowledge,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.backup_ok)) }
         }
         RunStatus(state, actions, style.digits)
         Button(
@@ -252,8 +269,14 @@ fun PassphraseScreen(
                 val reason =
                     when (val p = state.problem) {
                         null -> null
-                        PassphraseProblem.Empty -> stringResource(R.string.backup_pass_empty)
-                        is PassphraseProblem.TooShort -> stringResource(R.string.backup_pass_too_short, DateFormat.number(p.have, digits))
+                        PassphraseProblem.Empty ->
+                            stringResource(R.string.backup_pass_empty, DateFormat.number(BackupFormat.MIN_PASSPHRASE_CODE_POINTS, digits))
+                        is PassphraseProblem.TooShort ->
+                            stringResource(
+                                R.string.backup_pass_too_short,
+                                DateFormat.number(BackupFormat.MIN_PASSPHRASE_CODE_POINTS, digits),
+                                DateFormat.number(p.have, digits),
+                            )
                         PassphraseProblem.Mismatch -> stringResource(R.string.backup_pass_mismatch)
                     }
                 if (reason != null) Text(reason, color = MaterialTheme.colorScheme.error)

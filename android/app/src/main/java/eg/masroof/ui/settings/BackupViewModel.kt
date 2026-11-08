@@ -15,7 +15,11 @@ import eg.masroof.data.backup.PassphraseKdf
 import eg.masroof.data.backup.PassphraseProblem
 import eg.masroof.data.backup.PassphraseRules
 import eg.masroof.di.IoDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +33,9 @@ import javax.inject.Inject
 
 enum class BackupStep { NONE, EXPLAIN, PASSPHRASE, PICKING }
 
+/** Why a backup did not start, shown in the Backup section until the user dismisses it. */
+enum class BackupNotice { INTERRUPTED, START_FAILED, ALREADY_RUNNING }
+
 data class BackupUiState(
     val last: LastBackup? = null,
     val run: BackupRun = BackupRun.Idle,
@@ -39,6 +46,7 @@ data class BackupUiState(
     /** The key is being derived (about a second): the picker has returned and the task has not started yet. */
     val preparing: Boolean = false,
     val defaultFileName: String = "",
+    val notice: BackupNotice? = null,
 ) {
     val problem: PassphraseProblem? get() = PassphraseRules.check(passphrase, again)
     val canContinue: Boolean get() = problem == null
@@ -62,13 +70,14 @@ class BackupViewModel
             val passphrase: String = "",
             val again: String = "",
             val preparing: Boolean = false,
+            val notice: BackupNotice? = null,
         )
 
         private val local = MutableStateFlow(Local())
 
         val state: StateFlow<BackupUiState> =
             combine(local, status.last, launcher.run) { l, last, run ->
-                BackupUiState(last, run, l.step, l.understood, l.passphrase, l.again, l.preparing, defaultFileName())
+                BackupUiState(last, run, l.step, l.understood, l.passphrase, l.again, l.preparing, defaultFileName(), l.notice)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), BackupUiState())
 
         /** `masroof-2026-10-27.masroof`, the Cairo date. */
@@ -76,7 +85,7 @@ class BackupViewModel
 
         fun onBackUpNow() {
             if (state.value.run is BackupRun.Running || local.value.preparing) return
-            local.update { it.copy(step = if (status.last.value == null) BackupStep.EXPLAIN else BackupStep.PASSPHRASE) }
+            local.update { it.copy(notice = null, step = if (status.last.value == null) BackupStep.EXPLAIN else BackupStep.PASSPHRASE) }
         }
 
         fun onUnderstood(checked: Boolean) = local.update { it.copy(understood = checked) }
@@ -110,28 +119,61 @@ class BackupViewModel
         /** Leaves the flow from any step; the typed text is dropped. */
         fun onDismiss() = local.update { Local() }
 
-        /** The system "Save to" picker returned: null = the user cancelled, so nothing is written and nothing changes. */
+        /**
+         * The system "Save to" picker returned. Null = the user cancelled: nothing is written and nothing changes. A file that arrives when
+         * this screen is no longer asking for one (the process died while the picker was open) is an interrupted backup: the empty document
+         * is removed if the provider allows it, and the user is told to start again.
+         */
         fun onPicked(uri: Uri?) {
             val typed = local.value
-            if (uri == null || typed.step != BackupStep.PICKING) {
+            if (uri == null) {
                 local.value = Local()
                 return
             }
-            local.update { it.copy(preparing = true, passphrase = "", again = "") }
-            viewModelScope.launch {
-                try {
-                    val header = BackupHeader.fresh()
-                    val key = withContext(io) { PassphraseKdf.deriveKey(typed.passphrase, header) }
-                    launcher.start(uri, BackupInput(header, key))
-                } finally {
-                    // The field is cleared whether the task started or the derivation failed.
-                    local.value = Local()
-                }
+            if (typed.step != BackupStep.PICKING) {
+                launcher.discard(uri)
+                local.value = Local(notice = BackupNotice.INTERRUPTED)
+                return
             }
+            local.update { it.copy(preparing = true, passphrase = "", again = "") }
+            viewModelScope.launch { deriveAndStart(uri, typed.passphrase) }
         }
+
+        // Derivation cannot be interrupted, so it runs to the end and the key is zeroed unless the task took ownership of it.
+        // Out of memory at 64 MiB on a small phone must show a message, never crash the app.
+        @Suppress("TooGenericExceptionCaught", "SwallowedException")
+        private suspend fun deriveAndStart(
+            uri: Uri,
+            passphrase: String,
+        ) {
+            var key: ByteArray? = null
+            var started = false
+            var notice: BackupNotice? = null
+            try {
+                val header = BackupHeader.fresh()
+                key = withContext(NonCancellable + io) { PassphraseKdf.deriveKey(passphrase, header) }
+                currentCoroutineContext().ensureActive()
+                started = launcher.start(uri, BackupInput(header, key))
+                if (!started) notice = BackupNotice.ALREADY_RUNNING
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                notice = BackupNotice.START_FAILED
+            } finally {
+                if (!started) key?.fill(0)
+                // The field is cleared whether the task started or not.
+                local.value = Local(notice = notice)
+            }
+            if (!started) launcher.discard(uri)
+        }
+
+        fun onDismissNotice() = local.update { it.copy(notice = null) }
 
         fun onCancelBackup() = launcher.cancel()
 
         /** The user has seen the result (success, failure or cancel). */
-        fun onAcknowledge() = launcher.acknowledge()
+        fun onAcknowledge() {
+            local.update { it.copy(notice = null) }
+            viewModelScope.launch { launcher.acknowledge() }
+        }
     }

@@ -59,8 +59,14 @@ class BackupReceiptRef(
 internal object BackupJson {
     fun string(value: String): String {
         val sb = StringBuilder(value.length + 2).append('"')
-        for (c in value) {
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            val pair = c.isHighSurrogate() && i + 1 < value.length && value[i + 1].isLowSurrogate()
             when {
+                pair -> sb.append(c).append(value[++i])
+                // A lone surrogate cannot be written as UTF-8 (it would become `?`): escape it so the round trip is exact.
+                c.isSurrogate() -> sb.append("\\u").append("%04x".format(c.code))
                 c == '"' -> sb.append("\\\"")
                 c == '\\' -> sb.append("\\\\")
                 c == '\n' -> sb.append("\\n")
@@ -69,6 +75,7 @@ internal object BackupJson {
                 c < ' ' -> sb.append("\\u").append("%04x".format(c.code))
                 else -> sb.append(c)
             }
+            i++
         }
         return sb.append('"').toString()
     }

@@ -33,6 +33,33 @@ class BackupManifestTest {
     }
 
     @Test
+    fun `REQ-OPS-177 the merged manifest of the debug build keeps the dataSync service not exported and adds no other permission use`() {
+        val merged =
+            File("build/intermediates/merged_manifests/debug").walkTopDown().firstOrNull { it.name == "AndroidManifest.xml" }
+        assertTrue("the merged manifest is produced before the unit tests run", merged != null)
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(merged)
+        val service =
+            (0 until doc.getElementsByTagName("service").length)
+                .map { doc.getElementsByTagName("service").item(it) as org.w3c.dom.Element }
+                .first { it.getAttribute("android:name") == "androidx.work.impl.foreground.SystemForegroundService" }
+        assertEquals("dataSync", service.getAttribute("android:foregroundServiceType"))
+        assertEquals("false", service.getAttribute("android:exported"))
+        val permissions =
+            (0 until doc.getElementsByTagName("uses-permission").length)
+                .map { (doc.getElementsByTagName("uses-permission").item(it) as org.w3c.dom.Element).getAttribute("android:name") }
+        assertTrue(permissions.contains("android.permission.FOREGROUND_SERVICE_DATA_SYNC"))
+        assertFalse(
+            "no camera, location, contacts or storage permission came in through a library",
+            permissions.any {
+                it.contains("CAMERA") ||
+                    it.contains("LOCATION") ||
+                    it.contains("CONTACTS") ||
+                    it.contains("STORAGE")
+            },
+        )
+    }
+
+    @Test
     fun `REQ-OPS-177 no new exported component and no new permission beyond the two foreground ones`() {
         val exported =
             (names("activity") + names("service") + names("receiver") + names("provider"))

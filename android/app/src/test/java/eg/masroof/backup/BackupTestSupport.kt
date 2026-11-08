@@ -88,7 +88,18 @@ class FakeBackupDb(
     private val receiptRefs: List<BackupReceiptRef> = emptyList(),
     private val live: Long = 0,
 ) : BackupDatabase {
-    override fun <T> snapshot(block: () -> T): T = block()
+    var inSnapshot = false
+    var snapshots = 0
+
+    override fun <T> snapshot(block: () -> T): T {
+        inSnapshot = true
+        snapshots++
+        try {
+            return block()
+        } finally {
+            inSnapshot = false
+        }
+    }
 
     override fun count(table: String): Long = (tables[table] ?: emptyList()).size.toLong()
 

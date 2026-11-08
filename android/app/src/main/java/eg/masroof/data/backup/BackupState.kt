@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,6 +37,16 @@ class BackupStatusStore
         private val state = MutableStateFlow(read())
         val last: StateFlow<LastBackup?> get() = state
 
+        private val acknowledgedState = MutableStateFlow(prefs.getString(ACK, null))
+
+        /** The id of the finished run whose result the user has seen (success, failure or cancel); that run is shown as idle. */
+        val acknowledged: StateFlow<String?> get() = acknowledgedState
+
+        fun acknowledge(workId: String) {
+            prefs.edit(commit = true) { putString(ACK, workId) }
+            acknowledgedState.value = workId
+        }
+
         fun record(backup: LastBackup) {
             prefs.edit(commit = true) {
                 putLong(AT, backup.atMillis)
@@ -59,6 +70,7 @@ class BackupStatusStore
             const val ENTRIES = "last_entries"
             const val RECEIPTS = "last_receipts"
             const val BYTES = "last_bytes"
+            const val ACK = "ack_id"
         }
     }
 
@@ -71,21 +83,24 @@ class BackupStatusStore
 class PendingBackupKey
     @Inject
     constructor() {
-        private var pending: BackupInput? = null
+        private val pending = HashMap<UUID, BackupInput>()
 
+        /** Keyed by the work request's id, so a task takes exactly its own key and never another request's. */
         @Synchronized
-        fun put(input: BackupInput) {
-            pending?.key?.fill(0)
-            pending = input
+        fun put(
+            id: UUID,
+            input: BackupInput,
+        ) {
+            pending.put(id, input)?.key?.fill(0)
         }
 
         @Synchronized
-        fun take(): BackupInput? = pending.also { pending = null }
+        fun take(id: UUID): BackupInput? = pending.remove(id)
 
+        /** The request was not enqueued: its key must not stay in memory. */
         @Synchronized
-        fun clear() {
-            pending?.key?.fill(0)
-            pending = null
+        fun discard(id: UUID) {
+            pending.remove(id)?.key?.fill(0)
         }
     }
 

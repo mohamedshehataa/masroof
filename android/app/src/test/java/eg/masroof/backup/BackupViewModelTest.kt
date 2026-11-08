@@ -11,6 +11,7 @@ import eg.masroof.data.backup.BackupStatusStore
 import eg.masroof.data.backup.LastBackup
 import eg.masroof.data.backup.PassphraseKdf
 import eg.masroof.data.backup.PassphraseProblem
+import eg.masroof.ui.settings.BackupNotice
 import eg.masroof.ui.settings.BackupStep
 import eg.masroof.ui.settings.BackupUiState
 import eg.masroof.ui.settings.BackupViewModel
@@ -45,18 +46,28 @@ private class FakeLauncher : BackupLauncher {
     var acknowledged = 0
     val runState = MutableStateFlow<BackupRun>(BackupRun.Idle)
 
-    override fun start(
+    var startResult = true
+    var startFailure: Throwable? = null
+    val discarded = mutableListOf<Uri>()
+
+    override suspend fun start(
         destination: Uri,
         input: BackupInput,
-    ) {
+    ): Boolean {
+        startFailure?.let { throw it }
         started += destination to input
+        return startResult
+    }
+
+    override fun discard(destination: Uri) {
+        discarded += destination
     }
 
     override fun cancel() {
         cancelled++
     }
 
-    override fun acknowledge() {
+    override suspend fun acknowledge() {
         acknowledged++
     }
 
@@ -237,4 +248,65 @@ class BackupViewModelTest {
         val b = BackupHeader.fresh()
         assertFalse(a.salt.contentEquals(b.salt))
     }
+
+    private fun pickWith(
+        passphrase: String = "correct horse battery",
+        picked: Uri? = uri,
+    ) {
+        vm.onBackUpNow()
+        vm.onPassphrase(passphrase)
+        vm.onAgain(passphrase)
+        vm.onContinuePassphrase()
+        vm.onPicked(picked)
+    }
+
+    @Test
+    fun `REQ-OPS-177 a picked file arriving after the process died says the backup was interrupted and removes the empty document`() =
+        runTest {
+            hadBackup()
+            vm.onPicked(uri)
+            val s = await { it.notice == BackupNotice.INTERRUPTED }
+            assertEquals(BackupStep.NONE, s.step)
+            assertEquals(listOf(uri), launcher.discarded)
+            assertTrue(launcher.started.isEmpty())
+        }
+
+    @Test
+    fun `REQ-OPS-177 a key derivation that fails shows a message instead of crashing and clears the field`() =
+        runTest {
+            hadBackup()
+            val broken = BackupViewModel(launcher, status, clock, kotlinx.coroutines.Dispatchers.Default)
+            launcher.startFailure = OutOfMemoryError("64 MiB")
+            vm = broken
+            pickWith()
+            val s = await { it.notice == BackupNotice.START_FAILED && !it.preparing }
+            assertEquals("", s.passphrase)
+            assertEquals(listOf(uri), launcher.discarded)
+        }
+
+    @Test
+    fun `REQ-OPS-177 when the launcher refuses because a backup is queued the derived key is zeroed and the user is told`() =
+        runTest {
+            hadBackup()
+            launcher.startResult = false
+            pickWith()
+            val s = await { it.notice == BackupNotice.ALREADY_RUNNING && !it.preparing }
+            assertEquals(BackupStep.NONE, s.step)
+            val key =
+                launcher.started
+                    .single()
+                    .second.key
+            assertTrue("the key was zeroed", key.all { it == 0.toByte() })
+            assertEquals(listOf(uri), launcher.discarded)
+        }
+
+    @Test
+    fun `REQ-OPS-177 when starting the task throws the derived key is zeroed too`() =
+        runTest {
+            hadBackup()
+            launcher.startFailure = IllegalStateException("work manager not ready")
+            pickWith()
+            await { it.notice == BackupNotice.START_FAILED && !it.preparing }
+            assertTrue(launcher.started.isEmpty())
+        }
 }

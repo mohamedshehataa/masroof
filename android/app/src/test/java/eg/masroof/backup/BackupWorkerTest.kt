@@ -76,6 +76,8 @@ class BackupWorkerTest {
         receipts.deleteRecursively()
     }
 
+    private val workId = java.util.UUID.randomUUID()
+
     private fun worker(): BackupWorker {
         val factory =
             BackupEnvironmentFactory(
@@ -89,6 +91,7 @@ class BackupWorkerTest {
                 },
             )
         return TestListenableWorkerBuilder<BackupWorker>(context)
+            .setId(workId)
             .setInputData(workDataOf(BackupWorker.KEY_URI to uri.toString()))
             .setWorkerFactory(
                 object : WorkerFactory() {
@@ -118,7 +121,7 @@ class BackupWorkerTest {
     fun `REQ-OPS-177 the task writes the file the user picked, records the last backup and reports the counts`() {
         val sink = ByteArrayOutputStream()
         shadowOf(context.contentResolver).registerOutputStream(uri, sink)
-        pending.put(input())
+        pending.put(workId, input())
         val result = runBlocking { worker().doWork() }
         assertTrue(result is ListenableWorker.Result.Success)
         val out = (result as ListenableWorker.Result.Success).outputData
@@ -128,7 +131,7 @@ class BackupWorkerTest {
         assertEquals(LastBackup(clock.millis(), 1, 0, sink.size().toLong()), status.last.value)
         val plain = BackupTestDecryptor.decrypt(sink.toByteArray(), "correct horse battery")
         assertEquals("manifest.json", plain.names.first())
-        assertNull("the key is used once and is gone", pending.take())
+        assertNull("the key is used once and is gone", pending.take(workId))
     }
 
     @Test
@@ -152,7 +155,7 @@ class BackupWorkerTest {
                 }
             }
         shadowOf(context.contentResolver).registerOutputStream(uri, failing)
-        pending.put(input())
+        pending.put(workId, input())
         val result = runBlocking { worker().doWork() }
         assertTrue(result is ListenableWorker.Result.Failure)
         val reason = (result as ListenableWorker.Result.Failure).outputData.getString(BackupWorker.KEY_REASON)
@@ -163,7 +166,7 @@ class BackupWorkerTest {
 
     @Test
     fun `REQ-OPS-177 a location that cannot be opened fails with a reason and writes nothing`() {
-        pending.put(input())
+        pending.put(workId, input())
         val result = runBlocking { worker().doWork() }
         assertTrue(result is ListenableWorker.Result.Failure)
         assertEquals(
@@ -195,5 +198,27 @@ class BackupWorkerTest {
         assertEquals("Cancel", n.actions[0].title.toString())
         assertEquals(100, n.extras.getInt(Notification.EXTRA_PROGRESS_MAX))
         assertFalse("ongoing: it cannot be swiped away while it runs", n.flags and Notification.FLAG_ONGOING_EVENT == 0)
+    }
+
+    @Test
+    fun `REQ-OPS-177 a task takes only the key stored for its own request id, never another request's`() {
+        val sink = ByteArrayOutputStream()
+        shadowOf(context.contentResolver).registerOutputStream(uri, sink)
+        val other = input()
+        pending.put(java.util.UUID.randomUUID(), other)
+        val result = runBlocking { worker().doWork() }
+        assertTrue(result is ListenableWorker.Result.Failure)
+        assertEquals(BackupFailure.KEY_LOST.name, (result as ListenableWorker.Result.Failure).outputData.getString(BackupWorker.KEY_REASON))
+        assertEquals(0, sink.size())
+    }
+
+    @Test
+    fun `REQ-OPS-177 a discarded request leaves no key in memory`() {
+        val id = java.util.UUID.randomUUID()
+        val in1 = input()
+        pending.put(id, in1)
+        pending.discard(id)
+        assertNull(pending.take(id))
+        assertTrue(in1.key.all { it == 0.toByte() })
     }
 }
