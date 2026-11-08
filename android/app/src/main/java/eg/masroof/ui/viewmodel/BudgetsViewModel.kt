@@ -206,7 +206,7 @@ class HomeBudgetsViewModel
         val state: StateFlow<List<BudgetRowUi>> =
             rows.map { it.take(HOME_BUDGETS) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
-        /** The monthly "All spending" budget (the oldest if a restore left two), whatever its rank: its remaining amount is Home's figure. */
+        /** The monthly "All spending" budget (the oldest if a restore left two), whatever its rank: Home shows its remaining amount. */
         val total: StateFlow<BudgetRowUi?> =
             rows
                 .map { list -> list.firstOrNull { it.categoryId == null && !it.weekly && !it.duplicate && !it.unsupported } }

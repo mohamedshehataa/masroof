@@ -147,7 +147,10 @@ internal fun PeriodAnalytics.toSnapshot(nowMillis: Long): InsightsSnapshot {
     )
 }
 
-/** Removes the period caches an older build wrote (`insights-current.json`, `insights-previous.json`). The server-era budgets cache file is not touched here (Erase all data clears it). */
+/**
+ * Removes the period caches an older build wrote (`insights-current.json`, `insights-previous.json`). The server-era budgets
+ * cache file is not touched here (Erase all data clears it).
+ */
 fun deleteLegacyInsightsCache(dir: File) {
     for (name in listOf("current", "previous")) {
         File(dir, "insights-$name.json").delete()
