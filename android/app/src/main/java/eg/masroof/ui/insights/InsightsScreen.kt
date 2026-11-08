@@ -46,6 +46,7 @@ import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.core.PercentFormat
 import eg.masroof.data.insights.InsightsPeriod
+import eg.masroof.ui.ask.AskButton
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.MessageState
@@ -69,12 +70,19 @@ private const val DONUT_SLICES = 8
 @Composable
 fun InsightsRoute(
     onOpenBudgets: () -> Unit = {},
+    onOpenAsk: (() -> Unit)? = null,
     viewModel: InsightsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     // Runs each time the destination enters composition (tab revisited), not on recomposition.
     LaunchedEffect(viewModel) { viewModel.onShown() }
-    InsightsContent(state, onPeriod = viewModel::selectPeriod, onRetry = viewModel::refresh, onOpenBudgets = onOpenBudgets)
+    InsightsContent(
+        state,
+        onPeriod = viewModel::selectPeriod,
+        onRetry = viewModel::refresh,
+        onOpenBudgets = onOpenBudgets,
+        onOpenAsk = onOpenAsk,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,15 +93,19 @@ fun InsightsContent(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenBudgets: () -> Unit = {},
+    onOpenAsk: (() -> Unit)? = null,
 ) {
     val data = state.data
     Column(modifier.fillMaxSize()) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(R.string.insights_title),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.semantics { heading() },
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.insights_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                if (onOpenAsk != null) AskButton(onOpenAsk)
+            }
             PeriodToggle(state.period, onPeriod)
             TextButton(onClick = onOpenBudgets, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.budgets_title))

@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.ask.AskButton
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.HomeBudgetsCard
 import eg.masroof.ui.components.AmountText
@@ -58,6 +59,7 @@ fun HomeRoute(
     budgetsViewModel: HomeBudgetsViewModel = hiltViewModel(),
     captured: CapturedViewModel = hiltViewModel(),
     onOpenExpense: (String) -> Unit = {},
+    onOpenAsk: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val insight by insightsViewModel.state.collectAsStateWithLifecycle()
@@ -77,6 +79,7 @@ fun HomeRoute(
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
         onOpenExpense = onOpenExpense,
+        onOpenAsk = onOpenAsk,
     )
     StopLearningDialog(captured)
 }
@@ -96,8 +99,12 @@ fun HomeContent(
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
     onOpenExpense: ((String) -> Unit)? = null,
+    onOpenAsk: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (onOpenAsk != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { AskButton(onOpenAsk) }
+        }
         if (state.summaryAvailable) SpentCard(state, insight)
         if (state.recent.isNotEmpty()) StatusBanner(state.status, onRetry)
         if (insight != null && insight.pendingReview > 0) ReviewBanner(insight.pendingReview, onOpenInsights)
