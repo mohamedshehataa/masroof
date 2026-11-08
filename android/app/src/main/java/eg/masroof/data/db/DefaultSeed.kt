@@ -84,9 +84,20 @@ object DefaultSeed {
                     arrayOf<Any>(ME_MEMBER_ID, ME_MEMBER_NAME),
                 )
             }
+            writeDefaultEmoji(db)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    /** Default emoji, only where none is set: a user's choice is never overwritten, and a second run changes nothing. */
+    private fun writeDefaultEmoji(db: SupportSQLiteDatabase) {
+        for ((key, emoji) in eg.masroof.data.categories.DEFAULT_CATEGORY_EMOJI) {
+            db.execSQL(
+                "UPDATE category SET emoji = ? WHERE id = ? AND emoji IS NULL",
+                arrayOf<Any>(emoji, seededCategoryId(key)),
+            )
         }
     }
 

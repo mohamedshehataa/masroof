@@ -122,7 +122,7 @@ open class FakeBudgetsRepository : BudgetsRepository {
     }
 }
 
-class FakeBudgetsRemote : BudgetsRemote {
+open class FakeBudgetsRemote : BudgetsRemote {
     var failure: Exception? = null
     val calls = mutableListOf<String>()
 

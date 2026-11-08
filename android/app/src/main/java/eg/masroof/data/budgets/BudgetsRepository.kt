@@ -107,6 +107,9 @@ class DefaultBudgetsRepository
                 }
             } catch (_: SerializationException) {
                 MutationOutcome.Failed
+            } catch (_: IllegalArgumentException) {
+                // a category id that is not a server UUID (a local category) can never be sent: an error, not a crash
+                MutationOutcome.Invalid
             }
 
         private fun decode(json: String?): BudgetsSnapshot? =

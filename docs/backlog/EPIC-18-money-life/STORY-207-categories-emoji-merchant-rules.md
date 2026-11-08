@@ -3,7 +3,7 @@ id: STORY-207
 epic: EPIC-18
 title: Categories with emoji you can add, rename and archive, and merchant rules that file entries for you
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -37,7 +37,7 @@ System categories can be renamed and archived but never deleted.
 ### REQ-EXP-061 - Merchant rules: suggest, apply to new entries, optionally to past ones
 **Given** an entry with merchant "TALABAT EG" in Groceries **When** the user changes its category to Dining out in Edit
 **Then** a prompt asks "Always file Talabat under Dining out?"; Yes stores one `merchant_rule` (merchantKey = the
-normalised, digit-free merchant key the app already uses for merchant grouping) and asks "Also change the 6 past
+merchant key: folded for case, accents and Arabic spelling, digits kept, capped at 80 code points) and asks "Also change the 6 past
 Talabat entries?" (Yes updates those not-deleted entries in one transaction with Undo). **Given** the rule **When** a new
 SMS/notification capture or manual entry arrives with that merchant and no category chosen by the user **Then** it is
 saved under Dining out. A user-chosen category on a manual entry always wins. Settings -> Merchant rules lists rules
@@ -87,3 +87,6 @@ STORY-201
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 2 |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 6c0f228; fix rounds 4e2cae1, 8960731 |
+| 2026-11-08 | 6 verify | qa-verifier, security-reviewer | FAIL loop 1 (BLOCKER budget crash), FAIL loop 2 (same crash via custom ids), PASS loop 3; security APPROVE |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
