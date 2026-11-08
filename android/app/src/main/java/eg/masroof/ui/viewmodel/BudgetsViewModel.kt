@@ -157,8 +157,8 @@ class BudgetsViewModel
                     } else {
                         repository.update(editingId, minor, rollover)
                     }
-                form.value = Form(error = outcome.toError())
                 if (outcome == MutationOutcome.Ok) onSaved()
+                form.value = Form(error = outcome.toError())
             }
         }
 
@@ -173,9 +173,9 @@ class BudgetsViewModel
             form.value = Form(saving = true)
             viewModelScope.launch {
                 val outcome = repository.delete(id)
-                form.value = Form(error = outcome.toError())
                 // A budget already gone is as good as deleted.
                 if (outcome == MutationOutcome.Ok || outcome == MutationOutcome.NotFound) onDeleted()
+                form.value = Form(error = outcome.toError())
             }
         }
     }

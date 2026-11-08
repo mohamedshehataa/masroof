@@ -29,6 +29,7 @@ import eg.masroof.ui.viewmodel.BudgetError
 import eg.masroof.ui.viewmodel.BudgetsState
 import eg.masroof.ui.viewmodel.BudgetsViewModel
 import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +65,8 @@ private const val AWAIT_MS = 10_000L
 /** Waits (in real time, off the test scheduler) until a combined StateFlow holds a value that satisfies [done]. */
 private suspend fun <T> StateFlow<T>.await(done: (T) -> Boolean): T =
     withContext(Dispatchers.Default) { withTimeout(AWAIT_MS) { first(done) } }
+
+private suspend fun CompletableDeferred<Unit>.awaitReal() = withContext(Dispatchers.Default) { withTimeout(AWAIT_MS) { await() } }
 
 /**
  * STORY-181: budgets stored in Room, progress from the on-device engine, no server. Real in-memory database, real
@@ -271,7 +274,9 @@ class BudgetsLocalTest {
             vm.state.await { it.error == BudgetError.AMOUNT_TOO_LARGE }
             assertFalse(saved)
             assertTrue(db.budgets().all().isEmpty())
-            vm.save(null, groceries.id, BudgetPeriodKind.MONTHLY, "10000000000", false) { saved = true }
+            val done = CompletableDeferred<Unit>()
+            vm.save(null, groceries.id, BudgetPeriodKind.MONTHLY, "10000000000", false) { done.complete(Unit) }
+            done.awaitReal()
             vm.state.await { it.rows.size == 1 }
             assertEquals(
                 MAX_BUDGET_MINOR,
@@ -281,7 +286,6 @@ class BudgetsLocalTest {
                     .single()
                     .amountMinor,
             )
-            assertTrue(saved)
         }
 
     @Test
@@ -368,10 +372,10 @@ class BudgetsLocalTest {
                     .rows
                     .single()
                     .id
-            var deleted = false
-            vm.delete(id) { deleted = true }
+            val done = CompletableDeferred<Unit>()
+            vm.delete(id) { done.complete(Unit) }
+            done.awaitReal()
             vm.state.await { it.rows.isEmpty() }
-            assertTrue(deleted)
             assertTrue(db.budgets().all().isEmpty())
             assertNull(engine.compute("current").summary.remainingBudget)
         }
@@ -385,10 +389,9 @@ class BudgetsLocalTest {
             assertEquals(MutationOutcome.NotFound, repo.update("missing", 100, false))
             val vm = vm()
             watch(vm)
-            var deleted = false
-            vm.delete("missing") { deleted = true }
-            vm.state.await { !it.saving }
-            assertTrue(deleted)
+            val done = CompletableDeferred<Unit>()
+            vm.delete("missing") { done.complete(Unit) }
+            done.awaitReal()
             var saved = false
             vm.save("missing", null, BudgetPeriodKind.MONTHLY, "100", false) { saved = true }
             vm.state.await { it.error == BudgetError.FAILED }
@@ -408,10 +411,10 @@ class BudgetsLocalTest {
             val row = state.rows.single()
             assertNull(row.nameEn)
             assertEquals(groceries.id, row.categoryId)
-            var deleted = false
-            vm.delete(row.id) { deleted = true }
+            val done = CompletableDeferred<Unit>()
+            vm.delete(row.id) { done.complete(Unit) }
+            done.awaitReal()
             vm.state.await { it.rows.isEmpty() }
-            assertTrue(deleted)
         }
 
     @Test
