@@ -111,7 +111,10 @@ class AnswerCardsTest {
         assertTrue(cards(listOf(out)).filterIsInstance<AnswerCard.Transfer>().isEmpty())
         val state = AnswerState(links = setOf(EntryLink(LinkKind.TRANSFER, "t", "x")))
         val known = out.copy(instrumentLast4 = "1111")
-        assertTrue(cards(listOf(known), state = state).filterIsInstance<AnswerCard.Transfer>().isEmpty())
+        val partner = answerEntry("x", type = "TRANSFER_IN", amount = 500_000, source = "MANUAL")
+        assertTrue(cards(listOf(known, partner), state = state).filterIsInstance<AnswerCard.Transfer>().isEmpty())
+        // a link whose other side is gone no longer settles the survivor: it may ask again
+        assertEquals(1, cards(listOf(known), state = state).filterIsInstance<AnswerCard.Transfer>().size)
     }
 
     // ---- REQ-EXP-066

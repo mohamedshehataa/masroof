@@ -157,7 +157,6 @@ fun EditExpenseContent(
                             stringResource(
                                 when {
                                     form.partnerIsRefund -> R.string.answers_delete_keep_refund
-                                    form.hasPartner -> R.string.answers_delete_this_only
                                     else -> R.string.edit_delete
                                 },
                             ),
@@ -178,14 +177,12 @@ fun EditExpenseContent(
 private fun deleteTitle(form: eg.masroof.ui.viewmodel.EditFormState) =
     when {
         form.partnerIsRefund -> R.string.answers_delete_refund_title
-        form.hasPartner -> R.string.answers_delete_pair_title
         else -> R.string.edit_delete_title
     }
 
 private fun deleteBody(form: eg.masroof.ui.viewmodel.EditFormState) =
     when {
         form.partnerIsRefund -> R.string.answers_delete_refund_body
-        form.hasPartner -> R.string.answers_delete_pair_body
         else -> R.string.edit_delete_body
     }
 

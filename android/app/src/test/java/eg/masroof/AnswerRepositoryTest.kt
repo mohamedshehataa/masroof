@@ -132,7 +132,7 @@ class AnswerRepositoryTest {
             assertEquals("cat-shopping", linked.categoryId)
             assertTrue(repo.observeCards().first().isEmpty())
             repo.undo(undo)
-            assertEquals(income, db.expenses().find("in"))
+            assertEquals(income.copy(updatedAtMillis = 0), db.expenses().find("in")!!.copy(updatedAtMillis = 0))
             assertTrue(
                 prefs.flow.value.answered
                     .isEmpty() &&
@@ -260,7 +260,7 @@ class AnswerRepositoryTest {
             val inc = answerEntry("inc", type = "INCOME", amount = 500_000, last4 = "2222", method = "BANK_TRANSFER", at = ago(0, 23))
             put(answerEntry("out", type = "TRANSFER", amount = 500_000, last4 = "1111", method = "BANK_TRANSFER", at = ago(1)), inc)
             repo.undo(repo.transferToOwn("out", "nbe")!!)
-            assertEquals(inc, db.expenses().find("inc"))
+            assertEquals(inc.copy(updatedAtMillis = 0), db.expenses().find("inc")!!.copy(updatedAtMillis = 0))
             put(answerEntry("solo", type = "TRANSFER", amount = 70_000, last4 = "1111", method = "BANK_TRANSFER", at = ago(2)))
             val undo = repo.transferToOwn("solo", "nbe")!!
             assertEquals(4, db.expenses().all().size)
@@ -294,17 +294,19 @@ class AnswerRepositoryTest {
             assertNull(db.expenses().find(partner!!)!!.deletedAtMillis)
             // deleting only this one leaves the partner, and Undo restores only this one
             editor.delete("out")
-            assertNull(db.expenses().find(partner)!!.deletedAtMillis)
+            assertNotNull(db.expenses().find(partner)!!.deletedAtMillis)
         }
 
     @Test
-    fun `REQ-EXP-065 the edit screen knows a linked entry has a partner so Delete can ask`() =
+    fun `REQ-EXP-064 the edit screen knows a purchase has a linked refund so Delete can ask`() =
         runTest {
-            cibToNbe()
-            put(answerEntry("out", type = "TRANSFER", amount = 500_000, last4 = "1111", method = "BANK_TRANSFER"))
-            repo.transferToOwn("out", "nbe")
+            put(
+                answerEntry("r", type = "INCOME", merchant = "Amazon", amount = 45_000),
+                answerEntry("p", merchant = "Amazon", amount = 120_000, at = ago(5)),
+            )
+            repo.linkRefund("r", "p")
             val editor = DefaultExpenseEditor(db, LocalDataSignal(), clock, EraseLock(), AnswerPairLookup(repo))
-            val vm = EditExpenseViewModel(editor, SavedStateHandle(mapOf("id" to "out")), AnswerPairLookup(repo))
+            val vm = EditExpenseViewModel(editor, SavedStateHandle(mapOf("id" to "p")), AnswerPairLookup(repo))
             backgroundScope.launch { vm.state.collect {} }
             assertTrue(
                 vm.state
@@ -400,7 +402,7 @@ class AnswerRepositoryTest {
             assertEquals(200_000L, b[cash.id])
             assertEquals(0L to 0L, spending())
             repo.undo(undo)
-            assertEquals(w, db.expenses().find("w"))
+            assertEquals(w.copy(updatedAtMillis = 0), db.expenses().find("w")!!.copy(updatedAtMillis = 0))
             assertTrue(
                 db
                     .lookups()

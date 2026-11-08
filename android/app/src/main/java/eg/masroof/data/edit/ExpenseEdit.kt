@@ -9,7 +9,6 @@ import eg.masroof.data.answers.ExpenseTypes
 import eg.masroof.data.answers.LinkKind
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
-import eg.masroof.data.answers.RowChange
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -107,7 +106,6 @@ interface ExpenseEditor {
 }
 
 private const val DELETION_BUFFER = 16
-private const val MAX_REMEMBERED = 32
 
 /** Edit, confirm, delete and Undo on Room only; no HTTP. Every write waits for a running erase and is one transaction. */
 @Singleton
@@ -123,9 +121,6 @@ class DefaultExpenseEditor
         private val deletions = MutableSharedFlow<String>(extraBufferCapacity = DELETION_BUFFER)
 
         override val deleted: SharedFlow<String> = deletions
-
-        /** What a delete changed besides the deleted row, by deleted id, until its Undo (a few seconds) or the next few deletes. */
-        private val released = java.util.concurrent.ConcurrentHashMap<String, List<RowChange>>()
 
         override suspend fun find(id: String) = db.expenses().find(id)?.takeIf { it.deletedAtMillis == null }
 
@@ -160,6 +155,8 @@ class DefaultExpenseEditor
                                             }
                                         }
                                     }
+                                    // a linked row's fields follow the link (a purchase's new category moves its refund)
+                                    AnswerWrites.reconcile(db, links, now)
                                     EditOutcome.Saved(updated)
                                 }
                             }
@@ -178,18 +175,20 @@ class DefaultExpenseEditor
         ): Boolean {
             val newAmount = changes.amountMinor ?: old.amountMinor
             val newType = changes.type ?: old.type
+            val newCurrency = changes.currency ?: old.currency
             return links.filter { it.kind == LinkKind.REFUND }.any { link ->
                 if (id == link.second) {
                     val refund = db.expenses().find(link.first)?.takeIf { it.deletedAtMillis == null }
-                    refund != null && (newAmount < refund.amountMinor || newType != ExpenseTypes.EXPENSE)
+                    refund != null &&
+                        (newAmount < refund.amountMinor || newType != ExpenseTypes.EXPENSE || newCurrency != refund.currency)
                 } else {
                     val purchase = db.expenses().find(link.second)?.takeIf { it.deletedAtMillis == null }
-                    purchase != null && newAmount > purchase.amountMinor
+                    purchase != null && (newAmount > purchase.amountMinor || newCurrency != purchase.currency)
                 }
             }
         }
 
-        /** Deletes this entry only; a converted real entry is put back as it was, a refund of this purchase becomes income. */
+        /** Deletes this entry. What the pair or refund link implies for the other rows is applied by [AnswerWrites.reconcile]. */
         override suspend fun delete(id: String): EditOutcome = remove(id, withPartner = false)
 
         override suspend fun deleteWithPartner(id: String): EditOutcome = remove(id, withPartner = true)
@@ -203,15 +202,19 @@ class DefaultExpenseEditor
                 val changed =
                     eraseLock.mutex.withLock {
                         db.withTransaction {
-                            // one timestamp for both: Undo restores the partner only if it went away in the same moment
+                            // one timestamp for the rows that go together: Undo restores them only if they went at the same moment
                             val now = clock.millis()
                             val first = db.expenses().softDelete(id, now)
                             if (first > 0) {
-                                val changedRows = AnswerWrites.release(db, links, id, withPartner, now)
-                                if (changedRows.isNotEmpty()) {
-                                    if (released.size >= MAX_REMEMBERED) released.clear()
-                                    released[id] = changedRows
+                                if (withPartner) {
+                                    links
+                                        .mapNotNull {
+                                            it.deletablePartnerOf(
+                                                id,
+                                            )
+                                        }.forEach { db.expenses().softDelete(it, now) }
                                 }
+                                AnswerWrites.reconcile(db, links, now)
                             }
                             first
                         }
@@ -226,22 +229,20 @@ class DefaultExpenseEditor
             }
 
         override suspend fun restore(id: String): Boolean {
-            val partners = pairs.linksOf(id).mapNotNull { it.deletablePartnerOf(id) }
+            val links = pairs.linksOf(id)
+            val partners = links.mapNotNull { it.deletablePartnerOf(id) }
             val changed =
                 try {
                     eraseLock.mutex.withLock {
                         db.withTransaction {
+                            val now = clock.millis()
                             val deletedAt = db.expenses().find(id)?.deletedAtMillis
-                            val first = db.expenses().restore(id, clock.millis())
+                            val first = db.expenses().restore(id, now)
                             if (first > 0) {
                                 partners.filter { db.expenses().find(it)?.deletedAtMillis == deletedAt }.forEach {
-                                    db.expenses().restore(it, clock.millis())
+                                    db.expenses().restore(it, now)
                                 }
-                                // rows the delete changed (a converted side, a refund) go back to the pair state, unless edited since
-                                released.remove(id)?.forEach { c ->
-                                    val cur = db.expenses().find(c.before.id)
-                                    if (cur == c.after) db.expenses().update(c.before)
-                                }
+                                AnswerWrites.reconcile(db, links, now)
                             }
                             first
                         }

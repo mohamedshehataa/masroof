@@ -44,6 +44,11 @@ data class EntryLink(
     val origAccountId: String = "",
     /** A Cash account that "Track it" created for this pair: removed again when the capture is undone and nothing else uses it. */
     val newAccountId: String = "",
+    /** What the [converted] entry is while the pair is whole: its type and account (the rest of the record is the "orig" side). */
+    val pairType: String = "",
+    val pairAccountId: String = "",
+    val origStatus: String = "",
+    val origCategoryId: String = "",
 ) {
     /** The row that goes away together with [id]: an inserted transfer side, or the refund of a purchase. Null for a real entry. */
     fun deletablePartnerOf(id: String): String? =
@@ -70,6 +75,16 @@ data class AnswerState(
     val atmChoice: AtmChoice? = null,
 ) {
     fun linkedIds(): Set<String> = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
+
+    /**
+     * Entries whose card must not ask again: answered or linked, except the two sides of a link that lost a side ([liveIds] are the
+     * live entries): the survivor may ask again, and a new answer replaces the old link.
+     */
+    fun settledIds(liveIds: Set<String>): Set<String> {
+        val (whole, broken) = links.partition { it.first in liveIds && it.second in liveIds }
+        val brokenIds = broken.flatMapTo(HashSet()) { listOf(it.first, it.second) }
+        return (answered - brokenIds) + whole.flatMap { listOf(it.first, it.second) }
+    }
 
     fun linksOf(id: String): List<EntryLink> = links.filter { it.involves(id) }
 }
@@ -108,7 +123,7 @@ private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
 
-private const val LINK_FIELDS = 8
+private const val LINK_FIELDS = 12
 
 private fun EntryLink.encode() =
     listOf(
@@ -119,6 +134,10 @@ private fun EntryLink.encode() =
         converted,
         origType,
         origAccountId,
+        pairType,
+        pairAccountId,
+        origStatus,
+        origCategoryId,
         newAccountId,
     ).joinToString("|")
 
@@ -126,7 +145,20 @@ private fun decodeLink(raw: String): EntryLink? {
     val parts = raw.split('|')
     val kind = LinkKind.entries.firstOrNull { it.code == parts.getOrNull(0) } ?: return null
     if (parts.size != LINK_FIELDS) return null
-    return EntryLink(kind, parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7])
+    return EntryLink(
+        kind,
+        parts[1],
+        parts[2],
+        inserted = parts[3],
+        converted = parts[4],
+        origType = parts[5],
+        origAccountId = parts[6],
+        pairType = parts[7],
+        pairAccountId = parts[8],
+        origStatus = parts[9],
+        origCategoryId = parts[10],
+        newAccountId = parts[11],
+    )
 }
 
 private fun decode(p: Preferences) =

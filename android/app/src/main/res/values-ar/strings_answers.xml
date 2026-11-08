@@ -58,10 +58,7 @@
     <string name="answers_undo">تراجع</string>
     <string name="answers_cancel">إلغاء</string>
 
-    <string name="answers_delete_pair_title">تمسح الطرفين؟</string>
-    <string name="answers_delete_pair_body">ده طرف من تحويل بين حساباتك. تمسح الطرف التاني كمان؟</string>
     <string name="answers_delete_both">امسح الاتنين</string>
-    <string name="answers_delete_this_only">امسح ده بس</string>
     <string name="edit_type_transfer_in">تحويل وارد</string>
 
     <string name="review_reason_ignored_card">كارت متجاهل. احفظه لو عايز تسجله كعملية.</string>

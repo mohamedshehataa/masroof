@@ -146,9 +146,11 @@ class EditExpenseViewModel
                     form.update { it.copy(done = true, gone = true) } // missing or deleted: nothing to edit
                 } else {
                     original = found
-                    // REQ-EXP-065: one side of a linked transfer pair asks whether to delete both
+                    // REQ-EXP-064: a purchase with a linked refund asks whether to delete the refund too or keep it as income
                     val partner =
-                        pairs.linksOf(id).firstOrNull { l -> l.deletablePartnerOf(id)?.let { editor.find(it) } != null }
+                        pairs.linksOf(id).firstOrNull { l ->
+                            l.kind == LinkKind.REFUND && l.deletablePartnerOf(id)?.let { editor.find(it) } != null
+                        }
                     form.value = found.toForm().copy(hasPartner = partner != null, partnerIsRefund = partner?.kind == LinkKind.REFUND)
                 }
             }

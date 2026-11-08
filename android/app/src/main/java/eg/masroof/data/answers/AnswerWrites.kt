@@ -23,6 +23,8 @@ data class AnswerUndo(
     val atmBefore: AtmChoice? = null,
     /** The "Count ATM withdrawals as spending" value before this answer changed it; null = not touched. */
     val includeCashBefore: Boolean? = null,
+    /** Older links of the entries this answer is about (a pair whose other side was deleted): the new link replaces them. */
+    val replacedLinks: Set<EntryLink> = emptySet(),
 ) {
     // Never prints entries (merchants, amounts).
     override fun toString() = "AnswerUndo(restore=${restore.size}, inserted=${deleteExpenses.size})"
@@ -91,66 +93,82 @@ internal object AnswerWrites {
     fun pairSideId(entryId: String) = "$entryId:pair"
 
     /**
-     * An answer or a delete released a pair: [deletedId] was just soft-deleted; see [EntryLink] for what goes with it. Returns the
-     * rows it changed (not the deleted ones), so Undo of the delete can put them back.
+     * The pair and refund fields as a pure function of the stored links and which rows are live. Called in the same Room transaction
+     * after EVERY write that touches a linked row (answer, delete, restore, edit, capture Undo), so no order of operations can leave
+     * them out of step:
+     *  - a transfer pair whose two sides are live: the converted entry is in its paired type and account; if the other side is
+     *    deleted it is back to its original type, account (the record keeps both);
+     *  - an app-inserted row lives only while its source entry is live (it is deleted with the same timestamp, so a restore finds it);
+     *  - a refund whose purchase is live is a REFUND in the purchase's CURRENT category; while the purchase is deleted it is INCOME.
      */
-    suspend fun release(
+    suspend fun reconcile(
         db: AppDatabase,
-        links: List<EntryLink>,
-        deletedId: String,
-        deleteWithPartner: Boolean,
+        links: Collection<EntryLink>,
         now: Long,
-        deleteRefund: Boolean = deleteWithPartner,
-    ): List<RowChange> {
-        val changed = mutableListOf<RowChange>()
+    ) {
         for (link in links) {
-            val one =
-                when (link.kind) {
-                    LinkKind.TRANSFER -> releaseTransfer(db, link, deletedId, deleteWithPartner, now)
-                    LinkKind.REFUND -> link.deletablePartnerOf(deletedId)?.let { releaseRefund(db, it, deleteRefund, now) }
-                }
-            if (one != null) changed += one
+            when (link.kind) {
+                LinkKind.TRANSFER -> reconcileTransfer(db, link, now)
+                LinkKind.REFUND -> reconcileRefund(db, link, now)
+            }
         }
-        return changed
     }
 
-    private suspend fun releaseTransfer(
-        db: AppDatabase,
-        link: EntryLink,
-        deletedId: String,
-        deleteWithPartner: Boolean,
-        now: Long,
-    ): RowChange? {
-        val partner = link.deletablePartnerOf(deletedId)
-        if (deleteWithPartner && partner != null) db.expenses().softDelete(partner, now)
-        if (link.converted.isEmpty() || link.converted == deletedId) return null
-        return revertConverted(db, link, now)
-    }
-
-    private suspend fun releaseRefund(
-        db: AppDatabase,
-        refundId: String,
-        delete: Boolean,
-        now: Long,
-    ): RowChange? {
-        if (delete) {
-            db.expenses().softDelete(refundId, now)
-            return null
-        }
-        // a refund without its purchase would net spending below zero: it is received money again
-        val refund = db.expenses().find(refundId)?.takeIf { it.deletedAtMillis == null && it.type == ExpenseTypes.REFUND } ?: return null
-        return change(db, refund, refund.copy(type = ExpenseTypes.INCOME, updatedAtMillis = now))
-    }
-
-    private suspend fun revertConverted(
+    private suspend fun reconcileTransfer(
         db: AppDatabase,
         link: EntryLink,
         now: Long,
-    ): RowChange? {
-        val row = db.expenses().find(link.converted)?.takeIf { it.deletedAtMillis == null } ?: return null
-        val converted = row.type == ExpenseTypes.TRANSFER || row.type == ExpenseTypes.TRANSFER_IN
-        if (!converted || row.type == link.origType || link.origType.isEmpty()) return null
-        return change(db, row, row.copy(type = link.origType, accountId = link.origAccountId.ifEmpty { null }, updatedAtMillis = now))
+    ) {
+        val a = db.expenses().find(link.first) ?: return
+        val b = db.expenses().find(link.second) ?: return
+        if (link.inserted.isNotEmpty()) {
+            val (inserted, source) = if (link.inserted == a.id) a to b else b to a
+            val sourceGone = source.deletedAtMillis
+            if (sourceGone != null && inserted.deletedAtMillis == null) db.expenses().softDelete(inserted.id, sourceGone)
+        }
+        if (link.converted.isEmpty() || link.pairType.isEmpty()) return
+        val c = (if (link.converted == a.id) a else b).let { db.expenses().find(it.id) } ?: return
+        if (c.deletedAtMillis != null) return
+        val other = db.expenses().find(if (link.converted == a.id) b.id else a.id)
+        val paired = other != null && other.deletedAtMillis == null
+        val type = if (paired) link.pairType else link.origType
+        val account = (if (paired) link.pairAccountId else link.origAccountId).ifEmpty { null }
+        if (c.type != type || c.accountId != account) db.expenses().update(c.copy(type = type, accountId = account, updatedAtMillis = now))
+    }
+
+    private suspend fun reconcileRefund(
+        db: AppDatabase,
+        link: EntryLink,
+        now: Long,
+    ) {
+        val refund = db.expenses().find(link.first)?.takeIf { it.deletedAtMillis == null } ?: return
+        val purchase = db.expenses().find(link.second) ?: return
+        val whole = purchase.deletedAtMillis == null
+        val type = if (whole) ExpenseTypes.REFUND else ExpenseTypes.INCOME
+        val category = if (whole) purchase.categoryId ?: refund.categoryId else refund.categoryId
+        if (refund.type != type || refund.categoryId != category) {
+            db.expenses().update(refund.copy(type = type, categoryId = category, updatedAtMillis = now))
+        }
+    }
+
+    /** Undo of the answer that made [link]: the converted entry goes back to what it was. The rest of the row keeps later edits. */
+    suspend fun unlink(
+        db: AppDatabase,
+        link: EntryLink,
+        now: Long,
+    ) {
+        if (link.converted.isEmpty()) return
+        val row = db.expenses().find(link.converted)?.takeIf { it.deletedAtMillis == null } ?: return
+        val refund = link.kind == LinkKind.REFUND
+        db.expenses().update(
+            row.copy(
+                type = link.origType.ifEmpty { row.type },
+                accountId = if (refund) row.accountId else link.origAccountId.ifEmpty { null },
+                status = link.origStatus.ifEmpty { row.status },
+                categoryId = if (refund) link.origCategoryId.ifEmpty { null } else row.categoryId,
+                updatedAtMillis = now,
+            ),
+        )
     }
 
     /** Writes [after] over [before] and remembers both, so Undo can revert exactly the fields this change touched. */
@@ -164,8 +182,8 @@ internal object AnswerWrites {
     }
 
     /**
-     * Puts a [RowChange] back. A row nobody touched since goes back exactly as it was; one the user edited meanwhile gets only the
-     * fields this change set (type, category, account, status) reverted, and keeps the edit.
+     * Puts a [RowChange] back (answers that have no link: confirm, Not a refund, a linked card). A row nobody touched since goes back
+     * exactly as it was; one the user edited meanwhile gets only the fields this change set reverted, and keeps the edit.
      */
     suspend fun revert(
         db: AppDatabase,
@@ -208,29 +226,26 @@ internal object AnswerWrites {
                 AccountBalanceEntity(ids.next(), cashId, 0L, entry.currency, minOf(entry.occurredAtMillis - 1, now), "MANUAL", now),
             )
         }
-        val tracked = change(db, entry, entry.copy(type = ExpenseTypes.TRANSFER, updatedAtMillis = now))
+        db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER, updatedAtMillis = now))
         val inId = insertPairSide(db, entry, ExpenseTypes.TRANSFER_IN, cashId, null, now)
+        val link =
+            EntryLink(
+                LinkKind.TRANSFER,
+                entry.id,
+                inId,
+                inserted = inId,
+                converted = entry.id,
+                origType = entry.type,
+                origAccountId = entry.accountId.orEmpty(),
+                pairType = ExpenseTypes.TRANSFER,
+                pairAccountId = entry.accountId.orEmpty(),
+                origStatus = entry.status,
+                newAccountId = cashId.takeIf { existing == null }.orEmpty(),
+            )
         return AnswerUndo(
-            restore = listOf(tracked),
             deleteExpenses = listOf(inId),
             deleteAccounts = listOfNotNull(cashId.takeIf { existing == null }),
-            added =
-                AnswerState(
-                    answered = setOf(entry.id),
-                    links =
-                        setOf(
-                            EntryLink(
-                                LinkKind.TRANSFER,
-                                entry.id,
-                                inId,
-                                inserted = inId,
-                                converted = entry.id,
-                                origType = entry.type,
-                                origAccountId = entry.accountId.orEmpty(),
-                                newAccountId = cashId.takeIf { existing == null }.orEmpty(),
-                            ),
-                        ),
-                ),
+            added = AnswerState(answered = setOf(entry.id), links = setOf(link)),
         )
     }
 }

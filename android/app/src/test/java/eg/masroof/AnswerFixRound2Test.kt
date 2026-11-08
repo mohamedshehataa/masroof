@@ -261,10 +261,6 @@ class AnswerFixRound2Test {
                     .single()
                     .localId
             CapturedActions(db, clock, answers = prefs).undo(captured)
-            assertTrue(
-                prefs.flow.value.links
-                    .isEmpty(),
-            )
             assertEquals(0, db.accountBalances().accounts().count { it.kind == "CASH" })
         }
 
@@ -292,10 +288,6 @@ class AnswerFixRound2Test {
             db.captured().insert(CapturedTxEntity("c-in", "in", 500_000, "EGP", null, "SMS", null, ago(0, 23), instrumentLast4 = "2222"))
             repo.transferToOwn("out", "nbe")!!
             CapturedActions(db, clock, answers = prefs).undo("c-in")
-            assertTrue(
-                prefs.flow.value.links
-                    .isEmpty(),
-            )
             assertTrue(repo.observeCards().first().any { it is AnswerCard.Transfer })
         }
 

@@ -132,7 +132,7 @@ object AnswerCards {
         nowMillis: Long,
     ): List<AnswerCard> {
         val since = CairoTime.dateOf(nowMillis).minusDays(CARD_WINDOW_DAYS)
-        val done = state.answered + state.linkedIds()
+        val done = state.settledIds(entries.filter { it.live() }.mapTo(HashSet()) { it.id })
         val live = entries.filter { it.live() }
         val fresh = live.filter { it.captured() && !CairoTime.dateOf(it.occurredAtMillis).isBefore(since) && it.id !in done }
         val active = accounts.filter { !it.archived }
@@ -265,7 +265,7 @@ object AnswerCards {
         outgoing: Boolean,
     ): ExpenseEntity? {
         val wanted = if (outgoing) ExpenseTypes.INCOME else ExpenseTypes.TRANSFER
-        val taken = state.answered + state.linkedIds()
+        val taken = state.settledIds(live.filter { it.live() }.mapTo(HashSet()) { it.id })
         return live
             .filter { c -> c.type == wanted && c.id != entry.id && c.id !in taken && isMirror(entry, c, outgoing) }
             .filter { c -> ownerOf(accounts, c, state.aliases) == accountId }

@@ -132,25 +132,35 @@ class DefaultAnswerRepository
             refundId: String,
             purchaseId: String,
         ): AnswerUndo? =
-            answer(done(refundId)) {
+            answer(done(refundId)) { state ->
                 val refund = live(refundId)
                 val purchase = live(purchaseId)
                 if (refund == null || purchase == null) return@answer null
                 if (refund.type !in refundable || refund.currency != purchase.currency) return@answer null
                 if (purchase.type != ExpenseTypes.EXPENSE || purchase.amountMinor < refund.amountMinor) return@answer null
-                val changed =
-                    AnswerWrites.change(
-                        db,
-                        refund,
-                        refund.copy(
-                            type = ExpenseTypes.REFUND,
-                            categoryId = purchase.categoryId ?: refund.categoryId,
-                            status = CONFIRMED,
-                            updatedAtMillis = clock.millis(),
-                        ),
+                val now = clock.millis()
+                db.expenses().update(
+                    refund.copy(
+                        type = ExpenseTypes.REFUND,
+                        categoryId = purchase.categoryId ?: refund.categoryId,
+                        status = CONFIRMED,
+                        updatedAtMillis = now,
+                    ),
+                )
+                val link =
+                    EntryLink(
+                        LinkKind.REFUND,
+                        refundId,
+                        purchaseId,
+                        converted = refundId,
+                        origType = refund.type,
+                        origStatus = refund.status,
+                        origCategoryId = refund.categoryId.orEmpty(),
                     )
-                val link = EntryLink(LinkKind.REFUND, refundId, purchaseId, converted = refundId, origType = refund.type)
-                AnswerUndo(restore = listOf(changed), added = AnswerState(answered = setOf(refundId), links = setOf(link)))
+                AnswerUndo(
+                    added = AnswerState(answered = setOf(refundId), links = setOf(link)),
+                    replacedLinks = state.links.filter { it.involves(refundId) }.toSet(),
+                )
             }
 
         override suspend fun confirmRefund(entryId: String): AnswerUndo? =
@@ -198,26 +208,19 @@ class DefaultAnswerRepository
                 val ownLabel = accounts.firstOrNull { it.id == own }?.label
                 val partner = AnswerCards.counterpart(entry, accountId, live, accounts, state, outgoing)
                 val confirmed = entry.copy(status = CONFIRMED)
-                val restore = mutableListOf<RowChange>()
                 val inserted = mutableListOf<String>()
                 var converted: ExpenseEntity? = null
+                var pairAccount = ""
                 val partnerId: String
                 if (partner != null) {
                     partnerId = partner.id
                     if (outgoing) {
                         // the other bank's own entry, attributed to the chosen account and arriving after the send
                         converted = partner
-                        restore +=
-                            AnswerWrites.change(
-                                db,
-                                partner,
-                                partner.copy(
-                                    type = ExpenseTypes.TRANSFER_IN,
-                                    accountId = accountId,
-                                    status = CONFIRMED,
-                                    updatedAtMillis = now,
-                                ),
-                            )
+                        pairAccount = accountId
+                        db.expenses().update(
+                            partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId, status = CONFIRMED, updatedAtMillis = now),
+                        )
                     }
                 } else {
                     val type = if (outgoing) ExpenseTypes.TRANSFER_IN else ExpenseTypes.TRANSFER
@@ -226,17 +229,10 @@ class DefaultAnswerRepository
                 }
                 if (!outgoing) {
                     converted = entry
-                    restore +=
-                        AnswerWrites.change(
-                            db,
-                            entry,
-                            entry.copy(
-                                type = ExpenseTypes.TRANSFER_IN,
-                                accountId = entry.accountId ?: own,
-                                status = CONFIRMED,
-                                updatedAtMillis = now,
-                            ),
-                        )
+                    pairAccount = entry.accountId ?: own
+                    db.expenses().update(
+                        entry.copy(type = ExpenseTypes.TRANSFER_IN, accountId = pairAccount, status = CONFIRMED, updatedAtMillis = now),
+                    )
                 }
                 val (out, inn) = if (outgoing) entryId to partnerId else partnerId to entryId
                 val link =
@@ -248,11 +244,14 @@ class DefaultAnswerRepository
                         converted = converted?.id.orEmpty(),
                         origType = converted?.type.orEmpty(),
                         origAccountId = converted?.accountId.orEmpty(),
+                        pairType = if (converted == null) "" else ExpenseTypes.TRANSFER_IN,
+                        pairAccountId = pairAccount,
+                        origStatus = converted?.status.orEmpty(),
                     )
                 AnswerUndo(
-                    restore = restore,
                     deleteExpenses = inserted,
                     added = AnswerState(answered = setOf(entryId, partnerId), links = setOf(link)),
+                    replacedLinks = state.links.filter { it.involves(entryId) || it.involves(partnerId) }.toSet(),
                 )
             }
 
@@ -312,7 +311,8 @@ class DefaultAnswerRepository
         }
 
         /** An entry whose card was already answered (or that a pair already links) cannot be answered again. */
-        private fun done(entryId: String): (AnswerState) -> Boolean = { entryId in it.answered || entryId in it.linkedIds() }
+        private fun done(entryId: String): suspend (AnswerState) -> Boolean =
+            { s -> entryId in s.settledIds(db.expenses().liveSince(AnswerCards.lookbackStart(clock.millis())).mapTo(HashSet()) { it.id }) }
 
         override suspend fun setAtmChoice(choice: AtmChoice?) {
             eraseLock.mutex.withLock {
@@ -339,6 +339,7 @@ class DefaultAnswerRepository
                         db.withTransaction {
                             val now = clock.millis()
                             token.restore.forEach { AnswerWrites.revert(db, it, now) }
+                            token.added.links.forEach { AnswerWrites.unlink(db, it, now) }
                             token.deleteExpenses.forEach { db.expenses().delete(it) }
                             token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
                             true
@@ -370,7 +371,7 @@ class DefaultAnswerRepository
          * short between the two writes is a no-op. Null = nothing to answer.
          */
         private suspend fun answer(
-            alreadyDone: (AnswerState) -> Boolean = { false },
+            alreadyDone: suspend (AnswerState) -> Boolean = { false },
             block: suspend (AnswerState) -> AnswerUndo?,
         ): AnswerUndo? {
             val undo =
@@ -384,7 +385,7 @@ class DefaultAnswerRepository
                     prefs.edit { s ->
                         s.copy(
                             answered = s.answered + a.answered,
-                            links = s.links + a.links,
+                            links = s.links - done.replacedLinks + a.links,
                             ignoredCards = s.ignoredCards + a.ignoredCards,
                             aliases = s.aliases + a.aliases,
                             atmChoice = a.atmChoice ?: s.atmChoice,

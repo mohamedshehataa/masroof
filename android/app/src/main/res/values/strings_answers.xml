@@ -54,10 +54,7 @@
     <string name="answers_undo">Undo</string>
     <string name="answers_cancel">Cancel</string>
 
-    <string name="answers_delete_pair_title">Delete both sides?</string>
-    <string name="answers_delete_pair_body">This is one side of a transfer between your accounts. Delete the other side too?</string>
     <string name="answers_delete_both">Delete both</string>
-    <string name="answers_delete_this_only">Delete only this one</string>
     <string name="edit_type_transfer_in">Transfer in</string>
 
     <string name="review_reason_ignored_card">Ignored card. Save it to add it as an entry.</string>
