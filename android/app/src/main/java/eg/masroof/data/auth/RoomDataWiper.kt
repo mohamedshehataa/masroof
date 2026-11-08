@@ -44,6 +44,7 @@ class RoomDataWiper
         @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
         @SafetyCopyDir private val safetyCopyDir: File = File("no-safety-copy-dir"),
         @CameraDir private val cameraDir: File = File("no-camera-dir"),
+        private val reminders: eg.masroof.work.ReminderLog = eg.masroof.work.NoReminderLog,
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -107,6 +108,8 @@ class RoomDataWiper
                     { withContext(io) { insights.clear() } },
                     // nothing stays on the lock screen: every "Recorded ... Undo" notification goes
                     { notifier.cancelAll() },
+                    // the "already reminded" memory of the bill reminders
+                    { withContext(io) { reminders.clear() } },
                 )
             for (step in steps) {
                 try {

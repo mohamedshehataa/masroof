@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteException
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import androidx.hilt.work.HiltWorker
@@ -60,12 +61,28 @@ interface ReminderLog {
     fun wasReminded(key: String): Boolean
 
     fun markReminded(key: String)
+
+    /** Forgets everything ("Erase all data"). */
+    fun clear()
+}
+
+/** For code paths that have no reminder log. */
+object NoReminderLog : ReminderLog {
+    override fun wasReminded(key: String) = false
+
+    override fun markReminded(key: String) = Unit
+
+    override fun clear() = Unit
 }
 
 class PrefsReminderLog(
     private val prefs: android.content.SharedPreferences,
 ) : ReminderLog {
     override fun wasReminded(key: String) = prefs.contains(key)
+
+    override fun clear() {
+        prefs.edit { clear() }
+    }
 
     override fun markReminded(key: String) {
         // apply(): the in-memory value is set at once and written in the background
@@ -213,7 +230,8 @@ class AndroidReminderNotifier
                     ).setAutoCancel(true)
                     .setContentIntent(openIntent(reminder))
                     .build()
-            manager.notify(reminder.key.hashCode(), notification)
+            // the key is the tag: two reminders can never share a notification, whatever their hashes
+            manager.notify(reminder.key, 0, notification)
         }
 
         private fun text(
@@ -245,10 +263,18 @@ class AndroidReminderNotifier
             val intent =
                 Intent(appContext, MainActivity::class.java)
                     .putExtra(EXTRA_OPEN_ROUTE, reminder.route)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    // a distinct data URI per reminder keeps each PendingIntent (and its route extra) its own
+                    .setData(
+                        Uri
+                            .Builder()
+                            .scheme("masroof")
+                            .authority("reminder")
+                            .appendPath(reminder.key)
+                            .build(),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             return PendingIntent.getActivity(
                 appContext,
-                reminder.key.hashCode(),
+                0,
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )

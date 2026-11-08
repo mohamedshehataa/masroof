@@ -14,6 +14,7 @@ import eg.masroof.data.bills.PLAN_ACTIVE
 import eg.masroof.data.bills.PaymentChoice
 import eg.masroof.data.bills.PlanField
 import eg.masroof.data.bills.PlanProgress
+import eg.masroof.data.bills.RecordOutcome
 import eg.masroof.data.bills.UndoToken
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
@@ -82,6 +83,8 @@ data class PlanDetailState(
     val candidates: List<ExpenseEntity>? = null,
     val undo: UndoToken? = null,
     val deleted: Boolean = false,
+    /** The entry picked in the dialog no longer fits; the dialog says so and refreshes its list. */
+    val linkFailed: Boolean = false,
 )
 
 @HiltViewModel
@@ -99,6 +102,7 @@ class PlanDetailViewModel
             val candidates: List<ExpenseEntity>? = null,
             val undo: UndoToken? = null,
             val deleted: Boolean = false,
+            val linkFailed: Boolean = false,
         )
 
         val state: StateFlow<PlanDetailState> =
@@ -110,6 +114,7 @@ class PlanDetailViewModel
                     candidates = e.candidates,
                     undo = e.undo,
                     deleted = e.deleted,
+                    linkFailed = e.linkFailed,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), PlanDetailState())
 
@@ -121,13 +126,17 @@ class PlanDetailViewModel
             }
         }
 
-        fun dismissRecord() = extra.update { it.copy(candidates = null) }
+        fun dismissRecord() = extra.update { it.copy(candidates = null, linkFailed = false) }
 
         fun record(choice: PaymentChoice) {
             viewModelScope.launch {
-                val next = state.value.progress?.nextDue
-                val token = next?.let { repository.recordPayment(it.id, choice) }
-                extra.update { it.copy(candidates = null, undo = token) }
+                val next = state.value.progress?.nextDue ?: return@launch
+                when (val outcome = repository.recordPayment(next.id, choice)) {
+                    is RecordOutcome.Done -> extra.update { it.copy(candidates = null, undo = outcome.token, linkFailed = false) }
+                    RecordOutcome.NotLinkable ->
+                        extra.update { it.copy(candidates = repository.linkCandidates(next.id), linkFailed = true) }
+                    RecordOutcome.NotFound -> extra.update { it.copy(candidates = null, linkFailed = false) }
+                }
             }
         }
 

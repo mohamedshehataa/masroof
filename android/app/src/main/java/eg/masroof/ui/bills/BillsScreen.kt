@@ -183,6 +183,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.listItems(
             )
         }
     }
+    if (overview.overdue.isNotEmpty()) {
+        item {
+            SectionCard(stringResource(R.string.bills_overdue_section)) {
+                overview.overdue.forEach { ComingUpRow(it, onClick = { actions.onOpenPlan(it.planId) }) }
+            }
+        }
+    }
     if (overview.comingUp.isNotEmpty()) {
         item {
             SectionCard(stringResource(R.string.bills_coming_up)) {

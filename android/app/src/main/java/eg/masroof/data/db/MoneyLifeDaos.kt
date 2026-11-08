@@ -120,13 +120,15 @@ interface InstallmentPaymentDao {
     @Query(
         """
         SELECT * FROM expense
-        WHERE deletedAtMillis IS NULL AND type = 'EXPENSE' AND amountMinor = :amountMinor AND currency = :currency
+        WHERE deletedAtMillis IS NULL AND type IN (:types) AND amountMinor = :amountMinor AND currency = :currency
           AND occurredAtMillis >= :fromMillis AND occurredAtMillis < :toMillis
+          AND (paymentMethod IS NULL OR paymentMethod <> 'GAM3EYA_COLLECTION')
           AND id NOT IN (SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL)
         ORDER BY occurredAtMillis, id
         """,
     )
     suspend fun linkCandidates(
+        types: List<String>,
         amountMinor: Long,
         currency: String,
         fromMillis: Long,

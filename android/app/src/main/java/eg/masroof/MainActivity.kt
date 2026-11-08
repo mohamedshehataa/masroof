@@ -98,8 +98,8 @@ private const val BILL_DETAIL_ROUTE = "bills/{id}"
 /** Forms that have their own Save: the global add button is hidden there. */
 private val FORM_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE)
 
-/** The only routes a notification may open: a bills plan by id. Anything else in the extra is ignored. */
-private val OPENABLE_ROUTE = Regex("""bills/[A-Za-z0-9-]{1,64}""")
+/** The only route a notification may open: a bills plan by its UUID (the shape UuidIdFactory makes). */
+private val OPENABLE_ROUTE = Regex("""bills/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {

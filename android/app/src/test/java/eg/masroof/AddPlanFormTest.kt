@@ -95,6 +95,13 @@ class AddPlanFormTest {
     }
 
     @Test
+    fun `REQ-EXP-053 a down payment above the purchase price is flagged and an end date error flags only END_DATE`() {
+        assertTrue(PlanField.DOWN_PAYMENT in errors(form().copy(purchasePrice = "1,000", downPayment = "1,001")))
+        val f = form(count = "").copy(byEndDate = true, endDate = "2026-03-04")
+        assertEquals(setOf(PlanField.END_DATE), errors(f))
+    }
+
+    @Test
     fun `REQ-EXP-053 a plan with no name is a field error`() {
         assertTrue(PlanField.TITLE in errors(form().copy(title = " ")))
     }

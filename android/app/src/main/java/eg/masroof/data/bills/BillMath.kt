@@ -89,6 +89,7 @@ object BillMath {
             remainingMinor = countedPayments.filter { it.paidAtMillis == null }.sumOf { it.amountMinor },
             dropsTo = dropsTo(perMonth, thisMonth, monthly),
             comingUp = comingUp(progress.filter { it.plan.status == PLAN_ACTIVE }, today),
+            overdue = overdue(progress.filter { it.plan.status == PLAN_ACTIVE }, today),
             plans = progress.sortedWith(compareBy({ it.plan.status != PLAN_ACTIVE }, { it.nextDue?.dueAtMillis ?: Long.MAX_VALUE })),
             hasOtherCurrency = plans.any { it.status == PLAN_ACTIVE && it.currency != Money.EGP },
         )
@@ -112,6 +113,28 @@ object BillMath {
         }
         return null
     }
+
+    /** Unpaid payments of active plans whose day has passed, oldest first. They stay in "remaining". */
+    private fun overdue(
+        active: List<PlanProgress>,
+        today: LocalDate,
+    ): List<ComingUp> =
+        active
+            .flatMap { p ->
+                p.payments
+                    .filter { it.paidAtMillis == null && dateOf(it).isBefore(today) }
+                    .map {
+                        ComingUp(
+                            p.plan.id,
+                            p.plan.title,
+                            p.plan.provider,
+                            dateOf(it),
+                            it.amountMinor,
+                            p.plan.currency,
+                            incoming = false,
+                        )
+                    }
+            }.sortedWith(compareBy({ it.date }, { it.planId }))
 
     private fun comingUp(
         active: List<PlanProgress>,
@@ -246,6 +269,7 @@ data class BillsOverview(
     val remainingMinor: Long,
     val dropsTo: DropsTo?,
     val comingUp: List<ComingUp>,
+    val overdue: List<ComingUp>,
     val plans: List<PlanProgress>,
     val hasOtherCurrency: Boolean,
 )

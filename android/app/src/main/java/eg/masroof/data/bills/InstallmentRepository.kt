@@ -97,6 +97,7 @@ object PlanValidator {
         if (plan.alreadyPaid !in 0..plan.paymentCount.coerceAtLeast(0)) bad += PlanField.ALREADY_PAID
         if (plan.purchasePriceMinor != null && plan.purchasePriceMinor !in 1..MoneyFormat.MAX_ENTRY_MINOR) bad += PlanField.PURCHASE_PRICE
         if (plan.downPaymentMinor !in 0..MoneyFormat.MAX_ENTRY_MINOR) bad += PlanField.DOWN_PAYMENT
+        if (plan.purchasePriceMinor != null && plan.downPaymentMinor > plan.purchasePriceMinor) bad += PlanField.DOWN_PAYMENT
         if (plan.collectionTurn != null && plan.collectionTurn !in 1..plan.paymentCount.coerceAtLeast(1)) bad += PlanField.TURN
         if (plan.payoutMinor != null && plan.payoutMinor !in 1..MoneyFormat.MAX_ENTRY_MINOR) bad += PlanField.PAYOUT
         return bad
@@ -119,7 +120,22 @@ data class UndoToken(
     val plan: InstallmentPlanEntity,
     val payment: InstallmentPaymentEntity?,
     val createdExpenseId: String?,
+    /** A linked EXPENSE that was turned into a gam3eya TRANSFER: Undo puts this original back. */
+    val convertedFrom: ExpenseEntity? = null,
 )
+
+/** What recording a payment came to. Nothing throws on a race: the screen decides what to say. */
+sealed interface RecordOutcome {
+    data class Done(
+        val token: UndoToken,
+    ) : RecordOutcome
+
+    /** The payment is missing or already paid. */
+    data object NotFound : RecordOutcome
+
+    /** The chosen entry no longer fits (deleted, edited, linked elsewhere, out of the window). */
+    data object NotLinkable : RecordOutcome
+}
 
 /** The marker kept in `expense.paymentMethod` for a gam3eya movement: an outgoing share or the incoming collection. */
 const val METHOD_GAM3EYA_PAYMENT = "GAM3EYA_PAYMENT"
@@ -142,11 +158,11 @@ interface InstallmentRepository {
     /** Entries that could already be this payment (see [eg.masroof.data.db.InstallmentPaymentDao.linkCandidates]). */
     suspend fun linkCandidates(paymentId: String): List<ExpenseEntity>
 
-    /** Marks the payment paid now and links or creates its entry in one transaction; null when it is missing or already paid. */
+    /** Marks the payment paid now and links or creates its entry in one transaction. */
     suspend fun recordPayment(
         paymentId: String,
         choice: PaymentChoice,
-    ): UndoToken?
+    ): RecordOutcome
 
     /** A gam3eya collection: marks it received now and records the incoming TRANSFER entry. Null when there is none to collect. */
     suspend fun recordCollection(planId: String): UndoToken?
@@ -239,6 +255,14 @@ class DefaultInstallmentRepository
         override suspend fun linkCandidates(paymentId: String): List<ExpenseEntity> {
             val payment = db.installmentPayments().find(paymentId) ?: return emptyList()
             val plan = db.installmentPlans().find(payment.planId) ?: return emptyList()
+            return candidates(plan, payment)
+        }
+
+        /** EXPENSE entries (and, for a gam3eya, TRANSFERs such as an InstaPay) of the exact amount near the due day, not linked yet. */
+        private suspend fun candidates(
+            plan: InstallmentPlanEntity,
+            payment: InstallmentPaymentEntity,
+        ): List<ExpenseEntity> {
             val due = CairoTime.dateOf(payment.dueAtMillis)
             val from =
                 due
@@ -252,59 +276,69 @@ class DefaultInstallmentRepository
                     .atStartOfDay(CairoTime.zone)
                     .toInstant()
                     .toEpochMilli()
-            return db.installmentPayments().linkCandidates(payment.amountMinor, plan.currency, from, to)
+            val types = if (plan.provider == PROVIDER_GAM3EYA) listOf(TYPE_EXPENSE, TYPE_TRANSFER) else listOf(TYPE_EXPENSE)
+            return db.installmentPayments().linkCandidates(types, payment.amountMinor, plan.currency, from, to)
         }
 
         override suspend fun recordPayment(
             paymentId: String,
             choice: PaymentChoice,
-        ): UndoToken? {
+        ): RecordOutcome {
             val now = clock.millis()
-            val token =
+            val outcome =
                 eraseLock.mutex.withLock {
                     db.withTransaction {
                         val payment = db.installmentPayments().find(paymentId)?.takeIf { it.paidAtMillis == null }
                         val plan = payment?.let { db.installmentPlans().find(it.planId) }
-                        if (payment == null || plan == null) {
-                            null
-                        } else {
-                            val created = settle(plan, payment, choice, now)
-                            val linked = (choice as? PaymentChoice.LinkExisting)?.expenseId
-                            db.installmentPayments().update(payment.copy(paidAtMillis = now, expenseId = linked ?: created))
-                            val open = db.installmentPayments().byPlan(plan.id).count { it.paidAtMillis == null }
-                            if (open == 0) db.installmentPlans().update(plan.copy(status = PLAN_COMPLETED, completedAtMillis = now))
-                            UndoToken(plan, payment, created)
+                        when {
+                            payment == null || plan == null -> RecordOutcome.NotFound
+                            choice is PaymentChoice.LinkExisting -> link(plan, payment, choice.expenseId, now)
+                            else -> {
+                                val created = if (choice == PaymentChoice.CreateEntry) createEntry(plan, payment, now) else null
+                                RecordOutcome.Done(finish(plan, payment, created, null, created, now))
+                            }
                         }
                     }
                 }
-            if (token?.createdExpenseId != null) signal.changed()
-            return token
+            if (outcome is RecordOutcome.Done &&
+                (outcome.token.createdExpenseId != null || outcome.token.convertedFrom != null)
+            ) {
+                signal.changed()
+            }
+            return outcome
         }
 
-        /** Links (never to an entry another payment already holds) or creates the entry; returns the id of a created one. */
-        private suspend fun settle(
+        /**
+         * Links an entry only if it still passes the candidate rules (window, type, amount, not deleted, not linked). A linked
+         * EXPENSE of a gam3eya becomes a TRANSFER so it stops counting as spending (the original is kept for Undo).
+         */
+        private suspend fun link(
             plan: InstallmentPlanEntity,
             payment: InstallmentPaymentEntity,
-            choice: PaymentChoice,
+            expenseId: String,
             now: Long,
-        ): String? =
-            when (choice) {
-                is PaymentChoice.LinkExisting -> {
-                    val entry = db.expenses().find(choice.expenseId)
-                    require(
-                        entry != null &&
-                            entry.deletedAtMillis == null &&
-                            entry.type == TYPE_EXPENSE &&
-                            entry.amountMinor == payment.amountMinor &&
-                            entry.currency == plan.currency,
-                    ) { "Entry cannot be linked" }
-                    val held = db.installmentPayments().linkCandidates(entry.amountMinor, entry.currency, 0L, Long.MAX_VALUE)
-                    require(held.any { it.id == entry.id }) { "Entry is already linked to a payment" }
-                    null
-                }
-                PaymentChoice.CreateEntry -> createEntry(plan, payment, now)
-                PaymentChoice.MarkOnly -> null
+        ): RecordOutcome {
+            val entry = candidates(plan, payment).firstOrNull { it.id == expenseId } ?: return RecordOutcome.NotLinkable
+            val convert = plan.provider == PROVIDER_GAM3EYA && entry.type == TYPE_EXPENSE
+            if (convert) {
+                db.expenses().update(entry.copy(type = TYPE_TRANSFER, paymentMethod = METHOD_GAM3EYA_PAYMENT, updatedAtMillis = now))
             }
+            return RecordOutcome.Done(finish(plan, payment, null, if (convert) entry else null, entry.id, now))
+        }
+
+        private suspend fun finish(
+            plan: InstallmentPlanEntity,
+            payment: InstallmentPaymentEntity,
+            created: String?,
+            converted: ExpenseEntity?,
+            expenseId: String?,
+            now: Long,
+        ): UndoToken {
+            db.installmentPayments().update(payment.copy(paidAtMillis = now, expenseId = expenseId))
+            val open = db.installmentPayments().byPlan(plan.id).count { it.paidAtMillis == null }
+            if (open == 0) db.installmentPlans().update(plan.copy(status = PLAN_COMPLETED, completedAtMillis = now))
+            return UndoToken(plan, payment, created, converted)
+        }
 
         private suspend fun createEntry(
             plan: InstallmentPlanEntity,
@@ -393,27 +427,32 @@ class DefaultInstallmentRepository
                 db.withTransaction {
                     token.payment?.let { db.installmentPayments().update(it) }
                     token.createdExpenseId?.let { db.expenses().delete(it) }
+                    token.convertedFrom?.let { db.expenses().update(it) }
                     db.installmentPlans().update(token.plan)
                 }
             }
-            if (token.createdExpenseId != null) signal.changed()
+            if (token.createdExpenseId != null || token.convertedFrom != null) signal.changed()
         }
 
         override suspend fun complete(planId: String): Boolean {
             val now = clock.millis()
-            return db.withTransaction {
-                val plan = db.installmentPlans().find(planId)
-                if (plan == null) {
-                    false
-                } else {
-                    db.installmentPayments().closeOpen(planId, now)
-                    db.installmentPlans().update(plan.copy(status = PLAN_COMPLETED, completedAtMillis = now))
-                    true
+            return eraseLock.mutex.withLock {
+                db.withTransaction {
+                    val plan = db.installmentPlans().find(planId)
+                    if (plan == null) {
+                        false
+                    } else {
+                        db.installmentPayments().closeOpen(planId, now)
+                        db.installmentPlans().update(plan.copy(status = PLAN_COMPLETED, completedAtMillis = now))
+                        true
+                    }
                 }
             }
         }
 
         override suspend fun delete(planId: String) {
-            db.withTransaction { db.installmentPlans().find(planId)?.let { db.installmentPlans().delete(it) } }
+            eraseLock.mutex.withLock {
+                db.withTransaction { db.installmentPlans().find(planId)?.let { db.installmentPlans().delete(it) } }
+            }
         }
     }

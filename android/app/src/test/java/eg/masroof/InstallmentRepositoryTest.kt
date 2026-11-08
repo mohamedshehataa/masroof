@@ -14,6 +14,7 @@ import eg.masroof.data.bills.PLAN_COMPLETED
 import eg.masroof.data.bills.PaymentChoice
 import eg.masroof.data.bills.PlanField
 import eg.masroof.data.bills.PlanValidator
+import eg.masroof.data.bills.RecordOutcome
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import kotlinx.coroutines.flow.first
@@ -59,6 +60,12 @@ class InstallmentRepositoryTest {
     fun tearDown() = db.close()
 
     private fun d(s: String) = LocalDate.parse(s)
+
+    /** The undo token of a recorded payment, or null when nothing was recorded. */
+    private suspend fun rec(
+        paymentId: String,
+        choice: PaymentChoice,
+    ) = (repo.recordPayment(paymentId, choice) as? RecordOutcome.Done)?.token
 
     private fun valu(
         count: Int = 18,
@@ -179,7 +186,7 @@ class InstallmentRepositoryTest {
         runTest {
             val id = repo.create(valu(paid = 7, first = "2026-03-05"))
             val eighth = db.installmentPayments().byPlan(id)[7]
-            val token = repo.recordPayment(eighth.id, PaymentChoice.CreateEntry)
+            val token = rec(eighth.id, PaymentChoice.CreateEntry)
             assertNotNull(token)
             val after = db.installmentPayments().find(eighth.id)!!
             assertEquals(NOW.toEpochMilli(), after.paidAtMillis)
@@ -207,7 +214,7 @@ class InstallmentRepositoryTest {
             db.expenses().insert(expense("transfer", type = "TRANSFER"))
             db.expenses().insert(expense("deleted", deleted = 5L))
             assertEquals(setOf("edge-early", "ok", "edge-late"), repo.linkCandidates(pay[0].id).map { it.id }.toSet())
-            repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting("ok"))
+            rec(pay[0].id, PaymentChoice.LinkExisting("ok"))
             // an entry linked to payment 1 is no longer offered for any other payment
             db.expenses().insert(expense("second", date = "2026-05-05"))
             assertEquals(listOf("second"), repo.linkCandidates(pay[1].id).map { it.id })
@@ -219,7 +226,7 @@ class InstallmentRepositoryTest {
             val id = repo.create(valu(first = "2026-04-05", count = 3))
             val pay = db.installmentPayments().byPlan(id)
             db.expenses().insert(expense("ok"))
-            val token = repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting("ok"))
+            val token = rec(pay[0].id, PaymentChoice.LinkExisting("ok"))
             val after = db.installmentPayments().find(pay[0].id)!!
             assertEquals("ok", after.expenseId)
             assertNotNull(after.paidAtMillis)
@@ -233,8 +240,8 @@ class InstallmentRepositoryTest {
             val id = repo.create(valu(first = "2026-04-05", count = 3))
             val pay = db.installmentPayments().byPlan(id)
             db.expenses().insert(expense("only"))
-            repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting("only"))
-            assertRejects { repo.recordPayment(pay[1].id, PaymentChoice.LinkExisting("only")) }
+            rec(pay[0].id, PaymentChoice.LinkExisting("only"))
+            assertEquals(RecordOutcome.NotLinkable, repo.recordPayment(pay[1].id, PaymentChoice.LinkExisting("only")))
             // the failed attempt changed nothing
             assertNull(db.installmentPayments().find(pay[1].id)!!.paidAtMillis)
             assertEquals(1, db.installmentPayments().byPlan(id).count { it.expenseId == "only" })
@@ -248,7 +255,7 @@ class InstallmentRepositoryTest {
             db.expenses().insert(expense("other", amount = 1_000))
             db.expenses().insert(expense("gone", deleted = 3L))
             listOf("other", "gone", "missing").forEach { target ->
-                assertRejects { repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting(target)) }
+                assertEquals(RecordOutcome.NotLinkable, repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting(target)))
             }
             assertNull(db.installmentPayments().find(pay[0].id)!!.paidAtMillis)
         }
@@ -258,8 +265,8 @@ class InstallmentRepositoryTest {
         runTest {
             val id = repo.create(valu(count = 3))
             val first = db.installmentPayments().byPlan(id)[0]
-            assertNotNull(repo.recordPayment(first.id, PaymentChoice.CreateEntry))
-            assertNull(repo.recordPayment(first.id, PaymentChoice.CreateEntry))
+            assertNotNull(rec(first.id, PaymentChoice.CreateEntry))
+            assertNull(rec(first.id, PaymentChoice.CreateEntry))
             assertEquals(1, db.expenses().count())
         }
 
@@ -268,7 +275,7 @@ class InstallmentRepositoryTest {
         runTest {
             val id = repo.create(valu(count = 3))
             val first = db.installmentPayments().byPlan(id)[0]
-            val token = repo.recordPayment(first.id, PaymentChoice.CreateEntry)!!
+            val token = rec(first.id, PaymentChoice.CreateEntry)!!
             repo.undo(token)
             assertEquals(first, db.installmentPayments().find(first.id))
             assertEquals(0, db.expenses().count())
@@ -280,7 +287,7 @@ class InstallmentRepositoryTest {
             val id = repo.create(valu(first = "2026-04-05", count = 3))
             val first = db.installmentPayments().byPlan(id)[0]
             db.expenses().insert(expense("ok"))
-            val token = repo.recordPayment(first.id, PaymentChoice.LinkExisting("ok"))!!
+            val token = rec(first.id, PaymentChoice.LinkExisting("ok"))!!
             repo.undo(token)
             assertEquals(first, db.installmentPayments().find(first.id))
             assertNotNull(db.expenses().find("ok"))
@@ -291,7 +298,7 @@ class InstallmentRepositoryTest {
         runTest {
             val id = repo.create(valu(count = 2, paid = 1))
             val last = db.installmentPayments().byPlan(id)[1]
-            val token = repo.recordPayment(last.id, PaymentChoice.MarkOnly)!!
+            val token = rec(last.id, PaymentChoice.MarkOnly)!!
             assertEquals(PLAN_COMPLETED, db.installmentPlans().find(id)!!.status)
             repo.undo(token)
             assertEquals(PLAN_ACTIVE, db.installmentPlans().find(id)!!.status)
@@ -319,7 +326,7 @@ class InstallmentRepositoryTest {
             val id = repo.create(valu(first = "2026-04-05", count = 3))
             val first = db.installmentPayments().byPlan(id)[0]
             db.expenses().insert(expense("ok"))
-            repo.recordPayment(first.id, PaymentChoice.LinkExisting("ok"))
+            rec(first.id, PaymentChoice.LinkExisting("ok"))
             repo.delete(id)
             assertNull(db.installmentPlans().find(id))
             assertEquals(0, db.installmentPayments().byPlan(id).size)
@@ -332,7 +339,7 @@ class InstallmentRepositoryTest {
             val id = repo.create(valu(first = "2026-04-05", count = 3))
             val first = db.installmentPayments().byPlan(id)[0]
             db.expenses().insert(expense("ok"))
-            repo.recordPayment(first.id, PaymentChoice.LinkExisting("ok"))
+            rec(first.id, PaymentChoice.LinkExisting("ok"))
             db.expenses().delete("ok")
             val after = db.installmentPayments().find(first.id)!!
             assertNull(after.expenseId)
@@ -383,7 +390,7 @@ class InstallmentRepositoryTest {
         runTest {
             val id = repo.create(gam3eya())
             val first = db.installmentPayments().byPlan(id)[0]
-            repo.recordPayment(first.id, PaymentChoice.CreateEntry)
+            rec(first.id, PaymentChoice.CreateEntry)
             val paid = db.expenses().find(db.installmentPayments().find(first.id)!!.expenseId!!)!!
             assertEquals("TRANSFER", paid.type)
             assertEquals("GAM3EYA_PAYMENT", paid.paymentMethod)
@@ -407,7 +414,7 @@ class InstallmentRepositoryTest {
     fun `REQ-EXP-055 recorded gam3eya movements never count as spending or income`() =
         runTest {
             val id = repo.create(gam3eya())
-            repo.recordPayment(db.installmentPayments().byPlan(id)[0].id, PaymentChoice.CreateEntry)
+            rec(db.installmentPayments().byPlan(id)[0].id, PaymentChoice.CreateEntry)
             repo.recordCollection(id)
             val types = db.expenses().all().map { it.type }
             assertTrue(types.all { it == "TRANSFER" })
@@ -415,4 +422,81 @@ class InstallmentRepositoryTest {
             val (from, to) = CairoTime.monthRangeMillis(NOW)
             assertEquals(0L, db.expenses().observeTotal(from, to).first())
         }
+
+    @Test
+    fun `REQ-EXP-055 a gam3eya offers EXPENSE and TRANSFER candidates but never a collection`() =
+        runTest {
+            val id = repo.create(gam3eya())
+            val first = db.installmentPayments().byPlan(id)[0]
+            db.expenses().insert(expense("exp", amount = 200_000, date = "2026-11-01"))
+            db.expenses().insert(expense("insta", amount = 200_000, date = "2026-11-02", type = "TRANSFER"))
+            db.expenses().insert(expense("income", amount = 200_000, date = "2026-11-02", type = "INCOME"))
+            db.expenses().insert(
+                expense("coll", amount = 200_000, date = "2026-11-02", type = "TRANSFER").copy(paymentMethod = "GAM3EYA_COLLECTION"),
+            )
+            assertEquals(setOf("exp", "insta"), repo.linkCandidates(first.id).map { it.id }.toSet())
+        }
+
+    @Test
+    fun `REQ-EXP-055 linking an EXPENSE to a gam3eya payment turns it into a TRANSFER and Undo restores it`() =
+        runTest {
+            val id = repo.create(gam3eya())
+            val first = db.installmentPayments().byPlan(id)[0]
+            val original = expense("exp", amount = 200_000, date = "2026-11-01")
+            db.expenses().insert(original)
+            db.expenses().insert(expense("insta", amount = 200_000, date = "2026-11-02", type = "TRANSFER"))
+            val token = rec(first.id, PaymentChoice.LinkExisting("exp"))!!
+            val converted = db.expenses().find("exp")!!
+            assertEquals("TRANSFER", converted.type)
+            assertEquals("GAM3EYA_PAYMENT", converted.paymentMethod)
+            assertEquals("exp", db.installmentPayments().find(first.id)!!.expenseId)
+            val (from, to) = CairoTime.monthRangeMillis(Instant.parse("2026-11-08T07:00:00Z"))
+            assertEquals(0L, db.expenses().observeTotal(from, to).first())
+            repo.undo(token)
+            assertEquals("EXPENSE", db.expenses().find("exp")!!.type)
+            assertNull(db.expenses().find("exp")!!.paymentMethod)
+            // a TRANSFER is linked as it is
+            val second = db.installmentPayments().byPlan(id)[1]
+            db.expenses().insert(expense("insta2", amount = 200_000, date = "2026-12-01", type = "TRANSFER"))
+            rec(second.id, PaymentChoice.LinkExisting("insta2"))
+            assertEquals("TRANSFER", db.expenses().find("insta2")!!.type)
+            assertEquals(null, db.expenses().find("insta2")!!.paymentMethod)
+        }
+
+    @Test
+    fun `REQ-EXP-054 linking re-checks the rules and answers NotLinkable instead of throwing`() =
+        runTest {
+            val id = repo.create(valu(first = "2026-04-05", count = 3))
+            val pay = db.installmentPayments().byPlan(id)
+            db.expenses().insert(expense("gone"))
+            db.expenses().insert(expense("moved"))
+            db.expenses().insert(expense("kind"))
+            // each of these changed after the dialog listed it
+            db.expenses().softDelete("gone", 9L)
+            db.expenses().update(db.expenses().find("moved")!!.copy(occurredAtMillis = BillsFixtures.noon("2026-06-30")))
+            db.expenses().update(db.expenses().find("kind")!!.copy(type = "INCOME"))
+            listOf("gone", "moved", "kind", "missing").forEach {
+                assertEquals(RecordOutcome.NotLinkable, repo.recordPayment(pay[0].id, PaymentChoice.LinkExisting(it)))
+            }
+            assertNull(db.installmentPayments().find(pay[0].id)!!.paidAtMillis)
+            assertEquals(RecordOutcome.NotFound, repo.recordPayment("missing", PaymentChoice.MarkOnly))
+        }
+
+    @Test
+    fun `REQ-EXP-054 Just mark as paid closes the payment without creating an entry`() =
+        runTest {
+            val id = repo.create(valu(count = 3))
+            val first = db.installmentPayments().byPlan(id)[0]
+            val token = rec(first.id, PaymentChoice.MarkOnly)!!
+            assertNull(token.createdExpenseId)
+            assertEquals(0, db.expenses().count())
+            assertNotNull(db.installmentPayments().find(first.id)!!.paidAtMillis)
+            assertNull(db.installmentPayments().find(first.id)!!.expenseId)
+        }
+
+    @Test
+    fun `REQ-EXP-053 a down payment above the purchase price is a field error`() {
+        assertTrue(PlanField.DOWN_PAYMENT in PlanValidator.validate(valu().copy(purchasePriceMinor = 100_000, downPaymentMinor = 100_001)))
+        assertTrue(PlanValidator.validate(valu().copy(purchasePriceMinor = 100_000, downPaymentMinor = 100_000)).isEmpty())
+    }
 }

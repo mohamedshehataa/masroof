@@ -122,7 +122,7 @@ fun PlanDetailContent(
         }
         items(p.payments, key = { it.id }) { PaymentRow(it, p.plan.currency) }
     }
-    state.candidates?.let { RecordDialog(p, it, actions) }
+    state.candidates?.let { RecordDialog(p, it, state.linkFailed, actions) }
     confirm?.let { which ->
         AlertDialog(
             onDismissRequest = { confirm = null },
@@ -330,6 +330,7 @@ private fun PaymentRow(
 private fun RecordDialog(
     p: PlanProgress,
     candidates: List<ExpenseEntity>,
+    linkFailed: Boolean,
     actions: PlanDetailActions,
 ) {
     val next = p.nextDue ?: return
@@ -338,6 +339,7 @@ private fun RecordDialog(
         title = { Text(stringResource(R.string.bills_record_payment, billNumber(next.seq), billNumber(p.total))) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (linkFailed) Text(stringResource(R.string.bills_link_failed), color = MaterialTheme.colorScheme.error)
                 if (candidates.isEmpty()) {
                     Text(stringResource(R.string.bills_no_candidates), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
@@ -366,6 +368,11 @@ private fun RecordDialog(
                 ) {
                     Text(stringResource(R.string.bills_mark_only))
                 }
+                Text(
+                    stringResource(R.string.bills_mark_only_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {},

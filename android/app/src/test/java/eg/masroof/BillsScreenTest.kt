@@ -98,7 +98,7 @@ class BillsScreenTest {
         show(BillsUiState(loaded = true, overview = BillMath.overview(emptyList(), emptyList(), TODAY), today = TODAY))
         compose.onNodeWithText("No installments yet").assertIsDisplayed()
         compose.onNodeWithText("Example").assertIsDisplayed()
-        compose.onNodeWithText("valU - iPhone 17 Pro").assertIsDisplayed()
+        compose.onAllNodesWithText("valU - iPhone 17 Pro").onLast().assertIsDisplayed()
         compose.onAllNodesWithText("Add installment").onFirst().performClick()
         assertEquals(1, added)
         compose.onAllNodesWithText("Add installment")[1].performClick()
@@ -120,9 +120,16 @@ class BillsScreenTest {
         compose.onNodeWithText("8 of 18 paid").assertIsDisplayed()
         compose.onNodeWithText("5 of 12 paid").assertIsDisplayed()
         compose.onNodeWithText("Ends Aug 2027").assertIsDisplayed()
-        compose.onNodeWithText("valU - iPhone 17 Pro").assertIsDisplayed()
+        compose.onAllNodesWithText("valU - iPhone 17 Pro").onLast().assertIsDisplayed()
         compose.onAllNodesWithText("Halan - Laptop").onLast().performClick()
         assertEquals("b", opened)
+    }
+
+    @Test
+    fun `REQ-AN-166 overdue payments appear in an Overdue section`() {
+        show(stateOf("a" to 8))
+        compose.onNodeWithText("Overdue").assertIsDisplayed()
+        compose.onNodeWithText("5 Nov").assertIsDisplayed()
     }
 
     @Test
@@ -174,7 +181,7 @@ class BillsScreenTest {
         compose.onNodeWithText("الأقساط").assertIsDisplayed()
         compose.onNodeWithText("٦٬٨٠٠ ج.م").assertIsDisplayed()
         compose.onNodeWithText("اتدفع ٨ من ١٨").assertIsDisplayed()
-        compose.onNodeWithText("فاليو - iPhone 17 Pro").assertIsDisplayed()
+        compose.onAllNodesWithText("فاليو - iPhone 17 Pro").onLast().assertIsDisplayed()
     }
 
     // --- plan detail ----------------------------------------------------------------------------------------
@@ -235,6 +242,15 @@ class BillsScreenTest {
         assertEquals(PaymentChoice.CreateEntry, recorded)
         compose.onNodeWithText("Just mark as paid").performClick()
         assertEquals(PaymentChoice.MarkOnly, recorded)
+    }
+
+    @Test
+    fun `REQ-EXP-054 the dialog explains Just mark as paid and reports a link that no longer fits`() {
+        compose.setContent {
+            MasroofTheme { PlanDetailContent(detail(paid = 7, candidates = emptyList()).copy(linkFailed = true), actions()) }
+        }
+        compose.onNodeWithText("That entry no longer fits this payment. Pick another option.").assertIsDisplayed()
+        compose.onNodeWithText("This only marks the payment as paid", substring = true).assertIsDisplayed()
     }
 
     @Test

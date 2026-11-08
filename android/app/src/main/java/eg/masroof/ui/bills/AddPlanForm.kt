@@ -130,6 +130,10 @@ fun AddPlanForm.parse(today: LocalDate): FormResult {
             currency = Money.EGP,
         )
     bad += PlanValidator.validate(plan)
+    if (countField() == PlanField.END_DATE && PlanField.COUNT in bad) {
+        bad -= PlanField.COUNT
+        bad += PlanField.END_DATE
+    }
     return if (bad.isEmpty()) FormResult.Ok(plan) else FormResult.Errors(bad)
 }
 

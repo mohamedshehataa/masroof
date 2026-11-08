@@ -68,6 +68,10 @@ private class MemoryReminderLog : ReminderLog {
     override fun markReminded(key: String) {
         keys += key
     }
+
+    override fun clear() {
+        keys.clear()
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -280,14 +284,20 @@ class BillsReminderTest {
                 override fun granted() = true
             }
         AndroidReminderNotifier(context, granted).post(
-            DueReminder("bill:y", "valU - iPhone 17 Pro", Money(325_000, "EGP"), LocalDate.parse("2026-11-09"), "bills/p1"),
+            DueReminder(
+                "bill:y",
+                "valU - iPhone 17 Pro",
+                Money(325_000, "EGP"),
+                LocalDate.parse("2026-11-09"),
+                "bills/0b9f3a52-6c1e-4d7b-9a3e-5f2d8c1b7a40",
+            ),
             1,
         )
         val note = shadowOf(context.getSystemService(NotificationManager::class.java)).allNotifications.last()
         val intent = shadowOf(note.contentIntent).savedIntent
         assertEquals(MainActivity::class.java.name, intent.component?.className)
-        assertEquals("bills/p1", intent.getStringExtra(EXTRA_OPEN_ROUTE))
-        assertEquals("bills/p1", MainActivity.routeFrom(intent))
+        assertEquals("bills/0b9f3a52-6c1e-4d7b-9a3e-5f2d8c1b7a40", intent.getStringExtra(EXTRA_OPEN_ROUTE))
+        assertEquals("bills/0b9f3a52-6c1e-4d7b-9a3e-5f2d8c1b7a40", MainActivity.routeFrom(intent))
         // the public version of the notification carries no provider, title or amount
         assertTrue(
             !note.publicVersion.extras
@@ -301,11 +311,59 @@ class BillsReminderTest {
     @Test
     fun `REQ-AND-148 only bills routes are accepted from an incoming intent`() {
         fun with(route: String?) = Intent().apply { if (route != null) putExtra(EXTRA_OPEN_ROUTE, route) }
-        assertEquals("bills/abc-123", MainActivity.routeFrom(with("bills/abc-123")))
+        val uuid = "0b9f3a52-6c1e-4d7b-9a3e-5f2d8c1b7a40"
+        assertEquals("bills/$uuid", MainActivity.routeFrom(with("bills/$uuid")))
+        assertNull(MainActivity.routeFrom(with("bills/abc-123")))
+        assertNull(MainActivity.routeFrom(with("bills/add")))
+        assertNull(MainActivity.routeFrom(with("bills/$uuid/extra")))
         assertNull(MainActivity.routeFrom(with("bills/../settings")))
         assertNull(MainActivity.routeFrom(with("settings")))
         assertNull(MainActivity.routeFrom(with("bills/add?x=1")))
         assertNull(MainActivity.routeFrom(with(null)))
         assertNull(MainActivity.routeFrom(null))
     }
+
+    @Test
+    fun `REQ-AND-148 the notification is private, its tap intent is immutable and two reminders never collide`() {
+        val granted =
+            object : NotificationPermission {
+                override fun granted() = true
+            }
+        val notifier = AndroidReminderNotifier(context, granted)
+        val uuid1 = "0b9f3a52-6c1e-4d7b-9a3e-5f2d8c1b7a40"
+        val uuid2 = "1c0a4b63-7d2f-4e8c-8b4f-6a3e9d2c8b51"
+        listOf(uuid1, uuid2).forEach {
+            notifier.post(DueReminder("bill:$it", "valU - X", Money(100, "EGP"), LocalDate.parse("2026-11-09"), "bills/$it"), 1)
+        }
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val notes = shadowOf(manager).allNotifications
+        assertEquals(2, notes.size)
+        notes.forEach {
+            assertEquals(Notification.VISIBILITY_PRIVATE, it.visibility)
+            assertTrue(shadowOf(it.contentIntent).flags and android.app.PendingIntent.FLAG_IMMUTABLE != 0)
+        }
+        val routes = notes.map { shadowOf(it.contentIntent).savedIntent.getStringExtra(EXTRA_OPEN_ROUTE) }
+        assertEquals(setOf("bills/$uuid1", "bills/$uuid2"), routes.toSet())
+        assertTrue(notes.map { shadowOf(it.contentIntent).savedIntent.data }.toSet().size == 2)
+    }
+
+    @Test
+    fun `REQ-AND-148 Erase all data clears the already-reminded memory`() =
+        runTest {
+            val prefs = context.getSharedPreferences("masroof_reminders_test", Context.MODE_PRIVATE)
+            val log = PrefsReminderLog(prefs)
+            log.markReminded("bill:a")
+            assertTrue(prefs.all.isNotEmpty())
+            val wiper =
+                eg.masroof.data.auth.RoomDataWiper(
+                    db,
+                    NoInsightsCache,
+                    WorkManager.getInstance(context),
+                    kotlinx.coroutines.Dispatchers.Unconfined,
+                    reminders = log,
+                )
+            wiper.wipe()
+            assertTrue(prefs.all.isEmpty())
+            assertEquals(false, log.wasReminded("bill:a"))
+        }
 }

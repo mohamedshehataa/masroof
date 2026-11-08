@@ -162,6 +162,18 @@ class BillMathTest {
     }
 
     @Test
+    fun `REQ-AN-166 overdue unpaid payments are listed and stay in remaining`() {
+        val a = BillsFixtures.plan("a", 325_000, 18, "2026-03-05")
+        // 8 paid: payment 9 (2026-11-05) is overdue on 2026-11-08
+        val o = BillMath.overview(listOf(a), BillsFixtures.payments(a, paid = 8), d("2026-11-08"))
+        assertEquals(listOf(d("2026-11-05")), o.overdue.map { it.date })
+        assertEquals(325_000L, o.overdue.single().amountMinor)
+        assertEquals(10 * 325_000L, o.remainingMinor)
+        val none = BillMath.overview(listOf(a), BillsFixtures.payments(a, paid = 9), d("2026-11-08"))
+        assertTrue(none.overdue.isEmpty())
+    }
+
+    @Test
     fun `REQ-AN-166 the monthly total counts payments already paid this month`() {
         val a = BillsFixtures.plan("a", 325_000, 18, "2026-03-05")
         val o = BillMath.overview(listOf(a), BillsFixtures.payments(a, paid = 9), d("2026-11-20"))

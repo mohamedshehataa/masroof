@@ -117,4 +117,7 @@
     <string name="bills_error_date" tools:ignore="TypographyDashes">اكتب تاريخ زي 2026-03-05</string>
     <string name="bills_error_turn">الدور لازم يكون من 1 لعدد الأعضاء</string>
     <string name="bills_error_paid">اكتب رقم من 0 لعدد الدفعات</string>
+    <string name="bills_overdue_section">متأخرة</string>
+    <string name="bills_link_failed">المصروف ده مبقاش مناسب للدفعة دي. اختار حاجة تانية.</string>
+    <string name="bills_mark_only_hint">ده بيعلّم الدفعة إنها اتدفعت بس، مثلا لو دفعت كاش. مفيش مصروف بيتعمل، فمش هتتحسب في مصاريفك إلا لو ضفتها بنفسك.</string>
 </resources>

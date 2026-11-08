@@ -117,4 +117,7 @@
     <string name="bills_error_date" tools:ignore="TypographyDashes">Enter a date like 2026-03-05</string>
     <string name="bills_error_turn">The turn must be between 1 and the number of members</string>
     <string name="bills_error_paid">Enter a number from 0 to the number of payments</string>
+    <string name="bills_overdue_section">Overdue</string>
+    <string name="bills_link_failed">That entry no longer fits this payment. Pick another option.</string>
+    <string name="bills_mark_only_hint">This only marks the payment as paid, for example when you paid cash. No entry is created, so it is not in your spending unless you add it yourself.</string>
 </resources>
