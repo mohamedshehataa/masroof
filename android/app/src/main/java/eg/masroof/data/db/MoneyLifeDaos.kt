@@ -10,8 +10,57 @@ import kotlinx.coroutines.flow.Flow
 // v10 (STORY-201): plain DAOs for the money-life tables: insert / update / delete / observe-all / observe-by-id. The feature
 // stories add repositories and richer queries on top; an insert that breaks a unique index or a foreign key throws.
 
+/**
+ * One entry's flow facts for the balance maths (no merchant, no note, no message text). SMS captures carry only
+ * [instrumentLast4] (their [accountId] is null), so both are read and matched in Kotlin.
+ */
+data class AccountFlowRow(
+    val accountId: String?,
+    val instrumentLast4: String?,
+    val type: String,
+    val status: String,
+    val amountMinor: Long,
+    val currency: String,
+    val occurredAtMillis: Long,
+)
+
 @Dao
 interface AccountBalanceDao {
+    /** Every live entry that names an account or a card's last four; failed and soft-deleted ones never moved money. */
+    @Query(
+        """SELECT accountId, instrumentLast4, type, status, amountMinor, currency, occurredAtMillis FROM expense
+            WHERE (accountId IS NOT NULL OR instrumentLast4 IS NOT NULL) AND failed = 0 AND deletedAtMillis IS NULL""",
+    )
+    fun observeFlowRows(): Flow<List<AccountFlowRow>>
+
+    /** The accounts a picker may offer: archived ones are hidden (their history stays). */
+    @Query("SELECT * FROM account WHERE archived = 0 ORDER BY label")
+    fun observeActiveAccounts(): Flow<List<AccountEntity>>
+
+    /** Edits an account in place, including the v10 card columns and emoji that an upsert never writes. */
+    @Suppress("LongParameterList")
+    @Query(
+        """UPDATE account SET label = :label, kind = :kind, institution = :institution, last4 = :last4, emoji = :emoji,
+            creditLimitMinor = :limit, statementDay = :statementDay, dueDay = :dueDay WHERE id = :id""",
+    )
+    suspend fun updateAccountDetails(
+        id: String,
+        label: String,
+        kind: String?,
+        institution: String?,
+        last4: String?,
+        emoji: String?,
+        limit: Long?,
+        statementDay: Int?,
+        dueDay: Int?,
+    )
+
+    @Query("UPDATE account SET archived = :archived WHERE id = :id")
+    suspend fun setAccountArchived(
+        id: String,
+        archived: Boolean,
+    )
+
     @Insert
     suspend fun insert(row: AccountBalanceEntity)
 
@@ -69,6 +118,13 @@ interface InstallmentPlanDao {
 
 @Dao
 interface InstallmentPaymentDao {
+    /** Unpaid payments of active plans in [currency]: "Installments left". */
+    @Query(
+        """SELECT COALESCE(SUM(p.amountMinor), 0) FROM installment_payment p JOIN installment_plan pl ON pl.id = p.planId
+            WHERE p.paidAtMillis IS NULL AND pl.status = 'ACTIVE' AND pl.currency = :currency""",
+    )
+    fun observeUnpaidTotal(currency: String): Flow<Long>
+
     @Insert
     suspend fun insert(row: InstallmentPaymentEntity)
 
@@ -297,6 +353,9 @@ interface DebtDao {
 
 @Dao
 interface NetWorthSnapshotDao {
+    @Query("SELECT * FROM net_worth_snapshot WHERE cairoDate = :cairoDate")
+    suspend fun findByDate(cairoDate: String): NetWorthSnapshotEntity?
+
     @Insert
     suspend fun insert(row: NetWorthSnapshotEntity)
 
