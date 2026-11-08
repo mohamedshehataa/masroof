@@ -38,6 +38,7 @@ class BackupPrefsGuardTest {
             "EncryptedSessionStore.kt" to listOf("masroof_session"),
             "BackupState.kt" to listOf("masroof_backup"),
             "AppModule.kt" to listOf("masroof_device"),
+            "ImportStore.kt" to listOf("masroof_server_import"),
         )
 
     @Suppress("NestedBlockDepth", "CyclomaticComplexMethod")

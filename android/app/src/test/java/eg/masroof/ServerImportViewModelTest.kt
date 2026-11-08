@@ -13,6 +13,7 @@ import eg.masroof.ui.settings.ImportPhase
 import eg.masroof.ui.settings.ImportViewModel
 import eg.masroof.ui.settings.importCount
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -154,6 +155,7 @@ class ServerImportViewModelTest {
             val settingsVm =
                 eg.masroof.ui.viewmodel
                     .SettingsViewModel(w.settings, manager, TestAuth.eraser())
+            backgroundScope.launch { settingsVm.state.collect {} }
             assertTrue(settingsVm.state.await { it.showServer }.showServer)
             manager.logout()
             assertFalse(settingsVm.state.await { !it.showServer }.showServer)

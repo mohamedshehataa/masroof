@@ -38,22 +38,22 @@ interface ImportStore {
 class PrefsImportStore(
     private val prefs: SharedPreferences,
 ) : ImportStore {
-    override fun categoryOf(serverId: String): String? = prefs.getString("$CATEGORY$serverId", null)
+    override fun categoryOf(serverId: String): String? = prefs.getString(CATEGORY + serverId, null)
 
     override fun mapCategory(
         serverId: String,
         localId: String,
     ) {
-        prefs.edit().putString("$CATEGORY$serverId", localId).commit()
+        prefs.edit().putString(CATEGORY + serverId, localId).commit()
     }
 
-    override fun memberOf(serverId: String): String? = prefs.getString("$MEMBER$serverId", null)
+    override fun memberOf(serverId: String): String? = prefs.getString(MEMBER + serverId, null)
 
     override fun mapMember(
         serverId: String,
         localId: String,
     ) {
-        prefs.edit().putString("$MEMBER$serverId", localId).commit()
+        prefs.edit().putString(MEMBER + serverId, localId).commit()
     }
 
     override var pending: Boolean

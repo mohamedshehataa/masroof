@@ -71,6 +71,7 @@ object BackupPrefsInventory {
             "masroof_capture_key" to "the local-id key travels as keys/local-id.key, not as a preference",
             "masroof_reminders" to "which reminders were shown; a repeat reminder is harmless",
             "masroof_backup" to "describes this phone's last backup file, not the data",
+            "masroof_server_import" to "state of the one-time server import (STORY-182): ids and flags, meaningless on another phone",
         )
 
     /** Per store (`datastore:<name>` / `shared:<file>`): keys that are deliberately not in the backup, with the reason. */
@@ -83,6 +84,11 @@ object BackupPrefsInventory {
                 ),
             "shared:masroof_session" to mapOf("session" to "session tokens", "last_member" to "session state"),
             "shared:masroof_device" to mapOf("device_id" to "install identity for the frozen server upload"),
+            "shared:masroof_server_import" to
+                mapOf(
+                    "pending" to "an import is on offer on this phone",
+                    "forget" to "forgetting the server was started on this phone",
+                ),
             "shared:masroof_capture" to mapOf("erase_stage" to "erase-in-progress state"),
             "shared:masroof_capture_key" to mapOf("k" to "sealed local-id key; travels as keys/local-id.key"),
             "shared:masroof_ui" to mapOf("voice_online_notice_seen" to "one-time hint, shown again after a restore"),
