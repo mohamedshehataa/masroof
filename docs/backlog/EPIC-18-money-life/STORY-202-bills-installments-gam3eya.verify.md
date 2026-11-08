@@ -17,3 +17,10 @@ FINDINGS:
 - [NIT] down payment above price accepted; end-date error flags a hidden field; ISO text dates; stale manifest comment;
   reminder prefs not cleared by erase; complete/delete outside the erase lock
 STATUS: PASS -> MINORs (with the security review's) fixed before integration
+
+## MINOR fixes - head `aeea486` (diff reviewed by the orchestrator)
+Gam3eya payments link TRANSFER or EXPENSE (an EXPENSE becomes TRANSFER/GAM3EYA_PAYMENT in the same transaction, Undo
+restores); Overdue section; `recordPayment` returns Done/NotFound/NotLinkable instead of throwing; "just mark as paid"
+hint + DECISIONS; Erase all data clears the reminder prefs; route allow-list `bills/<uuid>`; manifest reason updated;
+down payment vs price, end-date error flag, collision-free notification tags, FLAG_IMMUTABLE/VISIBILITY_PRIVATE asserted,
+complete/delete under the erase lock. Gate: `check-fast GREEN [android] in 112s` on the tree merged with main.
