@@ -404,7 +404,8 @@ class SmsPipeline
         ): Stored {
             db.sources().insert(CaptureRows.source(ids.next(), entry.id, r, id, receivedAt, CHANNEL_BACKFILL))
             val fresh = abs(entry.occurredAtMillis - receivedAt) <= TWIN_WINDOW_MILLIS
-            if (fresh && entry.deletedAtMillis == null && entry.instrumentLast4 == null && r.instrumentLast4 != null) {
+            val untouched = entry.deletedAtMillis == null && entry.instrumentLast4 == null
+            if (fresh && untouched && r.instrumentLast4 != null) {
                 db.expenses().enrichFromTwin(entry.id, r.instrumentLast4, CaptureRows.label(r), true)
             }
             return Stored(Disposition.KNOWN, changed = true)
