@@ -37,7 +37,7 @@ System categories can be renamed and archived but never deleted.
 ### REQ-EXP-061 - Merchant rules: suggest, apply to new entries, optionally to past ones
 **Given** an entry with merchant "TALABAT EG" in Groceries **When** the user changes its category to Dining out in Edit
 **Then** a prompt asks "Always file Talabat under Dining out?"; Yes stores one `merchant_rule` (merchantKey = the
-normalised, digit-free merchant key the app already uses for merchant grouping) and asks "Also change the 6 past
+merchant key: folded for case, accents and Arabic spelling, digits kept, capped at 80 code points) and asks "Also change the 6 past
 Talabat entries?" (Yes updates those not-deleted entries in one transaction with Undo). **Given** the rule **When** a new
 SMS/notification capture or manual entry arrives with that merchant and no category chosen by the user **Then** it is
 saved under Dining out. A user-chosen category on a manual entry always wins. Settings -> Merchant rules lists rules

@@ -32,7 +32,7 @@ internal fun String.capCodePoints(n: Int): String = if (codePointCount(0, length
  * merchant field of a record, never from message text.
  */
 object MerchantKey {
-    fun of(merchant: String?): String = if (merchant.isNullOrBlank()) "" else foldText(merchant)
+    fun of(merchant: String?): String = if (merchant.isNullOrBlank()) "" else foldText(merchant.capCodePoints(MAX_MERCHANT))
 }
 
 /** The comparison form of a category name for the duplicate check. */

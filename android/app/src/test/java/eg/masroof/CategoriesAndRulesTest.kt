@@ -301,14 +301,13 @@ class CategoriesAndRulesTest {
     // ---- REQ-EXP-061
 
     @Test
-    fun `REQ-EXP-061 the merchant key is normalised and digit free, and empty keys get no rule`() =
+    fun `REQ-EXP-061 the merchant key is normalised, keeps digits and empty keys get no rule`() =
         runTest {
             assertEquals("talabat eg", MerchantKey.of("TALABAT EG"))
             assertEquals("talabat 123", MerchantKey.of("  Talabat   123 "))
             assertEquals("3m", MerchantKey.of("3M"))
             assertEquals("7-eleven", MerchantKey.of("7-Eleven"))
             assertEquals(MerchantKey.of("طلبات"), MerchantKey.of("طَلبات"))
-
             assertEquals("", MerchantKey.of("   "))
             assertEquals("", MerchantKey.of(null))
             assertEquals(RuleResult.EmptyKey, rules().addRule("   ", "cat-dining"))
