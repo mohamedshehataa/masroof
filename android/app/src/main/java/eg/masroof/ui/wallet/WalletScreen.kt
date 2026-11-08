@@ -72,6 +72,7 @@ import eg.masroof.ui.viewmodel.ReceiptListViewModel
 private const val TARGET_DP = 48
 
 /** Everything Wallet can open or do. The NavHost fills it; each field has a harmless default so a preview or test can omit it. */
+@Suppress("LongParameterList")
 class WalletActions(
     val onOpenSettings: () -> Unit = {},
     val onOpenInsights: () -> Unit = {},
