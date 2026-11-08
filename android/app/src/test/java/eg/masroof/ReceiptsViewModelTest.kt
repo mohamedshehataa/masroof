@@ -102,7 +102,8 @@ class ReceiptsViewModelTest {
             assertEquals(ReceiptMessage.Error(Refusal.UNSUPPORTED), vm.state.value.message)
             assertEquals(0, vm.state.value.adding)
             vm.dismissMessage()
-            assertNull(vm.state.value.message)
+            // The state is a combined flow that updates asynchronously: wait for the dismissal to arrive.
+            assertNull(await { it.message == null }.message)
         }
 
     @Test
