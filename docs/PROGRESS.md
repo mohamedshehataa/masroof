@@ -130,3 +130,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 13:24 · P7 · STORY-203 · integrate · GREEN · subscriptions and recurring income: verify loop 4 PASS (5 MINOR follow-ups); PR to main
 2026-11-08 14:38 · P7 · STORY-206 · integrate · GREEN · Wallet home and bottom tabs: verify loop 3 PASS (retry test fixed at integration); PR to main
 2026-11-08 17:17 · P7 · STORY-208 · integrate · GREEN · needs-an-answer cards: verify loop 5 PASS, security review APPROVE x2, follow-ups fixed; PR to main (last EPIC-18 story)
+2026-11-08 18:50 · P7 · STORY-180 · integrate · GREEN · budget progress port: verify loop 1 PASS (Java cases 1:1, 890-pair probe vs BigInteger and Java); PR to main
