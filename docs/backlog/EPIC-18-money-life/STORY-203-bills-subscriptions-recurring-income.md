@@ -3,7 +3,7 @@ id: STORY-203
 epic: EPIC-18
 title: Bills - subscriptions and recurring income with totals, renewals, reminders and days to payday
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -94,3 +94,7 @@ STORY-202
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 3 |
+| 2026-11-08 | 5 build | android-engineer | subscriptions, recurring income, renewals, reminders, days to payday |
+| 2026-11-08 | 6 verify | qa-verifier | loops 1-3 FAIL (matching false positives, then a learned key that broke later matches) |
+| 2026-11-08 | 6 verify | qa-verifier | loop 4 PASS on 092251d - 5 MINOR, 3 NIT (see .verify.md) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
