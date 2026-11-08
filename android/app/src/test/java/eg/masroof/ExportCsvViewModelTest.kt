@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import eg.masroof.data.db.AppDatabase
@@ -23,8 +24,12 @@ import eg.masroof.ui.settings.ExportUiState
 import eg.masroof.ui.theme.MasroofTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -60,6 +65,7 @@ class ExportCsvViewModelTest {
     private lateinit var db: AppDatabase
     private lateinit var settings: FakeSettings
     private lateinit var vm: ExportCsvViewModel
+    private lateinit var clock: Clock
 
     @Before
     fun setUp() {
@@ -68,7 +74,7 @@ class ExportCsvViewModelTest {
         db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()
         settings = FakeSettings()
         // 10 Nov 2026 noon Cairo.
-        val clock = Clock.fixed(Instant.parse("2026-11-10T10:00:00Z"), ZoneOffset.UTC)
+        clock = Clock.fixed(Instant.parse("2026-11-10T10:00:00Z"), ZoneOffset.UTC)
         vm = ExportCsvViewModel(settings, CsvExporter(db, Dispatchers.Unconfined), clock)
     }
 
@@ -200,6 +206,71 @@ class ExportCsvViewModelTest {
             vm.export(open = { null }, discard = { throw IOException("cannot delete") })
             assertEquals(ExportStatus.Failed, await { it.status == ExportStatus.Failed }.status)
         }
+
+    /** A view model whose export and stream opening wait on the test scheduler, so a test can act while it is running. */
+    private fun TestScope.slowVm() =
+        ExportCsvViewModel(settings, CsvExporter(db, StandardTestDispatcher(testScheduler)), clock, StandardTestDispatcher(testScheduler))
+
+    @Test
+    fun `REQ-EXP-048 leaving Settings during an export cancels it and still discards the half-written file`() =
+        runTest {
+            val slow = slowVm()
+            var discarded = false
+            slow.export(open = { ByteArrayOutputStream() }, discard = { discarded = true })
+            testScheduler.runCurrent()
+            // Back from Settings clears the view model, which cancels its scope; join waits for the cleanup that runs after it.
+            slow.viewModelScope.coroutineContext[Job]!!.cancelAndJoin()
+            assertTrue(discarded)
+        }
+
+    @Test
+    fun `REQ-EXP-048 range changes and a second export are ignored while an export is running`() =
+        runTest {
+            val slow = slowVm()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { slow.state.collect { } }
+            var opened = 0
+            val open = {
+                opened++
+                ByteArrayOutputStream()
+            }
+            slow.export(open = open)
+            testScheduler.runCurrent()
+            slow.choose(ExportChoice.LAST_MONTH)
+            slow.setCustomFrom(LocalDate.of(2026, 1, 1))
+            slow.setCustomTo(LocalDate.of(2026, 1, 2))
+            slow.export(open = open)
+            testScheduler.runCurrent()
+            val during = slow.state.first { true }
+            assertEquals(ExportStatus.Exporting, during.status)
+            assertEquals(ExportChoice.THIS_MONTH, during.choice)
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, opened)
+            assertEquals(ExportStatus.Done(0), slow.state.first { it.status is ExportStatus.Done }.status)
+        }
+
+    @Test
+    fun `REQ-EXP-048 the output stream is opened on the IO dispatcher, not on the caller`() =
+        runTest {
+            val slow = slowVm()
+            var opened = false
+            slow.export(
+                open = {
+                    opened = true
+                    ByteArrayOutputStream()
+                },
+            )
+            assertFalse("opened on the calling thread", opened)
+            testScheduler.advanceUntilIdle()
+            assertTrue(opened)
+        }
+
+    @Test
+    fun `REQ-EXP-048 the Arabic zero plural uses the same formatted number as the other forms`() {
+        val xml = java.io.File("src/main/res/values-ar/strings_export.xml").readText()
+        val zero = Regex("quantity=\"zero\">([^<]*)<").find(xml)!!.groupValues[1]
+        assertTrue("zero form: $zero", zero.contains("%1\$,d"))
+        assertFalse("zero form hard-codes a digit: $zero", zero.replace("%1\$,d", "").any { it in '0'..'9' || it in '٠'..'٩' })
+    }
 
     private fun uiState(
         endBeforeStart: Boolean = false,

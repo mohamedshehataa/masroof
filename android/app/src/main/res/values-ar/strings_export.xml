@@ -17,7 +17,7 @@
     <string name="export_date_ok">تمام</string>
     <string name="export_date_cancel">إلغاء</string>
     <plurals name="export_done">
-        <item quantity="zero">اتصدّر 0 عملية</item>
+        <item quantity="zero">اتصدّر %1$,d عملية</item>
         <item quantity="one">اتصدّرت عملية واحدة</item>
         <item quantity="two">اتصدّرت عمليتين</item>
         <item quantity="few">اتصدّرت %1$,d عمليات</item>

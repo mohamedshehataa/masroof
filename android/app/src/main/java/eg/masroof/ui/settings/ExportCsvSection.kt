@@ -51,7 +51,8 @@ private const val CSV_MIME = "text/csv"
 @Composable
 fun ExportCsvSection(viewModel: ExportCsvViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    // The application context, so the lambdas that outlive this screen never hold the Activity.
+    val context = LocalContext.current.applicationContext
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(CSV_MIME)) { uri ->
             // Cancelling the picker returns null: nothing is written and nothing is shown.
