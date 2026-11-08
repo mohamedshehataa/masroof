@@ -55,3 +55,6 @@ scripts/quality/tests/results.xml
 
 # jqwik run database
 backend/.jqwik-database
+
+# A tool run in worktrees generates a root pnpm-lock.yaml; the repo uses npm (web/package-lock.json).
+/pnpm-lock.yaml
