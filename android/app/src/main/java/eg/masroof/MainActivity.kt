@@ -55,6 +55,8 @@ import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
 import eg.masroof.ui.bills.PlanDetailRoute
 import eg.masroof.ui.budgets.BudgetsRoute
+import eg.masroof.ui.categories.CategoriesRoute
+import eg.masroof.ui.categories.MerchantRulesRoute
 import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.goals.GoalDetailRoute
 import eg.masroof.ui.goals.GoalFormRoute
@@ -94,6 +96,8 @@ private enum class Tab(
 private const val ADD_ROUTE = "add?receipt={receipt}"
 private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
+private const val CATEGORIES_ROUTE = "settings/categories"
+private const val RULES_ROUTE = "settings/merchant-rules"
 private const val ASK_ROUTE = "ask"
 private const val WEALTH_ROUTE = "wealth"
 private const val ACCOUNTS_ROUTE = "accounts"
@@ -287,11 +291,15 @@ private fun MasroofRoot(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                    onOpenCategories = { nav.navigate(CATEGORIES_ROUTE) },
+                    onOpenRules = { nav.navigate(RULES_ROUTE) },
                     onOpenWealth = { nav.navigate(WEALTH_ROUTE) },
                     onOpenBills = { nav.navigate(BILLS_ROUTE) },
                     onOpenGoals = { nav.navigate(GOALS_ROUTE) },
                 )
             }
+            composable(CATEGORIES_ROUTE) { CategoriesRoute() }
+            composable(RULES_ROUTE) { MerchantRulesRoute() }
             composable(WEALTH_ROUTE) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
             composable(ACCOUNTS_ROUTE) { AccountsRoute() }
             composable(BILLS_ROUTE) {

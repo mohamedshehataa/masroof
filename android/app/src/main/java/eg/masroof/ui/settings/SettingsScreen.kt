@@ -44,6 +44,8 @@ fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
     onOpenReview: () -> Unit = {},
     onOpenReceipts: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    onOpenRules: () -> Unit = {},
     onOpenWealth: () -> Unit = {},
     onOpenBills: () -> Unit = {},
     onOpenGoals: () -> Unit = {},
@@ -67,6 +69,7 @@ fun SettingsRoute(
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
+            CategoriesSettingsSection(onOpenCategories, onOpenRules)
             MembersRoute()
         },
     )
