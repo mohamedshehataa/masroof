@@ -29,5 +29,6 @@
     <string name="restore_err_space">Not enough space to restore (needs %1$s MB). Nothing was changed.</string>
     <string name="restore_err_read">The file could not be read. Nothing was changed.</string>
     <string name="restore_err_busy">A backup or an SMS scan is running. Try again when it finishes.</string>
+    <string name="restore_err_incomplete">The restore did not finish. Close and reopen Masroof and it will complete.</string>
     <string name="restore_err_failed">The restore could not finish. Nothing was changed.</string>
 </resources>

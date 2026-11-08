@@ -35,6 +35,9 @@ enum class RestoreFailure {
 
     /** The replace itself failed and was rolled back: nothing changed. */
     FAILED,
+
+    /** The data was replaced but a last step (receipts swap, settings, key) failed: the next start finishes it. */
+    INCOMPLETE,
 }
 
 /** [step] is the number of the check of REQ-SEC-068 that failed (1..7), 0 when it is not a check. Carries no content of the file. */

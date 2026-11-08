@@ -42,6 +42,10 @@ class ExpenseWritePathTest {
             "data/wealth/MetalRepository.kt" to 2,
             "data/wealth/WealthRepository.kt" to 1,
             "data/edit/DeletedEntryPurge.kt" to 1,
+            // STORY-184 restore: replaces the `expense` table (with every other table) by table name in ONE transaction, through the
+            // framework's delete/insert, so it matches none of the DAO patterns above (0 DAO calls); allowed on purpose, taken under
+            // the erase lock, and it only ever writes rows of a fully checked backup (RestoreValidator), links and answers included.
+            "data/backup/RestoreDatabase.kt" to 0,
             // the DAO declarations and the frozen server-import upserts
             "data/db/Daos.kt" to 7,
         )

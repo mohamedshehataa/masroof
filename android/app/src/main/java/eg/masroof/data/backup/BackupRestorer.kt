@@ -283,10 +283,11 @@ class BackupRestorer(
             }
         }
         val missing = tableFiles.values.toSet() - tables.keys
-        if (manifest == null || settings == null || keyFile == null || missing.isNotEmpty()) {
-            throw RestoreException(RestoreFailure.INVALID_CONTENT, 6)
-        }
-        return ExtractedBackup(manifest!!, settings!!, keyFile!!, tables, receipts)
+        val m = manifest
+        val s = settings
+        val k = keyFile
+        if (m == null || s == null || k == null || missing.isNotEmpty()) throw RestoreException(RestoreFailure.INVALID_CONTENT, 6)
+        return ExtractedBackup(m, s, k, tables, receipts)
     }
 
     /** Reads the size the receipts need from the manifest and refuses early when the disk cannot hold them. */
@@ -375,7 +376,16 @@ class BackupRestorer(
             throw RestoreException(RestoreFailure.FAILED).also { it.addSuppressed(e) }
         }
         env.hooks.afterCommit()
-        finish()
+        try {
+            finish()
+        } catch (e: RestoreKilled) {
+            throw e
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // The data is replaced; the marker stays, so the next start repeats the (idempotent) finish.
+            throw RestoreException(RestoreFailure.INCOMPLETE).also { it.addSuppressed(e) }
+        }
     }
 
     /** Finishes a restore whose transaction committed. Safe to run again after a kill at any point. */

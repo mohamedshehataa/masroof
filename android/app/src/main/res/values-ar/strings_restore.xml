@@ -33,5 +33,6 @@
     <string name="restore_err_space">مفيش مساحة كفاية للاسترجاع (محتاج %1$s ميجا). مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_read">معرفناش نقرا الملف. مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_busy">فيه نسخة احتياطية أو فحص رسائل شغّال. جرّب تاني لما يخلص.</string>
+    <string name="restore_err_incomplete">الاسترجاع ماخلصش. اقفل مصروف وافتحه تاني وهيكمّل.</string>
     <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
 </resources>
