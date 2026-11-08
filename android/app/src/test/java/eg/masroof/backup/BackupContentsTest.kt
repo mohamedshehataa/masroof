@@ -42,6 +42,7 @@ import java.io.File
 import java.security.MessageDigest
 
 /** What the real database and the real preference stores give the backup, decrypted again by the test decryptor (REQ-OPS-176). */
+@Suppress("LargeClass", "NestedBlockDepth")
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BackupContentsTest {

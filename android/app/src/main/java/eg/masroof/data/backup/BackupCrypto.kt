@@ -131,6 +131,7 @@ object PassphraseKdf {
     }
 
     /** Argon2id v1.3 through Bouncy Castle's lightweight generator (pure Java). [secret] and [additional] exist for the RFC 9106 vector. */
+    @Suppress("LongParameterList") // the RFC 9106 vector needs secret and additional data as well
     fun argon2id(
         password: ByteArray,
         salt: ByteArray,

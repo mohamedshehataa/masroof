@@ -32,7 +32,10 @@ interface BackupDatabase {
     fun receipts(): List<BackupReceiptRef>
 }
 
-/** The non-secret phone state outside Room, by store name then key (see [BackupPrefsInventory]). Values: Boolean, Int, Long, String, Set<String>. */
+/**
+ * The non-secret phone state outside Room, by store name then key (see [BackupPrefsInventory]).
+ * Values: Boolean, Int, Long, String, Set<String>.
+ */
 fun interface BackupPrefs {
     suspend fun snapshot(): Map<String, Map<String, Any>>
 }
@@ -97,7 +100,7 @@ class BackupWriter(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("TooGenericExceptionCaught") // any failure at all closes the provider stream and is rethrown
     suspend fun write(
         sink: OutputStream,
         input: BackupInput,

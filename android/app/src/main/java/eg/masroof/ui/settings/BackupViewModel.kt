@@ -46,7 +46,7 @@ data class BackupUiState(
 
 private const val STOP_TIMEOUT_MS = 5_000L
 
-/** "Back up now" (REQ-SEC-067, REQ-OPS-177): explanation on the first backup, a typed-twice passphrase, the system picker, a foreground task. */
+/** "Back up now" (REQ-SEC-067, REQ-OPS-177): first-backup explanation, typed-twice passphrase, system picker, foreground task. */
 @HiltViewModel
 class BackupViewModel
     @Inject

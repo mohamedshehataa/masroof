@@ -61,20 +61,6 @@ import eg.masroof.ui.theme.LocalMoneyStyle
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
-/** Actions of the Backup section; a plain class so screens and tests can pass fakes. */
-class BackupActions(
-    val onBackUpNow: () -> Unit,
-    val onUnderstood: (Boolean) -> Unit,
-    val onContinueExplain: () -> Unit,
-    val onPassphrase: (String) -> Unit,
-    val onAgain: (String) -> Unit,
-    val onContinuePassphrase: () -> Unit,
-    val onDismiss: () -> Unit,
-    val onPicked: (android.net.Uri?) -> Unit,
-    val onCancelBackup: () -> Unit,
-    val onAcknowledge: () -> Unit,
-)
-
 /** Settings -> Backup (REQ-OPS-177): last backup, running, success and failure lines; the explanation and passphrase dialogs. */
 @Composable
 fun BackupSection(viewModel: BackupViewModel = hiltViewModel()) {

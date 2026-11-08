@@ -40,6 +40,7 @@ class BackupRejected(
  * reading only the entries would leave the last AEAD segment (and a cut tail) unverified.
  */
 object BackupTestDecryptor {
+    @Suppress("ThrowsCount", "ComplexCondition", "SwallowedException")
     fun decrypt(
         file: ByteArray,
         passphrase: String,

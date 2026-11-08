@@ -65,7 +65,8 @@ class BackupWorkerTest {
         receipts.mkdirs()
         db.openHelper.writableDatabase.execSQL("INSERT INTO member (id, displayName, sortOrder) VALUES ('m1', 'Me', 0)")
         db.openHelper.writableDatabase.execSQL(
-            "INSERT INTO expense (id, amountMinor, currency, occurredAtMillis, pending, failed) VALUES ('e1', 12500, 'EGP', 1793000000000, 0, 0)",
+            "INSERT INTO expense (id, amountMinor, currency, occurredAtMillis, pending, failed) " +
+                "VALUES ('e1', 12500, 'EGP', 1793000000000, 0, 0)",
         )
     }
 
