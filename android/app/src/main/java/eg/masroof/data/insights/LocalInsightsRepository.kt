@@ -129,7 +129,7 @@ internal fun PeriodAnalytics.toSnapshot(nowMillis: Long): InsightsSnapshot {
                 daysLeft = s.daysLeft,
                 pendingReviewCount = s.pendingReviewCount,
                 projectedTotalWeekdayAware = s.projectedWeekdayAware.money(),
-                remainingBudget = null,
+                remainingBudget = s.remainingBudget?.money(),
                 income = s.income.money(),
                 topCategories = s.topCategories.map { it.toApi() },
             ),

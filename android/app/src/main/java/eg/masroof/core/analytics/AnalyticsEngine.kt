@@ -1,6 +1,7 @@
 package eg.masroof.core.analytics
 
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.budgets.toSpec
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.di.IoDispatcher
@@ -29,6 +30,12 @@ interface AnalyticsEngine {
 
     /** One computation; throws when the stored data cannot be read. */
     suspend fun compute(spec: String): PeriodAnalytics
+
+    /**
+     * Progress of every stored budget for the current period (a monthly budget the household month, a weekly one this week),
+     * from Room only. Emits again when an entry, a category, a budget or a setting changes; fails when it cannot be computed.
+     */
+    fun observeBudgets(): Flow<List<BudgetStatus>>
 }
 
 @Singleton
@@ -55,10 +62,53 @@ class RoomAnalyticsEngine
                     val period = AnalyticsPeriod.parse(spec, today, o.monthStartDay)
                     val trendPeriods = AnalyticsExtras.trendPeriods(today, o.monthStartDay)
                     val (from, to) = span(period, trendPeriods)
-                    combine(db.expenses().observeAnalyticsRows(from, to), db.lookups().observeEveryCategory()) { rows, cats ->
-                        assemble(period, today, trendPeriods, rows, cats.map { it.toAnalytics() }, o.includeCash)
+                    combine(
+                        db.expenses().observeAnalyticsRows(from, to),
+                        db.lookups().observeEveryCategory(),
+                        db.budgets().observeAll(),
+                    ) { rows, cats, budgets ->
+                        val specs = budgets.mapNotNull { it.toSpec() }
+                        assemble(period, today, trendPeriods, rows, cats.map { it.toAnalytics() }, o.includeCash, specs)
                     }
                 }.flowOn(io)
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        override fun observeBudgets(): Flow<List<BudgetStatus>> =
+            settings.settings
+                .map { Options(it.monthStartDay, it.includeCashWithdrawals) }
+                .distinctUntilChanged()
+                .combine(cairoToday()) { o, today -> o to today }
+                .flatMapLatest { (o, today) ->
+                    val requested = AnalyticsPeriod.parse("current", today, o.monthStartDay)
+                    val (from, to) = budgetSpan(requested, today, o.monthStartDay)
+                    combine(
+                        db.expenses().observeAnalyticsRows(from, to),
+                        db.lookups().observeEveryCategory(),
+                        db.budgets().observeAll(),
+                    ) { rows, cats, budgets ->
+                        BudgetCalculator
+                            .statuses(
+                                budgets.mapNotNull { it.toSpec() },
+                                requested,
+                                o.monthStartDay,
+                                today,
+                                rows,
+                                cats.map { it.toAnalytics() },
+                                o.includeCash,
+                            ).filterNot { it.duplicate }
+                    }
+                }.flowOn(io)
+
+        /** Rows from the start of the previous month (or week) to the end of the current ones: rollover needs the period before. */
+        private fun budgetSpan(
+            requested: AnalyticsPeriod,
+            today: LocalDate,
+            monthStartDay: Int,
+        ): Pair<Long, Long> {
+            val week = BudgetCalculator.periodFor(BudgetPeriodKind.WEEKLY, requested, monthStartDay, today)
+            val periods = listOf(requested, requested.previous(), week, week.previous())
+            return periods.minOf { it.start() }.toEpochMilli() to periods.maxOf { it.endExclusive() }.toEpochMilli()
+        }
 
         /** Today's Cairo date, emitted again right after each Cairo midnight so an open screen moves to the new day or month. */
         private fun cairoToday(): Flow<LocalDate> =
@@ -85,7 +135,8 @@ class RoomAnalyticsEngine
                         .observeEveryCategory()
                         .first()
                         .map { it.toAnalytics() }
-                assemble(period, today, trendPeriods, rows, cats, s.includeCashWithdrawals)
+                val budgets = db.budgets().all().mapNotNull { it.toSpec() }
+                assemble(period, today, trendPeriods, rows, cats, s.includeCashWithdrawals, budgets)
             }
 
         /** One range query for the period, the one before it and the whole trend: never one query per period. */
@@ -103,9 +154,10 @@ class RoomAnalyticsEngine
             rows: List<AnalyticsRow>,
             cats: List<AnalyticsCategory>,
             includeCash: Boolean,
+            budgets: List<BudgetSpec>,
         ): PeriodAnalytics =
             AnalyticsCalculator
-                .compute(period, today, rows, cats, includeCash)
+                .compute(period, today, rows, cats, includeCash, budgets)
                 .copy(trend = AnalyticsExtras.trend(trendPeriods, rows, cats, includeCash))
 
         private fun CategoryEntity.toAnalytics() = AnalyticsCategory(id, parentId, nameEn, nameAr, color, archived)

@@ -3,11 +3,6 @@ package eg.masroof
 import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.auth.AuthRemote
 import eg.masroof.data.auth.LoadedSession
-import eg.masroof.data.budgets.BudgetDraft
-import eg.masroof.data.budgets.BudgetsRemote
-import eg.masroof.data.budgets.BudgetsSnapshot
-import eg.masroof.data.budgets.DefaultBudgetsRepository
-import eg.masroof.data.budgets.MutationOutcome
 import eg.masroof.data.insights.DefaultInsightsRepository
 import eg.masroof.data.insights.InsightsCache
 import eg.masroof.data.insights.InsightsPeriod
@@ -63,20 +58,6 @@ class RefreshDeadlinesTest {
             ): InsightsSnapshot = withDeadline(30.seconds) { awaitCancellation() }
         }
 
-    private val hangingBudgets =
-        object : BudgetsRemote {
-            override suspend fun fetch(nowMillis: Long): BudgetsSnapshot = withDeadline(30.seconds) { awaitCancellation() }
-
-            override suspend fun create(draft: BudgetDraft) = withDeadline(30.seconds) { awaitCancellation() }
-
-            override suspend fun update(
-                id: String,
-                draft: BudgetDraft,
-            ) = withDeadline(30.seconds) { awaitCancellation() }
-
-            override suspend fun delete(id: String) = withDeadline(30.seconds) { awaitCancellation() }
-        }
-
     @Test
     fun `REQ-AND-071 a server that never answers ends the Insights refresh in the offline state, not loading`() =
         runTest {
@@ -87,19 +68,6 @@ class RefreshDeadlinesTest {
             assertNull(outcome)
             advanceUntilIdle()
             assertEquals(RefreshOutcome.Offline, outcome)
-        }
-
-    @Test
-    fun `REQ-AND-071 a server that never answers ends the Budgets refresh and save with an error outcome`() =
-        runTest {
-            val repo = DefaultBudgetsRepository(MemoryCache(), hangingBudgets, Clock.systemUTC(), Dispatchers.Unconfined)
-            var refresh: RefreshOutcome? = null
-            var save: MutationOutcome? = null
-            launch { refresh = repo.refresh() }
-            launch { save = repo.create(BudgetDraft(null, 1_000L, "EGP", false)) }
-            advanceUntilIdle()
-            assertEquals(RefreshOutcome.Offline, refresh)
-            assertEquals(MutationOutcome.Offline, save)
         }
 
     @Test

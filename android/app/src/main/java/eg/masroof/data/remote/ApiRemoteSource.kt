@@ -3,7 +3,6 @@ package eg.masroof.data.remote
 import eg.masroof.api.apis.AccountsApi
 import eg.masroof.api.apis.AnalyticsApi
 import eg.masroof.api.apis.AuthApi
-import eg.masroof.api.apis.BudgetsApi
 import eg.masroof.api.apis.CategoriesApi
 import eg.masroof.api.apis.ExpensesApi
 import eg.masroof.api.apis.IngestApi
@@ -233,9 +232,6 @@ class ApiRemoteSource
         fun entityOf(expense: Expense): ExpenseEntity = expense.toEntity()
 
         suspend fun membersApi(): MembersApi = retrofit().create(MembersApi::class.java)
-
-        /** The generated budgets API on the authenticated client. */
-        suspend fun budgetsApi(): BudgetsApi = retrofit().create(BudgetsApi::class.java)
 
         private fun <T> Response<T>.bodyOrThrow(): T {
             if (!isSuccessful) throw HttpFailure(code())

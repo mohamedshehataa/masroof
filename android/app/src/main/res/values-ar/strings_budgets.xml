@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-181: الميزانيات المحفوظة على الموبايل (عامية مصرية). -->
+    <string name="budgets_title">الميزانيات</string>
+    <string name="budgets_add">إضافة ميزانية</string>
+    <string name="budgets_edit">تعديل الميزانية</string>
+    <string name="budgets_empty_title">لسه مفيش ميزانيات</string>
+    <string name="budgets_empty_body">أضف واحدة عشان تتابع تقدمك.</string>
+    <string name="budgets_all_taken">كل فئة ليها ميزانية بالفعل</string>
+    <string name="budgets_all_spending">كل المصروفات</string>
+    <string name="budgets_deleted_category">فئة محذوفة</string>
+    <string name="budgets_category">الفئة</string>
+    <string name="budgets_amount">المبلغ (ج.م)</string>
+    <string name="budgets_rollover">ترحيل المبلغ غير المصروف أو الزائد</string>
+    <string name="budgets_cancel">إلغاء</string>
+    <string name="budgets_spent_of">%1$s من %2$s</string>
+    <string name="budgets_remaining">متبقي %1$s</string>
+    <string name="budgets_over_by">تجاوز بمقدار %1$s</string>
+    <string name="budgets_weekly">أسبوعي</string>
+    <string name="budgets_monthly">شهري</string>
+    <string name="budgets_level_ok">ضمن الحد</string>
+    <string name="budgets_level_half">في المنتصف</string>
+    <string name="budgets_level_warning">قريب من الحد</string>
+    <string name="budgets_level_over">تجاوز الميزانية</string>
+    <string name="budgets_row_desc">%1$s، %2$s بالمية مستخدمة، متبقي %3$s</string>
+    <string name="budgets_row_desc_over">%1$s، %2$s بالمية مستخدمة، تجاوز بمقدار %3$s</string>
+    <string name="budgets_row_desc_no_progress">%1$s، الحد %2$s</string>
+    <string name="budgets_spoken_pounds">%1$s جنيه</string>
+    <string name="budgets_home_desc">الميزانيات: %1$s</string>
+    <string name="budgets_home_cta">حدّد ميزانية</string>
+    <string name="budgets_progress_failed">مقدرناش نحسب التقدم</string>
+    <string name="budgets_error_amount">اكتب مبلغ أكبر من صفر، زي 1500</string>
+    <string name="budgets_error_amount_large">المبلغ لازم يكون 10,000,000,000 ج.م أو أقل</string>
+    <string name="budgets_error_invalid">القيم دي ماتقبلتش. راجع المبلغ.</string>
+    <string name="budgets_error_duplicate">فيه ميزانية لنفس الفئة والفترة بالفعل</string>
+    <string name="budgets_error_failed">ماتحفظتش. جرّب تاني.</string>
+    <string name="budgets_delete_title">حذف الميزانية؟</string>
+    <string name="budgets_delete_body">هتتحذف ميزانية %1$s. مصروفاتك مش هتتغير.</string>
+    <plurals name="budgets_days_left">
+        <item quantity="zero">لا أيام متبقية</item>
+        <item quantity="one">يوم واحد متبقٍ</item>
+        <item quantity="two">يومان متبقيان</item>
+        <item quantity="few">%1$s أيام متبقية</item>
+        <item quantity="many">%1$s يومًا متبقيًا</item>
+        <item quantity="other">%1$s يوم متبقٍ</item>
+    </plurals>
+</resources>
