@@ -10,6 +10,7 @@ import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.db.reviewCutoff
@@ -146,7 +147,7 @@ class ReviewViewModel
                     db.expenses().enrichFromTwin(expenseId, record.instrumentLast4, CaptureRows.label(record))
                 }
             } else {
-                db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true))
+                db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true).filedByRule(db))
                 db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, id, item.receivedAtMillis))
             }
             // Later twins of the other channel find this entry through this row; it shows no Undo chip (CaptureRows.REVIEW_SAVED)

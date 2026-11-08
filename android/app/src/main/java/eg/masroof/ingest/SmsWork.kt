@@ -16,6 +16,7 @@ import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.DatabaseStartup
@@ -192,7 +193,7 @@ class SmsPipeline
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
             val expenseId = ids.next()
-            db.expenses().insert(CaptureRows.expense(expenseId, r, now))
+            db.expenses().insert(CaptureRows.expense(expenseId, r, now).filedByRule(db))
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             // the safety net: a record the phone made by itself can be undone for a while
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)

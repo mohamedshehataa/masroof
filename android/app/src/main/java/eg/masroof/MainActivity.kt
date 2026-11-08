@@ -50,6 +50,8 @@ import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.budgets.BudgetsRoute
+import eg.masroof.ui.categories.CategoriesRoute
+import eg.masroof.ui.categories.MerchantRulesRoute
 import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
@@ -84,6 +86,8 @@ private enum class Tab(
 private const val ADD_ROUTE = "add?receipt={receipt}"
 private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
+private const val CATEGORIES_ROUTE = "settings/categories"
+private const val RULES_ROUTE = "settings/merchant-rules"
 private const val EDIT_ROUTE = "edit/{id}"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
@@ -235,8 +239,12 @@ private fun MasroofRoot(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                    onOpenCategories = { nav.navigate(CATEGORIES_ROUTE) },
+                    onOpenRules = { nav.navigate(RULES_ROUTE) },
                 )
             }
+            composable(CATEGORIES_ROUTE) { CategoriesRoute() }
+            composable(RULES_ROUTE) { MerchantRulesRoute() }
             composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
             composable(REVIEW_ADD_ROUTE) { entry ->
                 ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })

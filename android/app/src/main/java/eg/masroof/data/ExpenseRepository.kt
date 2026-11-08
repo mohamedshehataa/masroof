@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import eg.masroof.core.CairoTime
 import eg.masroof.core.Money
 import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -46,6 +47,8 @@ data class NewExpense(
     val paidByMemberId: String? = null,
     /** A receipt that waited unattached (REQ-RCPT-023): attached in the same write as the entry, or not at all. */
     val receiptId: String? = null,
+    /** Optional merchant text; with no [categoryId] a merchant rule may file the entry (a chosen category always wins). */
+    val merchant: String? = null,
 )
 
 /** New ids for rows. A seam so a test can make a write fail deterministically. */
@@ -115,7 +118,9 @@ class DefaultExpenseRepository
                 emitAll(db.expenses().observeTotal(from, to).map { Money(it, Money.EGP) })
             }
 
-        override fun observeCategories() = db.lookups().observeCategories()
+        // The budget picker: the same active categories the Add sheet offers (the phone's defaults are `system = 1`, so the old
+        // `system = 0` query left the picker empty on a phone that never talked to a server).
+        override fun observeCategories() = observePickerCategories()
 
         override fun observeLabelCategories() = db.lookups().observeLabelCategories()
 
@@ -141,7 +146,7 @@ class DefaultExpenseRepository
                             amountMinor = entry.amount.amountMinor,
                             currency = entry.amount.currency,
                             occurredAtMillis = occurredAt,
-                            merchant = null,
+                            merchant = entry.merchant?.trim()?.takeIf { it.isNotEmpty() },
                             categoryId = entry.categoryId,
                             accountId = entry.accountId,
                             notes = entry.notes,
@@ -151,7 +156,7 @@ class DefaultExpenseRepository
                             createdAtMillis = now,
                             updatedAtMillis = now,
                             timeKnown = today,
-                        ),
+                        ).filedByRule(db),
                     )
                     entry.receiptId?.let { db.receipts().attachWaiting(it, id) }
                     db.sources().insert(

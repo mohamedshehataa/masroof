@@ -79,13 +79,14 @@ fun AmountText(
     )
 }
 
-/** Colored circle with the first letter of the category: the stand-in for a category icon. */
+/** Colored circle with the category's emoji; the first letter of the name when it has none (STORY-207). */
 @Composable
 fun CategoryAvatar(
     name: String,
     key: String?,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
+    emoji: String? = null,
 ) {
     val color = CategoryPalette.colorFor(key)
     Box(
@@ -97,7 +98,7 @@ fun CategoryAvatar(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            name.trim().take(1).uppercase(),
+            emoji?.takeIf { it.isNotBlank() } ?: name.trim().take(1).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -218,7 +219,7 @@ fun ExpenseListItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CategoryAvatar(categoryName, row.category?.id)
+            CategoryAvatar(categoryName, row.category?.id, emoji = row.category?.emoji)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
