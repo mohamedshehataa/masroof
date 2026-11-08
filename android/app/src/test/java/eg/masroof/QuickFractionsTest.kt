@@ -191,6 +191,7 @@ class QuickFractionsTest {
         private const val PER = 100L
 
         /** (value, size of the last unit) in piasters for a fraction-free number made of [words] (no "و"), or null. */
+        @Suppress("CyclomaticComplexMethod")
         fun number(words: List<String>): Pair<Long, Long>? {
             var total = 0L
             var cur = 0L
@@ -237,6 +238,7 @@ class QuickFractionsTest {
                 else -> null
             }
 
+        @Suppress("CyclomaticComplexMethod")
         fun value(raw: List<String>): Long? {
             // Leading and trailing "و" are not part of a number.
             val t = raw.dropWhile { it == AND }.dropLastWhile { it == AND }

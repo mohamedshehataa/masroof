@@ -118,30 +118,38 @@ internal object QuickNumbers {
                 continue
             }
             val list = mutableListOf(first)
-            var last: Piece = first
-            var j = i + 1
-            while (j < pieces.size) {
-                val q = pieces[j]
-                var m = j
-                while (pieces.getOrNull(m) is Piece.Conn) m++
-                val next = pieces.getOrNull(m)
-                if (q is Piece.Conn && next != null && continues(next, last, true)) {
-                    for (k in j until m) list += Piece.Conn
-                    list += next
-                    last = next
-                    j = m + 1
-                } else if (q != null && q !is Piece.Conn && continues(q, last, false)) {
-                    list += q
-                    last = q
-                    j++
-                } else {
-                    break
-                }
-            }
-            runs += NumberRun(i, j - 1, list)
-            i = j
+            val end = extend(pieces, list, i + 1)
+            runs += NumberRun(i, end - 1, list)
+            i = end
         }
         return runs
+    }
+
+    /** Adds the pieces that continue the run from index [from] to [list]; returns the index after the last one used. */
+    private fun extend(
+        pieces: List<Piece?>,
+        list: MutableList<Piece>,
+        from: Int,
+    ): Int {
+        var j = from
+        while (j < pieces.size) {
+            val q = pieces[j]
+            // Several "و" in a row act as one.
+            var m = j
+            while (pieces.getOrNull(m) is Piece.Conn) m++
+            val next = pieces.getOrNull(m)
+            if (q is Piece.Conn && next != null && continues(next, list.last(), true)) {
+                repeat(m - j) { list += Piece.Conn }
+                list += next
+                j = m + 1
+            } else if (q != null && q !is Piece.Conn && continues(q, list.last(), false)) {
+                list += q
+                j++
+            } else {
+                break
+            }
+        }
+        return j
     }
 
     // A fraction word or "إلا" always belongs to a run, so a number next to one is judged as a whole (never read without it).
