@@ -124,10 +124,19 @@ class RoomBudgetsRepository
             }
     }
 
+/** The server's rule: a threshold is a percentage from 1 to 200, and each fires once. */
+private const val MAX_THRESHOLD_PERCENT = 200
+
 /** The calculator's view of a stored budget; null for a row whose period text is not one the app writes. */
 internal fun BudgetEntity.toSpec(): BudgetSpec? {
     val kind = BudgetPeriodKind.entries.firstOrNull { it.name == period } ?: return null
     val thresholds =
-        alertThresholds.split(',').mapNotNull { it.trim().toIntOrNull() }.ifEmpty { BudgetSpec.DEFAULT_THRESHOLDS }
+        alertThresholds
+            .split(',')
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..MAX_THRESHOLD_PERCENT }
+            .distinct()
+            .sorted()
+            .ifEmpty { BudgetSpec.DEFAULT_THRESHOLDS }
     return BudgetSpec(id, categoryId, kind, amountMinor, rollover, thresholds, createdAtMillis)
 }

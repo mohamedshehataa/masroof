@@ -14,6 +14,7 @@ import eg.masroof.data.budgets.BudgetDraft
 import eg.masroof.data.budgets.MAX_BUDGET_MINOR
 import eg.masroof.data.budgets.MutationOutcome
 import eg.masroof.data.budgets.RoomBudgetsRepository
+import eg.masroof.data.budgets.toSpec
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
@@ -620,6 +621,61 @@ class BudgetsLocalTest {
             repo().create(BudgetDraft(groceries.id, 5_000, false))
             assertEquals(1_750_000L, engine.compute("current").summary.remainingBudget)
         }
+
+    @Test
+    fun `REQ-AN-155 a stored total budget reaches the Insights and Wallet snapshot with its remaining amount`() =
+        runTest {
+            seedCategories()
+            repo().create(BudgetDraft(null, 1_000_000, false))
+            db.expenses().insert(entry("e1", 250_000))
+            val repository =
+                eg.masroof.data.insights
+                    .LocalInsightsRepository(engine(), clock)
+            val snapshot = repository.observe(eg.masroof.data.insights.InsightsPeriod.CURRENT).first()!!
+            assertEquals(750_000L, snapshot.summary.remainingBudget?.amountMinor)
+            assertEquals("EGP", snapshot.summary.remainingBudget?.currency)
+            db.budgets().all().forEach { db.budgets().delete(it) }
+            val without = repository.observe(eg.masroof.data.insights.InsightsPeriod.CURRENT).first()!!
+            assertNull(without.summary.remainingBudget)
+        }
+
+    @Test
+    fun `REQ-AN-153 a weekly budget on 29 Oct counts the whole ISO week including 1 Nov, outside the month`() =
+        runTest {
+            seedCategories()
+            val lateClock = Clock.fixed(Instant.parse("2026-10-29T10:00:00Z"), ZoneOffset.UTC)
+            repo().create(BudgetDraft(groceries.id, 100_000, false, BudgetPeriodKind.WEEKLY))
+            db.expenses().insert(entry("mon", 20_000, at = "2026-10-26T08:00:00Z"))
+            db.expenses().insert(entry("sun", 30_000, at = "2026-11-01T08:00:00Z"))
+            db.expenses().insert(entry("before", 90_000, at = "2026-10-25T08:00:00Z"))
+            db.expenses().insert(entry("after", 90_000, at = "2026-11-02T08:00:00Z"))
+            val vm = BudgetsViewModel(repo(), RoomAnalyticsEngine(db, settings, lateClock, Dispatchers.Unconfined), expenses)
+            watch(vm)
+            val row =
+                vm.state
+                    .await { s -> s.rows.singleOrNull()?.hasProgress == true }
+                    .rows
+                    .single()
+            assertEquals(Money(50_000), row.spent)
+            assertEquals(5_000, row.progressBps)
+        }
+
+    @Test
+    fun `REQ-AN-154 stored thresholds are made unique and limited to 1 to 200 before they fire`() {
+        val stored =
+            eg.masroof.data.db.BudgetEntity(
+                "b",
+                null,
+                "MONTHLY",
+                100,
+                "EGP",
+                alertThresholds = "80,80,50,0,300,100,-5,200",
+                createdAtMillis = 1,
+                updatedAtMillis = 1,
+            )
+        assertEquals(listOf(50, 80, 100, 200), stored.toSpec()!!.alertThresholds)
+        assertEquals(listOf(50, 80, 100), stored.copy(alertThresholds = "x,0").toSpec()!!.alertThresholds)
+    }
 
     @Test
     fun `REQ-AND-138 the screen state shows nothing about a server, last update or offline`() =
