@@ -268,7 +268,7 @@ class SmsPipeline
             // the same purchase announced by the other channel (SMS + notification) is one review item, not two
             val last4 = r.instrumentLast4.orEmpty()
             val window = TWIN_WINDOW_MILLIS
-            if (db.reviews().countIgnoredTwins(last4, r.amountMinor, receivedAt - window, receivedAt + window) > 0) {
+            if (db.reviews().countIgnoredTwins(last4, r.amountMinor, r.currency, receivedAt - window, receivedAt + window) > 0) {
                 return Stored(Disposition.REVIEW)
             }
             db.reviews().insert(
@@ -579,9 +579,13 @@ class SmsUploader
             localId: String,
             expenseId: String,
         ) {
+            // a row that an answer linked is never deleted here, on the server or on the phone: it leaves through the editor, which
+            // reconciles its pair. The request is cleared, so it is not retried on every pass.
+            if (expenseId in answers.current().linkedIds()) {
+                db.captured().delete(localId)
+                return
+            }
             if (!deleter.deleteExpense(expenseId)) return
-            // a row that an answer linked is never hard-deleted here: it leaves through the editor, which reconciles its pair
-            if (expenseId in answers.current().linkedIds()) return
             db.withTransaction {
                 db.expenses().delete(expenseId)
                 db.captured().delete(localId)

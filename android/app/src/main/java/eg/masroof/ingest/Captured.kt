@@ -313,8 +313,8 @@ class CapturedActions
                                 // the pair follows from the links: the app-inserted side goes, a converted real entry is put back
                                 AnswerWrites.reconcile(db, mine)
                                 // a Cash account the capture created goes too, unless something else uses it now
-                                mine.map { it.newAccountId }.filter { it.isNotEmpty() }.forEach { account ->
-                                    if (db.accountBalances().countLiveEntries(account) == 0) db.accountBalances().deleteAccount(account)
+                                mine.filter { it.newAccountId.isNotEmpty() }.forEach {
+                                    AnswerWrites.settleCreatedCash(db, it.newAccountId, listOf(it.inserted))
                                 }
                             }
                             db.captured().requestUndo(localId)

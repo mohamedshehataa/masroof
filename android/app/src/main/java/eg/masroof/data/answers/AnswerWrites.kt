@@ -97,6 +97,30 @@ internal object AnswerWrites {
 
     fun pairSideId(entryId: String) = "$entryId:pair"
 
+    /** The zero balance check a Cash account is created with; any other check on it is the user's. */
+    private fun seedCheckId(accountId: String) = "$accountId:seed"
+
+    /**
+     * Undo of "Track it" (answer or capture) for the Cash account it created. The account goes only when nothing of the user's
+     * depends on it: no entry on it besides [own] (live or in the trash) and no balance check besides the seed. Otherwise it is
+     * archived, so a balance check cascade-delete or a dangling account on a restored entry can never happen.
+     */
+    suspend fun settleCreatedCash(
+        db: AppDatabase,
+        accountId: String,
+        own: Collection<String>,
+    ) {
+        if (db.accountBalances().accounts().none { it.id == accountId }) return
+        val others = db.accountBalances().countEntriesExcept(accountId, own.ifEmpty { listOf("") }.toList())
+        val checks = db.accountBalances().countChecksExcept(accountId, seedCheckId(accountId))
+        if (others == 0 && checks == 0) {
+            own.filter { it.isNotEmpty() }.forEach { db.expenses().delete(it) }
+            db.accountBalances().deleteAccount(accountId)
+        } else {
+            db.accountBalances().setAccountArchived(accountId, true)
+        }
+    }
+
     /**
      * The pair and refund fields as a pure function of the stored links and which rows are live. Called in the same Room transaction
      * after EVERY write that touches a linked row (answer, delete, restore, edit, capture Undo), so no order of operations can leave
@@ -290,7 +314,15 @@ internal object AnswerWrites {
         if (existing == null) {
             db.lookups().upsertAccounts(listOf(AccountEntity(id = cashId, label = cashLabel, currency = entry.currency, kind = CASH_KIND)))
             db.accountBalances().insert(
-                AccountBalanceEntity(ids.next(), cashId, 0L, entry.currency, minOf(entry.occurredAtMillis - 1, now), "MANUAL", now),
+                AccountBalanceEntity(
+                    seedCheckId(cashId),
+                    cashId,
+                    0L,
+                    entry.currency,
+                    minOf(entry.occurredAtMillis - 1, now),
+                    "MANUAL",
+                    now,
+                ),
             )
         }
         db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER))

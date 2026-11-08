@@ -58,9 +58,19 @@ interface AccountBalanceDao {
     @Query("SELECT * FROM account ORDER BY label")
     suspend fun accounts(): List<AccountEntity>
 
-    /** Entries that still sit on [accountId] (a pair released by an Undo removes its Cash account only when this is 0). */
-    @Query("SELECT COUNT(*) FROM expense WHERE accountId = :accountId AND deletedAtMillis IS NULL")
-    suspend fun countLiveEntries(accountId: String): Int
+    /** Entries on [accountId] (live or in the trash) other than [own]: what a Cash account created by "Track it" must not outlive. */
+    @Query("SELECT COUNT(*) FROM expense WHERE accountId = :accountId AND id NOT IN (:own)")
+    suspend fun countEntriesExcept(
+        accountId: String,
+        own: List<String>,
+    ): Int
+
+    /** Balance checks of [accountId] other than the zero seed check the app created with it. */
+    @Query("SELECT COUNT(*) FROM account_balance WHERE accountId = :accountId AND id != :seedId")
+    suspend fun countChecksExcept(
+        accountId: String,
+        seedId: String,
+    ): Int
 
     /** Undo of "Track it" that created the Cash account: its balance checks go with it (cascade). */
     @Query("DELETE FROM account WHERE id = :id")

@@ -537,12 +537,13 @@ interface ReviewDao {
 
     /** STORY-208: an ignored card's capture already waits in the list (the other channel's copy of the same purchase). */
     @Query(
-        """SELECT COUNT(*) FROM review_item WHERE reason = 'ignored_card' AND sugLast4 = :last4 AND sugAmountMinor = :amountMinor
-            AND receivedAtMillis BETWEEN :from AND :to""",
+        """SELECT COUNT(*) FROM review_item WHERE reason = 'ignored_card' AND sugLast4 = :last4
+            AND sugAmountMinor = :amountMinor AND sugCurrency = :currency AND receivedAtMillis BETWEEN :from AND :to""",
     )
     suspend fun countIgnoredTwins(
         last4: String,
         amountMinor: Long,
+        currency: String,
         from: Long,
         to: Long,
     ): Int

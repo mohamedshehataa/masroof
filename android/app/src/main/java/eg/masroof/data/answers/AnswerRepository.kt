@@ -446,7 +446,7 @@ class DefaultAnswerRepository
                             token.restore.forEach { AnswerWrites.revert(db, it) }
                             token.added.links.forEach { AnswerWrites.unlink(db, it) }
                             token.deleteExpenses.forEach { db.expenses().delete(it) }
-                            token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
+                            token.deleteAccounts.forEach { AnswerWrites.settleCreatedCash(db, it, token.deleteExpenses) }
                             // the links this answer replaced come back exactly as they were
                             restoreSettled(token, now)
                             true

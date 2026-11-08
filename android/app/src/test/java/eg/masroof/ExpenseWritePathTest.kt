@@ -25,7 +25,7 @@ class ExpenseWritePathTest {
             "data/edit/ExpenseEdit.kt" to 6,
             // the helper: answers, Undo, Unlink and reconcile themselves
             "data/answers/AnswerRepository.kt" to 5,
-            "data/answers/AnswerWrites.kt" to 12,
+            "data/answers/AnswerWrites.kt" to 13,
             // capture Undo: soft delete, then reconcile in the same transaction
             "ingest/Captured.kt" to 1,
             // new rows only (nothing can be linked to a row that does not exist yet) and the twin enrichment of fresh captures
