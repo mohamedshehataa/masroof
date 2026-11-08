@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="answers_title">Needs an answer</string>
+    <plurals name="answers_row_desc">
+        <item quantity="one">%1$d question needs an answer</item>
+        <item quantity="other">%1$d questions need an answer</item>
+    </plurals>
+    <string name="answers_excerpt">%1$s · %2$s</string>
+    <string name="answers_excerpt_merchant">%1$s · %2$s · %3$s</string>
+
+    <string name="answers_refund_q_none">Is this a refund?</string>
+    <string name="answers_refund_q_one">Is this a refund for %1$s?</string>
+    <string name="answers_refund_q_many">Which purchase did this refund?</string>
+    <string name="answers_candidate">%1$s %2$s on %3$s</string>
+    <string name="answers_candidate_no_merchant">%1$s on %2$s</string>
+    <string name="answers_refund_link">Yes, link it</string>
+    <string name="answers_pick_another">Pick another</string>
+    <string name="answers_not_refund">Not a refund</string>
+    <string name="answers_pick_title">Which purchase?</string>
+    <string name="answers_pick_empty">No purchases in the last 60 days</string>
+
+    <string name="answers_transfer_out_q">Did this go to one of your accounts?</string>
+    <string name="answers_transfer_in_q">Did this come from one of your accounts?</string>
+    <string name="answers_transfer_to">To %1$s</string>
+    <string name="answers_transfer_from">From %1$s</string>
+    <string name="answers_transfer_choose">Choose the account</string>
+    <string name="answers_transfer_other_out">To someone else</string>
+    <string name="answers_transfer_other_in">From someone else</string>
+    <string name="answers_account_picker_title">Which account?</string>
+
+    <string name="answers_card_q">•••• %1$s isn\'t in Masroof</string>
+    <string name="answers_card_add">Add account</string>
+    <string name="answers_card_link">Link to an account</string>
+    <string name="answers_card_ignore">Ignore this card</string>
+    <string name="answers_card_link_title">Link •••• %1$s to which account?</string>
+    <string name="answers_card_no_accounts">Add an account first, then link the card to it.</string>
+
+    <string name="answers_atm_q">Keep track of this cash?</string>
+    <string name="answers_atm_track">Track it</string>
+    <string name="answers_atm_count">Count as spending</string>
+    <string name="answers_cash_account">Cash</string>
+
+    <string name="answers_done">Done</string>
+    <string name="answers_undo">Undo</string>
+    <string name="answers_cancel">Cancel</string>
+
+    <string name="answers_delete_pair_title">Delete both sides?</string>
+    <string name="answers_delete_pair_body">This is one side of a transfer between your accounts. Delete the other side too?</string>
+    <string name="answers_delete_both">Delete both</string>
+    <string name="answers_delete_this_only">Delete only this one</string>
+    <string name="edit_type_transfer_in">Transfer in</string>
+
+    <string name="review_reason_ignored_card">Ignored card. Save it to add it as an entry.</string>
+
+    <string name="answers_settings_title">Needs an answer</string>
+    <string name="answers_atm_setting">ATM withdrawals</string>
+    <string name="answers_atm_opt_ask">Ask me each time</string>
+    <string name="answers_atm_opt_track">Track the cash</string>
+    <string name="answers_atm_opt_count">Count as spending</string>
+    <string name="answers_ignored_title">Ignored cards</string>
+    <string name="answers_ignored_empty">No ignored cards</string>
+    <plurals name="answers_ignored_count">
+        <item quantity="one">%1$d ignored card</item>
+        <item quantity="other">%1$d ignored cards</item>
+    </plurals>
+    <string name="answers_ignored_item">•••• %1$s</string>
+    <string name="answers_restore">Restore</string>
+    <string name="answers_restore_desc">Restore the card ending %1$s</string>
+</resources>

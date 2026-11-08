@@ -167,6 +167,7 @@ private fun reasonLabel(reason: String): String =
             "unexplained_number" -> R.string.review_reason_unexplained_number
             "unconfirmed" -> R.string.review_reason_unconfirmed
             "rejected" -> R.string.review_reason_rejected
+            "ignored_card" -> R.string.review_reason_ignored_card
             else -> R.string.review_reason_other
         },
     )

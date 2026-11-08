@@ -16,4 +16,6 @@ class EditActions(
     val onDismissDelete: () -> Unit = {},
     val onPaidBy: (String?) -> Unit = {},
     val onExcluded: (Boolean) -> Unit = {},
+    /** "Delete both" on one side of a linked transfer between own accounts (STORY-208). */
+    val onDeleteBoth: () -> Unit = {},
 )

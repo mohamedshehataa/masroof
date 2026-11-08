@@ -24,6 +24,8 @@ import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
@@ -291,16 +293,22 @@ class CapturedActions
         private val signal: LocalDataSignal = LocalDataSignal(),
         private val eraseLock: EraseLock = EraseLock(),
         private val notifier: CapturedNotifier = NoCapturedNotifier,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) {
         fun observeRecent(): Flow<List<CapturedTxEntity>> = db.captured().observeRecent(capturedCutoff(clock.millis()))
 
         suspend fun undo(localId: String): UndoResult {
+            // A withdrawal that was turned into a transfer pair (REQ-EXP-067) goes away with its other side.
+            val pairs = answers.current()
             val item =
                 eraseLock.mutex.withLock {
                     db.withTransaction {
                         val found = db.captured().find(localId)
                         if (found != null) {
-                            found.expenseId?.let { db.expenses().softDelete(it, clock.millis()) }
+                            found.expenseId?.let { id ->
+                                db.expenses().softDelete(id, clock.millis())
+                                pairs.pairPartner(id)?.let { db.expenses().softDelete(it, clock.millis()) }
+                            }
                             db.captured().requestUndo(localId)
                         }
                         found

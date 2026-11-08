@@ -55,6 +55,13 @@ interface AccountBalanceDao {
         dueDay: Int?,
     )
 
+    @Query("SELECT * FROM account ORDER BY label")
+    suspend fun accounts(): List<AccountEntity>
+
+    /** Undo of "Track it" that created the Cash account: its balance checks go with it (cascade). */
+    @Query("DELETE FROM account WHERE id = :id")
+    suspend fun deleteAccount(id: String)
+
     @Query("UPDATE account SET archived = :archived WHERE id = :id")
     suspend fun setAccountArchived(
         id: String,

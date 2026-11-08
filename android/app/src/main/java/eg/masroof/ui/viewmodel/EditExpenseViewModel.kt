@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.core.CairoTime
 import eg.masroof.core.MoneyFormat
+import eg.masroof.data.answers.NoPairLookup
+import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MemberEntity
@@ -47,6 +49,8 @@ data class EditFormState(
     val busy: Boolean = false,
     val error: EditError? = null,
     val confirmDelete: Boolean = false,
+    /** The entry is one side of a linked transfer between own accounts: Delete asks whether to delete both. */
+    val hasPartner: Boolean = false,
     /** The entry was deleted while the screen was open: "This entry no longer exists", then the screen closes. */
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
@@ -76,6 +80,7 @@ data class EditUiState(
 const val TYPE_EXPENSE = "EXPENSE"
 const val TYPE_INCOME = "INCOME"
 const val TYPE_TRANSFER = "TRANSFER"
+const val TYPE_TRANSFER_IN = "TRANSFER_IN"
 const val TYPE_REFUND = "REFUND"
 private const val STATUS_PENDING_REVIEW = "PENDING_REVIEW"
 private const val STATUS_CONFIRMED = "CONFIRMED"
@@ -118,6 +123,7 @@ class EditExpenseViewModel
     constructor(
         private val editor: ExpenseEditor,
         savedState: SavedStateHandle,
+        private val pairs: PairLookup = NoPairLookup,
     ) : ViewModel() {
         private val id: String = savedState.get<String>("id").orEmpty()
         private val form = MutableStateFlow(EditFormState())
@@ -137,7 +143,9 @@ class EditExpenseViewModel
                     form.update { it.copy(done = true, gone = true) } // missing or deleted: nothing to edit
                 } else {
                     original = found
-                    form.value = found.toForm()
+                    // REQ-EXP-065: one side of a linked transfer pair asks whether to delete both
+                    val partner = pairs.partnerOf(id)?.takeIf { editor.find(it) != null }
+                    form.value = found.toForm().copy(hasPartner = partner != null)
                 }
             }
         }
@@ -200,6 +208,13 @@ class EditExpenseViewModel
             if (original == null || inFlight || form.value.done) return
             form.update { it.copy(confirmDelete = false) }
             submit(null) { editor.delete(id) }
+        }
+
+        /** "Delete both" on a linked transfer pair (REQ-EXP-065). */
+        fun deleteBoth() {
+            if (original == null || inFlight || form.value.done) return
+            form.update { it.copy(confirmDelete = false) }
+            submit(null) { editor.deleteWithPartner(id) }
         }
 
         private fun changesOf(

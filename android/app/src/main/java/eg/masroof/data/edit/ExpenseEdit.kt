@@ -3,6 +3,8 @@ package eg.masroof.data.edit
 import android.database.sqlite.SQLiteException
 import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.NoPairLookup
+import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -89,6 +91,9 @@ interface ExpenseEditor {
     /** Soft delete (ADR-0009 D3); [restore] brings it back. */
     suspend fun delete(id: String): EditOutcome
 
+    /** STORY-208: deletes the entry and the other side of its linked transfer pair together; [restore] brings both back. */
+    suspend fun deleteWithPartner(id: String): EditOutcome = delete(id)
+
     /** Undo of [delete]. Returns false when there was nothing to restore. */
     suspend fun restore(id: String): Boolean
 }
@@ -104,6 +109,7 @@ class DefaultExpenseEditor
         private val signal: LocalDataSignal,
         private val clock: Clock,
         private val eraseLock: EraseLock,
+        private val pairs: PairLookup = NoPairLookup,
     ) : ExpenseEditor {
         private val deletions = MutableSharedFlow<String>(extraBufferCapacity = DELETION_BUFFER)
 
@@ -152,10 +158,42 @@ class DefaultExpenseEditor
                 }
             }
 
+        override suspend fun deleteWithPartner(id: String): EditOutcome =
+            guarded {
+                val partner = pairs.partnerOf(id)
+                val changed =
+                    eraseLock.mutex.withLock {
+                        db.withTransaction {
+                            // one timestamp for both: Undo restores the partner only if it went away in the same moment
+                            val now = clock.millis()
+                            val first = db.expenses().softDelete(id, now)
+                            if (first > 0 && partner != null) db.expenses().softDelete(partner, now)
+                            first
+                        }
+                    }
+                if (changed == 0) {
+                    EditOutcome.NotFound
+                } else {
+                    signal.changed()
+                    deletions.tryEmit(id)
+                    EditOutcome.Deleted
+                }
+            }
+
         override suspend fun restore(id: String): Boolean {
+            val partner = pairs.partnerOf(id)
             val changed =
                 try {
-                    eraseLock.mutex.withLock { db.expenses().restore(id, clock.millis()) }
+                    eraseLock.mutex.withLock {
+                        db.withTransaction {
+                            val deletedAt = db.expenses().find(id)?.deletedAtMillis
+                            val first = db.expenses().restore(id, clock.millis())
+                            if (first > 0 && partner != null && db.expenses().find(partner)?.deletedAtMillis == deletedAt) {
+                                db.expenses().restore(partner, clock.millis())
+                            }
+                            first
+                        }
+                    }
                 } catch (_: SQLiteException) {
                     0
                 } catch (_: IllegalStateException) {

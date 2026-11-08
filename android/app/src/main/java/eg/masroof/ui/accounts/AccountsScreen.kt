@@ -179,11 +179,13 @@ private fun AccountCard(
 }
 
 @Composable
-private fun AccountFormDialog(
+internal fun AccountFormDialog(
     editing: AccountEntity?,
     existing: List<AccountEntity>,
     onSave: (eg.masroof.data.wealth.AccountDraft) -> Unit,
     onDismiss: () -> Unit,
+    /** "Add account" from an unknown-card answer (STORY-208): the four digits the card showed. */
+    initialLast4: String = "",
 ) {
     var form by remember {
         mutableStateOf(
@@ -199,7 +201,7 @@ private fun AccountFormDialog(
                     it.statementDay?.toString().orEmpty(),
                     it.dueDay?.toString().orEmpty(),
                 )
-            } ?: AccountForm(),
+            } ?: AccountForm(last4 = initialLast4),
         )
     }
     var errors by remember { mutableStateOf(emptySet<AccountField>()) }

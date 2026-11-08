@@ -46,6 +46,7 @@ class RoomDataWiper
         @CameraDir private val cameraDir: File = File("no-camera-dir"),
         private val reminders: eg.masroof.work.ReminderLog = eg.masroof.work.NoReminderLog,
         private val subscriptionPrefs: eg.masroof.data.bills.SubscriptionPrefs = eg.masroof.data.bills.NoSubscriptionPrefs,
+        private val answerPrefs: eg.masroof.data.answers.AnswerPrefs = eg.masroof.data.answers.NoAnswerPrefs,
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -113,6 +114,8 @@ class RoomDataWiper
                     { withContext(io) { reminders.clear() } },
                     // dismissed suggestions, price notices and renewal anchor days
                     { subscriptionPrefs.clear() },
+                    // answered cards, refund and transfer links, ignored cards, card aliases, the ATM choice (STORY-208)
+                    { answerPrefs.clear() },
                 )
             for (step in steps) {
                 try {

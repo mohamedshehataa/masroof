@@ -15,6 +15,13 @@ import dagger.assisted.AssistedInject
 import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.UuidIdFactory
+import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.AnswerState
+import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.AtmChoice
+import eg.masroof.data.answers.CashAccountLabel
+import eg.masroof.data.answers.EntryLink
+import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AppDatabase
@@ -43,6 +50,9 @@ import kotlin.coroutines.cancellation.CancellationException
 
 const val SMS_INTAKE_TAG = "sms-intake"
 const val SMS_UPLOAD_WORK = "sms-upload"
+
+/** `review_item.reason` of a capture from a card the user chose to ignore (REQ-EXP-066). */
+const val REASON_IGNORED_CARD = "ignored_card"
 const val SMS_UPLOAD_RETRY_WORK = "sms-upload-retry"
 private const val KEY_SOURCE = "source"
 private const val KEY_SENDER = "sender"
@@ -86,6 +96,8 @@ private data class Stored(
     val notice: CapturedTxEntity? = null,
     val withdraw: String? = null,
     val changed: Boolean = false,
+    /** A withdrawal turned into a transfer pair because the user chose "Track it" (STORY-208): remembered after the commit. */
+    val links: Set<EntryLink> = emptySet(),
 )
 
 /**
@@ -109,6 +121,8 @@ class SmsPipeline
         private val ids: IdFactory = UuidIdFactory(),
         private val signal: LocalDataSignal = LocalDataSignal(),
         private val eraseLock: EraseLock = EraseLock(),
+        private val answers: AnswerPrefs = NoAnswerPrefs,
+        private val cashLabel: CashAccountLabel = CashAccountLabel { "Cash" },
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -124,6 +138,8 @@ class SmsPipeline
             // A message in a format the user confirmed on this phone is recorded like a proven family
             val applied = TemplateLearning.apply(db, message, MessageParser.parse(message))
             val outcome = applied.outcome
+            // Ignored cards, card aliases and the ATM choice (STORY-208): read before the transaction, applied inside it.
+            val answerState = answers.current()
             // Waits for a running erase or recovery, like a manual save. The gate and the setting are checked once more inside the
             // transaction, right before anything is written, so an intake that was in flight when capture was switched off (or an
             // erase began) writes nothing.
@@ -133,12 +149,15 @@ class SmsPipeline
                         if (gate.isOpen() &&
                             isAllowed(message)
                         ) {
-                            store(message, id, outcome, applied.templateId)
+                            store(message, id, outcome, applied.templateId, answerState)
                         } else {
                             Stored(Disposition.DROPPED)
                         }
                     }
                 }
+            if (stored.links.isNotEmpty()) {
+                answers.edit { s -> s.copy(links = s.links + stored.links, answered = s.answered + stored.links.map { it.first }) }
+            }
             stored.withdraw?.let(notifier::cancel)
             stored.notice?.let(notifier::captured)
             if (stored.changed) signal.changed()
@@ -150,10 +169,17 @@ class SmsPipeline
             id: String,
             outcome: ParseOutcome,
             templateId: String?,
+            answerState: AnswerState,
         ): Stored =
             when (outcome) {
                 is ParseOutcome.Record ->
-                    storeRecord(outcome.record, id, templateId, message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis())
+                    storeRecord(
+                        outcome.record,
+                        id,
+                        templateId,
+                        message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis(),
+                        answerState,
+                    )
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
                     db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
@@ -182,10 +208,15 @@ class SmsPipeline
             id: String,
             templateId: String?,
             receivedAt: Long,
+            answerState: AnswerState,
         ): Stored {
             val now = clock.millis()
             db.captured().purgeBefore(capturedCutoff(now))
             db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
+            // REQ-EXP-066: a card the user chose to ignore never becomes an entry. It got here through the OTP/promo/secret filters
+            // already (a record exists only after them); it waits in the review list, described from its typed fields only.
+            val last4 = r.instrumentLast4
+            if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
             // The same message again (a re-run job, a double delivery) is the same record: no second entry, row or notice. The source
             // row outlives an Undo, and a paired twin has its own source row, so this also holds for an undone entry (30 days).
             if (db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0) return Stored(Disposition.RECORDED)
@@ -193,13 +224,53 @@ class SmsPipeline
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
             val expenseId = ids.next()
-            db.expenses().insert(CaptureRows.expense(expenseId, r, now).filedByRule(db, r.merchant))
+            // "Link to an existing account" (REQ-EXP-066): a card tail linked to an account files its captures under it
+            val entry =
+                CaptureRows.expense(expenseId, r, now).filedByRule(db, r.merchant).let { e ->
+                    val linked = last4?.let { answerState.aliases[it] }
+                    if (linked != null) e.copy(accountId = linked) else e
+                }
+            db.expenses().insert(entry)
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
             // the safety net: a record the phone made by itself can be undone for a while
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
             db.captured().insert(item)
+            // REQ-EXP-067: "Track it" is remembered: the withdrawal is a transfer to Cash from the start
+            if (r.kind == TxKind.CASH_WITHDRAWAL && answerState.atmChoice == AtmChoice.TRACK) {
+                val tracked = AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), now)
+                return Stored(Disposition.RECORDED, notice = item, changed = true, links = tracked.added.links)
+            }
             return Stored(Disposition.RECORDED, notice = item, changed = true)
         }
+
+        /** An ignored card's capture: a review item built from typed fields (never message text), with the one-tap Save suggestion. */
+        private suspend fun storeIgnoredCard(
+            r: ParsedRecord,
+            id: String,
+            receivedAt: Long,
+            now: Long,
+        ): Stored {
+            db.reviews().insert(
+                ReviewItemEntity(
+                    id = id,
+                    source = r.source.name,
+                    sender = r.senderId.take(MAX_SENDER),
+                    text = ignoredSummary(r),
+                    reason = REASON_IGNORED_CARD,
+                    receivedAtMillis = receivedAt,
+                    createdAtMillis = now,
+                ).withSuggestion(r, null),
+            )
+            return Stored(Disposition.REVIEW)
+        }
+
+        private fun ignoredSummary(r: ParsedRecord): String =
+            buildString {
+                append(r.kind.name).append(' ').append(r.amountMinor / MINOR_PER_MAJOR).append('.')
+                append((r.amountMinor % MINOR_PER_MAJOR).toString().padStart(2, '0')).append(' ').append(r.currency)
+                CaptureRows.label(r)?.let { append(" - ").append(it.take(MAX_SENDER)) }
+                r.instrumentLast4?.let { append(" - **").append(it) }
+            }
 
         /**
          * The other channel already made the entry: this message only adds its source. When it knows more (the account tail) and
@@ -292,6 +363,7 @@ class SmsPipeline
         private companion object {
             const val NOT_INSERTED = -1L
             const val MAX_SENDER = 60
+            const val MINOR_PER_MAJOR = 100L
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
         }

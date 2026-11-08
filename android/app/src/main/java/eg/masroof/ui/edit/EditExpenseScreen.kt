@@ -68,6 +68,7 @@ import eg.masroof.ui.viewmodel.TYPE_EXPENSE
 import eg.masroof.ui.viewmodel.TYPE_INCOME
 import eg.masroof.ui.viewmodel.TYPE_REFUND
 import eg.masroof.ui.viewmodel.TYPE_TRANSFER
+import eg.masroof.ui.viewmodel.TYPE_TRANSFER_IN
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -104,6 +105,7 @@ fun EditExpenseRoute(
             viewModel::dismissDelete,
             viewModel::onPaidBy,
             viewModel::onExcluded,
+            viewModel::deleteBoth,
         ),
         receipts = { ReceiptsSection(enabled = !state.form.locked) },
     )
@@ -141,11 +143,21 @@ fun EditExpenseContent(
     if (form.confirmDelete) {
         AlertDialog(
             onDismissRequest = actions.onDismissDelete,
-            title = { Text(stringResource(R.string.edit_delete_title)) },
-            text = { Text(stringResource(R.string.edit_delete_body)) },
+            title = { Text(stringResource(if (form.hasPartner) R.string.answers_delete_pair_title else R.string.edit_delete_title)) },
+            text = { Text(stringResource(if (form.hasPartner) R.string.answers_delete_pair_body else R.string.edit_delete_body)) },
             confirmButton = {
-                TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.edit_delete), color = MaterialTheme.colorScheme.error)
+                Column(horizontalAlignment = Alignment.End) {
+                    if (form.hasPartner) {
+                        TextButton(onClick = actions.onDeleteBoth, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.answers_delete_both), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(
+                            stringResource(if (form.hasPartner) R.string.answers_delete_this_only else R.string.edit_delete),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             },
             dismissButton = {
@@ -191,7 +203,7 @@ private fun EditFields(
             TYPE_INCOME to stringResource(R.string.edit_type_income),
             TYPE_TRANSFER to stringResource(R.string.edit_type_transfer),
             TYPE_REFUND to stringResource(R.string.edit_type_refund),
-        ),
+        ) + if (form.type == TYPE_TRANSFER_IN) listOf(TYPE_TRANSFER_IN to stringResource(R.string.edit_type_transfer_in)) else emptyList(),
         selected = form.type,
         enabled = !form.locked,
         onSelect = { actions.onType(it) },
