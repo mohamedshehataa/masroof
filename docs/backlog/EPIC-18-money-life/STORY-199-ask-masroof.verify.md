@@ -48,3 +48,12 @@ FINDINGS:
 - [MINOR] "ع الاكل" unknown again; a bare 2050 overrides "this month"; "groceries vs dining" merged; duplicate label
   names; formal Arabic dual forms
 STATUS: FAIL -> fix round 2 sent
+
+## Loop 3 - head `fff9a57`
+Gate GREEN in 56s; `--rerun` 745 tests, 0 failures; TEST_INTEGRITY: OK. 145 questions x start day 1 and 25; parity exact.
+- MAJOR A (may/march): PASS (17 cases incl. 10 new); MINORs B-F: PASS
+FINDINGS:
+- [MAJOR] `ask/PeriodScanner.kt` yearVerdict -- "groceries 2025 vs 2024" -> 2024 vs 2023 (regression from loop 2)
+- [MINOR] future year ("groceries 2027") -> silent this month; "kids" treated as a generic word though it is a
+  category; Arabic "لماما" not generic. [NIT] Year.now() instead of the injected clock; unnamed year label in Compare
+STATUS: FAIL -> fix round 3 (year grammar + generated combination test), past the 3-loop limit by owner rule
