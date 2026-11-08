@@ -151,12 +151,14 @@ interface ExpenseDao {
 
     /** STORY-208: the live entries since [since] that the "Needs an answer" cards and their matching read (typed columns only). */
     @Query(
-        "SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id",
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since
+            ORDER BY occurredAtMillis DESC, id""",
     )
     fun observeLiveSince(since: Long): Flow<List<ExpenseEntity>>
 
     @Query(
-        "SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id",
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since
+            ORDER BY occurredAtMillis DESC, id""",
     )
     suspend fun liveSince(since: Long): List<ExpenseEntity>
 

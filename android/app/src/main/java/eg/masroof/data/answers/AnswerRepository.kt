@@ -114,9 +114,8 @@ class DefaultAnswerRepository
             answer {
                 val refund = live(refundId)
                 val purchase = live(purchaseId)
-                if (refund == null || purchase == null || refund.type !in refundable || refund.currency != purchase.currency) {
-                    return@answer null
-                }
+                if (refund == null || purchase == null) return@answer null
+                if (refund.type !in refundable || refund.currency != purchase.currency) return@answer null
                 db.expenses().update(
                     refund.copy(
                         type = ExpenseTypes.REFUND,
