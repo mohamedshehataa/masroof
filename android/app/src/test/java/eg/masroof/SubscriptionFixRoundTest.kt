@@ -206,7 +206,10 @@ class SubscriptionFixRoundTest {
             repo.settle(day("2026-11-08"))
             assertEquals(22_900L, db.subscriptions().find(id)!!.amountMinor)
             assertEquals(day("2026-11-30"), nextOf(id))
-            assertEquals(listOf(PriceNotice(id, "Netflix", 19_900, 22_900, "EGP")), prefs.noticeList.value)
+            assertEquals(
+                listOf(id to (19_900L to 22_900L)),
+                prefs.noticeList.value.map { it.subscriptionId to (it.fromMinor to it.toMinor) },
+            )
             repo.settle(day("2026-11-08"))
             assertEquals(1, prefs.noticeList.value.size)
         }

@@ -55,6 +55,7 @@ class SubscriptionsActions(
     val onAddSuggestion: (Suggestion) -> Unit,
     val onDismissSuggestion: (String) -> Unit,
     val onDismissNotice: (String) -> Unit,
+    val onRejectNotice: (String) -> Unit = {},
 )
 
 @Composable
@@ -70,7 +71,15 @@ fun SubscriptionsRoute(
     SubscriptionsContent(
         state,
         section,
-        SubscriptionsActions(onAdd, onOpen, viewModel::shiftMonth, onAddSuggestion, viewModel::dismissSuggestion, viewModel::dismissNotice),
+        SubscriptionsActions(
+            onAdd,
+            onOpen,
+            viewModel::shiftMonth,
+            onAddSuggestion,
+            viewModel::dismissSuggestion,
+            viewModel::dismissNotice,
+            viewModel::rejectNotice,
+        ),
         modifier,
     )
 }
@@ -196,7 +205,7 @@ private fun LazyListScope.subscriptionItems(
     calendar: Boolean,
     setCalendar: (Boolean) -> Unit,
 ) {
-    items(state.notices, key = { "notice-${it.subscriptionId}" }) { PriceNoticeCard(it, actions.onDismissNotice) }
+    items(state.notices, key = { "notice-${it.subscriptionId}" }) { PriceNoticeCard(it, actions.onDismissNotice, actions.onRejectNotice) }
     items(state.suggestions, key = { "suggest-${it.key}" }) { SuggestionCard(it, actions) }
     if (state.subscriptions.isEmpty()) {
         item { EmptyState(R.string.subs_empty_title, R.string.subs_empty_body, actions.onAdd, R.string.subs_add) }
@@ -308,10 +317,11 @@ private fun SubscriptionRow(
 private fun PriceNoticeCard(
     notice: PriceNotice,
     onDismiss: (String) -> Unit,
+    onReject: (String) -> Unit,
 ) {
     val up = notice.toMinor > notice.fromMinor
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 4.dp)) {
             Text(
                 stringResource(
                     if (up) R.string.subs_price_up else R.string.subs_price_down,
@@ -320,10 +330,16 @@ private fun PriceNoticeCard(
                     billMoney(notice.toMinor, notice.currency),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { onDismiss(notice.subscriptionId) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.subs_got_it))
+            Row {
+                TextButton(onClick = { onDismiss(notice.subscriptionId) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.subs_got_it))
+                }
+                if (notice.entryId.isNotEmpty()) {
+                    TextButton(onClick = { onReject(notice.subscriptionId) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.subs_not_this_one))
+                    }
+                }
             }
         }
     }

@@ -31,6 +31,8 @@ enum class SubscriptionService(
     val kind: String,
     val categoryKey: String,
     val merchant: String?,
+    /** Extra raw merchant spellings that also pay this service (normalised with [SubscriptionMatcher.keyOf]). */
+    val aliases: List<String> = emptyList(),
 ) {
     NETFLIX("netflix", "🎬", KIND_SUBSCRIPTION, "subscriptions", "netflix"),
     SHAHID("shahid", "📺", KIND_SUBSCRIPTION, "subscriptions", "shahid"),
@@ -39,13 +41,13 @@ enum class SubscriptionService(
     SPOTIFY("spotify", "🎧", KIND_SUBSCRIPTION, "subscriptions", "spotify"),
     ANGHAMI("anghami", "🎧", KIND_SUBSCRIPTION, "subscriptions", "anghami"),
     YOUTUBE("youtube", "▶️", KIND_SUBSCRIPTION, "subscriptions", "youtube premium"),
-    ICLOUD("icloud", "☁️", KIND_SUBSCRIPTION, "subscriptions", "icloud"),
+    ICLOUD("icloud", "☁️", KIND_SUBSCRIPTION, "subscriptions", "icloud", listOf("apple.com/bill", "icloud")),
     GOOGLE_ONE("google_one", "☁️", KIND_SUBSCRIPTION, "subscriptions", "google one"),
     CHATGPT("chatgpt", "🤖", KIND_SUBSCRIPTION, "subscriptions", "chatgpt"),
-    WE("we", "🌐", KIND_BILL, "bills.internet", "we"),
+    WE("we", "🌐", KIND_BILL, "bills.internet", "we", listOf("we internet", "telecom egypt")),
     VODAFONE("vodafone", "📱", KIND_BILL, "bills.mobile", "vodafone"),
     ORANGE("orange", "📱", KIND_BILL, "bills.mobile", "orange"),
-    ETISALAT("etisalat", "📱", KIND_BILL, "bills.mobile", "etisalat"),
+    ETISALAT("etisalat", "📱", KIND_BILL, "bills.mobile", "etisalat", listOf("e and", "e&")),
     GYM("gym", "💪", KIND_SUBSCRIPTION, "subscriptions", null),
     OTHER("other", "🔁", KIND_SUBSCRIPTION, "subscriptions", null),
     ;
@@ -54,6 +56,14 @@ enum class SubscriptionService(
 
     companion object {
         fun of(key: String?): SubscriptionService? = entries.firstOrNull { it.key == key }
+
+        /** The normalised alias keys of the built-in service whose merchant key is [rowKey] (none for a typed service). */
+        fun aliasKeysFor(rowKey: String): List<String> =
+            entries
+                .firstOrNull { SubscriptionMatcher.keyOf(it.merchant) == rowKey }
+                ?.aliases
+                .orEmpty()
+                .mapNotNull { SubscriptionMatcher.keyOf(it) }
     }
 }
 
@@ -89,6 +99,9 @@ data class PriceNotice(
     val fromMinor: Long,
     val toMinor: Long,
     val currency: String,
+    /** The entry that paid and the renewal day it paid, so "Not this one" can undo it. */
+    val entryId: String = "",
+    val renewalEpochDay: Long = 0L,
 )
 
 /** What the Bills screen reads: the rows, the recent entries to match and suggest from, and the remembered choices. */
@@ -212,19 +225,20 @@ class DataStoreSubscriptionPrefs
         }
 
         private fun encode(n: PriceNotice) =
-            listOf(n.subscriptionId, n.name.replace(SEP, ' '), n.fromMinor, n.toMinor, n.currency).joinToString(SEP.toString())
+            listOf(n.subscriptionId, n.name.replace(SEP, ' '), n.fromMinor, n.toMinor, n.currency, n.entryId, n.renewalEpochDay)
+                .joinToString(SEP.toString())
 
         private fun decode(text: String): PriceNotice? {
             val p = text.split(SEP)
             if (p.size != NOTICE_FIELDS) return null
             val from = p[2].toLongOrNull() ?: return null
             val to = p[3].toLongOrNull() ?: return null
-            return PriceNotice(p[0], p[1], from, to, p[4])
+            return PriceNotice(p[0], p[1], from, to, p[4], p[5], p[6].toLongOrNull() ?: 0L)
         }
 
         private companion object {
             const val SEP = '\t'
-            const val NOTICE_FIELDS = 5
+            const val NOTICE_FIELDS = 7
         }
     }
 
@@ -256,6 +270,9 @@ interface SubscriptionRepository {
     suspend fun dismissSuggestion(key: String)
 
     suspend fun dismissNotice(subscriptionId: String)
+
+    /** "Not this one": restores the amount and renewal before the match and never matches that entry again. */
+    suspend fun rejectNotice(subscriptionId: String)
 }
 
 @Singleton
@@ -349,7 +366,12 @@ class DefaultSubscriptionRepository
             db.withTransaction {
                 val rows = dao.all().filter { it.active && (onlyId == null || it.id == onlyId) }
                 val earliest = rows.minOfOrNull { CairoTime.dateOf(it.nextRenewalAtMillis) } ?: return@withTransaction
-                val entries = dao.entriesSince(sinceMillis(minOf(earliest, today))).mapNotNull(::factOf)
+                val ignored = prefs.dismissedKeys.first()
+                val entries =
+                    dao
+                        .entriesSince(sinceMillis(minOf(earliest, today)))
+                        .mapNotNull(::factOf)
+                        .filter { "$IGNORED_ENTRY_PREFIX${it.id}" !in ignored }
                 settleAll(rows, entries, today, anchors, changes)
             }
             changes.forEach { prefs.addNotice(it) }
@@ -383,16 +405,38 @@ class DefaultSubscriptionRepository
                 val facts =
                     states.values.mapNotNull { st ->
                         val key = SubscriptionMatcher.keyOfRow(st.row.merchantKey, st.row.name) ?: return@mapNotNull null
-                        SubscriptionMatcher.RowFacts(st.row.id, key, st.row.amountMinor, st.row.currency, st.date, st.pool)
+                        SubscriptionMatcher.RowFacts(
+                            st.row.id,
+                            key,
+                            st.row.amountMinor,
+                            st.row.currency,
+                            st.date,
+                            st.pool,
+                            SubscriptionService.aliasKeysFor(key),
+                        )
                     }
                 val (id, hit) = SubscriptionMatcher.bestMatch(facts, used) ?: break
                 val st = states.getValue(id)
                 used += hit.id
                 if (hit.amountMinor != st.row.amountMinor) {
-                    notices += PriceNotice(st.row.id, st.row.name, st.row.amountMinor, hit.amountMinor, st.row.currency)
+                    notices +=
+                        PriceNotice(
+                            st.row.id,
+                            st.row.name,
+                            st.row.amountMinor,
+                            hit.amountMinor,
+                            st.row.currency,
+                            hit.id,
+                            st.date.toEpochDay(),
+                        )
                 }
                 st.date = RenewalMath.nextAfter(st.date, Cadence.of(st.row.cadence), st.anchor)
-                st.row = st.row.copy(amountMinor = hit.amountMinor, merchantKey = st.row.merchantKey ?: hit.merchantKey)
+                st.row =
+                    st.row.copy(
+                        amountMinor = hit.amountMinor,
+                        merchantKey =
+                            st.row.merchantKey ?: SubscriptionMatcher.keyOfRow(null, st.row.name),
+                    )
             }
             for ((id, st) in states) {
                 val rolled = RenewalMath.rollPastGrace(st.date, Cadence.of(st.row.cadence), today, st.anchor)
@@ -404,6 +448,18 @@ class DefaultSubscriptionRepository
         override suspend fun dismissSuggestion(key: String) = prefs.dismissKey(key)
 
         override suspend fun dismissNotice(subscriptionId: String) = prefs.clearNotice(subscriptionId)
+
+        override suspend fun rejectNotice(subscriptionId: String) {
+            val notice = prefs.notices.first().firstOrNull { it.subscriptionId == subscriptionId } ?: return
+            val row = dao.find(subscriptionId)
+            if (row != null && notice.entryId.isNotEmpty()) {
+                prefs.dismissKey("$IGNORED_ENTRY_PREFIX${notice.entryId}")
+                val back = CairoTime.noonOf(LocalDate.ofEpochDay(notice.renewalEpochDay)).toEpochMilli()
+                dao.update(row.copy(amountMinor = notice.fromMinor, nextRenewalAtMillis = back))
+            }
+            prefs.clearNotice(subscriptionId)
+            settle(todayCairo())
+        }
 
         override suspend fun daysToPayday(today: LocalDate): Payday =
             PaydayMath.next(today, dao.all(), settings.current().monthStartDay, CairoTime::dateOf, prefs.anchors.first())
@@ -450,6 +506,7 @@ class DefaultSubscriptionRepository
 
         private companion object {
             const val SINCE_PREFIX = "since:"
+            const val IGNORED_ENTRY_PREFIX = "entry:"
             const val HISTORY_DAYS = 150L
             const val MAX_MATCHES = 60
         }

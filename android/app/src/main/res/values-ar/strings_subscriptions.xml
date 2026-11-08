@@ -30,6 +30,7 @@
     <string name="subs_payday_month_start">لسه ما أضفتش دخل. الحساب لحد أول الشهر عندك، %1$s.</string>
     <string name="subs_price_up">%1$s غلي من %2$s لـ %3$s</string>
     <string name="subs_price_down">%1$s رخص من %2$s لـ %3$s</string>
+    <string name="subs_not_this_one">مش ده</string>
     <string name="subs_got_it">تمام</string>
     <string name="subs_suggestion">شكله دفع شهري: %1$s حوالي %2$s</string>
     <string name="subs_suggestion_add">إضافة</string>

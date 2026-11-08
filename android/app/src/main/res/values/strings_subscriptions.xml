@@ -30,6 +30,7 @@
     <string name="subs_payday_month_start">No income added yet. Counting to your month start, %1$s.</string>
     <string name="subs_price_up">%1$s went up from %2$s to %3$s</string>
     <string name="subs_price_down">%1$s went down from %2$s to %3$s</string>
+    <string name="subs_not_this_one">Not this one</string>
     <string name="subs_got_it">Got it</string>
     <string name="subs_suggestion">Looks like a monthly payment: %1$s about %2$s</string>
     <string name="subs_suggestion_add">Add</string>

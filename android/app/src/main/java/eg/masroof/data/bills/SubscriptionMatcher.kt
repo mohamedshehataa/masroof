@@ -53,7 +53,8 @@ object SubscriptionMatcher {
     ): String? = keyOf(merchantKey) ?: keyOf(name)
 
     /** Words after a brand that make an entry a different merchant ("Orange Money", "Netflix Gift Card"). */
-    private val DIFFERENT_MERCHANT_WORDS = setOf("money", "cash", "pay", "wallet", "gift", "card")
+    private val DIFFERENT_MERCHANT_WORDS =
+        setOf("money", "cash", "pay", "wallet", "gift", "card", "store", "shop", "eats", "food", "market", "mart", "express")
     private const val MIN_PREFIX_KEY = 3
 
     /**
@@ -84,6 +85,8 @@ object SubscriptionMatcher {
         val currency: String,
         val renewal: LocalDate,
         val entries: List<EntryFact>,
+        /** Normalised extra keys of a built-in service; they match like the main key (short keys exactly only). */
+        val aliases: List<String> = emptyList(),
     )
 
     /**
@@ -103,20 +106,37 @@ object SubscriptionMatcher {
         priceChange: Boolean,
     ): Pair<String, EntryFact>? =
         rows
-            .flatMap { row -> row.entries.mapNotNull { e -> rankOf(row, e, used, priceChange)?.let { it to (row.id to e) } } }
-            .minWithOrNull { x, y -> compareKeys(x.first, y.first) }
+            .flatMap { row ->
+                // A price change is believed only when the entry is the one candidate of the row in its window.
+                val candidates = row.entries.filter { canPay(row, it, used) }
+                if (priceChange && candidates.size != 1) {
+                    emptyList()
+                } else {
+                    candidates.mapNotNull { e -> rankOf(row, e, priceChange)?.let { it to (row.id to e) } }
+                }
+            }.minWithOrNull { x, y -> compareKeys(x.first, y.first) }
             ?.second
+
+    private fun canPay(
+        row: RowFacts,
+        e: EntryFact,
+        used: Set<String>,
+    ): Boolean {
+        val days = abs(ChronoUnit.DAYS.between(row.renewal, e.date))
+        return e.id !in used &&
+            e.currency == row.currency &&
+            days <= DATE_WINDOW_DAYS &&
+            (listOf(row.key) + row.aliases).any { entryKeyMatches(e.merchantKey, it) }
+    }
 
     /** Sort key (exact key first, closest date, entry id, row id) when [e] can pay [row] in this pass, else null. */
     private fun rankOf(
         row: RowFacts,
         e: EntryFact,
-        used: Set<String>,
         priceChange: Boolean,
     ): List<Comparable<*>>? {
         val days = abs(ChronoUnit.DAYS.between(row.renewal, e.date))
-        val exact = e.merchantKey == row.key
-        val fits = e.id !in used && e.currency == row.currency && days <= DATE_WINDOW_DAYS && entryKeyMatches(e.merchantKey, row.key)
+        val exact = e.merchantKey == row.key || e.merchantKey in row.aliases
         val amountOk =
             if (priceChange) {
                 exact &&
@@ -127,7 +147,7 @@ object SubscriptionMatcher {
             } else {
                 withinTolerance(e.amountMinor, row.amountMinor)
             }
-        return if (fits && amountOk) listOf(if (exact) 0 else 1, days, e.id, row.id) else null
+        return if (amountOk) listOf(if (exact) 0 else 1, days, e.id, row.id) else null
     }
 
     private fun inPriceBand(

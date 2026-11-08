@@ -134,6 +134,10 @@ class SubscriptionsViewModel
             viewModelScope.launch { repository.dismissSuggestion(key) }
         }
 
+        fun rejectNotice(id: String) {
+            viewModelScope.launch { repository.rejectNotice(id) }
+        }
+
         fun dismissNotice(id: String) {
             viewModelScope.launch { repository.dismissNotice(id) }
         }

@@ -335,7 +335,10 @@ class SubscriptionRepositoryTest {
             entry("e1", "Netflix", 21_000, "2026-10-30")
             repo.settle(today)
             assertEquals(21_000L, db.subscriptions().find(id)!!.amountMinor)
-            assertEquals(listOf(PriceNotice(id, "Netflix", 19_900, 21_000, "EGP")), prefs.noticeList.value)
+            assertEquals(
+                listOf(id to (19_900L to 21_000L)),
+                prefs.noticeList.value.map { it.subscriptionId to (it.fromMinor to it.toMinor) },
+            )
             repo.settle(today)
             assertEquals(1, prefs.noticeList.value.size)
             repo.dismissNotice(id)
