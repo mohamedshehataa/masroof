@@ -10,8 +10,9 @@ RUN npx vite build
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 USER root
-# Fixed HIGHs in brotli-libs (CVE-2026-111497) and curl/libcurl (CVE-2026-92392) until the base image digest is bumped; drop when trivy is clean without them.
-RUN apk upgrade --no-cache brotli-libs curl libcurl
+# Fixed HIGHs in brotli-libs (CVE-2026-111497), curl/libcurl (CVE-2026-92392), libexpat (CVE-2026-113351 and 3 more),
+# musl and musl-utils (CVE-2026-107891) and zlib (CVE-2026-85091) until the base image digest is bumped; drop when trivy is clean without them.
+RUN apk upgrade --no-cache brotli-libs curl libcurl libexpat musl musl-utils zlib
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 USER 101:101
