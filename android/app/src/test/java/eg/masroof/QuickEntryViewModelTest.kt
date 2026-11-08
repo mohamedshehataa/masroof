@@ -421,4 +421,19 @@ class QuickEntryViewModelTest {
             vm.applyQuickText()
             assertEquals(80, vm.form().merchant.length)
         }
+
+    @Test
+    fun `REQ-AND-144 a missing on-device language shows the online notice before the default recognizer is used`() =
+        runTest {
+            val vm = newVm()
+            vm.onMicTapped(MicPermission.GRANTED)
+            vm.onFallbackNotice()
+            assertTrue(vm.form().voice is VoiceUi.OnlineNotice)
+            vm.onNoticeContinue()
+            assertTrue(vm.form().voice is VoiceUi.Listening)
+            // Not listening: nothing to interrupt.
+            vm.dismissVoice()
+            vm.onFallbackNotice()
+            assertEquals(VoiceUi.Idle, vm.form().voice)
+        }
 }

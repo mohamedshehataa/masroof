@@ -56,6 +56,7 @@ class AddVoiceActions(
     val onClose: () -> Unit = {},
     val onRationaleContinue: () -> Unit = {},
     val onNoticeContinue: () -> Unit = {},
+    val onNoticeDecline: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
 )
 
@@ -128,7 +129,7 @@ private fun VoicePanel(
                         Button(onClick = quick.voice.onNoticeContinue, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.voice_continue))
                         }
-                        TextButton(onClick = quick.voice.onClose, modifier = Modifier.heightIn(min = 48.dp)) {
+                        TextButton(onClick = quick.voice.onNoticeDecline, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.voice_type_instead))
                         }
                     }

@@ -20,6 +20,7 @@ internal class DateHit(
 /** "today", "yesterday", "on 3 oct", "last friday" and their Arabic forms. [today] is already the Cairo day. */
 internal object QuickDates {
     private const val MAX_DAY_DIGITS = 2
+    private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private const val MAX_DAY = 31
     private const val YEAR_DIGITS = 4
     private const val DAYS_BEFORE_YESTERDAY = 2L
@@ -33,6 +34,7 @@ internal object QuickDates {
             val key = tokens[i].key
             val hit =
                 when {
+                    ISO_DATE.matches(key) -> isoDate(key, i, today)
                     key in QuickLexicon.YESTERDAY -> beforeYesterday(tokens, i, today)
                     key in QuickLexicon.TODAY -> DateHit(today, setOf(i))
                     key == "last" -> lastWeekday(tokens, i, today)
@@ -42,6 +44,21 @@ internal object QuickDates {
             if (hit != null) return hit
         }
         return null
+    }
+
+    // 2026-10-03. A day that does not exist, or one still ahead of today, is still a date and not an amount: the entry keeps today.
+    private fun isoDate(
+        key: String,
+        i: Int,
+        today: LocalDate,
+    ): DateHit {
+        val date =
+            try {
+                LocalDate.parse(key).takeUnless { it.isAfter(today) }
+            } catch (_: java.time.format.DateTimeParseException) {
+                null
+            }
+        return DateHit(date ?: today, setOf(i))
     }
 
     // "أول امبارح" is the day before yesterday.

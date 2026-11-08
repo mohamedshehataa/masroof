@@ -346,4 +346,63 @@ class QuickEntryParserTest {
         assertNull(n.amountMinor)
         assertEquals(false, n.note.orEmpty().any { it in '\u202A'..'\u202E' })
     }
+
+    // ---- fix round 2 ----
+
+    @Test
+    fun `REQ-PARSE-099 a half or quarter before a scale word is a fraction of the scale and N plus a half is N and a half`() {
+        val rows =
+            listOf(
+                "نص مليون" to 50_000_000L,
+                "ربع مليون" to 25_000_000L,
+                "نص ألف" to 50_000L,
+                "ربع ألف" to 25_000L,
+                "خمسة ونص ألف" to 550_000L,
+                "اتنين ونص مليون" to 250_000_000L,
+                "مليون ونص" to 150_000_000L,
+                "ألفين ونص" to 250_000L,
+                "مية ونص" to 15_000L,
+                "ألف إلا ربع" to 75_000L,
+                "ألف إلا نص" to 50_000L,
+                "مليون إلا ربع" to 75_000_000L,
+            )
+        for ((line, minor) in rows) assertEquals("amount of [$line]", minor, parse(line).amountMinor)
+    }
+
+    @Test
+    fun `REQ-PARSE-099 a half or quarter with nothing to take it from, or an except with nothing after it, gives no amount`() {
+        for (line in listOf("ربع", "نص", "ربع جنيه", "ألف إلا", "ألف إلا تلت", "إلا ربع", "ألف إلا ربع ألف")) {
+            assertNull("amount of [$line]", parse(line).amountMinor)
+        }
+    }
+
+    @Test
+    fun `REQ-PARSE-098 every spelling of E pound and LE is Egyptian pounds`() {
+        for (line in listOf("150E£ fuel", "£E 150 fuel", "E£ 150 fuel", "150 LE fuel", "L.E150 fuel", "150LE fuel", "E £150 fuel")) {
+            val d = parse(line)
+            assertEquals("amount of [$line]", 15000L, d.amountMinor)
+            assertEquals("currency of [$line]", "EGP", d.currency)
+            assertEquals("stated [$line]", true, d.currencyStated)
+        }
+        check("£150 fuel", 15000, "GBP", category = "car.fuel")
+    }
+
+    @Test
+    fun `REQ-PARSE-098 a currency the form does not keep gives no amount and the line stays in the note`() {
+        for (line in listOf("50 dinar fuel", "5 dinars coffee", "5 kwd coffee", "50 دينار بنزين", "100 yen sushi", "40 rupees tea")) {
+            val d = parse(line)
+            assertNull("amount of [$line]", d.amountMinor)
+            assertEquals("note of [$line]", line, d.note)
+            assertEquals(false, d.currencyStated)
+        }
+    }
+
+    @Test
+    fun `REQ-PARSE-098 an ISO date is a date and not negative numbers`() {
+        check("50 on 2026-10-03", 5000, date = LocalDate.of(2026, 10, 3))
+        check("2026-10-03 fuel 75", 7500, category = "car.fuel", date = LocalDate.of(2026, 10, 3))
+        // Ahead of today or not a real day: still a date, never an amount; the entry keeps today.
+        check("50 on 2027-01-01", 5000)
+        check("50 on 2026-02-31", 5000)
+    }
 }

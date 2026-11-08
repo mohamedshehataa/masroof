@@ -129,6 +129,25 @@ private fun markNoticeSeen(context: Context) =
         putBoolean(NOTICE_KEY, true)
     }
 
+// Starts the recognizer and routes its events to the view model. When the on-device recognizer lacks the language the default
+// one (maybe online) is used next: after the one-time notice, or at once if the notice was already seen.
+private fun startListening(
+    input: VoiceInput,
+    viewModel: AddExpenseViewModel,
+    context: Context,
+    tag: String,
+) {
+    input.start(tag) { event ->
+        when (event) {
+            is VoiceEvent.Level -> viewModel.onVoiceLevel(event.percent)
+            is VoiceEvent.Text -> viewModel.onVoiceText(event.text)
+            VoiceEvent.NoSpeech, VoiceEvent.Failed -> viewModel.onVoiceError()
+            VoiceEvent.OnDeviceLanguageMissing ->
+                if (noticeSeen(context)) startListening(input, viewModel, context, tag) else viewModel.onFallbackNotice()
+        }
+    }
+}
+
 private fun Context.findActivity(): android.app.Activity? =
     when (this) {
         is android.app.Activity -> this
@@ -164,13 +183,7 @@ private fun rememberQuickActions(
             viewModel.dismissVoice()
         } else if (listening) {
             val tag = if (AppLanguage.current(context) == AppLanguage.ARABIC) "ar-EG" else "en-US"
-            input.start(tag) { event ->
-                when (event) {
-                    is VoiceEvent.Level -> viewModel.onVoiceLevel(event.percent)
-                    is VoiceEvent.Text -> viewModel.onVoiceText(event.text)
-                    VoiceEvent.NoSpeech, VoiceEvent.Failed -> viewModel.onVoiceError()
-                }
-            }
+            startListening(input, viewModel, context, tag)
         }
     }
     // Leaving the screen (home button, another app, rotation) stops listening.
@@ -224,6 +237,10 @@ private fun rememberQuickActions(
                     viewModel.dismissVoice()
                 },
                 onRationaleContinue = viewModel::onRationaleContinue,
+                onNoticeDecline = {
+                    markNoticeSeen(context)
+                    viewModel.dismissVoice()
+                },
                 onNoticeContinue = {
                     markNoticeSeen(context)
                     viewModel.onNoticeContinue()

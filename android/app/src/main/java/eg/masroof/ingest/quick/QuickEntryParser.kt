@@ -39,10 +39,10 @@ object QuickEntryParser {
 
     // Whole digit groups are one token so a malformed group ("1,2345", "150.5.5", "1k5", "-5") is rejected, not half read.
     private val TOKEN =
-        Regex("""-?\d[\d.,]*[kK]\d[\d.,]*|-?\d[\d.,]*\d|-?\d|[${'$'}€£]|[\p{L}\p{M}]+""")
-    private val POUND_E = Regex("""\be£""")
+        Regex("""\d{4}-\d{2}-\d{2}|-?\d[\d.,]*[kK]\d[\d.,]*|-?\d[\d.,]*\d|-?\d|[${'$'}€£]|[\p{L}\p{M}]+""")
+    private val POUND_E = Regex("""(?<!\p{L})e\s?£|£\s?e(?!\p{L})""")
     private val BIDI = Regex("[" + 0x202A.toChar() + "-" + 0x202E.toChar() + 0x2066.toChar() + "-" + 0x2069.toChar() + "]")
-    private val LATIN_LE = Regex("""\bl\.e\b\.?""")
+    private val LATIN_LE = Regex("""(?<!\p{L})l\.e(?!\p{L})\.?""")
 
     fun parse(
         line: String,
@@ -61,8 +61,9 @@ object QuickEntryParser {
         val used = dateHit?.used ?: emptySet()
         val ctx = Ctx(tokens, used, runs)
 
-        val chosen = runs.firstOrNull { ctx.currencyAt(it.start - 1) != null || ctx.currencyAt(it.end + 1) != null } ?: runs.lastOrNull()
-        val value = chosen?.let { QuickNumbers.evaluate(it.pieces) }
+        val chosen = runs.firstOrNull { ctx.currencyNear(it) } ?: runs.lastOrNull()
+        // A currency we do not keep (dinar, yen ...) next to the amount: no amount, never silently pounds.
+        val value = chosen?.let { if (ctx.foreignNear(it)) RunValue.Bad else QuickNumbers.evaluate(it.pieces) }
         val stated =
             chosen?.let { ctx.currencyAt(it.end + 1) ?: ctx.currencyAt(it.start - 1) }
                 ?: tokens.indices.firstNotNullOfOrNull { ctx.currencyAt(it) }
@@ -136,6 +137,14 @@ object QuickEntryParser {
             BooleanArray(tokens.size).also { flags ->
                 for (r in runs) for (i in r.start..r.end) flags[i] = true
             }
+
+        fun currencyNear(r: NumberRun): Boolean =
+            currencyAt(r.start - 1) != null || currencyAt(r.end + 1) != null || foreignNear(r)
+
+        fun foreignNear(r: NumberRun): Boolean = foreignAt(r.start - 1) || foreignAt(r.end + 1)
+
+        private fun foreignAt(i: Int): Boolean =
+            i in tokens.indices && i !in used && !inRun[i] && tokens[i].key in QuickLexicon.UNSUPPORTED_CURRENCIES
 
         fun currencyAt(i: Int): String? =
             if (i in tokens.indices &&

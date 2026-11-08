@@ -122,6 +122,32 @@ internal object QuickLexicon {
             put("qar", "QAR")
         }
 
+    /** Currencies the Add form does not keep: a line that names one gets no amount rather than a wrong EGP one. */
+    val UNSUPPORTED_CURRENCIES: Set<String> =
+        setOf(
+            "dinar",
+            "dinars",
+            "kwd",
+            "bhd",
+            "omr",
+            "jod",
+            "دينار",
+            "دنانير",
+            "yen",
+            "jpy",
+            "yuan",
+            "cny",
+            "rupee",
+            "rupees",
+            "inr",
+            "lira",
+            "rial",
+            "rials",
+            "يوان",
+            "روبيه",
+            "ليره",
+        )
+
     val INCOME_WORDS: Set<String> =
         setOf(
             "received",

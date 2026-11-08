@@ -15,7 +15,12 @@ internal sealed interface Piece {
 
     class Word(
         val word: QuickLexicon.NumWord,
+        /** The spoken "تلت": 3 as a count ("تلت آلاف"), a third after "إلا" ("ألف إلا تلت"). */
+        val third: Boolean = false,
     ) : Piece
+
+    /** "إلا": the fraction that follows is taken away ("ألف إلا ربع" = 750). */
+    data object Except : Piece
 
     class Scale(
         val scale: QuickLexicon.ScaleWord,
@@ -58,6 +63,7 @@ internal object QuickNumbers {
     private const val ALL_SLOTS = HUNDRED or TEN or UNIT
     private const val HALF_DIVISOR = 2L
     private const val QUARTER_DIVISOR = 4L
+    private const val THIRD_DIVISOR = 3L
     private const val HUNDRED_MINOR = 100L * MINOR_PER_MAJOR
     private val ZERO_TOKEN = Regex("""0+([.,]0+)?""")
 
@@ -85,8 +91,9 @@ internal object QuickNumbers {
         when {
             key in QuickLexicon.HALF -> Piece.Half
             key in QuickLexicon.QUARTER -> Piece.Quarter
+            key == "الا" -> Piece.Except
             else ->
-                QuickLexicon.NUMBER_WORDS[key]?.let { Piece.Word(it) }
+                QuickLexicon.NUMBER_WORDS[key]?.let { Piece.Word(it, key == "تلت") }
                     ?: QuickLexicon.SCALE_WORDS[key]?.let { Piece.Scale(it, key in QuickLexicon.SCALE_STARTERS) }
         }
 
@@ -103,7 +110,7 @@ internal object QuickNumbers {
         var i = 0
         while (i < pieces.size) {
             val first = pieces[i]
-            if (first == null || !starts(first)) {
+            if (first == null || !starts(first, pieces.getOrNull(i + 1))) {
                 i++
                 continue
             }
@@ -132,10 +139,15 @@ internal object QuickNumbers {
         return runs
     }
 
-    private fun starts(p: Piece): Boolean =
+    // "نص مليون" opens a number: a half or quarter that comes straight before a scale word.
+    private fun starts(
+        p: Piece,
+        next: Piece?,
+    ): Boolean =
         when (p) {
             is Piece.Digits, is Piece.Word -> true
             is Piece.Scale -> p.starter
+            is Piece.Half, is Piece.Quarter -> next is Piece.Scale
             else -> false
         }
 
@@ -165,25 +177,60 @@ internal object QuickNumbers {
         var lastUnit = 0L
         var lastFactor = Long.MAX_VALUE
         var halved = false
+
+        /** "إلا" was said and its fraction has not come yet. */
+        var subtract = false
     }
 
     private fun compute(pieces: List<Piece>): RunValue {
         val s = State()
-        for (p in pieces) {
+        for ((i, p) in pieces.withIndex()) {
+            val beforeScale = pieces.getOrNull(i + 1) is Piece.Scale
             val ok =
                 when (p) {
                     is Piece.Conn -> true
                     is Piece.Unknown -> false
+                    is Piece.Except -> startSubtract(s)
                     is Piece.Digits -> addDigits(s, p)
-                    is Piece.Word -> addWord(s, p.word)
+                    is Piece.Word -> if (p.third && s.subtract) fraction(s, THIRD_DIVISOR, false) else addWord(s, p.word)
                     is Piece.Scale -> addScale(s, p.scale)
-                    is Piece.Half -> addFraction(s, HALF_DIVISOR)
-                    is Piece.Quarter -> addFraction(s, QUARTER_DIVISOR)
+                    is Piece.Half -> fraction(s, HALF_DIVISOR, beforeScale)
+                    is Piece.Quarter -> fraction(s, QUARTER_DIVISOR, beforeScale)
                 }
             if (!ok) return RunValue.Bad
         }
+        // A trailing "إلا" with nothing after it is not a number.
+        if (s.subtract) return RunValue.Bad
         val value = Math.addExact(s.total, s.current)
         return if (value <= 0 || value > MoneyFormat.MAX_ENTRY_MINOR) RunValue.OutOfRange else RunValue.Ok(value)
+    }
+
+    private fun startSubtract(s: State): Boolean {
+        if (s.lastUnit == 0L || s.halved || s.subtract) return false
+        s.subtract = true
+        return true
+    }
+
+    // A half, quarter or third. After "إلا": taken from the unit just spoken (only when it divides exactly). Straight before a
+    // scale word: part of the count ("نص مليون" = 0.5 x 1,000,000; "خمسة ونص ألف" = 5.5 x 1,000). Else: "ألفين ونص" = 2,500.
+    private fun fraction(
+        s: State,
+        divisor: Long,
+        beforeScale: Boolean,
+    ): Boolean {
+        if (s.subtract) {
+            if (beforeScale || s.lastUnit % divisor != 0L) return false
+            s.total = Math.subtractExact(s.total, s.lastUnit / divisor)
+            s.subtract = false
+            s.halved = true
+            return s.total > 0
+        }
+        if (beforeScale && divisor != THIRD_DIVISOR) {
+            s.current = Math.addExact(s.current, MINOR_PER_MAJOR / divisor)
+            s.slots = ALL_SLOTS
+            return true
+        }
+        return addFraction(s, divisor)
     }
 
     private fun addDigits(

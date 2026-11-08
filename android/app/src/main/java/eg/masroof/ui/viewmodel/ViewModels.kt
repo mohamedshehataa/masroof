@@ -261,6 +261,12 @@ class AddExpenseViewModel
             form.update { it.copy(voice = next) }
         }
 
+        /** The on-device recognizer has no model for the language: the default one may be online, so the notice comes first. */
+        fun onFallbackNotice() =
+            form.update {
+                if (it.voice is VoiceUi.Listening) it.copy(voice = VoiceUi.OnlineNotice(MicPermission.GRANTED)) else it
+            }
+
         /** "Continue" on the one-time online notice: on to the permission step the tap would have taken. */
         fun onNoticeContinue() {
             val v = form.value.voice
