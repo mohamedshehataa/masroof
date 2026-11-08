@@ -2,6 +2,7 @@ package eg.masroof.data.db
 
 import androidx.room.Dao
 import androidx.room.Database
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -28,8 +29,35 @@ internal fun ExpenseEntity.keepLocalFrom(old: ExpenseEntity): ExpenseEntity =
         paidByMemberId = paidByMemberId ?: old.paidByMemberId,
     )
 
+/** One entry of the CSV export with its receipt count and channels (STORY-185). No message text is read. */
+data class ExportRow(
+    @Embedded val expense: ExpenseEntity,
+    val receiptCount: Int,
+    /** Comma-joined source channels, first received first (SMS,PUSH); null for an entry without sources. */
+    val channels: String?,
+)
+
 @Dao
 interface ExpenseDao {
+    /** A page of the export in (occurredAt, id) order after the given key, so memory stays bounded; deleted rows never appear. */
+    @Query(
+        """SELECT e.*,
+            (SELECT COUNT(*) FROM receipt r WHERE r.expenseId = e.id) AS receiptCount,
+            (SELECT group_concat(channel) FROM (SELECT channel FROM expense_source s WHERE s.expenseId = e.id
+                GROUP BY channel ORDER BY MIN(receivedAtMillis), channel)) AS channels
+            FROM expense e
+            WHERE e.deletedAtMillis IS NULL AND e.occurredAtMillis >= :fromMillis AND e.occurredAtMillis < :toMillis
+              AND (e.occurredAtMillis > :afterMillis OR (e.occurredAtMillis = :afterMillis AND e.id > :afterId))
+            ORDER BY e.occurredAtMillis, e.id LIMIT :limit""",
+    )
+    suspend fun exportPage(
+        fromMillis: Long,
+        toMillis: Long,
+        afterMillis: Long,
+        afterId: String,
+        limit: Int,
+    ): List<ExportRow>
+
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id")
     fun observeAll(): Flow<List<ExpenseEntity>>
 
