@@ -127,7 +127,15 @@ abstract class AskEngineFixture {
         put("tal14", 23_300, "2026-10-15T20:00:00Z", category = DINING, merchant = "TALABAT")
     }
 
-    protected suspend fun spend(question: String) = ask().answer(QuestionParser.parse(question))
+    protected suspend fun spend(question: String) =
+        ask().answer(
+            QuestionParser.parse(
+                question,
+                java.time.LocalDate
+                    .ofInstant(now, java.time.ZoneId.of("Africa/Cairo"))
+                    .year,
+            ),
+        )
 
     protected suspend fun current(): PeriodAnalytics = insights().compute("current")
 

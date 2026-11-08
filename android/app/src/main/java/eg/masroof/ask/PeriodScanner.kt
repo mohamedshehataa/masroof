@@ -1,7 +1,5 @@
 package eg.masroof.ask
 
-import eg.masroof.core.CairoTime
-import java.time.Year
 import java.time.YearMonth
 
 /**
@@ -87,7 +85,6 @@ internal object PeriodScanner {
     private val PRONOUNS = setOf("i", "we", "you", "he", "she", "it", "they")
     private val AFTER_MODAL = PRONOUNS + "be"
     private val VERB_PARTICLES = setOf("to", "into", "on")
-    private val YEAR_CUES = setOf("in", "during", "for", "of", "year", "سنه", "عام")
 
     private fun neighbours(
         m: MatchResult,
@@ -133,17 +130,40 @@ internal object PeriodScanner {
         }
     }
 
-    /** A bare 20xx is a year after a cue word, or when it closes the question and is not in the future. */
-    private fun yearVerdict(
+    private const val YEAR_WINDOW = 30
+    private val AMOUNT_WORDS = setOf("over", "under", "above", "below")
+    private val AMOUNT_PHRASES = setOf("more than", "less than", "اكتر من", "اقل من")
+
+    private fun precedingWords(
         m: MatchResult,
         text: String,
-    ): Verdict {
-        val (before, after) = neighbours(m, text)
-        val prefixed = m.value != m.groupValues[1]
-        val plausible = m.groupValues[1].toInt() <= Year.now(CairoTime.zone).value
-        val closing = after == null && plausible
-        return if (prefixed || closing || before in YEAR_CUES) Verdict.TAKE else Verdict.SKIP
-    }
+    ): List<String> =
+        text
+            .substring(0, m.range.first)
+            .trim()
+            .split(' ')
+            .filter { it.isNotEmpty() }
+            .takeLast(2)
+
+    /**
+     * A 4-digit 19xx/20xx that no currency word follows is a year, anywhere in the question, when it lies within
+     * [currentYear] - 30 .. [currentYear]. A future or older year cannot be read. After "more than", "less than", "over"
+     * and "under" it is an amount and is left alone.
+     */
+    private fun yearRule(currentYear: Int) =
+        Rule(
+            Regex("$B(?:(?:year|سنه|عام) )?((?:19|20)[0-9]{2})(?! (?:egp|le|جنيه|pound|pounds))$E"),
+            accept = { m, text ->
+                val before = precedingWords(m, text)
+                val amount = before.lastOrNull() in AMOUNT_WORDS || before.joinToString(" ") in AMOUNT_PHRASES
+                val year = m.groupValues[1].toInt()
+                when {
+                    amount -> Verdict.SKIP
+                    year in (currentYear - YEAR_WINDOW)..currentYear -> Verdict.TAKE
+                    else -> Verdict.UNREADABLE
+                }
+            },
+        ) { m -> AskPeriod.year(m.groupValues[1].toInt()) }
 
     private fun yearOf(m: MatchResult, group: Int) = m.groups[group]?.value?.toInt()
 
@@ -216,10 +236,6 @@ internal object PeriodScanner {
                     "(?:el |al )?sana (?:di|dih|deh|dee)",
                 AskPeriod.THIS_YEAR,
             ),
-            Rule(
-                Regex("$B(?:(?:year|سنه|عام) )?$YEAR(?! (?:egp|le|جنيه|pound|pounds))$E"),
-                accept = ::yearVerdict,
-            ) { m -> AskPeriod.year(m.groupValues[1].toInt()) },
             fixed("yesterday|امبارح|مبارح|امس|embare7|embar7|embareh|embarh", AskPeriod.YESTERDAY),
             fixed(
                 "today|todays|النهارده|النهارد|انهارده|النهاردا|اليوم|(?:el |al )?(?:nahar|nhar|enhar)(?:da|dah|deh|dh)",
@@ -231,16 +247,19 @@ internal object PeriodScanner {
     private val unreadable =
         listOf(
             Regex("$B(?:ago|منذ)$E"),
-            Regex("$B(?:in|during|for|of|year|سنه|عام) (?:19|20)[0-9]{2}$E"),
             Regex("$B(?:past|last|akher|akhir|اخر) [0-9]+$E"),
             Regex("$B(?:from|between|من) [0-9]+ (?:(?:to|and|till|until|ل|الي|لحد) )?[0-9]+$E"),
         )
 
-    fun scan(normalized: String): Result {
+    /** [currentYear] (Cairo, from the app clock) bounds which bare years can be read. */
+    fun scan(
+        normalized: String,
+        currentYear: Int,
+    ): Result {
         val chars = normalized.toCharArray()
         val found = ArrayList<Pair<Int, AskPeriod>>()
         var invalid = false
-        for (rule in rules) {
+        for (rule in rules + yearRule(currentYear)) {
             for (m in rule.regex.findAll(String(chars)).toList()) {
                 val verdict = rule.accept(m, String(chars))
                 if (verdict == Verdict.UNREADABLE) invalid = true

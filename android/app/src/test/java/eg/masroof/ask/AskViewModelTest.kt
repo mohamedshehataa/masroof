@@ -42,7 +42,7 @@ class AskViewModelTest {
     @Test
     fun `REQ-AN-165 the intro fact is loaded when the screen opens and the conversation starts empty`() =
         runTest {
-            val vm = AskViewModel(engine)
+            val vm = AskViewModel(engine, java.time.Clock.fixed(java.time.Instant.parse("2026-10-20T09:00:00Z"), java.time.ZoneOffset.UTC))
             assertEquals(
                 "Amazon",
                 vm.state.value.intro
@@ -58,7 +58,7 @@ class AskViewModelTest {
     @Test
     fun `REQ-AN-160 a typed question is parsed on the phone and answered, blank text is ignored`() =
         runTest {
-            val vm = AskViewModel(engine)
+            val vm = AskViewModel(engine, java.time.Clock.fixed(java.time.Instant.parse("2026-10-20T09:00:00Z"), java.time.ZoneOffset.UTC))
             vm.ask("   ")
             assertTrue(
                 vm.state.value.messages
@@ -76,7 +76,7 @@ class AskViewModelTest {
     @Test
     fun `REQ-AN-165 a chip asks its own typed query and shows its label as the question`() =
         runTest {
-            val vm = AskViewModel(engine)
+            val vm = AskViewModel(engine, java.time.Clock.fixed(java.time.Instant.parse("2026-10-20T09:00:00Z"), java.time.ZoneOffset.UTC))
             vm.askQuery(AskQuery.Roast, "Roast me")
             assertEquals(listOf<AskQuery>(AskQuery.Roast), engine.asked)
             assertEquals(
@@ -90,7 +90,7 @@ class AskViewModelTest {
     @Test
     fun `REQ-AN-165 a question longer than 200 characters is cut and a failed read can be retried`() =
         runTest {
-            val vm = AskViewModel(engine)
+            val vm = AskViewModel(engine, java.time.Clock.fixed(java.time.Instant.parse("2026-10-20T09:00:00Z"), java.time.ZoneOffset.UTC))
             engine.fail = true
             vm.ask("payday " + "x".repeat(500))
             val failed =
@@ -111,7 +111,7 @@ class AskViewModelTest {
     @Test
     fun `REQ-AN-165 each question is kept in order with its own answer`() =
         runTest {
-            val vm = AskViewModel(engine)
+            val vm = AskViewModel(engine, java.time.Clock.fixed(java.time.Instant.parse("2026-10-20T09:00:00Z"), java.time.ZoneOffset.UTC))
             vm.ask("roast me")
             vm.ask("top places")
             assertEquals(

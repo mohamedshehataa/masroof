@@ -101,6 +101,8 @@ internal object AskPeriods {
         when (p.kind) {
             AskPeriodKind.THIS_MONTH -> AskPeriod.LAST_MONTH
             AskPeriodKind.THIS_WEEK -> AskPeriod.LAST_WEEK
+            AskPeriodKind.THIS_YEAR -> AskPeriod.LAST_YEAR
+            AskPeriodKind.YEAR, AskPeriodKind.LAST_YEAR -> AskPeriod.year(a.from.year - 1)
             AskPeriodKind.TODAY -> AskPeriod.YESTERDAY
             AskPeriodKind.LAST_MONTH, AskPeriodKind.MONTH_OF_YEAR -> {
                 val ym = YearMonth.from(a.from).minusMonths(1)

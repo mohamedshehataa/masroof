@@ -211,9 +211,9 @@ object AskCalculator {
         val merchants = ctx.rows.mapNotNull { it.merchant }.distinct()
         SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants)?.let { return Resolution.Found(it, ignored) }
         val tokens = ArabicText.tokens(subject.text)
-        val real = tokens.filter { it !in ParserLexicon.GENERIC }
+        val real = tokens.filter { !ParserLexicon.isGeneric(it) }
         if (real.isNotEmpty() && real.size < tokens.size) {
-            val left = tokens.filter { it in ParserLexicon.GENERIC }.joinToString(" ")
+            val left = tokens.filter { ParserLexicon.isGeneric(it) }.joinToString(" ")
             return resolveSubject(AskSubject.Text(real.joinToString(" ")), period, ctx, left)
         }
         val parts = SubjectResolver.resolveParts(subject.text, ctx.categories, ctx.accounts, merchants)

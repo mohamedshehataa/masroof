@@ -8,12 +8,14 @@ import eg.masroof.ask.AskEngine
 import eg.masroof.ask.AskIntro
 import eg.masroof.ask.AskQuery
 import eg.masroof.ask.QuestionParser
+import eg.masroof.core.analytics.BusinessCalendar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Clock
 import javax.inject.Inject
 
 /** One exchange. [answer] is null while it is being worked out. [question] is what the user typed or the chip's label. */
@@ -39,6 +41,7 @@ class AskViewModel
     @Inject
     constructor(
         private val engine: AskEngine,
+        private val clock: Clock,
     ) : ViewModel() {
         private val mutable = MutableStateFlow(AskState())
         val state: StateFlow<AskState> = mutable.asStateFlow()
@@ -55,7 +58,7 @@ class AskViewModel
         fun ask(text: String) {
             val question = text.trim().take(MAX_QUESTION)
             if (question.isEmpty()) return
-            submit(question, QuestionParser.parse(question))
+            submit(question, QuestionParser.parse(question, BusinessCalendar.dateOf(clock.instant()).year))
         }
 
         /** A chip or a tapped chart row: [label] is shown as the question, [query] is what is answered. */

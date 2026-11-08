@@ -174,13 +174,16 @@ private val PERIOD_CASES: List<Pair<String, AskQuery>> =
         "spent at mar mina pharmacy" to AskQuery.Spend(TM, t("mar mina pharmacy")),
         "groceries may spending" to AskQuery.PeriodUnreadable,
         "did I spend more than 2050 on groceries this month" to AskQuery.Spend(TM, t("groceries")),
-        "spent 2000 on groceries" to AskQuery.Spend(TM, t("groceries")),
-        "groceries in 2050" to AskQuery.Spend(AskPeriod.year(2050), t("groceries")),
+        "spent 2000 on groceries" to AskQuery.Spend(AskPeriod.year(2000), t("groceries")),
+        "groceries in 2050" to AskQuery.PeriodUnreadable,
+        "groceries 2027" to AskQuery.PeriodUnreadable,
+        "spent 2030" to AskQuery.PeriodUnreadable,
+        "groceries 2025 vs 2024" to AskQuery.Compare(AskPeriod.year(2025), AskPeriod.year(2024), t("groceries")),
         "صرفت كام ع الاكل" to AskQuery.Spend(TM, t("الاكل")),
         "صرفت كام عال بنزين" to AskQuery.Spend(TM, t("بنزين")),
         "groceries vs dining this month" to AskQuery.Compare(TM, null, t("groceries dining")),
         "roast chicken" to AskQuery.Spend(TM, t("chicken"), implicit = true),
-        "how much did I spend in 1999" to AskQuery.PeriodUnreadable,
+        "how much did I spend in 1950" to AskQuery.PeriodUnreadable,
         "spent 3 weeks ago" to AskQuery.PeriodUnreadable,
         "spent 5 days ago" to AskQuery.PeriodUnreadable,
         "spent last 2 months" to AskQuery.PeriodUnreadable,
@@ -255,5 +258,64 @@ class QuestionParserTest {
     fun `REQ-AN-160 the tables hold at least 60 distinct questions`() {
         val all = SPEND_CASES + BREAKDOWN_CASES + COMPARE_CASES + MERCHANT_CASES + PAYDAY_CASES + ROAST_WHY_CASES + PERIOD_CASES
         assertTrue("only ${all.size} questions", all.map { it.first }.distinct().size >= 60)
+    }
+
+    /**
+     * The bug class: a year-like token next to vs / and / more than / a currency word. For every template and every year
+     * (1990 .. 2099, 2026 being the current year) the result is the year period(s), the amount-ignoring default, or
+     * PeriodUnreadable - never a silent this-month answer and never a dropped year.
+     */
+    @Test
+    fun `REQ-AN-160 generated year questions are never a silent this-month answer or a dropped year`() {
+        val now = 2026
+        val years = listOf(1990, 1995, 2000, 2005, 2010, 2020, 2024, 2025, 2026, 2027, 2030, 2099)
+
+        fun readable(y: Int) = y in (now - 30)..now
+        val groceries = t("groceries")
+        val unreadable = AskQuery.PeriodUnreadable
+        var combinations = 0
+        val failures = ArrayList<String>()
+
+        fun expect(
+            question: String,
+            expected: AskQuery,
+        ) {
+            combinations++
+            val actual = QuestionParser.parse(question, now)
+            if (actual != expected) failures.add("[$question] expected $expected but was $actual")
+        }
+        for (y in years) {
+            val one = if (readable(y)) AskPeriod.year(y) else null
+
+            fun single(query: AskQuery?) = query ?: unreadable
+            expect("groceries $y", single(one?.let { AskQuery.Spend(it, groceries) }))
+            expect("$y groceries", single(one?.let { AskQuery.Spend(it, groceries) }))
+            expect("groceries in $y", single(one?.let { AskQuery.Spend(it, groceries) }))
+            expect("spent $y", single(one?.let { AskQuery.Spend(it) }))
+            expect("how much did I spend in $y", single(one?.let { AskQuery.Spend(it) }))
+            expect("صرفت كام سنة $y", single(one?.let { AskQuery.Spend(it) }))
+            expect("more than $y on groceries this month", AskQuery.Spend(TM, groceries))
+            expect("less than $y on groceries this month", AskQuery.Spend(TM, groceries))
+            expect("$y egp on groceries", AskQuery.Spend(TM, groceries, implicit = true))
+            expect("$y جنيه على البقالة الشهر ده", AskQuery.Spend(TM, t("البقاله")))
+            for (z in years) {
+                val both = if (readable(y) && readable(z)) AskQuery.Compare(AskPeriod.year(y), AskPeriod.year(z), groceries) else unreadable
+                expect("groceries $y vs $z", both)
+                expect("groceries $y and $z", both)
+                expect("groceries $y compared to $z", both)
+                expect(
+                    "مقارنة $y و $z",
+                    if (readable(y) &&
+                        readable(z)
+                    ) {
+                        AskQuery.Compare(AskPeriod.year(y), AskPeriod.year(z))
+                    } else {
+                        unreadable
+                    },
+                )
+            }
+        }
+        assertTrue("${failures.size} of $combinations combinations wrong:\n" + failures.take(25).joinToString("\n"), failures.isEmpty())
+        assertTrue("only $combinations combinations", combinations >= 400)
     }
 }

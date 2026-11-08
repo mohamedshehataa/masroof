@@ -220,7 +220,7 @@ class AskSpendTest : AskEngineFixture() {
         runTest {
             seedOctober()
             for (q in listOf(
-                "how much did I spend in 1999",
+                "how much did I spend in 1950",
                 "spent 3 weeks ago",
                 "groceries last 2 months",
                 "spent from 20 to 5 october",
@@ -229,9 +229,9 @@ class AskSpendTest : AskEngineFixture() {
                 assertTrue("$q -> $answer", answer is AskAnswer.PeriodUnreadable)
                 assertTrue(answer.followUps.isNotEmpty())
             }
-            val text = en().text(spend("how much did I spend in 1999"))
+            val text = en().text(spend("how much did I spend in 1950"))
             assertTrue(text.headline.startsWith("I can’t read that period"))
-            assertTrue(ar().text(spend("how much did I spend in 1999")).headline.startsWith("معرفتش أقرا الفترة دي"))
+            assertTrue(ar().text(spend("how much did I spend in 1950")).headline.startsWith("معرفتش أقرا الفترة دي"))
         }
 
     @Test
@@ -309,10 +309,10 @@ class AskSpendTest : AskEngineFixture() {
             val future = spend("did I spend more than 2050 on groceries this month") as AskAnswer.SpendTotal
             assertEquals(AskPeriod.THIS_MONTH, future.period.period)
             assertEquals(1_000L, future.totalMinor)
-            val amount = spend("spent 2000 on groceries") as AskAnswer.SpendTotal
-            assertEquals(AskPeriod.THIS_MONTH, amount.period.period)
-            val cued = spend("groceries in 2050") as AskAnswer.SpendTotal
-            assertEquals(LocalDate.of(2050, 1, 1), cued.period.from)
+            val amount = spend("spent 2000 on groceries more than 1500") as AskAnswer.SpendTotal
+            assertEquals(LocalDate.of(2000, 1, 1), amount.period.from)
+            assertTrue(spend("groceries in 2050") is AskAnswer.PeriodUnreadable)
+            assertTrue(spend("groceries 2027") is AskAnswer.PeriodUnreadable)
         }
 
     @Test
@@ -351,5 +351,32 @@ class AskSpendTest : AskEngineFixture() {
             val a = spend("how much did I spend on food and groceries this month") as AskAnswer.SpendTotal
             assertEquals("Groceries + Dining out", a.subject?.en)
             assertEquals("بقالة + مطاعم", a.subject?.ar)
+        }
+
+    @Test
+    fun `REQ-AN-160 kids is a category, so groceries and kids sums both, and for-mom words are generic with an Arabic prefix`() =
+        runTest {
+            seedCategories()
+            put("g", 5_000, "2026-10-10T10:00:00Z", category = GROCERIES)
+            put("k", 7_000, "2026-10-11T10:00:00Z", category = "cat-kids")
+            val both = spend("how much did I spend on groceries and kids this month") as AskAnswer.SpendTotal
+            assertEquals(12_000L, both.totalMinor)
+            assertEquals("Groceries + Kids", both.subject?.en)
+            val mama = spend("how much did I spend on groceries لماما this month") as AskAnswer.SpendTotal
+            assertEquals(5_000L, mama.totalMinor)
+            assertEquals("لماما", mama.ignored)
+        }
+
+    @Test
+    fun `REQ-AN-162 two years compare as years with the year in both labels`() =
+        runTest {
+            seedCategories()
+            put("a", 5_000, "2025-03-10T10:00:00Z", category = GROCERIES)
+            put("b", 2_000, "2024-03-10T10:00:00Z", category = GROCERIES)
+            val answer = spend("groceries 2025 vs 2024") as AskAnswer.Compare
+            assertEquals(5_000L, answer.currentMinor)
+            assertEquals(2_000L, answer.previousMinor)
+            assertEquals("Groceries: 50 EGP in 2025 vs 20 EGP in 2024", en().text(answer).headline)
+            assertTrue(spend("groceries 2027") is AskAnswer.PeriodUnreadable)
         }
 }

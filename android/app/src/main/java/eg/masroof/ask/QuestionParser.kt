@@ -25,10 +25,17 @@ object QuestionParser {
         fun subjectOrNull(): AskSubject.Text? = subject.takeIf { it.isNotEmpty() }?.let(AskSubject::Text)
     }
 
-    fun parse(question: String): AskQuery {
+    /** [currentYear] is the Cairo year of the app clock; the default is only for tests and callers without a clock. */
+    fun parse(
+        question: String,
+        currentYear: Int =
+            java.time.Year
+                .now(eg.masroof.core.CairoTime.zone)
+                .value,
+    ): AskQuery {
         val text = ArabicText.normalize(question.take(MAX_LENGTH))
         if (text.isEmpty()) return AskQuery.NotUnderstood
-        val scan = PeriodScanner.scan(text)
+        val scan = PeriodScanner.scan(text, currentYear)
         if (scan.invalid) return AskQuery.PeriodUnreadable
         val tokens = ArabicText.tokens(scan.remaining)
         val subject =
@@ -46,6 +53,7 @@ object QuestionParser {
             ?: why(facts)
             ?: biggest(facts)
             ?: breakdown(facts)
+            ?: manyPeriods(facts)
             ?: spend(facts)
             ?: bare(facts)
     }
@@ -98,6 +106,10 @@ object QuestionParser {
         val weak = f.subject.isEmpty() && f.has(ParserLexicon.BREAKDOWN_WEAK)
         return if (strong || weak) AskQuery.Breakdown(f.period) else null
     }
+
+    /** Two periods and no word that says what to do with them ("groceries 2025 and 2024"): compare them, never drop one. */
+    private fun manyPeriods(f: Facts): AskQuery? =
+        if (f.periods.size >= 2) AskQuery.Compare(f.periods[0], f.periods[1], f.subjectOrNull()) else null
 
     private fun spend(f: Facts): AskQuery? {
         if (!f.hasAny(ParserLexicon.SPEND_WORDS) && !f.has(ParserLexicon.SPEND_PHRASES)) return null

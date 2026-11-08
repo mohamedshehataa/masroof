@@ -105,9 +105,13 @@ internal object ParserLexicon {
     /** People and "for whom" words next to a real subject ("groceries for mom"): ignored, and the answer says so. */
     val GENERIC: Set<String> =
         words(
-            """mom dad mother father wife husband family friend friends sister brother son daughter kids
+            """mom dad mother father wife husband family friend friends sister brother son daughter
             ماما بابا مامتي ابويا مراتي جوزي اهلي صاحبي اختي اخويا ابني بنتي""",
         )
+
+    /** A generic word, also with the Arabic "for" prefix: "لماما" is "for mom". */
+    fun isGeneric(token: String): Boolean =
+        token in GENERIC || token.startsWith("لل") && token.drop(2) in GENERIC || token.startsWith("ل") && token.drop(1) in GENERIC
 
     /** Words that are never part of a subject: filler plus every intent word above. */
     val STOP: Set<String> =
