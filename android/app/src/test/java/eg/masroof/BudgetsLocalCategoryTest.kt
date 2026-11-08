@@ -57,7 +57,7 @@ class BudgetsLocalCategoryTest : BudgetsRoomTestBase() {
             watch(vm)
             val closed = CompletableDeferred<Unit>()
             vm.save(null, "no-such-category", BudgetPeriodKind.MONTHLY, "100", false) { closed.complete(Unit) }
-            vm.state.await { it.error == BudgetError.INVALID }
+            vm.state.await { it.error == BudgetError.CATEGORY_GONE }
             assertFalse(closed.isCompleted)
             assertTrue(db.budgets().all().isEmpty())
             vm.save(null, "custom-1234", BudgetPeriodKind.MONTHLY, "100", false) { closed.complete(Unit) }
@@ -67,13 +67,13 @@ class BudgetsLocalCategoryTest : BudgetsRoomTestBase() {
             assertEquals("Coffee", state.rows.single().nameEn)
         }
 
-    // was: the budgets repository turns a non-UUID category id into Invalid instead of throwing
+    // was: the budgets repository turns a non-UUID category id into UnknownCategory instead of throwing
     @Test
     fun `REQ-EXP-060 the budgets repository turns an unknown category id into Invalid instead of throwing`() =
         runTest {
             seedCategories()
-            assertEquals(MutationOutcome.Invalid, repo().create(BudgetDraft("custom-1234", 100, false)))
-            assertEquals(MutationOutcome.Invalid, repo().create(BudgetDraft("", 100, false)))
+            assertEquals(MutationOutcome.UnknownCategory, repo().create(BudgetDraft("custom-1234", 100, false)))
+            assertEquals(MutationOutcome.UnknownCategory, repo().create(BudgetDraft("", 100, false)))
             assertTrue(db.budgets().all().isEmpty())
         }
 

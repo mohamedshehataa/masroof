@@ -55,6 +55,9 @@ abstract class BudgetsRoomTestBase {
             override fun next() = "budget-${counter.incrementAndGet()}"
         }
     protected val expenses = FakeRepository()
+    protected val eraseLock =
+        eg.masroof.data.auth
+            .EraseLock()
 
     protected val groceries = CategoryEntity("cat-groceries", "Groceries", "بقالة", 1)
     protected val car = CategoryEntity("cat-car", "Car", "سيارة", 2)
@@ -81,7 +84,7 @@ abstract class BudgetsRoomTestBase {
         expenses.categories.value = all.filterNot { it.archived }
     }
 
-    protected fun repo() = RoomBudgetsRepository(db, clock, ids, Dispatchers.Unconfined)
+    protected fun repo() = RoomBudgetsRepository(db, clock, ids, eraseLock, Dispatchers.Unconfined)
 
     protected fun engine() = RoomAnalyticsEngine(db, settings, clock, Dispatchers.Unconfined)
 

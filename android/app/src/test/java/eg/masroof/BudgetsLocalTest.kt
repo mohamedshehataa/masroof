@@ -196,8 +196,8 @@ class BudgetsLocalTest : BudgetsRoomTestBase() {
             assertEquals(MutationOutcome.Invalid, repo.create(BudgetDraft(groceries.id, 0, false)))
             assertEquals(MutationOutcome.Invalid, repo.create(BudgetDraft(groceries.id, -1, false)))
             assertEquals(MutationOutcome.Invalid, repo.create(BudgetDraft(groceries.id, MAX_BUDGET_MINOR + 1, false)))
-            assertEquals(MutationOutcome.Invalid, repo.create(BudgetDraft("no-such-category", 100, false)))
-            assertEquals(MutationOutcome.Invalid, repo.create(BudgetDraft("cat-old", 100, false)))
+            assertEquals(MutationOutcome.UnknownCategory, repo.create(BudgetDraft("no-such-category", 100, false)))
+            assertEquals(MutationOutcome.UnknownCategory, repo.create(BudgetDraft("cat-old", 100, false)))
             assertTrue(db.budgets().all().isEmpty())
         }
 
@@ -614,5 +614,27 @@ class BudgetsLocalTest : BudgetsRoomTestBase() {
             assertEquals(eg.masroof.ui.viewmodel.LoadStatus.READY, state.status)
             val row: BudgetRowUi = state.rows.single()
             assertTrue(row.hasProgress)
+        }
+
+    @Test
+    fun `REQ-AND-137 Home's total-budget figure follows a new 500 EGP entry and goes away when the total budget is deleted`() =
+        runTest {
+            seedCategories()
+            repo().create(BudgetDraft(null, 400_000, false))
+            repo().create(BudgetDraft(groceries.id, 100_000, false))
+            val home = HomeBudgetsViewModel(repo(), engine())
+            backgroundScope.launch { home.total.collect {} }
+            val before = home.total.await { it != null && it.hasProgress }!!
+            assertEquals(Money(400_000), before.remaining)
+            db.expenses().insert(entry("e1", 50_000))
+            val moved = home.total.await { it?.spent == Money(50_000) }!!
+            assertEquals(Money(350_000), moved.remaining)
+            assertEquals(Money(400_000), moved.effectiveLimit)
+            db
+                .budgets()
+                .all()
+                .first { it.categoryId == null }
+                .let { db.budgets().delete(it) }
+            assertNull(home.total.await { it == null })
         }
 }

@@ -8,6 +8,10 @@
     <string name="budgets_empty_body">Add one to see your progress.</string>
     <string name="budgets_all_taken">Every category already has a budget</string>
     <string name="budgets_all_spending">All spending</string>
+    <string name="budgets_unsupported">Unsupported budget</string>
+    <string name="budgets_error_category">This category no longer exists or is archived. Pick another one.</string>
+    <string name="budgets_tile_left">%1$s left of %2$s</string>
+    <string name="budgets_tile_over">Over by %1$s</string>
     <string name="budgets_duplicate">Duplicate budget</string>
     <string name="budgets_deleted_category">Deleted category</string>
     <string name="budgets_category">Category</string>

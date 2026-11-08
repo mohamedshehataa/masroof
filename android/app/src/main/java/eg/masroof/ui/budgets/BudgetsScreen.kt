@@ -184,6 +184,7 @@ private data class DialogTarget(
 @Composable
 fun budgetName(row: BudgetRowUi): String {
     val arabic = LocalMoneyStyle.current.arabic
+    if (row.unsupported) return stringResource(R.string.budgets_unsupported)
     if (row.deletedCategory) return stringResource(R.string.budgets_deleted_category)
     return (if (arabic) row.nameAr else row.nameEn) ?: stringResource(R.string.budgets_all_spending)
 }
@@ -485,6 +486,7 @@ private fun errorText(error: BudgetError): Int =
         BudgetError.INVALID_AMOUNT -> R.string.budgets_error_amount
         BudgetError.AMOUNT_TOO_LARGE -> R.string.budgets_error_amount_large
         BudgetError.INVALID -> R.string.budgets_error_invalid
+        BudgetError.CATEGORY_GONE -> R.string.budgets_error_category
         BudgetError.DUPLICATE -> R.string.budgets_error_duplicate
         BudgetError.FAILED -> R.string.budgets_error_failed
     }

@@ -29,6 +29,8 @@ import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.viewmodel.BudgetError
 import eg.masroof.ui.viewmodel.BudgetsState
 import eg.masroof.ui.viewmodel.LoadStatus
+import eg.masroof.ui.wallet.WalletActions
+import eg.masroof.ui.wallet.WalletContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -339,5 +341,48 @@ class BudgetsScreenTest {
         assertEquals(LayoutDirection.Rtl, direction)
         compose.onNodeWithText("الميزانيات").assertIsDisplayed()
         compose.onNodeWithText("٨٢٫٥٪").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-AND-137 the Wallet budget tile shows what is left of the total budget, and over by when past it`() {
+        val total = BudgetsFixtures.row("t", null, null, null, 400_000, 300_000, 7_500)
+        compose.setContent { MasroofTheme { WalletContent(walletUi(), emptyList(), WalletActions(), totalBudget = total) } }
+        compose.scrollWalletTo("1,000 EGP left of 4,000 EGP")
+        compose.onNodeWithText("1,000 EGP left of 4,000 EGP").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-AND-137 the Wallet budget tile says Over by when the total budget is exceeded`() {
+        val total = BudgetsFixtures.row("t", null, null, null, 400_000, 450_000, 11_250)
+        compose.setContent { MasroofTheme { WalletContent(walletUi(), emptyList(), WalletActions(), totalBudget = total) } }
+        compose.scrollWalletTo("Over by 500 EGP")
+        compose.onNodeWithText("Over by 500 EGP").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "ar")
+    fun `REQ-AND-137 the Wallet budget tile uses Arabic text and digits`() {
+        val total = BudgetsFixtures.row("t", null, null, null, 400_000, 300_000, 7_500)
+        compose.setContent { MasroofTheme { WalletContent(walletUi(), emptyList(), WalletActions(), totalBudget = total) } }
+        compose.scrollWalletTo("متبقي ١٬٠٠٠ ج.م من ٤٬٠٠٠ ج.م")
+        compose.onNodeWithText("متبقي ١٬٠٠٠ ج.م من ٤٬٠٠٠ ج.م").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-AND-136 the category-gone and unsupported messages are shown`() {
+        show(empty().copy(error = BudgetError.CATEGORY_GONE))
+        compose.onNode(hasText("Add budget") and hasClickAction()).performClick()
+        compose.onNodeWithText("This category no longer exists or is archived. Pick another one.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-AND-137 an Unsupported budget is listed and can be deleted`() {
+        val odd = BudgetsFixtures.row("odd", null, null, null, 100_000, 0, 0, hasProgress = false).copy(unsupported = true)
+        show(ready(listOf(odd)))
+        compose.onNodeWithText("Unsupported budget").assertIsDisplayed()
+        compose.onNodeWithText("1,000 EGP").performClick()
+        compose.onNode(hasText("Delete") and hasClickAction()).performClick()
+        compose.onAllNodes(hasText("Delete") and hasClickAction()).onLast().performClick()
+        assertEquals("odd", deleted)
     }
 }

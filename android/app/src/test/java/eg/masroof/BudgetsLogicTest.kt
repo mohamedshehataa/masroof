@@ -80,7 +80,9 @@ class BudgetsLogicTest : BudgetsRoomTestBase() {
             assertEquals(10_000, rows[0].barBps)
             assertEquals(Money(-10_000, "EGP"), rows[0].remaining)
             assertNull(rows[1].nameEn)
-            assertTrue(rows[2].daysLeft!! in 4..5)
+            // the fixed clock is 2026-10-27 (Cairo): a 31-day month with 27 days elapsed leaves 4. The old server fixture said 6
+            // because it was computed for 2026-10-25.
+            assertEquals(4, rows[2].daysLeft)
         }
 
     @Test
@@ -393,7 +395,7 @@ class BudgetsLogicTest : BudgetsRoomTestBase() {
         runTest {
             seedCategories()
             repo().create(BudgetDraft(groceries.id, 100_000, false))
-            val reopened = RoomBudgetsRepository(db, clock, ids, Dispatchers.Unconfined)
+            val reopened = RoomBudgetsRepository(db, clock, ids, eraseLock, Dispatchers.Unconfined)
             val rows = reopened.observe().first()
             assertEquals(1, rows.size)
             assertEquals(100_000L, rows.single().amountMinor)
@@ -421,5 +423,149 @@ class BudgetsLogicTest : BudgetsRoomTestBase() {
                         .id,
                 ),
             )
+        }
+
+    @Test
+    fun `REQ-AND-137 editing a budget with Arabic-Indic digits stores the same amount`() =
+        runTest {
+            seedCategories()
+            db.budgets().insert(budget("e", groceries.id, 100_000))
+            val vm = vm()
+            watch(vm)
+            vm.state.await { it.rows.size == 1 }
+            vm.save("e", null, BudgetPeriodKind.MONTHLY, "\u0662\u0665\u0660\u0660", true) {}
+            vm.state.await { it.rows.singleOrNull()?.limit == Money(250_000) }
+            assertEquals(250_000L, db.budgets().byId("e")!!.amountMinor)
+            assertTrue(db.budgets().byId("e")!!.rollover)
+        }
+
+    @Test
+    fun `REQ-AND-136 direction marks pasted with Arabic digits do not make the amount invalid`() {
+        val arabic = "\u0664\u0660\u0660\u0660"
+        for (mark in listOf("\u200F", "\u200E", "\u061C", "\u202B", "\u202C", "\u2067", "\u2069")) {
+            assertEquals(
+                400_000L,
+                eg.masroof.core.MoneyFormat
+                    .parseMinor(arabic + mark),
+            )
+            assertEquals(
+                400_000L,
+                eg.masroof.core.MoneyFormat
+                    .parseMinor(mark + arabic + mark),
+            )
+        }
+        assertEquals(
+            eg.masroof.core.MoneyFormat.EntryAmount
+                .Valid(125_050),
+            eg.masroof.core.MoneyFormat
+                .parseEntry("\u200F\u0661\u066C\u0662\u0665\u0660\u066B\u0665\u200F"),
+        )
+        assertNull(
+            eg.masroof.core.MoneyFormat
+                .parseMinor("\u200F"),
+        )
+    }
+
+    @Test
+    fun `REQ-AND-136 a second tap while a save runs is ignored`() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            val creates =
+                java.util.concurrent.atomic
+                    .AtomicInteger()
+            val slow =
+                object : eg.masroof.data.budgets.BudgetsRepository by repo() {
+                    override suspend fun create(draft: BudgetDraft): MutationOutcome {
+                        creates.incrementAndGet()
+                        gate.await()
+                        return MutationOutcome.Ok
+                    }
+                }
+            seedCategories()
+            val vm =
+                eg.masroof.ui.viewmodel
+                    .BudgetsViewModel(slow, engine(), expenses)
+            watch(vm)
+            var closed = 0
+            vm.save(null, groceries.id, BudgetPeriodKind.MONTHLY, "100", false) { closed++ }
+            vm.save(null, groceries.id, BudgetPeriodKind.MONTHLY, "100", false) { closed++ }
+            vm.delete("x") { closed++ }
+            assertEquals(1, creates.get())
+            gate.complete(Unit)
+            vm.state.await { !it.saving }
+            assertEquals(1, closed)
+            assertEquals(1, creates.get())
+        }
+
+    @Test
+    fun `REQ-AND-137 a stored budget with an unknown period or a foreign currency is listed as Unsupported and can be deleted`() =
+        runTest {
+            seedCategories()
+            db.budgets().insert(budget("y", groceries.id, 100_000, period = "YEARLY"))
+            db.budgets().insert(budget("u", car.id, 100_000).copy(currency = "USD"))
+            db.budgets().insert(budget("ok", null, 1_000_000))
+            db.expenses().insert(entry("e", 50_000))
+            val engine = engine()
+            val vm = vm(engine)
+            watch(vm)
+            val state = vm.state.await { it.rows.size == 3 && it.rows.any { r -> r.id == "ok" && r.hasProgress } }
+            assertEquals(
+                setOf("y", "u"),
+                state.rows
+                    .filter { it.unsupported }
+                    .map { it.id }
+                    .toSet(),
+            )
+            assertTrue(state.rows.filter { it.unsupported }.none { it.hasProgress })
+            assertFalse(state.rows.first { it.id == "ok" }.unsupported)
+            // the unsupported rows do not occupy a scope and do not feed the remaining budget
+            assertEquals(950_000L, engine.compute("current").summary.remainingBudget)
+            assertEquals(
+                listOf(
+                    groceries.id,
+                    car.id,
+                ),
+                eg.masroof.ui.budgets.freeScopes(state.rows, listOf(groceries, car), BudgetPeriodKind.MONTHLY).mapNotNull {
+                    it.categoryId
+                },
+            )
+            val done = CompletableDeferred<Unit>()
+            vm.delete("y") { done.complete(Unit) }
+            done.awaitReal()
+            vm.state.await { s -> s.rows.none { it.id == "y" } }
+            assertEquals(
+                setOf("u", "ok"),
+                db
+                    .budgets()
+                    .all()
+                    .map { it.id }
+                    .toSet(),
+            )
+        }
+
+    @Test
+    fun `REQ-AND-136 a create that waits for an erase lands after it, and the erased budget stays gone`() =
+        runTest {
+            seedCategories()
+            repo().create(BudgetDraft(groceries.id, 100_000, false))
+            eraseLock.mutex.lock()
+            val create = kotlinx.coroutines.CompletableDeferred<MutationOutcome>()
+            backgroundScope.launch { create.complete(repo().create(BudgetDraft(car.id, 50_000, false))) }
+            // the erase runs while it holds the lock: the create may not write into the half-cleared tables
+            assertTrue(db.budgets().all().size == 1)
+            db.clearAllTables()
+            db.lookups().upsertCategories(listOf(groceries, car)) // the defaults come back with the erase
+            assertFalse(create.isCompleted)
+            assertTrue(db.budgets().all().isEmpty())
+            eraseLock.mutex.unlock()
+            assertEquals(
+                MutationOutcome.Ok,
+                kotlinx.coroutines.withContext(Dispatchers.Default) {
+                    kotlinx.coroutines.withTimeout(AWAIT_MS) { create.await() }
+                },
+            )
+            val after = db.budgets().all()
+            assertEquals(1, after.size)
+            assertEquals(car.id, after.single().categoryId)
         }
 }

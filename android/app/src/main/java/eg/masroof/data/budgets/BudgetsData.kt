@@ -11,7 +11,7 @@ data class BudgetDraft(
 )
 
 /** Result of a create, update or delete. Only [Ok] changed anything. */
-enum class MutationOutcome { Ok, Invalid, Duplicate, NotFound, Failed }
+enum class MutationOutcome { Ok, Invalid, UnknownCategory, Duplicate, NotFound, Failed }
 
 /** The largest budget a user may set, in minor units (same cap as a manual entry). */
 const val MAX_BUDGET_MINOR = 1_000_000_000_000L

@@ -8,6 +8,10 @@
     <string name="budgets_empty_body">أضف واحدة عشان تتابع تقدمك.</string>
     <string name="budgets_all_taken">كل فئة ليها ميزانية بالفعل</string>
     <string name="budgets_all_spending">كل المصروفات</string>
+    <string name="budgets_unsupported">ميزانية مش مدعومة</string>
+    <string name="budgets_error_category">الفئة دي اتحذفت أو اتأرشفت. اختار فئة تانية.</string>
+    <string name="budgets_tile_left">متبقي %1$s من %2$s</string>
+    <string name="budgets_tile_over">تجاوز بمقدار %1$s</string>
     <string name="budgets_duplicate">ميزانية مكررة</string>
     <string name="budgets_deleted_category">فئة محذوفة</string>
     <string name="budgets_category">الفئة</string>
@@ -38,11 +42,11 @@
     <string name="budgets_delete_title">حذف الميزانية؟</string>
     <string name="budgets_delete_body">هتتحذف ميزانية %1$s. مصروفاتك مش هتتغير.</string>
     <plurals name="budgets_days_left">
-        <item quantity="zero">لا أيام متبقية</item>
-        <item quantity="one">يوم واحد متبقٍ</item>
-        <item quantity="two">يومان متبقيان</item>
-        <item quantity="few">%1$s أيام متبقية</item>
-        <item quantity="many">%1$s يومًا متبقيًا</item>
-        <item quantity="other">%1$s يوم متبقٍ</item>
+        <item quantity="zero">مفيش أيام فاضلة</item>
+        <item quantity="one">فاضل يوم</item>
+        <item quantity="two">فاضل يومين</item>
+        <item quantity="few">فاضل %1$s أيام</item>
+        <item quantity="many">فاضل %1$s يوم</item>
+        <item quantity="other">فاضل %1$s يوم</item>
     </plurals>
 </resources>

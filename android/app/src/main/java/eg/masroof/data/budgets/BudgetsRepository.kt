@@ -6,6 +6,7 @@ import eg.masroof.core.Money
 import eg.masroof.core.analytics.BudgetPeriodKind
 import eg.masroof.core.analytics.BudgetSpec
 import eg.masroof.data.IdFactory
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.BudgetEntity
 import eg.masroof.data.db.CategoryEntity
@@ -13,6 +14,7 @@ import eg.masroof.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Clock
 import javax.inject.Inject
@@ -46,6 +48,7 @@ class RoomBudgetsRepository
         private val db: AppDatabase,
         private val clock: Clock,
         private val ids: IdFactory,
+        private val eraseLock: EraseLock,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) : BudgetsRepository {
         override fun observe(): Flow<List<BudgetEntity>> = db.budgets().observeAll().flowOn(io)
@@ -59,7 +62,7 @@ class RoomBudgetsRepository
                     val dao = db.budgets()
                     val category = draft.categoryId
                     when {
-                        category != null && dao.liveCategoryCount(category) == 0 -> MutationOutcome.Invalid
+                        category != null && dao.liveCategoryCount(category) == 0 -> MutationOutcome.UnknownCategory
                         dao.countInScope(category, draft.period.name) > 0 -> MutationOutcome.Duplicate
                         else -> {
                             val now = clock.millis()
@@ -113,9 +116,10 @@ class RoomBudgetsRepository
             }
 
         private suspend fun guarded(block: suspend () -> MutationOutcome): MutationOutcome =
+            // Waits for a running erase or start-up recovery, so the write lands after it and is never half wiped.
             withContext(io) {
                 try {
-                    block()
+                    eraseLock.mutex.withLock { block() }
                 } catch (
                     @Suppress("SwallowedException") _: SQLException,
                 ) {
@@ -127,9 +131,10 @@ class RoomBudgetsRepository
 /** The server's rule: a threshold is a percentage from 1 to 200, and each fires once. */
 private const val MAX_THRESHOLD_PERCENT = 200
 
-/** The calculator's view of a stored budget; null for a row whose period text is not one the app writes. */
+/** The calculator's view of a stored budget; null when its period is not one the app writes or its currency is not EGP. */
 internal fun BudgetEntity.toSpec(): BudgetSpec? {
     val kind = BudgetPeriodKind.entries.firstOrNull { it.name == period } ?: return null
+    if (currency != Money.EGP) return null
     val thresholds =
         alertThresholds
             .split(',')

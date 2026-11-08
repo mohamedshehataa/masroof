@@ -11,6 +11,7 @@ import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.budgets.BudgetDraft
 import eg.masroof.data.budgets.BudgetsRepository
 import eg.masroof.data.budgets.MutationOutcome
+import eg.masroof.data.budgets.toSpec
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.buildBudgetRows
@@ -33,12 +34,13 @@ private const val STOP_TIMEOUT_MS = 5_000L
 private const val HOME_BUDGETS = 4
 
 /** Why a save or delete did not go through; shown in the form. */
-enum class BudgetError { INVALID_AMOUNT, AMOUNT_TOO_LARGE, INVALID, DUPLICATE, FAILED }
+enum class BudgetError { INVALID_AMOUNT, AMOUNT_TOO_LARGE, INVALID, CATEGORY_GONE, DUPLICATE, FAILED }
 
 private fun MutationOutcome.toError(): BudgetError? =
     when (this) {
         MutationOutcome.Ok -> null
         MutationOutcome.Invalid -> BudgetError.INVALID
+        MutationOutcome.UnknownCategory -> BudgetError.CATEGORY_GONE
         MutationOutcome.Duplicate -> BudgetError.DUPLICATE
         MutationOutcome.NotFound, MutationOutcome.Failed -> BudgetError.FAILED
     }
@@ -96,7 +98,16 @@ internal fun budgetRows(
         if (p is Progress.Pending) return@combine BudgetRows(emptyList(), progressFailed = false, loading = true)
         val statuses = (p as? Progress.Ready)?.byBudget.orEmpty()
         // a budget saved a moment ago has no status until the engine catches up: it appears with its progress, never without
-        val hidden = if (p is Progress.Ready) budgets.filter { it.id !in statuses }.map { it.id }.toSet() else emptySet()
+        val hidden =
+            if (p is Progress.Ready) {
+                budgets
+                    .filter {
+                        it.toSpec() != null && it.id !in statuses
+                    }.map { it.id }
+                    .toSet()
+            } else {
+                emptySet()
+            }
         BudgetRows(buildBudgetRows(budgets.filter { it.id !in hidden }, categories, statuses), p is Progress.Failed)
     }
 }
@@ -143,6 +154,7 @@ class BudgetsViewModel
             rollover: Boolean,
             onSaved: () -> Unit,
         ) {
+            if (form.value.saving) return // a second tap while a save runs is ignored
             val minor =
                 when (val amount = MoneyFormat.parseEntry(amountText)) {
                     is MoneyFormat.EntryAmount.Valid -> amount.minor
@@ -170,6 +182,7 @@ class BudgetsViewModel
             id: String,
             onDeleted: () -> Unit,
         ) {
+            if (form.value.saving) return
             form.value = Form(saving = true)
             viewModelScope.launch {
                 val outcome = repository.delete(id)
@@ -188,8 +201,14 @@ class HomeBudgetsViewModel
         repository: BudgetsRepository,
         engine: AnalyticsEngine,
     ) : ViewModel() {
+        private val rows = budgetRows(repository, engine, MutableStateFlow(0)).map { it.rows.filter { r -> r.hasProgress } }
+
         val state: StateFlow<List<BudgetRowUi>> =
-            budgetRows(repository, engine, MutableStateFlow(0))
-                .map { it.rows.filter { r -> r.hasProgress }.take(HOME_BUDGETS) }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+            rows.map { it.take(HOME_BUDGETS) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+        /** The monthly "All spending" budget (the oldest if a restore left two), whatever its rank: its remaining amount is Home's figure. */
+        val total: StateFlow<BudgetRowUi?> =
+            rows
+                .map { list -> list.firstOrNull { it.categoryId == null && !it.weekly && !it.duplicate && !it.unsupported } }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
     }

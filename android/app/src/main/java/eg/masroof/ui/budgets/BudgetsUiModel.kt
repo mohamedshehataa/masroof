@@ -45,6 +45,8 @@ data class BudgetRowUi(
     val hasProgress: Boolean = true,
     /** A second budget for the same category and period (a restored backup can hold one): shown, marked, deletable. */
     val duplicate: Boolean = false,
+    /** A stored period or currency this app cannot compute (only a restore could bring one): "Unsupported budget", deletable. */
+    val unsupported: Boolean = false,
 ) {
     /** Bar fill in basis points, clamped to a full bar. */
     val barBps: Int get() = progressBps.coerceIn(0, FULL_BPS)
@@ -61,8 +63,11 @@ fun buildBudgetRows(
 ): List<BudgetRowUi> {
     val byId = categories.associateBy { it.id }
     return budgets
-        .mapNotNull { b ->
-            val kind = BudgetPeriodKind.entries.firstOrNull { it.name == b.period } ?: return@mapNotNull null
+        .map { b ->
+            val knownKind = BudgetPeriodKind.entries.firstOrNull { it.name == b.period }
+            val kind = knownKind ?: BudgetPeriodKind.MONTHLY
+            // a period the app never writes, or a currency other than EGP, has no progress: listed so it can be deleted
+            val unsupported = knownKind == null || b.currency != Money.EGP
             val status = statuses[b.id]
             val cat = b.categoryId?.let { byId[it] }
             val deleted = b.categoryId != null && (cat == null || cat.archived)
@@ -83,8 +88,9 @@ fun buildBudgetRows(
                 weekly = kind == BudgetPeriodKind.WEEKLY,
                 period = kind,
                 deletedCategory = deleted,
-                hasProgress = status != null,
-                duplicate = status?.duplicate == true,
+                hasProgress = status != null && !unsupported,
+                unsupported = unsupported,
+                duplicate = status?.duplicate == true && !unsupported,
             )
         }.sortedWith(compareByDescending<BudgetRowUi> { it.progressBps }.thenBy { it.id })
 }
@@ -101,7 +107,7 @@ fun freeScopes(
     categories: List<CategoryEntity>,
     period: BudgetPeriodKind,
 ): List<BudgetScope> {
-    val taken = rows.filter { it.period == period }.mapTo(HashSet()) { it.categoryId }
+    val taken = rows.filter { it.period == period && !it.unsupported }.mapTo(HashSet()) { it.categoryId }
     return (listOf<String?>(null) + categories.map { it.id }).filter { it !in taken }.map { BudgetScope(it, period) }
 }
 

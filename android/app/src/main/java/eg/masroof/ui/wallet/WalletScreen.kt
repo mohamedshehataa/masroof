@@ -119,6 +119,7 @@ fun WalletRoute(
     val answerUndo by answerCards.undo.collectAsStateWithLifecycle()
     val refundPick by answerCards.pick.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
+    val totalBudget by budgetsViewModel.total.collectAsStateWithLifecycle()
     val capturedIds by captured.byExpenseId.collectAsStateWithLifecycle()
     val stored by receipts.state.collectAsStateWithLifecycle()
     val camera = rememberCameraLaunch { file -> receipts.add(after = { file.delete() }) { file.inputStream() } }
@@ -133,6 +134,7 @@ fun WalletRoute(
     WalletContent(
         state = state,
         budgets = budgets,
+        totalBudget = totalBudget,
         actions =
             WalletActions(
                 onOpenSettings = actions.onOpenSettings,
@@ -172,6 +174,7 @@ fun WalletContent(
     budgets: List<BudgetRowUi>,
     actions: WalletActions,
     modifier: Modifier = Modifier,
+    totalBudget: BudgetRowUi? = null,
     capturedIds: Map<String, String> = emptyMap(),
     onUndoCaptured: (String) -> Unit = {},
     /** The "Needs an answer" row (STORY-208); null = nothing to ask, so no row and no gap. */
@@ -224,7 +227,7 @@ fun WalletContent(
         if (state.firstRun) {
             item(key = "start") { GetStartedCards(actions) }
         } else {
-            item(key = "tiles") { InsightTiles(state, budgets.firstOrNull(), actions) }
+            item(key = "tiles") { InsightTiles(state, totalBudget ?: budgets.firstOrNull(), actions) }
         }
     }
 }
