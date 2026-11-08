@@ -57,3 +57,15 @@ FINDINGS:
 - [MINOR] future year ("groceries 2027") -> silent this month; "kids" treated as a generic word though it is a
   category; Arabic "لماما" not generic. [NIT] Year.now() instead of the injected clock; unnamed year label in Compare
 STATUS: FAIL -> fix round 3 (year grammar + generated combination test), past the 3-loop limit by owner rule
+
+## Loop 4 - head `ebc3a86`
+Gate GREEN in 67s; `--rerun` 748 tests, 0 failures; TEST_INTEGRITY: OK. 172 questions x start day 1 and 25; parity exact.
+- Loop-3 MAJOR ("groceries 2025 vs 2024"): PASS; kids / لماما: PASS
+FINDINGS:
+- [MAJOR] `PeriodScanner.yearRule` -- any cue-free 1996-2026 number is a year: "صرفت 2000 على البقالة الشهر ده" ->
+  compare this month vs 2000; "spent 2000 on groceries" -> "in 2000"
+- [MAJOR] `QuestionParser.manyPeriods` -- two periods without a compare word become a Compare: "may 31 2026" -> May vs
+  2026; "april may june" -> May vs April
+- [MINOR] "october 2030" accepted; "بسنة 2024" not read. Generated test oracle restates the rule (696 combinations, not
+  1,152)
+STATUS: FAIL -> fix round 4: explicit-cue rules (orchestrator product decision, DECISIONS)
