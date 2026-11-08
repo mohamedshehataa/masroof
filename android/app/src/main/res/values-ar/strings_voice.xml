@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_amount_label">المبلغ</string>
+    <string name="voice_type_title">النوع</string>
+    <string name="voice_type_expense">مصروف</string>
+    <string name="voice_type_income">دخل</string>
+    <string name="voice_currency_title">العملة</string>
+    <string name="voice_not_in_totals">مش داخل في إجمالي الجنيه المصري</string>
+    <string name="voice_merchant">المحل أو المستلم</string>
+    <string name="voice_quick_label">اكتبها: ١٥٠ بنزين</string>
+    <string name="voice_mic_desc">قولها بصوتك</string>
+    <string name="voice_listening">بسمعك…</string>
+    <string name="voice_processing">بفهم اللي قلته…</string>
+    <string name="voice_stop">وقف</string>
+    <string name="voice_close">إغلاق</string>
+    <string name="voice_level_desc">مستوى الميكروفون</string>
+    <string name="voice_rationale">مصروف بيسمعك بس وإنت بتقول المصروف ومابيحفظش الصوت. اسمح بالميكروفون عشان تكمّل.</string>
+    <string name="voice_online_notice">الموبايل ده مفيهوش خدمة كلام شغالة من غير نت، فممكن خدمة الكلام تبعت اللي بتقوله على الإنترنت. لو كتبت بإيدك كل حاجة بتفضل على الموبايل.</string>
+    <string name="voice_type_instead">اكتب بدل كده</string>
+    <string name="voice_continue">كمّل</string>
+    <string name="voice_denied">الميكروفون مقفول فمصروف مش هيسمعك. تقدر تكتب السطر اللي فوق.</string>
+    <string name="voice_denied_forever">الميكروفون ممنوع لمصروف. افتحه من الإعدادات، أو اكتب السطر اللي فوق.</string>
+    <string name="voice_open_settings">افتح الإعدادات</string>
+    <string name="voice_error">ماسمعتش كويس - جرّب تاني أو اكتبها</string>
+    <string name="voice_try_again">جرّب تاني</string>
+    <string name="voice_say_amount">قول المبلغ أو اكتبه</string>
+    <string name="voice_filled">اتملا من كلامك. راجعه وبعدين دوس حفظ.</string>
+</resources>

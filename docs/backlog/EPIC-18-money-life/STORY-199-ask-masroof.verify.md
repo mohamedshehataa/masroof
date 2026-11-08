@@ -80,3 +80,15 @@ FINDINGS:
 - [MINOR] "since 2024" answers one year; for/of cues read amounts as years; Franco year cues; two bare years + "and" ->
   this month; "may 31" ignores the day
 STATUS: FAIL -> fix round 5 (small, targeted) + severity rubric (DECISIONS)
+
+## Loop 6 - head `ca36cf0` (severity rubric from DECISIONS applied)
+Gate GREEN in 50s; `--rerun` 792 tests, 0 failures; TEST_INTEGRITY: OK; YearQuestionsTest executed 1,804 combinations.
+228 questions x month start day 1 and 25 (456 engine answers); parity with Insights exact (cash on and off).
+- Loop-5 MAJORs: PASS ("مقارنة 2025 و 2024" -> 2025 vs 2024; "this year vs 2024"; "this month vs 2025"; same-period answer)
+- Loop-5 MINORs: PASS (since/من ranges; for/of not cues; Franco fe/sanat/3am; two bare years -> can't read; "may 31"
+  most recent such day; "on 31 May" label)
+- REQ-AN-160..165: PASS
+FINDINGS (all MINOR under the rubric; known limitations): "2000 vs 3000 on groceries" reads years; "قارن 2025 و2024"
+(no space after و) unknown subject, no number; "from 2024" not a cue; "من شهر 5" read as May; trailing year after a
+named compare ignored; a yearless day resolved to last year shows no year in its label.
+STATUS: PASS

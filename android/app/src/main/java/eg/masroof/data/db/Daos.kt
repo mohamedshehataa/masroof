@@ -36,6 +36,32 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
+    /** STORY-209: buying gold is saving, so a linked entry stops counting as spending (and counts again on Undo). */
+    @Query("UPDATE expense SET excludedFromTotals = :excluded, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun setExcluded(
+        id: String,
+        excluded: Boolean,
+        nowMillis: Long,
+    ): Int
+
+    /** Excludes the entry only if it counted until now, so Undo can safely restore it. */
+    @Query(
+        """UPDATE expense SET excludedFromTotals = 1, updatedAtMillis = :nowMillis
+            WHERE id = :id AND deletedAtMillis IS NULL AND excludedFromTotals = 0""",
+    )
+    suspend fun claimExcluded(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    /** Recent purchases a gold lot could be: live, not failed, not already excluded, not linked to another lot. */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND type = 'EXPENSE' AND excludedFromTotals = 0
+            AND id NOT IN (SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL)
+            ORDER BY occurredAtMillis DESC, id LIMIT :limit""",
+    )
+    suspend fun metalLinkCandidates(limit: Int): List<ExpenseEntity>
+
     /** Live entries on or after [since], newest first: the "Attach to entry" picker. */
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id")
     fun observeSince(since: Long): Flow<List<ExpenseEntity>>
@@ -43,7 +69,7 @@ interface ExpenseDao {
     // The one spending rule (ADR-0009 D2, parity-v1.json): EGP, CONFIRMED or PENDING_REVIEW, refunds netted, no cash withdrawals here.
     @Query(
         """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
             AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
@@ -54,7 +80,7 @@ interface ExpenseDao {
     /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeAnalyticsRows(
@@ -64,13 +90,24 @@ interface ExpenseDao {
 
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun analyticsRows(
         from: Long,
         to: Long,
     ): List<AnalyticsRow>
+
+    /** The same rows as [analyticsRows] plus the id and account, for Ask Masroof (STORY-199): read-only, the same filter. */
+    @Query(
+        """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    suspend fun askRows(
+        from: Long,
+        to: Long,
+    ): List<AskRow>
 
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.
@@ -302,35 +339,90 @@ interface OutboxDao {
 }
 
 @Dao
-interface LookupDao {
+abstract class LookupDao {
     /**
      * The categories the server knows (pickers, uploads). The phone's own defaults (`system = 1`, ids `cat-...`) are not
      * server ids and are hidden here until the local-only screens use [observeAllCategories] (STORY-169+).
      */
     @Query("SELECT * FROM category WHERE system = 0 ORDER BY sortOrder, nameEn")
-    fun observeCategories(): Flow<List<CategoryEntity>>
+    abstract fun observeCategories(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM category ORDER BY sortOrder, nameEn")
-    fun observeLabelCategories(): Flow<List<CategoryEntity>>
+    abstract fun observeLabelCategories(): Flow<List<CategoryEntity>>
 
     /** Every category, archived ones too: analytics must not lose an amount whose category was archived. */
     @Query("SELECT * FROM category")
-    fun observeEveryCategory(): Flow<List<CategoryEntity>>
+    abstract fun observeEveryCategory(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM category WHERE archived = 0 ORDER BY sortOrder, nameEn")
-    fun observeAllCategories(): Flow<List<CategoryEntity>>
+    abstract fun observeAllCategories(): Flow<List<CategoryEntity>>
 
     @Query("SELECT * FROM member ORDER BY sortOrder, displayName")
-    fun observeMembers(): Flow<List<MemberEntity>>
+    abstract fun observeMembers(): Flow<List<MemberEntity>>
 
     @Query("SELECT * FROM account ORDER BY label")
-    fun observeAccounts(): Flow<List<AccountEntity>>
+    abstract fun observeAccounts(): Flow<List<AccountEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertCategories(items: List<CategoryEntity>)
+    // True upserts: never INSERT OR REPLACE here. A replace deletes the row, and with the v10 foreign keys that would delete
+    // the account's balances and the category's merchant rules, null its budgets and reset its v10 columns. A new id is
+    // inserted; an existing id is UPDATEd in place, and only the columns a caller owns (never emoji, credit limit, statement
+    // or due day) are written.
+    @Transaction
+    open suspend fun upsertCategories(items: List<CategoryEntity>) {
+        for (c in items) {
+            insertCategoryIgnore(c)
+            updateCategory(c.id, c.nameEn, c.nameAr, c.sortOrder, c.parentId, c.color, c.archived, c.system)
+        }
+    }
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAccounts(items: List<AccountEntity>)
+    @Transaction
+    open suspend fun upsertAccounts(items: List<AccountEntity>) {
+        for (a in items) {
+            insertAccountIgnore(a)
+            updateAccount(a.id, a.label, a.currency, a.kind, a.institution, a.last4, a.archived)
+        }
+    }
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertCategoryIgnore(item: CategoryEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertAccountIgnore(item: AccountEntity): Long
+
+    @Suppress("LongParameterList")
+    @Query(
+        """
+        UPDATE category SET nameEn = :nameEn, nameAr = :nameAr, sortOrder = :sortOrder, parentId = :parentId,
+        color = :color, archived = :archived, system = :system WHERE id = :id
+        """,
+    )
+    protected abstract suspend fun updateCategory(
+        id: String,
+        nameEn: String,
+        nameAr: String,
+        sortOrder: Int,
+        parentId: String?,
+        color: String?,
+        archived: Boolean,
+        system: Boolean,
+    )
+
+    @Suppress("LongParameterList")
+    @Query(
+        """
+        UPDATE account SET label = :label, currency = :currency, kind = :kind, institution = :institution,
+        last4 = :last4, archived = :archived WHERE id = :id
+        """,
+    )
+    protected abstract suspend fun updateAccount(
+        id: String,
+        label: String,
+        currency: String,
+        kind: String?,
+        institution: String?,
+        last4: String?,
+        archived: Boolean,
+    )
 }
 
 @Dao
@@ -535,8 +627,21 @@ interface CapturedDao {
             MemberEntity::class,
             ReceiptEntity::class,
             ExpenseSourceEntity::class,
+            AccountBalanceEntity::class,
+            BudgetEntity::class,
+            InstallmentPlanEntity::class,
+            InstallmentPaymentEntity::class,
+            SubscriptionEntity::class,
+            SavingsGoalEntity::class,
+            GoalMovementEntity::class,
+            AssetEntity::class,
+            AssetLotEntity::class,
+            MetalPriceEntity::class,
+            MerchantRuleEntity::class,
+            DebtEntity::class,
+            NetWorthSnapshotEntity::class,
         ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -557,6 +662,34 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sources(): ExpenseSourceDao
 
     abstract fun receipts(): ReceiptDao
+
+    abstract fun accountBalances(): AccountBalanceDao
+
+    abstract fun budgets(): BudgetDao
+
+    abstract fun installmentPlans(): InstallmentPlanDao
+
+    abstract fun installmentPayments(): InstallmentPaymentDao
+
+    abstract fun subscriptions(): SubscriptionDao
+
+    abstract fun savingsGoals(): SavingsGoalDao
+
+    abstract fun goalMovements(): GoalMovementDao
+
+    abstract fun assets(): AssetDao
+
+    abstract fun assetLots(): AssetLotDao
+
+    abstract fun metalPrices(): MetalPriceDao
+
+    abstract fun merchantRules(): MerchantRuleDao
+
+    abstract fun categoryRules(): CategoryRulesDao
+
+    abstract fun debts(): DebtDao
+
+    abstract fun netWorthSnapshots(): NetWorthSnapshotDao
 
     /** Local-first write: the pending expense and its outbox row are committed together. */
     @Transaction

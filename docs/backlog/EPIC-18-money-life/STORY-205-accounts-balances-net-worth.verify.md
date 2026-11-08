@@ -33,3 +33,9 @@ FINDINGS:
 - [MINOR] a matured certificate still counts at principal (its payout lands in the bank)
 - [NIT] a lone earlier snapshot is replaced by "History starts today"; superseded DECISIONS line; no card reminder yet
 STATUS: PASS -> MINORs fixed before integration
+
+## MINOR fixes - head `2ee1e81` (diff reviewed by the orchestrator)
+Any second active account with the same last four is rejected, and Wealth reports captured entries matching several
+accounts; a date with a blank time is now (today) or Cairo noon (past), `9:30`/`٩:٣٠` accepted; matured certificates
+count 0 and say "principal returned to your account"; one earlier snapshot is kept beside today. Gate: `check-fast GREEN
+[android] in 216s` on the tree merged with main (incl. STORY-204).

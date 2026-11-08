@@ -40,6 +40,8 @@ data class ExpenseEntity(
     val paidByMemberId: String? = null,
     /** The server's id for a row cached from (or imported from) the server; unique, so the import is idempotent. */
     val serverId: String? = null,
+    // v10: "Don't count in totals" (analytics use it in STORY-206).
+    @ColumnInfo(defaultValue = "0") val excludedFromTotals: Boolean = false,
 )
 
 @Entity(tableName = "category")
@@ -52,6 +54,8 @@ data class CategoryEntity(
     val color: String? = null,
     @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
     @ColumnInfo(defaultValue = "0") val system: Boolean = false,
+    // v10
+    val emoji: String? = null,
 )
 
 @Entity(tableName = "account")
@@ -63,6 +67,13 @@ data class AccountEntity(
     val institution: String? = null,
     val last4: String? = null,
     @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
+    // v10: credit card facts (STORY-207) and a picker emoji. Never a full account number.
+    val creditLimitMinor: Long? = null,
+    /** Day of month 1..31 the statement closes. */
+    val statementDay: Int? = null,
+    /** Day of month 1..31 the payment is due. */
+    val dueDay: Int? = null,
+    val emoji: String? = null,
 )
 
 /** A household member. A phone without a server starts with one row "Me" (ADR-0009 D3). */

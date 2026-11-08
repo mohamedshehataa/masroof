@@ -48,9 +48,19 @@ import eg.masroof.data.SettingsRepository
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
+import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.ask.AskRoute
+import eg.masroof.ui.bills.AddPlanRoute
+import eg.masroof.ui.bills.BillsRoute
+import eg.masroof.ui.bills.PlanDetailRoute
 import eg.masroof.ui.budgets.BudgetsRoute
+import eg.masroof.ui.categories.CategoriesRoute
+import eg.masroof.ui.categories.MerchantRulesRoute
 import eg.masroof.ui.edit.EditExpenseRoute
+import eg.masroof.ui.goals.GoalDetailRoute
+import eg.masroof.ui.goals.GoalFormRoute
+import eg.masroof.ui.goals.GoalsRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
@@ -62,6 +72,8 @@ import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.ui.viewmodel.UndoDeleteViewModel
+import eg.masroof.ui.wealth.WealthRoute
+import eg.masroof.work.EXTRA_OPEN_ROUTE
 import eg.masroof.work.ForegroundSync
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -84,9 +96,27 @@ private enum class Tab(
 private const val ADD_ROUTE = "add?receipt={receipt}"
 private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
+private const val CATEGORIES_ROUTE = "settings/categories"
+private const val RULES_ROUTE = "settings/merchant-rules"
+private const val ASK_ROUTE = "ask"
+private const val WEALTH_ROUTE = "wealth"
+private const val ACCOUNTS_ROUTE = "accounts"
 private const val EDIT_ROUTE = "edit/{id}"
+private const val GOALS_ROUTE = "goals"
+private const val GOAL_NEW_ROUTE = "goals-new"
+private const val GOAL_DETAIL_ROUTE = "goals/{id}"
+private const val GOAL_EDIT_ROUTE = "goals/{id}/edit"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
+private const val BILLS_ROUTE = "bills"
+private const val BILL_ADD_ROUTE = "bills/add"
+private const val BILL_DETAIL_ROUTE = "bills/{id}"
+
+/** The only route a notification may open: a bills plan by its UUID (the shape UuidIdFactory makes). */
+private val OPENABLE_ROUTE = Regex("""bills/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
+
+// No floating add button on screens with their own primary action or an input field at the bottom.
+private val FAB_HIDDEN_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE, ASK_ROUTE)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -102,9 +132,19 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 false
             }
+
+        /** The in-app route a reminder asks for, only when it is on the allow-list; hostile extras count as none. */
+        @Suppress("TooGenericExceptionCaught")
+        internal fun routeFrom(intent: Intent?): String? =
+            try {
+                intent?.getStringExtra(EXTRA_OPEN_ROUTE)?.takeIf { OPENABLE_ROUTE.matches(it) }
+            } catch (_: Exception) {
+                null
+            }
     }
 
     private var openReceipts by mutableStateOf(false)
+    private var openRoute by mutableStateOf<String?>(null)
 
     /**
      * The launch intent is replaced by a bare one before any navigation sees it: the navigation library reads deep-link extras
@@ -112,8 +152,10 @@ class MainActivity : ComponentActivity() {
      */
     private fun takeIntent(intent: Intent?, fresh: Boolean) {
         val wants = fresh && wantsReceipts(intent)
+        val route = if (fresh) routeFrom(intent) else null
         setIntent(Intent(this, MainActivity::class.java))
         if (wants) openReceipts = true
+        if (route != null) openRoute = route
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +195,8 @@ class MainActivity : ComponentActivity() {
                 MasroofRoot(
                     openReceipts = openReceipts,
                     onReceiptsOpened = { openReceipts = false },
+                    openRoute = openRoute,
+                    onRouteOpened = { openRoute = null },
                     onToggleLanguage = {
                         AppLanguage.toggle(this@MainActivity)
                         recreate()
@@ -167,6 +211,8 @@ class MainActivity : ComponentActivity() {
 private fun MasroofRoot(
     openReceipts: Boolean,
     onReceiptsOpened: () -> Unit,
+    openRoute: String?,
+    onRouteOpened: () -> Unit,
     onToggleLanguage: () -> Unit,
 ) {
     val nav = rememberNavController()
@@ -178,6 +224,12 @@ private fun MasroofRoot(
         if (openReceipts) {
             nav.navigate(RECEIPTS_ROUTE)
             onReceiptsOpened()
+        }
+    }
+    LaunchedEffect(openRoute) {
+        if (openRoute != null) {
+            nav.navigate(openRoute)
+            onRouteOpened()
         }
     }
     val deletedText = stringResource(R.string.edit_deleted)
@@ -210,7 +262,7 @@ private fun MasroofRoot(
             }
         },
         floatingActionButton = {
-            if (destination?.route != ADD_ROUTE && destination?.route != EDIT_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
+            if (destination?.route !in FAB_HIDDEN_ROUTES) {
                 FloatingActionButton(onClick = { nav.navigate("add") }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
@@ -224,9 +276,13 @@ private fun MasroofRoot(
                     onOpenInsights = { nav.navigate(Tab.Insights.route) },
                     onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
                     onOpenExpense = { id -> nav.navigate("edit/$id") },
+                    onOpenAsk = { nav.navigate(ASK_ROUTE) },
                 )
             }
-            composable(Tab.Insights.route) { InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }) }
+            composable(Tab.Insights.route) {
+                InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }, onOpenAsk = { nav.navigate(ASK_ROUTE) })
+            }
+            composable(ASK_ROUTE) { AskRoute(onBack = { nav.popBackStack() }, onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(BUDGETS_ROUTE) { BudgetsRoute() }
             composable(Tab.Transactions.route) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(EDIT_ROUTE) { EditExpenseRoute(onDone = { nav.popBackStack() }) }
@@ -235,8 +291,32 @@ private fun MasroofRoot(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                    onOpenCategories = { nav.navigate(CATEGORIES_ROUTE) },
+                    onOpenRules = { nav.navigate(RULES_ROUTE) },
+                    onOpenWealth = { nav.navigate(WEALTH_ROUTE) },
+                    onOpenBills = { nav.navigate(BILLS_ROUTE) },
+                    onOpenGoals = { nav.navigate(GOALS_ROUTE) },
                 )
             }
+            composable(CATEGORIES_ROUTE) { CategoriesRoute() }
+            composable(RULES_ROUTE) { MerchantRulesRoute() }
+            composable(WEALTH_ROUTE) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
+            composable(ACCOUNTS_ROUTE) { AccountsRoute() }
+            composable(BILLS_ROUTE) {
+                BillsRoute(onAdd = { nav.navigate(BILL_ADD_ROUTE) }, onOpenPlan = { id -> nav.navigate("bills/$id") })
+            }
+            composable(BILL_ADD_ROUTE) {
+                AddPlanRoute(onSaved = { id -> nav.navigate("bills/$id") { popUpTo(BILL_ADD_ROUTE) { inclusive = true } } })
+            }
+            composable(BILL_DETAIL_ROUTE) { PlanDetailRoute(onClose = { nav.popBackStack() }) }
+            composable(GOALS_ROUTE) {
+                GoalsRoute(onOpenGoal = { id -> nav.navigate("goals/$id") }, onNewGoal = { nav.navigate(GOAL_NEW_ROUTE) })
+            }
+            composable(GOAL_NEW_ROUTE) { GoalFormRoute(onDone = { nav.popBackStack() }) }
+            composable(GOAL_DETAIL_ROUTE) {
+                GoalDetailRoute(onEdit = { id -> nav.navigate("goals/$id/edit") }, onClosed = { nav.popBackStack() })
+            }
+            composable(GOAL_EDIT_ROUTE) { GoalFormRoute(onDone = { nav.popBackStack() }) }
             composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
             composable(REVIEW_ADD_ROUTE) { entry ->
                 ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })

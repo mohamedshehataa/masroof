@@ -14,3 +14,9 @@ FINDINGS:
 - [MINOR] celebration fires again after take-out and re-reach
 - [NIT] 99.5% shows "100%" without Reached; dialog button says Save; Arabic gender/phrasing in two strings
 STATUS: PASS -> MINORs fixed before integration
+
+## MINOR fixes - head `2f8da11` (diff reviewed by the orchestrator)
+Name capped at 60 with a field error; movement dates bounded to [goal creation, today Cairo] and the running total checked
+at every date so the chart never goes below zero; celebration and `completedAtMillis` first time only; percent never
+rounds up to 100 below the target; dialog button "Done"/"تمام"; Arabic strings fixed. 5 new REQ-tagged tests; the
+builder replaced its own earlier "take out clears completedAtMillis" test because the rule changed. Gate GREEN.

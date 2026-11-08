@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gold_bucket">دهب وفضة</string>
+    <string name="gold_add_chip">دهب وفضة</string>
+    <string name="gold_open">افتح</string>
+    <string name="gold_back">رجوع</string>
+    <string name="gold_ok">تمام</string>
+    <string name="gold_save">حفظ</string>
+    <string name="gold_cancel">إلغاء</string>
+    <string name="gold_edit">تعديل</string>
+    <string name="gold_delete">مسح</string>
+    <string name="gold_undo">تراجع</string>
+    <string name="gold_not_found">المقتنى ده اتمسح</string>
+
+    <string name="gold_kind_gold">دهب</string>
+    <string name="gold_kind_silver">فضة</string>
+    <string name="gold_karat_gold">دهب عيار %1$s</string>
+    <string name="gold_karat_silver">فضة %1$s</string>
+    <string name="gold_grams">%1$s جرام</string>
+
+    <string name="gold_form_name">الاسم (مثلاً شبكة الفرح)</string>
+    <string name="gold_form_grams">الجرامات</string>
+    <string name="gold_form_paid">المدفوع (جنيه)</string>
+    <string name="gold_form_received">المستلم (جنيه)</string>
+    <string name="gold_form_date">التاريخ (سنة-شهر-يوم، فاضي = النهارده)</string>
+    <string name="gold_error_name">اكتب اسم (لحد ٦٠ حرف)</string>
+    <string name="gold_error_grams">اكتب الجرامات، أكتر من صفر</string>
+    <string name="gold_error_amount">اكتب مبلغ أكبر من صفر</string>
+    <string name="gold_error_date">اكتب تاريخ صحيح مش بعد النهارده</string>
+    <string name="gold_error_too_large">الرقم ده كبير قوي</string>
+    <string name="gold_error_only_hold">معاك بس %1$s</string>
+    <string name="gold_error_goal">الهدف ده ما ينفعش يتدعم: مؤرشف أو بعملة تانية.</string>
+    <string name="gold_error_linked">المقتنى ده بيدعم هدف تاني. فك الربط الأول.</string>
+
+    <string name="gold_held">اللي معاك</string>
+    <string name="gold_value">يساوي النهارده</string>
+    <string name="gold_value_at_cost">يساوي (بالتكلفة، لسه مفيش سعر)</string>
+    <string name="gold_average">متوسط اللي دفعته: %1$s للجرام</string>
+    <string name="gold_gain">المكسب: %1$s (%2$s)</string>
+    <string name="gold_gain_no_pct">المكسب: %1$s</string>
+    <string name="gold_realised">مكسب البيع: %1$s</string>
+    <string name="gold_add_price">ضيف سعر النهارده</string>
+    <string name="gold_price_line">سعر النهارده: %1$s للجرام (%2$s)</string>
+    <string name="gold_price_stale">السعر من %1$s - حدّثه</string>
+    <string name="gold_price_sheet_gold">سعر الدهب النهارده</string>
+    <string name="gold_price_sheet_silver">سعر الفضة النهارده</string>
+    <string name="gold_price_hint">اكتب سعر الجرام لكل عيار. مصروف مفيهوش سعر مباشر، فانت اللي بتحدده.</string>
+    <string name="gold_price_field">سعر الجرام، %1$s (جنيه)</string>
+
+    <string name="gold_buy_more">اشتري كمان</string>
+    <string name="gold_record_sale">سجّل بيع</string>
+    <string name="gold_lot_title_buy">ضيف شراء</string>
+    <string name="gold_lot_title_sell">سجّل بيع</string>
+    <string name="gold_lot_title_edit">تعديل الدفعة</string>
+    <string name="gold_lots">الدفعات</string>
+    <string name="gold_lots_empty">مفيش دفعات لسه</string>
+    <string name="gold_lot_buy">اشتريت %1$s بـ %2$s</string>
+    <string name="gold_lot_sell">بعت %1$s بـ %2$s</string>
+    <string name="gold_lot_entry">شراء دهب، مربوط بمعاملة</string>
+    <string name="gold_delete_lot_title">تمسح الدفعة دي؟</string>
+
+    <string name="gold_link_entry">اربطها بمعاملة موجودة</string>
+    <string name="gold_unlink_entry">فك ربط المعاملة</string>
+    <string name="gold_entry_picker_title">اختار المعاملة</string>
+    <string name="gold_entry_none">مفيش معاملات حديثة تتربط</string>
+    <string name="gold_entry_row">%1$s - %2$s</string>
+    <string name="gold_entry_unnamed">معاملة</string>
+    <string name="gold_entry_selected">مربوطة بـ: %1$s</string>
+    <string name="gold_entry_excluded">المعاملة دي مبقتش بتتحسب مصروف: شراء الدهب ادخار.</string>
+
+    <string name="gold_goal_section">الهدف</string>
+    <string name="gold_goal_none">مش بيدعم هدف</string>
+    <string name="gold_goal_backing">بيدعم هدف %1$s</string>
+    <string name="gold_goal_link">ادعم هدف</string>
+    <string name="gold_goal_unlink">فك الربط</string>
+    <string name="gold_goal_unlink_title">تفك الربط بالهدف؟</string>
+    <string name="gold_goal_unlink_body">الهدف مش هيحسب المقتنى ده تاني، فالمبلغ المدخر هينقص بقيمته.</string>
+    <string name="gold_goal_pick_title">تدعم أنهي هدف؟</string>
+    <string name="gold_goal_no_goals">اعمل هدف الأول وبعدين اربط المقتنى بيه.</string>
+    <string name="gold_including_gold">شامل دهب بقيمة %1$s</string>
+    <string name="gold_including_silver">شامل فضة بقيمة %1$s</string>
+
+    <string name="gold_hide">اخفيه من الإجماليات</string>
+    <string name="gold_delete_holding">امسح المقتنى ده</string>
+    <string name="gold_delete_holding_title">تمسح المقتنى ده؟</string>
+    <string name="gold_delete_holding_body">الدفعات هتتمسح وأي هدف بيدعمه مش هيحسبه. والمعاملات المربوطة هترجع تتحسب مصروف.</string>
+</resources>

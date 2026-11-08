@@ -4,6 +4,9 @@ import androidx.room.withTransaction
 import eg.masroof.core.CairoTime
 import eg.masroof.core.Money
 import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.categories.CUSTOM_ID_PREFIX
+import eg.masroof.data.categories.CategoryNameKey
+import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -46,6 +49,13 @@ data class NewExpense(
     val paidByMemberId: String? = null,
     /** A receipt that waited unattached (REQ-RCPT-023): attached in the same write as the entry, or not at all. */
     val receiptId: String? = null,
+    /** "EXPENSE" (default) or "INCOME"; income is listed but never counts as spending (ADR-0009 D2). */
+    val type: String = "EXPENSE",
+    /**
+     * Shop or payee (e.g. from a spoken line); null = none. With no [categoryId] a merchant rule may file the entry
+     * (a chosen category always wins).
+     */
+    val merchant: String? = null,
 )
 
 /** New ids for rows. A seam so a test can make a write fail deterministically. */
@@ -91,6 +101,8 @@ interface ExpenseRepository {
 
 const val CHANNEL_MANUAL = "MANUAL"
 
+private val CURRENCY_CODE = Regex("[A-Z]{3}")
+
 @Singleton
 class DefaultExpenseRepository
     @Inject
@@ -121,11 +133,13 @@ class DefaultExpenseRepository
 
         override fun observePickerCategories(): Flow<List<CategoryEntity>> = db.lookups().observeAllCategories().map(::oneChipPerName)
 
-        override fun observeAccounts() = db.lookups().observeAccounts()
+        override fun observeAccounts() = db.accountBalances().observeActiveAccounts()
 
         override fun observeMembers() = db.lookups().observeMembers()
 
         override suspend fun add(entry: NewExpense): String {
+            require(entry.type == "EXPENSE" || entry.type == "INCOME") { "Unknown entry type" }
+            require(CURRENCY_CODE.matches(entry.amount.currency)) { "Currency must be a 3-letter ISO code" }
             val now = clock.millis()
             val id = ids.next()
             val sourceId = ids.next()
@@ -141,7 +155,8 @@ class DefaultExpenseRepository
                             amountMinor = entry.amount.amountMinor,
                             currency = entry.amount.currency,
                             occurredAtMillis = occurredAt,
-                            merchant = null,
+                            merchant = entry.merchant?.trim()?.takeIf { it.isNotEmpty() },
+                            type = entry.type,
                             categoryId = entry.categoryId,
                             accountId = entry.accountId,
                             notes = entry.notes,
@@ -151,7 +166,7 @@ class DefaultExpenseRepository
                             createdAtMillis = now,
                             updatedAtMillis = now,
                             timeKnown = today,
-                        ),
+                        ).filedByRule(db),
                     )
                     entry.receiptId?.let { db.receipts().attachWaiting(it, id) }
                     db.sources().insert(
@@ -178,12 +193,17 @@ class DefaultExpenseRepository
         }
 
         /**
-         * Two chips with the same name would confuse the user. The phone's own default wins over a server category of the
-         * same English name (case-insensitive); among equals the first by sort order stays.
+         * Only a server copy of a category the phone already has (same normalised name) is dropped. A custom category is never
+         * dropped, so "Fuel" under Dining out stays even though "Fuel" exists under Car.
          */
-        private fun oneChipPerName(all: List<CategoryEntity>): List<CategoryEntity> =
-            all
-                .sortedByDescending { it.system }
-                .distinctBy { it.nameEn.trim().lowercase() }
-                .sortedWith(compareBy({ it.sortOrder }, { it.nameEn }))
+        private fun oneChipPerName(all: List<CategoryEntity>): List<CategoryEntity> {
+            val systemNames = all.filter { it.system }.mapTo(HashSet()) { CategoryNameKey.of(it.nameEn) }
+            // the phone's own and the user's custom categories are always kept; only server copies can be duplicates
+            val own = all.filter { it.system || it.id.startsWith(CUSTOM_ID_PREFIX) }
+            val servers =
+                all
+                    .filter { !it.system && !it.id.startsWith(CUSTOM_ID_PREFIX) && CategoryNameKey.of(it.nameEn) !in systemNames }
+                    .distinctBy { CategoryNameKey.of(it.nameEn) }
+            return (own + servers).sortedWith(compareBy({ it.sortOrder }, { it.nameEn }))
+        }
     }

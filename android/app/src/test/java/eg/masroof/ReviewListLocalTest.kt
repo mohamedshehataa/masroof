@@ -17,9 +17,12 @@ import eg.masroof.ingest.parse.IncomingMessage
 import eg.masroof.ui.viewmodel.ReviewSaveResult
 import eg.masroof.ui.viewmodel.ReviewViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -119,6 +122,10 @@ class ReviewListLocalTest {
             pipeline().accept(sms("NBE", z18))
             val item = db.reviews().all().single()
             vm().dismiss(item.id)
+            // dismiss() launches on viewModelScope (Main, a queued Robolectric looper): wait for the delete to land.
+            withContext(Dispatchers.Default) {
+                withTimeout(10_000) { while (db.reviews().all().isNotEmpty()) delay(10) }
+            }
             assertTrue(db.reviews().all().isEmpty())
             assertTrue(db.expenses().all().isEmpty())
             assertTrue(db.learnedTemplates().all().isEmpty())

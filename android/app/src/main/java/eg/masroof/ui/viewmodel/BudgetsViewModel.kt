@@ -51,6 +51,11 @@ data class BudgetsState(
     val error: BudgetError? = null,
 )
 
+private val SERVER_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+/** True for an id the budgets server knows (a UUID); the phone's own `cat-...` and `custom-...` ids are not. */
+internal fun isServerCategoryId(id: String): Boolean = SERVER_ID.matches(id)
+
 @HiltViewModel
 class BudgetsViewModel
     @Inject
@@ -70,7 +75,9 @@ class BudgetsViewModel
         )
 
         val state: StateFlow<BudgetsState> =
-            combine(repository.observe(), expenses.observeCategories(), status, form) { snapshot, categories, st, f ->
+            combine(repository.observe(), expenses.observeCategories(), status, form) { snapshot, all, st, f ->
+                // budgets are server-backed: a local category (not a server UUID) is never offered
+                val categories = all.filter { isServerCategoryId(it.id) }
                 BudgetsState(snapshot?.toRows(categories).orEmpty(), categories, st, f.saving, f.error)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), BudgetsState())
 
@@ -106,7 +113,18 @@ class BudgetsViewModel
                 val period = rows.firstOrNull { it.id == editingId }?.period ?: BudgetPeriod.MONTHLY
                 val draft = BudgetDraft(categoryId, minor, householdCurrency(rows), rollover, period)
                 val scope = draft.categoryId to draft.period
-                var outcome = if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
+                var outcome =
+                    try {
+                        if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
+                    } catch (
+                        @Suppress("SwallowedException") _: IllegalArgumentException,
+                    ) {
+                        MutationOutcome.Invalid
+                    } catch (
+                        @Suppress("SwallowedException") _: IllegalStateException,
+                    ) {
+                        MutationOutcome.Failed
+                    }
                 if (editingId == null) {
                     // a create that got no answer may still have gone through; a later 409 for that scope is then ours
                     val unanswered = outcome == MutationOutcome.Offline

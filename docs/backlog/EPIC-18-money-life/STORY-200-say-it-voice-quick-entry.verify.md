@@ -79,3 +79,14 @@ FINDINGS:
 - [MAJOR] `ألف جنيه إلا ربع` -> 1,000 (partial)
 - [MINOR] `مدفعتش إلا 50` now no amount; generated test oracle mirrors the parser's run choice
 STATUS: FAIL -> fix round 5 (small, targeted) + severity rubric (DECISIONS)
+
+## Loop 6 - head `9bcf7eb` (severity rubric from DECISIONS applied)
+Gate GREEN in 34s; `--rerun` 796 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 324). 242 parser cases + 16 VM steps.
+- Loop-5 MAJORs: PASS (`ألف جنيه ونص إيجار 3 شهور` -> 1,500; `150 جنيه ونص لـ 2 كيلو` -> 150.50; `ألف جنيه إلا ربع` -> 750)
+- MINORs: PASS (`مدفعتش إلا 50` -> 50; `50 جنيه ونص 2 قهوة` -> 50.50); split oracle: single-phrase generated test (332,411
+  phrases) + run-selection table; listed digit patterns covered by explicit table tests
+- No regression across all earlier lines; REQ-PARSE-098, REQ-PARSE-099, REQ-AND-144, REQ-EXP-052: PASS
+FINDINGS (MINOR under the rubric; known limitations): digits before ونص read the half as half a pound
+(`١٠٠٠ جنيه ونص` -> 1,000.50 while the words `ألف جنيه ونص` -> 1,500; recognizers often output digits - candidate
+follow-up); `50 جنيه ونص و 2 قهوة` -> no amount; `50 نص 500` -> 500 (unlisted).
+STATUS: PASS

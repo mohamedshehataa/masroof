@@ -27,3 +27,15 @@ FINDINGS:
   key keeps digits against the spec text (DECISIONS)
 - [NIT] key cap applied only when adding a rule; stale test name
 STATUS: FAIL -> fix round 2 (budget boundary: server ids only + error result instead of crash)
+
+## Loop 3 - head `8960731` (main incl. STORY-204 merged)
+Gate EXIT 0; `--rerun` 736 tests, 0 failures; TEST_INTEGRITY: OK (195 assertions, `FakeBudgetsRemote` made `open` is
+test-only). 16 exploratory cases, 0 new problems.
+- BLOCKER fixed at the budget boundary: the Budgets picker offers only server UUID categories; create/update/delete with
+  `custom-...`, `cat-...`, empty or fake ids -> `Invalid`, nothing saved, no crash; `observeCategories()` unchanged
+- REQ-EXP-060: PASS; REQ-EXP-061: PASS (EXPENSE-only rules on every path, institution fallback never filed, exact Undo,
+  double tap, 80-code-point key cap so long merchants match their own rule)
+FINDINGS (MINOR, known limitations): manual entries get rules once the Add form sends a merchant (STORY-200); archived
+top-level categories show as Uncategorised in Insights (pre-existing). NITs: 80-char prefix twins share a key; first
+STORY-207 DECISIONS line superseded; digit-only merchants can get a rule.
+STATUS: PASS
