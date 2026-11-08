@@ -157,7 +157,7 @@ class DefaultExpenseEditor
                 outcome
             }
 
-        /** Deletes this entry only. A real entry that a pair had converted is put back as it was; a refund of this purchase becomes income. */
+        /** Deletes this entry only; a converted real entry is put back as it was, a refund of this purchase becomes income. */
         override suspend fun delete(id: String): EditOutcome = remove(id, withPartner = false)
 
         override suspend fun deleteWithPartner(id: String): EditOutcome = remove(id, withPartner = true)

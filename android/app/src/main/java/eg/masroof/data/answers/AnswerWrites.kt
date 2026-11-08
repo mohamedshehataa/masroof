@@ -100,20 +100,24 @@ internal object AnswerWrites {
                     if (deleteWithPartner && partner != null) db.expenses().softDelete(partner, now)
                     if (link.converted.isNotEmpty() && link.converted != deletedId) revertConverted(db, link, now)
                 }
-                LinkKind.REFUND ->
-                    if (partner != null) {
-                        if (deleteRefund) {
-                            db.expenses().softDelete(partner, now)
-                        } else {
-                            // a refund without its purchase would net spending below zero: it is received money again
-                            val refund = db.expenses().find(partner)
-                            if (refund != null && refund.deletedAtMillis == null && refund.type == ExpenseTypes.REFUND) {
-                                db.expenses().update(refund.copy(type = ExpenseTypes.INCOME, updatedAtMillis = now))
-                            }
-                        }
-                    }
+                LinkKind.REFUND -> if (partner != null) releaseRefund(db, partner, deleteRefund, now)
             }
         }
+    }
+
+    private suspend fun releaseRefund(
+        db: AppDatabase,
+        refundId: String,
+        delete: Boolean,
+        now: Long,
+    ) {
+        if (delete) {
+            db.expenses().softDelete(refundId, now)
+            return
+        }
+        // a refund without its purchase would net spending below zero: it is received money again
+        val refund = db.expenses().find(refundId)?.takeIf { it.deletedAtMillis == null && it.type == ExpenseTypes.REFUND } ?: return
+        db.expenses().update(refund.copy(type = ExpenseTypes.INCOME, updatedAtMillis = now))
     }
 
     private suspend fun revertConverted(

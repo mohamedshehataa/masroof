@@ -277,7 +277,8 @@ object AnswerCards {
         c: ExpenseEntity,
         outgoing: Boolean,
     ): Boolean {
-        if (!c.live() || !c.captured() || c.currency != entry.currency || c.amountMinor != entry.amountMinor) return false
+        if (!c.live() || !c.captured() || c.currency != entry.currency) return false
+        if (c.amountMinor != entry.amountMinor) return false
         if (c.paymentMethod?.startsWith(GAM3EYA_PREFIX) == true) return false
         if (outgoing && c.paymentMethod !in transferMethods) return false
         val delta = c.occurredAtMillis - entry.occurredAtMillis
