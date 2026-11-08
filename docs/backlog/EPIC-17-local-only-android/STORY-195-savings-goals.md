@@ -3,7 +3,7 @@ id: STORY-195
 epic: EPIC-17
 title: Savings goals - set money aside ahead for a known expense
 phase: 7
-status: DRAFT
+status: DESCOPED
 risk_tier: high
 size: M
 modules: [android]
@@ -14,6 +14,8 @@ owner_agent: android-engineer
 ---
 
 # STORY-195 - Savings goals - set money aside ahead for a known expense
+
+> **DESCOPED 2026-11-08** - superseded by EPIC-18 STORY-204 (savings goals, built from the Say teardown). REQ-AN-159 stays reserved here and is not reused.
 
 > **DRAFT stub** - owner raised "goals / saving ahead" earlier; no Part I section covers it. Product questions (how money
 > "set aside" is recorded, whether it reduces the spendable budget) are open for the owner. REQ id reserved.
