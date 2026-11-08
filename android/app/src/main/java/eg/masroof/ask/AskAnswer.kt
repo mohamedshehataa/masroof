@@ -102,6 +102,8 @@ sealed interface AskAnswer {
         val otherCurrencyCount: Int,
         val entries: List<EntryLine>,
         override val followUps: List<AskChip>,
+        /** Words of the question that were left out ("mom" in "groceries for mom"); the answer says so. */
+        val ignored: String? = null,
     ) : AskAnswer
 
     /** The entries behind a total, newest first (at most [AskCalculator.ENTRY_LIST_LIMIT]); [count] is how many there are. */

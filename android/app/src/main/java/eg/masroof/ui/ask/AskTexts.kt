@@ -177,7 +177,8 @@ class AskTexts(
                 subject != null -> res.getString(R.string.ask_spend_subject, money(a.totalMinor), subject, period)
                 else -> res.getString(R.string.ask_spend_all, money(a.totalMinor), period)
             }
-        val lines = listOfNotNull(if (a.count > 0) entriesCount(a.count) else null, otherCurrency(a.otherCurrencyCount))
+        val left = a.ignored?.let { res.getString(R.string.ask_ignored, subject.orEmpty(), it) }
+        val lines = listOfNotNull(if (a.count > 0) entriesCount(a.count) else null, otherCurrency(a.otherCurrencyCount), left)
         return AnswerText(null, head, lines)
     }
 

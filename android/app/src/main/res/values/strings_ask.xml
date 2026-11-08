@@ -117,4 +117,5 @@
         <item quantity="one">in the last day</item>
         <item quantity="other">in the last %1$s days</item>
     </plurals>
+    <string name="ask_ignored">Answered for %1$s only. I didn’t use: %2$s</string>
 </resources>

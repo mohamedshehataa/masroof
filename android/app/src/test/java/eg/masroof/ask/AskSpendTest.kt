@@ -264,4 +264,92 @@ class AskSpendTest : AskEngineFixture() {
             val partly = spend("how much did I spend on groceries and xyzzy this month") as AskAnswer.UnknownSubject
             assertEquals("groceries xyzzy", partly.text)
         }
+
+    private suspend fun seedMay() {
+        seedCategories()
+        put("may", 9_000, "2026-05-10T10:00:00Z", category = GROCERIES)
+        put("oct", 1_000, "2026-10-10T10:00:00Z", category = GROCERIES)
+        put("pharm", 3_000, "2026-10-11T10:00:00Z", merchant = "Mar Mina Pharmacy")
+    }
+
+    @Test
+    fun `REQ-AN-160 may next to a subject or alone is the month, never silently this month`() =
+        runTest {
+            seedMay()
+            for (q in listOf("groceries may", "may groceries", "how much did I spend on groceries in may")) {
+                val a = spend(q) as AskAnswer.SpendTotal
+                assertEquals("$q", 9_000L, a.totalMinor)
+                assertEquals(LocalDate.of(2026, 5, 1), a.period.from)
+            }
+            assertEquals(9_000L, (spend("spending may") as AskAnswer.SpendTotal).totalMinor)
+            assertEquals(9_000L, (spend("how much in may") as AskAnswer.SpendTotal).totalMinor)
+            val march = spend("march groceries") as AskAnswer.SpendTotal
+            assertEquals(LocalDate.of(2026, 3, 1), march.period.from)
+        }
+
+    @Test
+    fun `REQ-AN-165 may as a modal verb is not a month, a name part stays a merchant, and a doubtful month is not guessed`() =
+        runTest {
+            seedMay()
+            val modal = spend("I may have spent too much on groceries") as AskAnswer.SpendTotal
+            assertEquals(AskPeriod.THIS_MONTH, modal.period.period)
+            assertEquals(1_000L, modal.totalMinor)
+            val polite = spend("may I know how much I spent today") as AskAnswer.SpendTotal
+            assertEquals(AskPeriod.TODAY, polite.period.period)
+            val pharmacy = spend("spent at mar mina pharmacy") as AskAnswer.SpendTotal
+            assertEquals(3_000L, pharmacy.totalMinor)
+            assertEquals(AskPeriod.THIS_MONTH, pharmacy.period.period)
+            assertTrue(spend("groceries may spending") is AskAnswer.PeriodUnreadable)
+        }
+
+    @Test
+    fun `REQ-AN-160 a bare number is not a year unless it has a cue, and a named period wins over a number`() =
+        runTest {
+            seedMay()
+            val future = spend("did I spend more than 2050 on groceries this month") as AskAnswer.SpendTotal
+            assertEquals(AskPeriod.THIS_MONTH, future.period.period)
+            assertEquals(1_000L, future.totalMinor)
+            val amount = spend("spent 2000 on groceries") as AskAnswer.SpendTotal
+            assertEquals(AskPeriod.THIS_MONTH, amount.period.period)
+            val cued = spend("groceries in 2050") as AskAnswer.SpendTotal
+            assertEquals(LocalDate.of(2050, 1, 1), cued.period.from)
+        }
+
+    @Test
+    fun `REQ-AN-160 colloquial short prepositions and words for whom do not break the subject`() =
+        runTest {
+            seedMay()
+            val food = spend("صرفت كام ع الاكل الشهر ده") as AskAnswer.SpendTotal
+            assertEquals("Groceries + Dining out", food.subject?.en)
+            assertEquals(1_000L, food.totalMinor)
+            val forMom = spend("how much did I spend on groceries for mom this month") as AskAnswer.SpendTotal
+            assertEquals("Groceries", forMom.subject?.en)
+            assertEquals(1_000L, forMom.totalMinor)
+            assertEquals("mom", forMom.ignored)
+            assertTrue(en().text(forMom).lines.contains("Answered for Groceries only. I didn’t use: mom"))
+            assertEquals(
+                listOf("groceries xyzzy"),
+                listOf((spend("how much did I spend on groceries xyzzy mom") as? AskAnswer.UnknownSubject)?.text),
+            )
+        }
+
+    @Test
+    fun `REQ-AN-162 two subjects with vs are not merged into this month vs last month`() =
+        runTest {
+            seedMay()
+            val answer = spend("groceries vs dining this month") as AskAnswer.OneAtATime
+            assertEquals(2, answer.followUps.size)
+            val tapped = ask().answer(answer.followUps.first { it.arg?.en == "Groceries" }.query) as AskAnswer.Compare
+            assertEquals("Groceries", tapped.subject?.en)
+            assertEquals(1_000L, tapped.currentMinor)
+        }
+
+    @Test
+    fun `REQ-AN-160 merged labels name each category once`() =
+        runTest {
+            seedMay()
+            val a = spend("how much did I spend on food and groceries this month") as AskAnswer.SpendTotal
+            assertEquals("Groceries + Dining out", a.subject?.en)
+            assertEquals("بقالة + مطاعم", a.subject?.ar)
+        }
 }

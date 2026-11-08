@@ -190,6 +190,8 @@ object AskCalculator {
     private sealed interface Resolution {
         data class Found(
             val subject: AskSubject?,
+            /** Generic words left out next to the one real subject. */
+            val ignored: String? = null,
         ) : Resolution
 
         /** No subject: [answer] says why. [unknown] is true when the words matched nothing at all. */
@@ -203,35 +205,52 @@ object AskCalculator {
         subject: AskSubject?,
         period: AskPeriod,
         ctx: AskContext,
+        ignored: String? = null,
     ): Resolution {
         if (subject !is AskSubject.Text) return Resolution.Found(subject)
         val merchants = ctx.rows.mapNotNull { it.merchant }.distinct()
-        SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants)?.let { return Resolution.Found(it) }
+        SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants)?.let { return Resolution.Found(it, ignored) }
+        val tokens = ArabicText.tokens(subject.text)
+        val real = tokens.filter { it !in ParserLexicon.GENERIC }
+        if (real.isNotEmpty() && real.size < tokens.size) {
+            val left = tokens.filter { it in ParserLexicon.GENERIC }.joinToString(" ")
+            return resolveSubject(AskSubject.Text(real.joinToString(" ")), period, ctx, left)
+        }
         val parts = SubjectResolver.resolveParts(subject.text, ctx.categories, ctx.accounts, merchants)
         return when {
             parts.isEmpty() -> Resolution.Failed(unknown(subject.text, period, ctx), unknown = true)
             parts.all { it is AskSubject.Category } ->
-                Resolution.Found(mergeCategories(parts.filterIsInstance<AskSubject.Category>()))
+                Resolution.Found(mergeCategories(parts.filterIsInstance<AskSubject.Category>()), ignored)
             else -> Resolution.Failed(oneAtATime(parts, period), unknown = false)
         }
+    }
+
+    /** Two or more different things named in one question; empty when the text is one subject (or nothing). */
+    private fun severalParts(
+        subject: AskSubject?,
+        ctx: AskContext,
+    ): List<AskSubject> {
+        if (subject !is AskSubject.Text) return emptyList()
+        val merchants = ctx.rows.mapNotNull { it.merchant }.distinct()
+        if (SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants) != null) return emptyList()
+        return SubjectResolver.resolveParts(subject.text, ctx.categories, ctx.accounts, merchants)
     }
 
     /** "groceries and fuel" is one question over both: the ids are joined and the label names both. */
     private fun mergeCategories(parts: List<AskSubject.Category>) =
         AskSubject.Category(
             parts.flatMap { it.ids }.toSet(),
-            parts.joinToString(" + ") { it.nameEn },
-            parts.joinToString(" + ") { it.nameAr },
+            parts.flatMap { it.nameEn.split(" + ") }.distinct().joinToString(" + "),
+            parts.flatMap { it.nameAr.split(" + ") }.distinct().joinToString(" + "),
         )
 
     private fun oneAtATime(
         parts: List<AskSubject>,
         period: AskPeriod,
+        ask: (AskSubject) -> AskQuery = { AskQuery.Spend(period, it) },
     ): AskAnswer.OneAtATime =
         AskAnswer.OneAtATime(
-            parts.mapNotNull { part ->
-                label(part)?.let { AskChip(AskChipKind.SUGGESTED_CATEGORY, AskQuery.Spend(period, part), it) }
-            },
+            parts.mapNotNull { part -> label(part)?.let { AskChip(AskChipKind.SUGGESTED_CATEGORY, ask(part), it) } },
         )
 
     private fun unknown(
@@ -260,9 +279,10 @@ object AskCalculator {
         q: AskQuery.Spend,
         ctx: AskContext,
     ): AskAnswer {
+        var ignoredWords: String? = null
         val subject =
             when (val r = resolveSubject(q.subject, q.period, ctx)) {
-                is Resolution.Found -> r.subject
+                is Resolution.Found -> r.also { ignoredWords = it.ignored }.subject
                 is Resolution.Failed -> return if (q.implicit && r.unknown) AskAnswer.NotUnderstood(intro(ctx).chips) else r.answer
             }
         val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
@@ -283,6 +303,7 @@ object AskCalculator {
             otherCurrencyCount = others,
             entries = ordered.take(INLINE_ENTRIES).map { entry(it, ctx) },
             followUps = chips,
+            ignored = ignoredWords,
         )
     }
 
@@ -379,6 +400,8 @@ object AskCalculator {
         q: AskQuery.Compare,
         ctx: AskContext,
     ): AskAnswer {
+        val several = severalParts(q.subject, ctx)
+        if (several.isNotEmpty()) return oneAtATime(several, q.current) { AskQuery.Compare(q.current, q.previous, it) }
         val subject =
             when (val r = resolveSubject(q.subject, q.current, ctx)) {
                 is Resolution.Found -> r.subject

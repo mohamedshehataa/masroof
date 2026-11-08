@@ -150,7 +150,7 @@ class AskIntroRoastTest : AskEngineFixture() {
         assertEquals("1 visit", en().visits(1))
         assertEquals("2 visits", en().visits(2))
         assertEquals("زيارة واحدة", ar().visits(1))
-        assertEquals("زيارتان", ar().visits(2))
+        assertEquals("زيارتين", ar().visits(2))
         assertEquals("٣ زيارات", ar().visits(3))
         assertEquals("١١ زيارة", ar().visits(11))
         val share = CategoryShare(null, LocalizedText("", ""), 100, 10_000, 100, null, isOther = true)
@@ -159,9 +159,9 @@ class AskIntroRoastTest : AskEngineFixture() {
         val period = PeriodInfo(AskPeriod.THIS_MONTH, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31))
 
         fun spent(others: Int) = AskAnswer.SpendTotal(period, null, 100, 2, others, emptyList(), emptyList())
-        assertTrue(ar().text(spent(2)).lines.contains("عمليتان بعملة تانية مش محسوبتين"))
+        assertTrue(ar().text(spent(2)).lines.contains("عمليتين بعملة تانية مش محسوبين"))
         assertTrue(ar().text(spent(5)).lines.contains("٥ عمليات بعملات تانية مش محسوبة"))
-        assertTrue(ar().text(spent(2)).lines.contains("عمليتان"))
+        assertTrue(ar().text(spent(2)).lines.contains("عمليتين"))
         assertTrue(en().text(spent(3)).lines.contains("3 entries in other currencies not included"))
     }
 }

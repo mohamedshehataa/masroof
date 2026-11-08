@@ -92,13 +92,21 @@ internal object ParserLexicon {
             than more less so there has have had been over under into per any all every each some also just only very really often
             times time visits visit order orders ordered go went going goes buy bought shop shopping eat ate top places place
             merchants merchant shops stores expensive left remaining until till payday day roast breakdown week month year days
-            last past current previous ago now lately recently got many may too might should
+            last past current previous ago now lately recently got many may too might should know
+            ع عال لل ف ل عشان
             على علي في من الى الي عن ب مع و قد انا انت انتا بقي بقى ده دا دي دول لو سمحت ممكن عايز عاوز عايزه عاوزه اعرف قولي قوللي
             وريني هات فلوس فلوسي فلوسنا جنيه جنيها بتاع بتاعي بتاعت اللي باللي فات اخر شهر اسبوع سنه يوم ايام النهارده مره مرات
             اكتر اقل اماكن مكان محلات طلبت رحت روحت بروح بطلب اشتريت بشتري اشتري اروح اطلب راحت فين اوي جدا تاني فاضل باقي لحد حد
             لغايه
             3ala 3la fe fi f men el al ya w ana 3and da di dah deh dih dy fel fil lel lil l bta3 bta3t sarf floos floosy fluosy
             flosy fluos feen rahet raht awy awi gedan mara marra mrat talabt rohet roht fadel fadl el2abd 2abd bel bil""",
+        )
+
+    /** People and "for whom" words next to a real subject ("groceries for mom"): ignored, and the answer says so. */
+    val GENERIC: Set<String> =
+        words(
+            """mom dad mother father wife husband family friend friends sister brother son daughter kids
+            ماما بابا مامتي ابويا مراتي جوزي اهلي صاحبي اختي اخويا ابني بنتي""",
         )
 
     /** Words that are never part of a subject: filler plus every intent word above. */

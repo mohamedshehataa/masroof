@@ -96,7 +96,7 @@
     <plurals name="ask_visits">
         <item quantity="zero">لا زيارات</item>
         <item quantity="one">زيارة واحدة</item>
-        <item quantity="two">زيارتان</item>
+        <item quantity="two">زيارتين</item>
         <item quantity="few">%1$s زيارات</item>
         <item quantity="many">%1$s زيارة</item>
         <item quantity="other">%1$s زيارة</item>
@@ -112,7 +112,7 @@
     <plurals name="ask_entries">
         <item quantity="zero">لا عمليات</item>
         <item quantity="one">عملية واحدة</item>
-        <item quantity="two">عمليتان</item>
+        <item quantity="two">عمليتين</item>
         <item quantity="few">%1$s عمليات</item>
         <item quantity="many">%1$s عملية</item>
         <item quantity="other">%1$s عملية</item>
@@ -120,7 +120,7 @@
     <plurals name="ask_other_currency">
         <item quantity="zero">مفيش عمليات بعملات تانية</item>
         <item quantity="one">عملية واحدة بعملة تانية مش محسوبة</item>
-        <item quantity="two">عمليتان بعملة تانية مش محسوبتين</item>
+        <item quantity="two">عمليتين بعملة تانية مش محسوبين</item>
         <item quantity="few">%1$s عمليات بعملات تانية مش محسوبة</item>
         <item quantity="many">%1$s عملية بعملات تانية مش محسوبة</item>
         <item quantity="other">%1$s عملية بعملات تانية مش محسوبة</item>
@@ -141,4 +141,5 @@
         <item quantity="many">في آخر %1$s يوم</item>
         <item quantity="other">في آخر %1$s يوم</item>
     </plurals>
+    <string name="ask_ignored">جاوبت على %1$s بس. ما استخدمتش: %2$s</string>
 </resources>

@@ -1,5 +1,7 @@
 package eg.masroof.ask
 
+import eg.masroof.core.CairoTime
+import java.time.Year
 import java.time.YearMonth
 
 /**
@@ -28,10 +30,13 @@ internal object PeriodScanner {
     private const val PREFIX = "(?:ب|ل)?(?:ال)?"
     private val CUES = setOf("in", "on", "during", "for", "since", "last", "this", "of", "from", "to", "until", "till", "by")
 
+    /** TAKE: it is a period. SKIP: it is something else (a verb, part of a name) and stays in the text. UNREADABLE: cannot tell. */
+    private enum class Verdict { TAKE, SKIP, UNREADABLE }
+
     private class Rule(
         val regex: Regex,
         /** False when the match is not really a period (an ambiguous word like "may" without a cue); it is left in the text. */
-        val accept: (MatchResult, String) -> Boolean = { _, _ -> true },
+        val accept: (MatchResult, String) -> Verdict = { _, _ -> Verdict.TAKE },
         val build: (MatchResult) -> AskPeriod?,
     )
 
@@ -79,25 +84,65 @@ internal object PeriodScanner {
     private val clearMonths = monthNames.filterKeys { it !in ambiguousMonths }
     private val anyMonth = alternation(monthNames.keys)
 
-    private fun hasCue(
+    private val PRONOUNS = setOf("i", "we", "you", "he", "she", "it", "they")
+    private val AFTER_MODAL = PRONOUNS + "be"
+    private val VERB_PARTICLES = setOf("to", "into", "on")
+    private val YEAR_CUES = setOf("in", "during", "for", "of", "year", "سنه", "عام")
+
+    private fun neighbours(
         m: MatchResult,
         text: String,
-    ): Boolean {
-        val before =
-            text
-                .substring(0, m.range.first)
-                .trim()
-                .split(' ')
-                .lastOrNull()
-        val after =
+    ): Pair<String?, String?> =
+        text
+            .substring(0, m.range.first)
+            .trim()
+            .split(' ')
+            .lastOrNull()
+            ?.takeIf { it.isNotEmpty() } to
             text
                 .substring(m.range.last + 1)
                 .trim()
                 .split(' ')
                 .firstOrNull()
-                .orEmpty()
-        val whole = text.trim() == m.value
-        return before in CUES || after.isNotEmpty() && after.all(Char::isDigit) || m.groups[2] != null || whole
+                ?.takeIf { it.isNotEmpty() }
+
+    /**
+     * "may" / "mar" / "march" are months, except as the verb or modal ("I may", "may I", "march to") or part of a name
+     * ("at Mar Mina Pharmacy"). A month needs a cue, a year or day number after it, or to open or close the question.
+     */
+    private fun ambiguousVerdict(
+        m: MatchResult,
+        text: String,
+    ): Verdict {
+        val (before, after) = neighbours(m, text)
+        val word = m.groupValues[1]
+        val modal = word == "may" && (before in PRONOUNS || after in AFTER_MODAL)
+        val marching = word == "march" && after in VERB_PARTICLES
+        val namePart = before == "at"
+        val month =
+            m.groups[2] != null ||
+                before in CUES ||
+                after != null &&
+                after.all(Char::isDigit) ||
+                before == null ||
+                after == null
+        return when {
+            modal || marching || namePart -> Verdict.SKIP
+            month -> Verdict.TAKE
+            else -> Verdict.UNREADABLE
+        }
+    }
+
+    /** A bare 20xx is a year after a cue word, or when it closes the question and is not in the future. */
+    private fun yearVerdict(
+        m: MatchResult,
+        text: String,
+    ): Verdict {
+        val (before, after) = neighbours(m, text)
+        val prefixed = m.value != m.groupValues[1]
+        val plausible = m.groupValues[1].toInt() <= Year.now(CairoTime.zone).value
+        val closing = after == null && plausible
+        return if (prefixed || closing || before in YEAR_CUES) Verdict.TAKE else Verdict.SKIP
     }
 
     private fun yearOf(m: MatchResult, group: Int) = m.groups[group]?.value?.toInt()
@@ -132,7 +177,7 @@ internal object PeriodScanner {
             Rule(Regex("$B(${alternation(clearMonths.keys)})(?: $YEAR)?$E")) { m ->
                 AskPeriod.monthOfYear(monthNames.getValue(m.groupValues[1]), yearOf(m, 2))
             },
-            Rule(Regex("$B(${alternation(ambiguousMonths.keys)})(?: $YEAR)?$E"), accept = ::hasCue) { m ->
+            Rule(Regex("$B(${alternation(ambiguousMonths.keys)})(?: $YEAR)?$E"), accept = ::ambiguousVerdict) { m ->
                 AskPeriod.monthOfYear(ambiguousMonths.getValue(m.groupValues[1]), yearOf(m, 2))
             },
             Rule(Regex("$B(?:ب|ل)?(?:شهر|month|shahr) ([0-9]{1,2})(?: $YEAR)?$E")) { m ->
@@ -173,6 +218,7 @@ internal object PeriodScanner {
             ),
             Rule(
                 Regex("$B(?:(?:year|سنه|عام) )?$YEAR(?! (?:egp|le|جنيه|pound|pounds))$E"),
+                accept = ::yearVerdict,
             ) { m -> AskPeriod.year(m.groupValues[1].toInt()) },
             fixed("yesterday|امبارح|مبارح|امس|embare7|embar7|embareh|embarh", AskPeriod.YESTERDAY),
             fixed(
@@ -185,7 +231,7 @@ internal object PeriodScanner {
     private val unreadable =
         listOf(
             Regex("$B(?:ago|منذ)$E"),
-            Regex("$B(?:19|20)[0-9]{2}$E"),
+            Regex("$B(?:in|during|for|of|year|سنه|عام) (?:19|20)[0-9]{2}$E"),
             Regex("$B(?:past|last|akher|akhir|اخر) [0-9]+$E"),
             Regex("$B(?:from|between|من) [0-9]+ (?:(?:to|and|till|until|ل|الي|لحد) )?[0-9]+$E"),
         )
@@ -196,7 +242,9 @@ internal object PeriodScanner {
         var invalid = false
         for (rule in rules) {
             for (m in rule.regex.findAll(String(chars)).toList()) {
-                if (!rule.accept(m, String(chars))) continue
+                val verdict = rule.accept(m, String(chars))
+                if (verdict == Verdict.UNREADABLE) invalid = true
+                if (verdict != Verdict.TAKE) continue
                 val period = rule.build(m)
                 if (period == null) invalid = true else found.add(m.range.first to period)
                 for (i in m.range) chars[i] = ' '
