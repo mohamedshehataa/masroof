@@ -121,3 +121,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 02:40 · P7 · STORY-201 · integrate · GREEN · Room v10 money-life tables (13 new, 3 altered), additive migration verified from v2..v9, true upserts; verify PASS loop 2; PR #94
 2026-11-08 03:50 · P7 · STORY-204 · integrate · GREEN · Savings goals with emoji, add/take out, monthly need (whole-pound ceiling), on-track; verify PASS loop 1, MINORs fixed; supersedes STORY-195
 2026-11-08 04:55 · P7 · STORY-205 · integrate · GREEN · Wealth: accounts with honest balances (SMS by last four), credit cards, debts, certificates/funds/property, net worth with daily snapshots; verify FAIL loop 1 -> PASS loop 2, MINORs fixed
+2026-11-08 04:45 · P7 · STORY-202 · integrate · GREEN · Bills: installments (valU, Halan, ...) and gam3eya with schedules, record/link payments, overdue, daily reminders; verify PASS, security APPROVE, MINORs fixed

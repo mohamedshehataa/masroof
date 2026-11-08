@@ -3,7 +3,7 @@ id: STORY-202
 epic: EPIC-18
 title: Bills - track installments (valU, Halan, ...) and a gam3eya, with reminders before each payment
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -111,3 +111,6 @@ STORY-201
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 2, from the Say APK and the real app |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 7b19377; MINOR + security fixes aeea486 |
+| 2026-11-08 | 6 verify | qa-verifier, security-reviewer | PASS loop 1 (736 tests); security APPROVE |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

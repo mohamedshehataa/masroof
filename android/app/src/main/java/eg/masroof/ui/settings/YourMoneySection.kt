@@ -19,18 +19,20 @@ import eg.masroof.ui.components.SectionCard
 /** "Your money": a plain list of rows into the money-life screens (STORY-206 moves these into the app's tabs). */
 @Composable
 fun YourMoneySection(
-    onOpenGoals: () -> Unit,
-    onOpenWealth: () -> Unit,
+    onOpenGoals: () -> Unit = {},
+    onOpenBills: () -> Unit = {},
+    onOpenWealth: () -> Unit = {},
 ) {
     SectionCard(stringResource(R.string.goals_settings_section)) {
-        MoneyRow(R.string.settings_wealth_row, onOpenWealth)
-        MoneyRow(R.string.goals_settings_row, onOpenGoals)
+        MoneyRow(stringResource(R.string.settings_wealth_row), onOpenWealth)
+        MoneyRow(stringResource(R.string.bills_title), onOpenBills)
+        MoneyRow(stringResource(R.string.goals_settings_row), onOpenGoals)
     }
 }
 
 @Composable
 private fun MoneyRow(
-    label: Int,
+    label: String,
     onClick: () -> Unit,
 ) {
     Row(
@@ -41,6 +43,6 @@ private fun MoneyRow(
             .semantics { role = Role.Button },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(stringResource(label))
+        Text(label)
     }
 }
