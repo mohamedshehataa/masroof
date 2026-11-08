@@ -234,7 +234,7 @@ class BackfillRound5Test {
                     memory = store,
                 )
             // cause of the old difference: the receiver masks a code-like number BEFORE the worker parses (IncomingMessage.capped), so the
-            // classification sees the masked text; handing the raw text to the pipeline (not what the receiver does) classifies it as secret
+            // classification sees the masked text; the raw text (not what the receiver hands over) classifies as secret
             val raw = IncomingMessage(CaptureSource.SMS, "NBE", CODE_TRANSFER, at(2))
             pipeline.accept(raw)
             assertEquals(

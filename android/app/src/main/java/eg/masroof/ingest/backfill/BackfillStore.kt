@@ -224,22 +224,31 @@ class BackfillStore(
         val drop = mutableListOf<String>()
         val rewrite = mutableMapOf<String, List<Seen>>()
         for ((k, v) in prefs.all) {
-            if (v !is String) continue
-            when {
-                k.startsWith(SEEN) -> if ((open(v)?.toLongOrNull() ?: Long.MAX_VALUE) < cutoffMillis) drop += k
-                k.startsWith(SIG) || k.startsWith(AUX) -> {
-                    val all = slot(k) ?: continue
-                    val fresh = all.filter { it.marked >= cutoffMillis }
-                    if (fresh.isEmpty()) {
-                        drop += k
-                    } else if (fresh.size < all.size) {
-                        rewrite[k] = fresh
-                    }
-                }
-            }
+            if (v is String) pruneOne(k, v, cutoffMillis, drop, rewrite)
         }
         if (drop.isNotEmpty()) prefs.edit { drop.forEach { remove(it) } }
         rewrite.forEach { (key, fresh) -> write(key, fresh) }
+    }
+
+    private fun pruneOne(
+        key: String,
+        raw: String,
+        cutoffMillis: Long,
+        drop: MutableList<String>,
+        rewrite: MutableMap<String, List<Seen>>,
+    ) {
+        if (key.startsWith(SEEN)) {
+            if ((open(raw)?.toLongOrNull() ?: Long.MAX_VALUE) < cutoffMillis) drop += key
+            return
+        }
+        if (!key.startsWith(SIG) && !key.startsWith(AUX)) return
+        val all = slot(key) ?: return // unreadable: left alone
+        val fresh = all.filter { it.marked >= cutoffMillis }
+        if (fresh.isEmpty()) {
+            drop += key
+        } else if (fresh.size < all.size) {
+            rewrite[key] = fresh
+        }
     }
 
     private fun read(): BackfillState =
