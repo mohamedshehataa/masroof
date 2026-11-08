@@ -3,7 +3,7 @@ id: STORY-205
 epic: EPIC-18
 title: Wealth - accounts with honest balances, credit cards, debts, things you own and a net worth chart
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -112,3 +112,6 @@ STORY-201 (STORY-202 only for the card due-date reminder; optional)
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 2, from the Say APK and the real app |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 706f382; fix round 1 4c1ad15; MINOR fixes 2ee1e81 |
+| 2026-11-08 | 6 verify | qa-verifier | FAIL loop 1 (5 MAJOR), PASS loop 2 (705 tests) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
