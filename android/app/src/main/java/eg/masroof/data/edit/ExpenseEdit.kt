@@ -4,8 +4,12 @@ import android.database.sqlite.SQLiteException
 import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.EntryLink
+import eg.masroof.data.answers.ExpenseTypes
+import eg.masroof.data.answers.LinkKind
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
+import eg.masroof.data.answers.RowChange
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
@@ -71,6 +75,9 @@ sealed interface EditOutcome {
 
     /** The local write threw; the row is unchanged. */
     data object Failed : EditOutcome
+
+    /** The edit would make a linked refund bigger than its purchase (or take the purchase away from being a purchase). */
+    data object LinkedRefund : EditOutcome
 }
 
 interface ExpenseEditor {
@@ -100,6 +107,7 @@ interface ExpenseEditor {
 }
 
 private const val DELETION_BUFFER = 16
+private const val MAX_REMEMBERED = 32
 
 /** Edit, confirm, delete and Undo on Room only; no HTTP. Every write waits for a running erase and is one transaction. */
 @Singleton
@@ -116,6 +124,9 @@ class DefaultExpenseEditor
 
         override val deleted: SharedFlow<String> = deletions
 
+        /** What a delete changed besides the deleted row, by deleted id, until its Undo (a few seconds) or the next few deletes. */
+        private val released = java.util.concurrent.ConcurrentHashMap<String, List<RowChange>>()
+
         override suspend fun find(id: String) = db.expenses().find(id)?.takeIf { it.deletedAtMillis == null }
 
         override fun observeCategories() = db.lookups().observeLabelCategories()
@@ -128,7 +139,7 @@ class DefaultExpenseEditor
         ): EditOutcome =
             guarded {
                 val now = clock.millis()
-                val links = if (changes.status != null) pairs.linksOf(id) else emptyList()
+                val links = pairs.linksOf(id)
                 val outcome =
                     eraseLock.mutex.withLock {
                         db.withTransaction {
@@ -136,6 +147,7 @@ class DefaultExpenseEditor
                             when {
                                 old == null || old.deletedAtMillis != null -> EditOutcome.NotFound
                                 changes.isEmpty -> EditOutcome.Saved(old)
+                                breaksRefundLink(id, old, changes, links) -> EditOutcome.LinkedRefund
                                 else -> {
                                     val updated = old.withChanges(changes, now)
                                     db.expenses().update(updated)
@@ -157,6 +169,26 @@ class DefaultExpenseEditor
                 outcome
             }
 
+        /** A purchase may not go below its linked refund (or stop being one), nor a refund above its purchase. */
+        private suspend fun breaksRefundLink(
+            id: String,
+            old: ExpenseEntity,
+            changes: ExpenseChanges,
+            links: List<EntryLink>,
+        ): Boolean {
+            val newAmount = changes.amountMinor ?: old.amountMinor
+            val newType = changes.type ?: old.type
+            return links.filter { it.kind == LinkKind.REFUND }.any { link ->
+                if (id == link.second) {
+                    val refund = db.expenses().find(link.first)?.takeIf { it.deletedAtMillis == null }
+                    refund != null && (newAmount < refund.amountMinor || newType != ExpenseTypes.EXPENSE)
+                } else {
+                    val purchase = db.expenses().find(link.second)?.takeIf { it.deletedAtMillis == null }
+                    purchase != null && newAmount > purchase.amountMinor
+                }
+            }
+        }
+
         /** Deletes this entry only; a converted real entry is put back as it was, a refund of this purchase becomes income. */
         override suspend fun delete(id: String): EditOutcome = remove(id, withPartner = false)
 
@@ -174,7 +206,13 @@ class DefaultExpenseEditor
                             // one timestamp for both: Undo restores the partner only if it went away in the same moment
                             val now = clock.millis()
                             val first = db.expenses().softDelete(id, now)
-                            if (first > 0) AnswerWrites.release(db, links, id, withPartner, now)
+                            if (first > 0) {
+                                val changedRows = AnswerWrites.release(db, links, id, withPartner, now)
+                                if (changedRows.isNotEmpty()) {
+                                    if (released.size >= MAX_REMEMBERED) released.clear()
+                                    released[id] = changedRows
+                                }
+                            }
                             first
                         }
                     }
@@ -198,6 +236,11 @@ class DefaultExpenseEditor
                             if (first > 0) {
                                 partners.filter { db.expenses().find(it)?.deletedAtMillis == deletedAt }.forEach {
                                     db.expenses().restore(it, clock.millis())
+                                }
+                                // rows the delete changed (a converted side, a refund) go back to the pair state, unless edited since
+                                released.remove(id)?.forEach { c ->
+                                    val cur = db.expenses().find(c.before.id)
+                                    if (cur == c.after) db.expenses().update(c.before)
                                 }
                             }
                             first

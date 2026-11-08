@@ -54,8 +54,19 @@ class AnswerCardsViewModel
         private val picking = MutableStateFlow<RefundPick?>(null)
         val pick: StateFlow<RefundPick?> = picking.asStateFlow()
 
+        /** Main thread only: a tap while an answer is still running is ignored (a double tap must not answer twice). */
+        private var answering = false
+
         private fun run(block: suspend () -> AnswerUndo?) {
-            viewModelScope.launch { lastUndo.value = block() ?: lastUndo.value }
+            if (answering) return
+            answering = true
+            viewModelScope.launch {
+                try {
+                    lastUndo.value = block() ?: lastUndo.value
+                } finally {
+                    answering = false
+                }
+            }
         }
 
         fun linkRefund(

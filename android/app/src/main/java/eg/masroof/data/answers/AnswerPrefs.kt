@@ -42,6 +42,8 @@ data class EntryLink(
     val converted: String = "",
     val origType: String = "",
     val origAccountId: String = "",
+    /** A Cash account that "Track it" created for this pair: removed again when the capture is undone and nothing else uses it. */
+    val newAccountId: String = "",
 ) {
     /** The row that goes away together with [id]: an inserted transfer side, or the refund of a purchase. Null for a real entry. */
     fun deletablePartnerOf(id: String): String? =
@@ -106,15 +108,25 @@ private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
 
-private const val LINK_FIELDS = 7
+private const val LINK_FIELDS = 8
 
-private fun EntryLink.encode() = listOf(kind.code, first, second, inserted, converted, origType, origAccountId).joinToString("|")
+private fun EntryLink.encode() =
+    listOf(
+        kind.code,
+        first,
+        second,
+        inserted,
+        converted,
+        origType,
+        origAccountId,
+        newAccountId,
+    ).joinToString("|")
 
 private fun decodeLink(raw: String): EntryLink? {
     val parts = raw.split('|')
     val kind = LinkKind.entries.firstOrNull { it.code == parts.getOrNull(0) } ?: return null
     if (parts.size != LINK_FIELDS) return null
-    return EntryLink(kind, parts[1], parts[2], parts[3], parts[4], parts[5], parts[6])
+    return EntryLink(kind, parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7])
 }
 
 private fun decode(p: Preferences) =

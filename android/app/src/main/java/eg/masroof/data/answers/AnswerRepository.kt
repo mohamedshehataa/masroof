@@ -132,40 +132,48 @@ class DefaultAnswerRepository
             refundId: String,
             purchaseId: String,
         ): AnswerUndo? =
-            answer {
+            answer(done(refundId)) {
                 val refund = live(refundId)
                 val purchase = live(purchaseId)
                 if (refund == null || purchase == null) return@answer null
                 if (refund.type !in refundable || refund.currency != purchase.currency) return@answer null
                 if (purchase.type != ExpenseTypes.EXPENSE || purchase.amountMinor < refund.amountMinor) return@answer null
-                db.expenses().update(
-                    refund.copy(
-                        type = ExpenseTypes.REFUND,
-                        categoryId = purchase.categoryId ?: refund.categoryId,
-                        status = CONFIRMED,
-                        updatedAtMillis = clock.millis(),
-                    ),
-                )
+                val changed =
+                    AnswerWrites.change(
+                        db,
+                        refund,
+                        refund.copy(
+                            type = ExpenseTypes.REFUND,
+                            categoryId = purchase.categoryId ?: refund.categoryId,
+                            status = CONFIRMED,
+                            updatedAtMillis = clock.millis(),
+                        ),
+                    )
                 val link = EntryLink(LinkKind.REFUND, refundId, purchaseId, converted = refundId, origType = refund.type)
-                AnswerUndo(restore = listOf(refund), added = AnswerState(answered = setOf(refundId), links = setOf(link)))
+                AnswerUndo(restore = listOf(changed), added = AnswerState(answered = setOf(refundId), links = setOf(link)))
             }
 
         override suspend fun confirmRefund(entryId: String): AnswerUndo? =
-            answer {
+            answer(done(entryId)) {
                 val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.REFUND } ?: return@answer null
-                db.expenses().update(entry.copy(status = CONFIRMED, updatedAtMillis = clock.millis()))
-                AnswerUndo(restore = listOf(entry), added = AnswerState(answered = setOf(entryId)))
+                val changed = AnswerWrites.change(db, entry, entry.copy(status = CONFIRMED, updatedAtMillis = clock.millis()))
+                AnswerUndo(restore = listOf(changed), added = AnswerState(answered = setOf(entryId)))
             }
 
         override suspend fun notRefund(entryId: String): AnswerUndo? =
-            answer {
+            answer(done(entryId)) {
                 val entry = live(entryId) ?: return@answer null
                 if (entry.type !in refundable) return@answer null
                 // Received money that is not a reversal is income; an INCOME stays as it is.
                 val restore =
                     if (entry.type == ExpenseTypes.REFUND) {
-                        db.expenses().update(entry.copy(type = ExpenseTypes.INCOME, status = CONFIRMED, updatedAtMillis = clock.millis()))
-                        listOf(entry)
+                        listOf(
+                            AnswerWrites.change(
+                                db,
+                                entry,
+                                entry.copy(type = ExpenseTypes.INCOME, status = CONFIRMED, updatedAtMillis = clock.millis()),
+                            ),
+                        )
                     } else {
                         emptyList()
                     }
@@ -175,9 +183,8 @@ class DefaultAnswerRepository
         override suspend fun transferToOwn(
             entryId: String,
             accountId: String,
-        ): AnswerUndo? {
-            val state = prefs.current()
-            return answer {
+        ): AnswerUndo? =
+            answer(done(entryId)) { state ->
                 val entry = live(entryId) ?: return@answer null
                 val accounts = db.accountBalances().accounts()
                 val target = accounts.firstOrNull { it.id == accountId && !it.archived && it.currency == entry.currency }
@@ -191,7 +198,7 @@ class DefaultAnswerRepository
                 val ownLabel = accounts.firstOrNull { it.id == own }?.label
                 val partner = AnswerCards.counterpart(entry, accountId, live, accounts, state, outgoing)
                 val confirmed = entry.copy(status = CONFIRMED)
-                val restore = mutableListOf<ExpenseEntity>()
+                val restore = mutableListOf<RowChange>()
                 val inserted = mutableListOf<String>()
                 var converted: ExpenseEntity? = null
                 val partnerId: String
@@ -199,11 +206,18 @@ class DefaultAnswerRepository
                     partnerId = partner.id
                     if (outgoing) {
                         // the other bank's own entry, attributed to the chosen account and arriving after the send
-                        restore += partner
                         converted = partner
-                        db.expenses().update(
-                            partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId, status = CONFIRMED, updatedAtMillis = now),
-                        )
+                        restore +=
+                            AnswerWrites.change(
+                                db,
+                                partner,
+                                partner.copy(
+                                    type = ExpenseTypes.TRANSFER_IN,
+                                    accountId = accountId,
+                                    status = CONFIRMED,
+                                    updatedAtMillis = now,
+                                ),
+                            )
                     }
                 } else {
                     val type = if (outgoing) ExpenseTypes.TRANSFER_IN else ExpenseTypes.TRANSFER
@@ -211,16 +225,18 @@ class DefaultAnswerRepository
                     inserted += partnerId
                 }
                 if (!outgoing) {
-                    restore += entry
                     converted = entry
-                    db.expenses().update(
-                        entry.copy(
-                            type = ExpenseTypes.TRANSFER_IN,
-                            accountId = entry.accountId ?: own,
-                            status = CONFIRMED,
-                            updatedAtMillis = now,
-                        ),
-                    )
+                    restore +=
+                        AnswerWrites.change(
+                            db,
+                            entry,
+                            entry.copy(
+                                type = ExpenseTypes.TRANSFER_IN,
+                                accountId = entry.accountId ?: own,
+                                status = CONFIRMED,
+                                updatedAtMillis = now,
+                            ),
+                        )
                 }
                 val (out, inn) = if (outgoing) entryId to partnerId else partnerId to entryId
                 val link =
@@ -239,16 +255,19 @@ class DefaultAnswerRepository
                     added = AnswerState(answered = setOf(entryId, partnerId), links = setOf(link)),
                 )
             }
-        }
 
         override suspend fun transferToOther(entryId: String): AnswerUndo? =
-            answer {
+            answer(done(entryId)) {
                 live(entryId) ?: return@answer null
                 AnswerUndo(added = AnswerState(answered = setOf(entryId)))
             }
 
         override suspend fun ignoreCard(last4: String): AnswerUndo? =
-            if (!isLast4(last4)) null else answer { AnswerUndo(added = AnswerState(ignoredCards = setOf(last4))) }
+            if (!isLast4(last4)) {
+                null
+            } else {
+                answer({ last4 in it.ignoredCards }) { AnswerUndo(added = AnswerState(ignoredCards = setOf(last4))) }
+            }
 
         override suspend fun linkCard(
             last4: String,
@@ -257,20 +276,20 @@ class DefaultAnswerRepository
             if (!isLast4(last4)) {
                 null
             } else {
-                answer {
+                answer({ last4 in it.aliases }) {
                     val account = db.accountBalances().accounts().firstOrNull { it.id == accountId && !it.archived } ?: return@answer null
                     val now = clock.millis()
                     // Entries already captured from this card join the account; later ones are filed by the alias at capture.
                     val rows = db.expenses().liveSince(0L).filter { it.instrumentLast4 == last4 && it.accountId == null }
-                    rows.forEach { db.expenses().update(it.copy(accountId = account.id, updatedAtMillis = now)) }
-                    AnswerUndo(restore = rows, added = AnswerState(aliases = mapOf(last4 to account.id)))
+                    val changed = rows.map { AnswerWrites.change(db, it, it.copy(accountId = account.id, updatedAtMillis = now)) }
+                    AnswerUndo(restore = changed, added = AnswerState(aliases = mapOf(last4 to account.id)))
                 }
             }
 
         override suspend fun trackCash(entryId: String): AnswerUndo? {
             val before = settings.current().includeCashWithdrawals
             val undo =
-                answer {
+                answer(done(entryId)) {
                     val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
                     val tracked =
                         AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), clock.millis())
@@ -284,13 +303,16 @@ class DefaultAnswerRepository
         override suspend fun countCash(entryId: String): AnswerUndo? {
             val before = settings.current().includeCashWithdrawals
             val undo =
-                answer {
+                answer(done(entryId)) {
                     live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
                     AnswerUndo(added = AnswerState(answered = setOf(entryId), atmChoice = AtmChoice.COUNT), includeCashBefore = before)
                 } ?: return null
             settings.update { it.copy(includeCashWithdrawals = true) }
             return undo
         }
+
+        /** An entry whose card was already answered (or that a pair already links) cannot be answered again. */
+        private fun done(entryId: String): (AnswerState) -> Boolean = { entryId in it.answered || entryId in it.linkedIds() }
 
         override suspend fun setAtmChoice(choice: AtmChoice?) {
             eraseLock.mutex.withLock {
@@ -315,9 +337,8 @@ class DefaultAnswerRepository
                 eraseLock.mutex.withLock {
                     val done =
                         db.withTransaction {
-                            token.restore.forEach { original ->
-                                if (db.expenses().find(original.id) != null) db.expenses().update(original)
-                            }
+                            val now = clock.millis()
+                            token.restore.forEach { AnswerWrites.revert(db, it, now) }
                             token.deleteExpenses.forEach { db.expenses().delete(it) }
                             token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
                             true
@@ -348,10 +369,16 @@ class DefaultAnswerRepository
          * and leave links of rows that no longer exist). Inserted rows have deterministic ids, so repeating an answer that was cut
          * short between the two writes is a no-op. Null = nothing to answer.
          */
-        private suspend fun answer(block: suspend () -> AnswerUndo?): AnswerUndo? {
+        private suspend fun answer(
+            alreadyDone: (AnswerState) -> Boolean = { false },
+            block: suspend (AnswerState) -> AnswerUndo?,
+        ): AnswerUndo? {
             val undo =
                 eraseLock.mutex.withLock {
-                    val done = db.withTransaction { block() } ?: return@withLock null
+                    // checked under the same lock as the write: a second tap (or caller) finds the first answer recorded
+                    val state = prefs.current()
+                    if (alreadyDone(state)) return@withLock null
+                    val done = db.withTransaction { block(state) } ?: return@withLock null
                     val a = done.added
                     val atmBefore = prefs.current().atmChoice
                     prefs.edit { s ->

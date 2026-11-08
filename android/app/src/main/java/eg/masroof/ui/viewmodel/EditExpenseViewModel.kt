@@ -26,7 +26,7 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 /** Why the last Save / Confirm / Delete did not go through; shown above the buttons. The user's edits stay as typed. */
-enum class EditError { FAILED, }
+enum class EditError { FAILED, LINKED_REFUND }
 
 data class EditFormState(
     val loaded: Boolean = false,
@@ -276,6 +276,7 @@ class EditExpenseViewModel
                 EditOutcome.Deleted -> form.update { it.copy(done = true) }
                 EditOutcome.NotFound -> form.update { it.copy(done = true, gone = true) }
                 EditOutcome.Failed -> form.update { it.copy(error = EditError.FAILED) }
+                EditOutcome.LinkedRefund -> form.update { it.copy(error = EditError.LINKED_REFUND) }
             }
         }
     }

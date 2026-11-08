@@ -27,6 +27,7 @@
     <string name="answers_links_title">الكروت المربوطة</string>
     <string name="answers_link_item">•••• %1$s ← %2$s</string>
     <string name="answers_remove">شيل الربط</string>
+    <string name="answers_edit_linked_refund">فيه استرداد مربوط بالعملية دي، فالمبلغ مينفعش ينزل عنه. عدّل الاسترداد الأول.</string>
     <string name="answers_remove_desc">شيل ربط الكارت اللي بينتهي بـ %1$s</string>
     <string name="answers_not_refund">مش استرداد</string>
     <string name="answers_pick_title">أنهي عملية شراء؟</string>

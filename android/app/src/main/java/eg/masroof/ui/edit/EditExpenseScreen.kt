@@ -320,6 +320,7 @@ private fun EditBar(
             val message =
                 when {
                     form.error == EditError.FAILED -> R.string.edit_error_failed
+                    form.error == EditError.LINKED_REFUND -> R.string.answers_edit_linked_refund
                     form.busy -> R.string.edit_working
                     else -> null
                 }

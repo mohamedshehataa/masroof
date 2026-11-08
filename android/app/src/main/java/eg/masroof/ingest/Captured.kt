@@ -26,6 +26,7 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.answers.AnswerPrefs
 import eg.masroof.data.answers.AnswerWrites
+import eg.masroof.data.answers.EntryLink
 import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
@@ -303,19 +304,32 @@ class CapturedActions
             val pairs = answers.current()
             val item =
                 eraseLock.mutex.withLock {
-                    db.withTransaction {
-                        val found = db.captured().find(localId)
-                        if (found != null) {
-                            found.expenseId?.let { id ->
-                                val now = clock.millis()
-                                db.expenses().softDelete(id, now)
-                                // rows the app inserted go with it; a real entry that a pair converted is put back as it was
-                                AnswerWrites.release(db, pairs.linksOf(id), id, deleteWithPartner = true, now = now, deleteRefund = false)
+                    var released = emptyList<EntryLink>()
+                    val row =
+                        db.withTransaction {
+                            val found = db.captured().find(localId)
+                            if (found != null) {
+                                found.expenseId?.let { id ->
+                                    val now = clock.millis()
+                                    released = pairs.linksOf(id)
+                                    db.expenses().softDelete(id, now)
+                                    // rows the app inserted go with it; a real entry that a pair converted is put back as it was
+                                    AnswerWrites.release(db, released, id, deleteWithPartner = true, now = now, deleteRefund = false)
+                                    // a Cash account the capture created goes too, unless something else uses it now
+                                    released.map { it.newAccountId }.filter { it.isNotEmpty() }.forEach { account ->
+                                        if (db.accountBalances().countLiveEntries(account) == 0) db.accountBalances().deleteAccount(account)
+                                    }
+                                }
+                                db.captured().requestUndo(localId)
                             }
-                            db.captured().requestUndo(localId)
+                            found
                         }
-                        found
+                    if (released.isNotEmpty()) {
+                        // the pair is released: its entries may ask again, nothing stays linked to rows that are gone
+                        val ids = released.flatMap { listOf(it.first, it.second) }.toSet()
+                        answers.edit { s -> s.copy(links = s.links - released.toSet(), answered = s.answered - ids) }
                     }
+                    row
                 }
             // The notice goes away whatever happened: its row may be gone already (purged, or replaced by the twin's notice).
             notifier.cancel(localId)
