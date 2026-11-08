@@ -139,7 +139,11 @@ object QuickEntryParser {
             }
 
         fun currencyNear(r: NumberRun): Boolean =
-            currencyAt(r.start - 1) != null || currencyAt(r.end + 1) != null || foreignNear(r)
+            currencyAt(r.start - 1) != null ||
+                currencyAt(r.end + 1) != null ||
+                foreignNear(r) ||
+                // a currency word bridged into the run ("ألف جنيه ونص")
+                (r.start..r.end).any { currencyAt(it) != null }
 
         fun foreignNear(r: NumberRun): Boolean = foreignAt(r.start - 1) || foreignAt(r.end + 1)
 

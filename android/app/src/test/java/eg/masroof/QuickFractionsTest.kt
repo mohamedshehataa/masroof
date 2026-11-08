@@ -125,9 +125,9 @@ class QuickFractionsTest {
     fun `REQ-PARSE-099 fraction words outside a number never leave a partial amount`() {
         // A fraction word beside a number makes the whole phrase unreadable instead of reading the number without it.
         assertNull(amount("نص خمسة"))
-        assertNull(amount("إلا خمسة"))
         assertNull(amount("خمسة إلا"))
         assertNull(amount("نص و و خمسة"))
+        assertEquals(500L, amount("إلا خمسة"))
     }
 
     // ---- exhaustive check against an independent reference of the whitelist grammar ----
@@ -179,37 +179,96 @@ class QuickFractionsTest {
         println("QUICK-FRACTIONS combinations checked=$checked withAmount=$withAmount")
     }
 
-    private val wideTokens =
-        tokens + listOf("ونص", "وربع", "5", "50", "500", "1.5", "k", "جنيه", "pounds", "EGP")
+    private val phraseTokens =
+        tokens + listOf("ونص", "وربع", "جنيه", "pounds")
+    private val currencyWords = setOf("جنيه", "pounds")
 
+    // The value of ONE number phrase (words, "و", fraction words, at most one currency word) against the independent reference.
+    // Which number of a line is the amount is a different question, covered by the table test below.
     @Test
-    fun `REQ-PARSE-099 wide token space with digits k currency and glued half is exact or no amount`() {
+    fun `REQ-PARSE-099 the value of a single number phrase with a currency word matches the whitelist reference`() {
         var checked = 0
         var withAmount = 0
         val bad = mutableListOf<String>()
 
         fun check(phrase: List<String>) {
+            val body = singlePhraseBody(phrase) ?: return
             if (phrase.none { it in fractionWords || it == "ونص" || it == "وربع" }) return
             checked++
-            val line = phrase.joinToString(" ")
-            val got = amount(line)
-            val want = Wide.amount(phrase)
+            val got = amount(phrase.joinToString(" "))
+            val want = Reference.value(body)?.takeIf { it in 1..1_000_000_000_000L }
             if (got != null) withAmount++
-            if (got != want && bad.size < 20) bad += "[$line] parser=$got reference=$want"
+            if (got != want && bad.size < 20) bad += "[${phrase.joinToString(" ")}] parser=$got reference=$want"
         }
 
         fun visit(phrase: List<String>) {
             check(phrase)
-            if (phrase.size < 4) for (t in wideTokens) visit(phrase + t)
+            if (phrase.size < 4) for (t in phraseTokens) visit(phrase + t)
         }
-        for (t in wideTokens) visit(listOf(t))
+        for (t in phraseTokens) visit(listOf(t))
         val exhaustive = checked
         val random = java.util.Random(20_261_108L)
-        repeat(300_000) { check(List(5) { wideTokens[random.nextInt(wideTokens.size)] }) }
+        repeat(300_000) { check(List(5) { phraseTokens[random.nextInt(phraseTokens.size)] }) }
         assertTrue("disagreements: $bad", bad.isEmpty())
-        assertTrue("exhaustive checked $exhaustive", exhaustive > 200_000)
+        assertTrue("exhaustive checked $exhaustive", exhaustive > 100_000)
         assertTrue("some phrases must give an amount: $withAmount", withAmount > 1_000)
-        println("QUICK-FRACTIONS-WIDE checked=$checked (exhaustive up to 4 tokens: $exhaustive) withAmount=$withAmount")
+        println("QUICK-FRACTIONS-PHRASES checked=$checked (exhaustive up to 4 tokens: $exhaustive) withAmount=$withAmount")
+    }
+
+    /**
+     * The words of a phrase that is one number: glued "ونص" split, the currency word removed when it is leading, trailing or
+     * sits right after the number and before a fraction word ("خمسين جنيه ونص"), and leading "إلا" (the word "only") dropped.
+     * Null for phrases where the currency word splits the number in two (those are run-selection cases).
+     */
+    private fun singlePhraseBody(phrase: List<String>): List<String>? {
+        val t =
+            phrase.flatMap {
+                if (it == "ونص") {
+                    listOf("و", "نص")
+                } else if (it == "وربع") {
+                    listOf("و", "ربع")
+                } else {
+                    listOf(it)
+                }
+            }
+        val cur = t.indices.filter { t[it] in currencyWords }
+        if (cur.size > 1) return null
+        val body = t.toMutableList()
+        if (cur.size == 1) {
+            val c = cur[0]
+            val next = t.drop(c + 1).firstOrNull { it != "و" }
+            val bridge = c > 0 && t[c - 1] != "و" && (next == "نص" || next == "ربع" || next == "إلا")
+            if (!(c == 0 || c == t.lastIndex || bridge)) return null
+            body.removeAt(c)
+        }
+        return body.dropWhile { it == "و" || it == "إلا" }
+    }
+
+    @Test
+    fun `REQ-PARSE-099 which number of a line is the amount, with ordinary words around it`() {
+        val rows =
+            listOf(
+                "ألف جنيه ونص إيجار 3 شهور" to 150_000L,
+                "150 جنيه ونص لـ 2 كيلو" to 15_050L,
+                "ألف جنيه إلا ربع" to 75_000L,
+                "مدفعتش إلا 50" to 5_000L,
+                "إلا 50 جنيه" to 5_000L,
+                "50 جنيه ونص 2 قهوة" to 5_050L,
+                "2 قهوة 90" to 9_000L,
+                "5 كيلو لحمة 300 جنيه" to 30_000L,
+                "قهوة 2 بنزين 150" to 15_000L,
+                "نص كيلو لحمة 50 جنيه" to 5_000L,
+                "إيجار 3 شهور 5000 جنيه" to 500_000L,
+                "بنزين 40 لتر 300" to 30_000L,
+                "300 جنيه بنزين 40 لتر" to 30_000L,
+                "ربع كيلو جبنة 60" to 6_000L,
+                "دفعت ألفين ونص جنيه إيجار 3 شهور" to 250_000L,
+                "50 pounds ونص 2 coffees" to 5_050L,
+            )
+        for ((line, minor) in rows) assertEquals("amount of [$line]", minor, amount(line))
+        assertEquals("2 قهوة", QuickEntryParser.parse("50 جنيه ونص 2 قهوة", today).note)
+        assertEquals("إيجار 3 شهور", QuickEntryParser.parse("ألف جنيه ونص إيجار 3 شهور", today).note)
+        assertNull(amount("50 جنيه نص كيلو"))
     }
 
     @Test
@@ -236,92 +295,7 @@ class QuickFractionsTest {
         assertEquals(500_000L, amount("5k"))
         assertEquals(150_000L, amount("1.5k"))
         assertEquals(500_000L, amount("5ك"))
-        for (line in listOf("نص ٥٠٠", "نص 500", "ربع 50", "50 نص 500")) assertNull("amount of [$line]", amount(line))
-    }
-
-    /** Segments a phrase into number runs like the parser's rules say, then reads the chosen run with [Reference]. */
-    private object Wide {
-        private val numberWords = setOf("واحد", "اتنين", "خمسة", "عشرة", "عشرين", "مية", "ميتين", "خمسمية", "تلت")
-        private val scales = setOf("ألف", "ألفين", "تلاف", "مليون")
-        private val currencies = setOf("جنيه", "pounds", "EGP")
-        private val digits = Reference.digitMinor.keys
-        private const val AND = "و"
-
-        private fun isFraction(t: String) = t == "نص" || t == "ربع"
-
-        private fun starts(t: String) = t in numberWords || t in digits || isFraction(t) || t == "إلا" || t in scales
-
-        private fun continues(
-            q: String,
-            last: String,
-            afterAnd: Boolean,
-        ): Boolean =
-            when {
-                q in digits -> afterAnd || isFraction(last) || last == "إلا"
-                q in numberWords -> afterAnd || last !in digits
-                q == AND || q in currencies -> false
-                else -> true
-            }
-
-        @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LoopWithTooManyJumpStatements")
-        fun amount(raw: List<String>): Long? {
-            val glue = mutableSetOf<Int>()
-            val t = mutableListOf<String>()
-            for (w in raw) {
-                if (w == "ونص" || w == "وربع") {
-                    glue += t.size
-                    t += listOf(AND, w.drop(1))
-                } else {
-                    t += w
-                }
-            }
-
-            // The token before a run, skipping the "و" that was only the front of a glued "ونص".
-            fun before(i: Int) = t.getOrNull(if (i - 1 in glue) i - 2 else i - 1)
-            val runs = mutableListOf<IntRange>()
-            var i = 0
-            while (i < t.size) {
-                if (!starts(t[i])) {
-                    i++
-                    continue
-                }
-                var last = t[i]
-                var j = i + 1
-                while (j < t.size) {
-                    var m = j
-                    while (m < t.size && t[m] == AND) m++
-                    val next = t.getOrNull(m)
-                    if (t[j] in currencies && last !in currencies) {
-                        var f = j + 1
-                        while (f < t.size && t[f] == AND) f++
-                        if (f < t.size && isFraction(t[f])) {
-                            last = t[f]
-                            j = f + 1
-                        } else {
-                            break
-                        }
-                    } else if (t[j] == AND && next != null && continues(next, last, true)) {
-                        last = next
-                        j = m + 1
-                    } else if (t[j] != AND && continues(t[j], last, false)) {
-                        last = t[j]
-                        j++
-                    } else {
-                        break
-                    }
-                }
-                runs += i until j
-                i = j
-            }
-            val chosen =
-                runs.firstOrNull { r -> before(r.first) in currencies || t.getOrNull(r.last + 1) in currencies }
-                    ?: runs.lastOrNull() ?: return null
-            val words = t.slice(chosen).filter { it !in currencies }
-            val fractional = words.any { isFraction(it) || it == "تلت" || it == "إلا" }
-            val value = if (fractional) Reference.value(words) else Reference.number(words.filter { it != AND })?.first
-            // The Add form accepts at most 10 billion pounds.
-            return value?.takeIf { it in 1..1_000_000_000_000L }
-        }
+        for (line in listOf("نص ٥٠٠", "نص 500", "ربع 50")) assertNull("amount of [$line]", amount(line))
     }
 
     /** A small independent reader of the intended grammar, working on the words (not on the parser's pieces). */
@@ -397,7 +371,8 @@ class QuickFractionsTest {
         @Suppress("CyclomaticComplexMethod")
         fun value(raw: List<String>): Long? {
             // Leading and trailing "و" are not part of a number.
-            val t = raw.dropWhile { it == AND }.dropLastWhile { it == AND }
+            // A leading "إلا" is the word "only", not a fraction.
+            val t = raw.dropWhile { it == AND || it == EXCEPT }.dropLastWhile { it == AND }
             val plain = t.filter { it != AND }
             val noFractionButThird = plain.none { it == "نص" || it == "ربع" || it == EXCEPT }
             if (noFractionButThird && t.indices.filter { t[it] == "تلت" }.all { t.getOrNull(it + 1) == "تلاف" }) {

@@ -149,11 +149,11 @@ internal object QuickNumbers {
                 repeat(bridgeTo - j - 1) { list += Piece.Conn }
                 list += pieces[bridgeTo] as Piece
                 j = bridgeTo + 1
-            } else if (q is Piece.Conn && next != null && continues(next, list.last(), true)) {
+            } else if (q is Piece.Conn && next != null && continues(next, list.last(), true, list.size == 1)) {
                 repeat(m - j) { list += Piece.Conn }
                 list += next
                 j = m + 1
-            } else if (q != null && q !is Piece.Conn && continues(q, list.last(), false)) {
+            } else if (q != null && q !is Piece.Conn && continues(q, list.last(), false, list.size == 1)) {
                 list += q
                 j++
             } else {
@@ -163,20 +163,21 @@ internal object QuickNumbers {
         return j
     }
 
-    /** Index of the fraction word at or after [from], skipping "و", or null when something else comes first. */
+    /** Index of the fraction word (or "إلا") at or after [from], skipping "و", or null when something else comes first. */
     private fun fractionAfter(
         pieces: List<Piece?>,
         from: Int,
     ): Int? {
         var f = from
         while (pieces.getOrNull(f) is Piece.Conn) f++
-        return f.takeIf { pieces.getOrNull(f) is Piece.Fraction }
+        return f.takeIf { pieces.getOrNull(f).let { it is Piece.Fraction || it is Piece.Except } }
     }
 
-    // A fraction word or "إلا" always belongs to a run, so a number next to one is judged as a whole (never read without it).
+    // A fraction word always belongs to a run, so a number next to one is judged as a whole (never read without it). "إلا" does
+    // not open a run: on its own it is the word "only" ("مدفعتش إلا 50"); after a number it belongs to that number.
     private fun starts(p: Piece): Boolean =
         when (p) {
-            is Piece.Digits, is Piece.Word, is Piece.Fraction, is Piece.Except -> true
+            is Piece.Digits, is Piece.Word, is Piece.Fraction -> true
             // "k" and "ك" never open a number; a plural ("تلاف") does, so it is judged with what follows and never dropped.
             is Piece.Scale -> p.starter || p.scale.times == 0
             else -> false
@@ -186,10 +187,11 @@ internal object QuickNumbers {
         q: Piece,
         last: Piece,
         afterConn: Boolean,
+        runStart: Boolean,
     ): Boolean =
         when (q) {
-            // Digits straight after a fraction word join it, so "نص 500" is judged as a whole (and is not an amount).
-            is Piece.Digits -> afterConn || last is Piece.Fraction || last is Piece.Except
+            // Digits straight after a fraction word that opens the run join it, so "نص 500" is judged as a whole (not an amount).
+            is Piece.Digits -> afterConn || (runStart && last is Piece.Fraction)
             is Piece.Word -> afterConn || last !is Piece.Digits
             is Piece.Conn, is Piece.Cur -> false
             else -> true
