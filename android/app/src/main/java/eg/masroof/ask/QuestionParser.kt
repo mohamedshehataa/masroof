@@ -29,7 +29,7 @@ object QuestionParser {
         val text = ArabicText.normalize(question.take(MAX_LENGTH))
         if (text.isEmpty()) return AskQuery.NotUnderstood
         val scan = PeriodScanner.scan(text)
-        if (scan.invalid) return AskQuery.NotUnderstood
+        if (scan.invalid) return AskQuery.PeriodUnreadable
         val tokens = ArabicText.tokens(scan.remaining)
         val subject =
             ArabicText
@@ -50,7 +50,11 @@ object QuestionParser {
             ?: bare(facts)
     }
 
-    private fun roast(f: Facts) = if (ParserLexicon.ROAST.any { f.text.contains(it) }) AskQuery.Roast else null
+    private fun roast(f: Facts): AskQuery? {
+        val whole = f.text == "roast" || f.has(ParserLexicon.ROAST_PHRASES)
+        val stem = f.tokens.any { t -> ParserLexicon.ROAST_STEMS.any { t.contains(it) } || t.startsWith("etre2") }
+        return if (whole || stem) AskQuery.Roast else null
+    }
 
     private fun payday(f: Facts) =
         if (f.hasAny(ParserLexicon.PAYDAY_WORDS) || f.has(ParserLexicon.PAYDAY_PHRASES)) AskQuery.Payday else null

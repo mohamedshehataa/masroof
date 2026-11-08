@@ -143,7 +143,7 @@ sealed interface AskAnswer {
     /** REQ-AN-163. [visits] 0 means no entries for the merchant in the period. */
     data class MerchantVisits(
         val period: PeriodInfo,
-        val name: String,
+        val name: LocalizedText,
         val visits: Int,
         val totalMinor: Long,
         val averageMinor: Long,
@@ -188,6 +188,16 @@ sealed interface AskAnswer {
     /** REQ-AN-165. [lines] is empty when there is nothing to roast yet. */
     data class Roast(
         val lines: List<RoastLine>,
+        override val followUps: List<AskChip>,
+    ) : AskAnswer
+
+    /** The question names a period that could not be read; no number, only the suggestion chips. */
+    data class PeriodUnreadable(
+        override val followUps: List<AskChip>,
+    ) : AskAnswer
+
+    /** The question named several different kinds of thing ("groceries and talabat"); pick one. */
+    data class OneAtATime(
         override val followUps: List<AskChip>,
     ) : AskAnswer
 

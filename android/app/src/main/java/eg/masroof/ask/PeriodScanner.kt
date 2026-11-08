@@ -1,5 +1,7 @@
 package eg.masroof.ask
 
+import java.time.YearMonth
+
 /**
  * Finds the periods named in a normalised question (English, Egyptian Arabic, Franco) and blanks them out of the text so
  * the rest can be read as a subject. All patterns are written in [ArabicText.normalize] form.
@@ -10,17 +12,26 @@ internal object PeriodScanner {
         val periods: List<AskPeriod>,
         /** The question with every matched period replaced by spaces. */
         val remaining: String,
-        /** True when a number was out of range ("last 0 days", "month 14"): the question is not understood. */
+        /** True when the question names a period that could not be read ("last 0 days", "month 14", "in 1999", "3 weeks ago"). */
         val invalid: Boolean,
     )
 
     private const val B = "(?<![\\p{L}\\p{N}])"
     private const val E = "(?![\\p{L}\\p{N}])"
     private const val MAX_DAYS = 366
+    private const val MAX_WEEKS = 52
+    private const val MAX_MONTHS_AGO = 24
     private const val MONTHS = 12
+    private const val LEAP_YEAR = 2024
+    private const val TWO = 2
+    private const val YEAR = "(20[0-9]{2})"
+    private const val PREFIX = "(?:ب|ل)?(?:ال)?"
+    private val CUES = setOf("in", "on", "during", "for", "since", "last", "this", "of", "from", "to", "until", "till", "by")
 
     private class Rule(
         val regex: Regex,
+        /** False when the match is not really a period (an ambiguous word like "may" without a cue); it is left in the text. */
+        val accept: (MatchResult, String) -> Boolean = { _, _ -> true },
         val build: (MatchResult) -> AskPeriod?,
     )
 
@@ -29,47 +40,30 @@ internal object PeriodScanner {
         period: AskPeriod,
     ) = Rule(Regex("$B(?:$pattern)$E")) { period }
 
+    /** Words that are months but also ordinary English: only a month with a cue. */
+    private val ambiguousMonths = mapOf("may" to 5, "march" to 3, "mar" to 3)
+
     private val monthNames: Map<String, Int> =
         buildMap {
-            val english =
-                listOf(
-                    "january",
-                    "february",
-                    "march",
-                    "april",
-                    "may",
-                    "june",
-                    "july",
-                    "august",
-                    "september",
-                    "october",
-                    "november",
-                    "december",
-                )
+            val english = "january february march april may june july august september october november december".split(' ')
             english.forEachIndexed { i, n ->
                 put(n, i + 1)
                 if (n.length > 3) put(n.take(3), i + 1)
             }
             put("sept", 9)
-            val arabic =
-                listOf(
-                    "يناير",
-                    "فبراير",
-                    "مارس",
-                    "أبريل",
-                    "مايو",
-                    "يونيو",
-                    "يوليو",
-                    "أغسطس",
-                    "سبتمبر",
-                    "أكتوبر",
-                    "نوفمبر",
-                    "ديسمبر",
+            val arabic = "يناير فبراير مارس أبريل مايو يونيو يوليو أغسطس سبتمبر أكتوبر نوفمبر ديسمبر يونيه يوليه".split(' ')
+            arabic.forEachIndexed { i, n ->
+                put(
+                    ArabicText.normalize(n),
+                    if (i < MONTHS) {
+                        i + 1
+                    } else if (i == MONTHS) {
+                        6
+                    } else {
+                        7
+                    },
                 )
-            arabic.forEachIndexed { i, n -> put(ArabicText.normalize(n), i + 1) }
-            put(ArabicText.normalize("يونيه"), 6)
-            put(ArabicText.normalize("يوليه"), 7)
-            put(ArabicText.normalize("اغسطس"), 8)
+            }
             put("yanayer", 1)
             put("febrayer", 2)
             put("mares", 3)
@@ -80,6 +74,34 @@ internal object PeriodScanner {
             put("aghostos", 8)
         }
 
+    private fun alternation(names: Collection<String>) = names.sortedByDescending { it.length }.joinToString("|")
+
+    private val clearMonths = monthNames.filterKeys { it !in ambiguousMonths }
+    private val anyMonth = alternation(monthNames.keys)
+
+    private fun hasCue(
+        m: MatchResult,
+        text: String,
+    ): Boolean {
+        val before =
+            text
+                .substring(0, m.range.first)
+                .trim()
+                .split(' ')
+                .lastOrNull()
+        val after =
+            text
+                .substring(m.range.last + 1)
+                .trim()
+                .split(' ')
+                .firstOrNull()
+                .orEmpty()
+        val whole = text.trim() == m.value
+        return before in CUES || after.isNotEmpty() && after.all(Char::isDigit) || m.groups[2] != null || whole
+    }
+
+    private fun yearOf(m: MatchResult, group: Int) = m.groups[group]?.value?.toInt()
+
     private val rules: List<Rule> =
         listOf(
             Rule(Regex("$B(?:last|past|akher|akhir|اخر) ([0-9]{1,4}) (?:days|day|ايام|يوم|ayam|yom)$E")) { m ->
@@ -88,50 +110,84 @@ internal object PeriodScanner {
                     .takeIf { it in 1..MAX_DAYS }
                     ?.let(AskPeriod::lastDays)
             },
-            Rule(
-                Regex(
-                    B + "(" + monthNames.keys.sortedByDescending { it.length }.joinToString("|") + ")(?: (20[0-9]{2}))?" + E,
-                ),
-            ) { m ->
-                val year = m.groups[2]?.value?.toInt()
-                AskPeriod.monthOfYear(monthNames.getValue(m.groupValues[1]), year)
+            Rule(Regex("$B(?:last|past|akher|akhir|اخر) ([0-9]{1,3}) (?:weeks|week|اسابيع|اسبوع)$E")) { m ->
+                m.groupValues[1]
+                    .toInt()
+                    .takeIf { it in 1..MAX_WEEKS }
+                    ?.let { AskPeriod.lastDays(it * 7) }
             },
-            Rule(Regex("$B(?:شهر|month|shahr) ([0-9]{1,2})(?: (20[0-9]{2}))?$E")) { m ->
+            Rule(Regex("$B(?:([0-9]{1,3}) months? ago|(?:من|قبل) (?:([0-9]{1,3}) (?:شهور|اشهر|شهر)|(شهرين)))$E")) { m ->
+                val n = (m.groups[1] ?: m.groups[2])?.value?.toInt() ?: TWO
+                n.takeIf { it in 1..MAX_MONTHS_AGO }?.let(AskPeriod::monthsAgo)
+            },
+            Rule(
+                Regex("$B(?:(?:from|between|من) )?([0-9]{1,2}) (?:(?:to|and|till|until|ل|الي|لحد) )?([0-9]{1,2}) ($anyMonth)(?: $YEAR)?$E"),
+            ) { m ->
+                val from = m.groupValues[1].toInt()
+                val to = m.groupValues[2].toInt()
+                val month = monthNames.getValue(m.groupValues[3])
+                val last = YearMonth.of(yearOf(m, 4) ?: LEAP_YEAR, month).lengthOfMonth()
+                if (from in 1..to && to <= last) AskPeriod.dayRange(from, to, month, yearOf(m, 4)) else null
+            },
+            Rule(Regex("$B(${alternation(clearMonths.keys)})(?: $YEAR)?$E")) { m ->
+                AskPeriod.monthOfYear(monthNames.getValue(m.groupValues[1]), yearOf(m, 2))
+            },
+            Rule(Regex("$B(${alternation(ambiguousMonths.keys)})(?: $YEAR)?$E"), accept = ::hasCue) { m ->
+                AskPeriod.monthOfYear(ambiguousMonths.getValue(m.groupValues[1]), yearOf(m, 2))
+            },
+            Rule(Regex("$B(?:ب|ل)?(?:شهر|month|shahr) ([0-9]{1,2})(?: $YEAR)?$E")) { m ->
                 m.groupValues[1]
                     .toInt()
                     .takeIf { it in 1..MONTHS }
-                    ?.let { AskPeriod.monthOfYear(it, m.groups[2]?.value?.toInt()) }
+                    ?.let { AskPeriod.monthOfYear(it, yearOf(m, 2)) }
             },
             fixed(
                 "last week|previous week|(?:el |al )?esbo3 (?:el madi|elli fat|el fayet|elmadi)|" +
-                    "(?:ب|ل)?(?:ال)?اسبوع (?:اللي فات|اللي فاتت|الماضي|السابق|الفايت|اللي عدي|اللي عدا)",
+                    "${PREFIX}اسبوع (?:اللي فات|اللي فاتت|الماضي|السابق|الفايت|اللي عدي|اللي عدا)",
                 AskPeriod.LAST_WEEK,
             ),
             fixed(
-                "this week|current week|(?:ب|ل)?(?:ال)?اسبوع (?:ده|دا|هذا|الحالي|الجاري)|هذا الاسبوع|" +
+                "this week|current week|${PREFIX}اسبوع (?:ده|دا|هذا|الحالي|الجاري)|هذا الاسبوع|" +
                     "(?:el |al )?esbo3 (?:da|dah|deh)|el usbou3 da",
                 AskPeriod.THIS_WEEK,
             ),
             fixed(
-                "last month|previous month|(?:ب|ل)?(?:ال)?شهر (?:اللي فات|اللي فاتت|الماضي|السابق|الفايت|اللي عدي|اللي عدا)|" +
+                "last month|previous month|${PREFIX}شهر (?:اللي فات|اللي فاتت|الماضي|السابق|الفايت|اللي عدي|اللي عدا)|" +
                     "(?:el |al )?(?:shahr|shahar|shaher|sahr|sha7r) (?:el madi|elli fat|el fayet|elmadi|el madee)",
                 AskPeriod.LAST_MONTH,
             ),
             fixed(
-                "this month|current month|(?:ب|ل)?(?:ال)?شهر (?:ده|دا|هذا|الحالي|الجاري)|هذا الشهر|" +
+                "this month|current month|${PREFIX}شهر (?:ده|دا|هذا|الحالي|الجاري)|هذا الشهر|" +
                     "(?:el |al )?(?:shahr|shahar|shaher|sahr|sha7r) (?:da|dah|deh|dh)",
                 AskPeriod.THIS_MONTH,
             ),
             fixed(
-                "this year|(?:ب|ل)?(?:ال)?سنه (?:دي|ديه|الحاليه|هذه)|هذه السنه|(?:ب|ل)?(?:ال)?عام (?:ده|دا|هذا|الحالي)|هذا العام|" +
+                "last year|previous year|$PREFIX(?:سنه|عام) (?:اللي فات|اللي فاتت|الماضي|السابق|الفايت|اللي عدي|اللي عدا)|" +
+                    "(?:el |al )?sana (?:el madya|el madia|elli fat|el madi)",
+                AskPeriod.LAST_YEAR,
+            ),
+            fixed(
+                "this year|${PREFIX}سنه (?:دي|ديه|الحاليه|هذه)|هذه السنه|${PREFIX}عام (?:ده|دا|هذا|الحالي)|هذا العام|" +
                     "(?:el |al )?sana (?:di|dih|deh|dee)",
                 AskPeriod.THIS_YEAR,
             ),
+            Rule(
+                Regex("$B(?:(?:year|سنه|عام) )?$YEAR(?! (?:egp|le|جنيه|pound|pounds))$E"),
+            ) { m -> AskPeriod.year(m.groupValues[1].toInt()) },
             fixed("yesterday|امبارح|مبارح|امس|embare7|embar7|embareh|embarh", AskPeriod.YESTERDAY),
             fixed(
                 "today|todays|النهارده|النهارد|انهارده|النهاردا|اليوم|(?:el |al )?(?:nahar|nhar|enhar)(?:da|dah|deh|dh)",
                 AskPeriod.TODAY,
             ),
+        )
+
+    /** What is left of a period phrase the rules could not read. */
+    private val unreadable =
+        listOf(
+            Regex("$B(?:ago|منذ)$E"),
+            Regex("$B(?:19|20)[0-9]{2}$E"),
+            Regex("$B(?:past|last|akher|akhir|اخر) [0-9]+$E"),
+            Regex("$B(?:from|between|من) [0-9]+ (?:(?:to|and|till|until|ل|الي|لحد) )?[0-9]+$E"),
         )
 
     fun scan(normalized: String): Result {
@@ -140,11 +196,14 @@ internal object PeriodScanner {
         var invalid = false
         for (rule in rules) {
             for (m in rule.regex.findAll(String(chars)).toList()) {
+                if (!rule.accept(m, String(chars))) continue
                 val period = rule.build(m)
                 if (period == null) invalid = true else found.add(m.range.first to period)
                 for (i in m.range) chars[i] = ' '
             }
         }
-        return Result(found.sortedBy { it.first }.map { it.second }, String(chars), invalid)
+        val left = String(chars)
+        if (unreadable.any { it.containsMatchIn(left) }) invalid = true
+        return Result(found.sortedBy { it.first }.map { it.second }, left, invalid)
     }
 }

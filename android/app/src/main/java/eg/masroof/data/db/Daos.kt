@@ -81,7 +81,7 @@ interface ExpenseDao {
     suspend fun askRows(
         from: Long,
         to: Long,
-    ): List<eg.masroof.ask.AskRow>
+    ): List<AskRow>
 
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.

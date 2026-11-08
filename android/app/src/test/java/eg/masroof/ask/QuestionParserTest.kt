@@ -84,7 +84,7 @@ private val COMPARE_CASES: List<Pair<String, AskQuery>> =
         "moqarna el shahr da bel shahr el madi" to AskQuery.Compare(TM, AskPeriod.LAST_MONTH),
         "this month versus last month" to AskQuery.Compare(TM, AskPeriod.LAST_MONTH),
         "الاسبوع ده مقارنة بالاسبوع اللي فات" to AskQuery.Compare(AskPeriod.THIS_WEEK, AskPeriod.LAST_WEEK),
-        "compare this year vs last year" to AskQuery.Compare(AskPeriod.THIS_YEAR),
+        "compare this year vs last year" to AskQuery.Compare(AskPeriod.THIS_YEAR, AskPeriod.LAST_YEAR),
         "compare week" to AskQuery.Compare(AskPeriod.THIS_WEEK),
         "comparison" to AskQuery.Compare(TM),
     )
@@ -141,10 +141,38 @@ private val ROAST_WHY_CASES: List<Pair<String, AskQuery>> =
         "ايه الطقس النهارده" to AskQuery.NotUnderstood,
         "how are you" to AskQuery.NotUnderstood,
         "who won the match yesterday" to AskQuery.NotUnderstood,
-        "last 0 days" to AskQuery.NotUnderstood,
-        "how much did I spend last 400 days" to AskQuery.NotUnderstood,
-        "how much did I spend in month 13" to AskQuery.NotUnderstood,
+        "last 0 days" to AskQuery.PeriodUnreadable,
+        "how much did I spend last 400 days" to AskQuery.PeriodUnreadable,
+        "how much did I spend in month 13" to AskQuery.PeriodUnreadable,
         "why" to AskQuery.NotUnderstood,
+    )
+
+private val PERIOD_CASES: List<Pair<String, AskQuery>> =
+    listOf(
+        "how much did I spend last year" to AskQuery.Spend(AskPeriod.LAST_YEAR),
+        "groceries in 2025" to AskQuery.Spend(AskPeriod.year(2025), t("groceries")),
+        "صرفت كام سنة 2025" to AskQuery.Spend(AskPeriod.year(2025)),
+        "صرفت كام السنة اللي فاتت" to AskQuery.Spend(AskPeriod.LAST_YEAR),
+        "spent 2 months ago" to AskQuery.Spend(AskPeriod.monthsAgo(2)),
+        "صرفت كام من شهرين" to AskQuery.Spend(AskPeriod.monthsAgo(2)),
+        "صرفت كام من 3 شهور" to AskQuery.Spend(AskPeriod.monthsAgo(3)),
+        "groceries from 1 to 15 october" to AskQuery.Spend(AskPeriod.dayRange(1, 15, 10), t("groceries")),
+        "صرفت كام من 1 ل 15 اكتوبر" to AskQuery.Spend(AskPeriod.dayRange(1, 15, 10)),
+        "how much did I spend past 2 weeks" to AskQuery.Spend(AskPeriod.lastDays(14)),
+        "I may have spent too much on groceries" to AskQuery.Spend(TM, t("groceries")),
+        "how much did I spend in may" to AskQuery.Spend(AskPeriod.monthOfYear(5)),
+        "groceries may 2025" to AskQuery.Spend(AskPeriod.monthOfYear(5, 2025), t("groceries")),
+        "may" to AskQuery.Spend(AskPeriod.monthOfYear(5)),
+        "how much did I spend on mar 5" to AskQuery.Spend(AskPeriod.monthOfYear(3)),
+        "بشهر 8 صرفت كام" to AskQuery.Spend(AskPeriod.monthOfYear(8)),
+        "roast chicken" to AskQuery.Spend(TM, t("chicken"), implicit = true),
+        "how much did I spend in 1999" to AskQuery.PeriodUnreadable,
+        "spent 3 weeks ago" to AskQuery.PeriodUnreadable,
+        "spent 5 days ago" to AskQuery.PeriodUnreadable,
+        "spent last 2 months" to AskQuery.PeriodUnreadable,
+        "spent from 20 to 5 october" to AskQuery.PeriodUnreadable,
+        "spent from 5 to 7" to AskQuery.PeriodUnreadable,
+        "صرفت كام منذ زمان" to AskQuery.PeriodUnreadable,
     )
 
 class QuestionParserTest {
@@ -206,8 +234,12 @@ class QuestionParserTest {
     }
 
     @Test
+    fun `REQ-AN-160 years, months ago, day ranges, weeks and ambiguous month words like may are read with a cue only`() =
+        check(PERIOD_CASES)
+
+    @Test
     fun `REQ-AN-160 the tables hold at least 60 distinct questions`() {
-        val all = SPEND_CASES + BREAKDOWN_CASES + COMPARE_CASES + MERCHANT_CASES + PAYDAY_CASES + ROAST_WHY_CASES
+        val all = SPEND_CASES + BREAKDOWN_CASES + COMPARE_CASES + MERCHANT_CASES + PAYDAY_CASES + ROAST_WHY_CASES + PERIOD_CASES
         assertTrue("only ${all.size} questions", all.map { it.first }.distinct().size >= 60)
     }
 }

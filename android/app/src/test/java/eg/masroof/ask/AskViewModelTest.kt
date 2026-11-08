@@ -187,4 +187,12 @@ class AskIsLocalOnlyTest {
             }
         assertTrue("logging in ${offenders.map { it.name }}", offenders.isEmpty())
     }
+
+    @Test
+    fun `REQ-AN-165 the question draft is not saved in the saved-state bundle and data does not depend on the Ask package`() {
+        val screen = sources("ui/ask").filter { it.name == "AskScreen.kt" }.single().readText()
+        assertTrue("rememberSaveable would write the question into the saved state", !screen.contains("rememberSaveable"))
+        val data = sources("data/db").filter { f -> f.readText().contains("eg.masroof.ask") }
+        assertTrue("data layer references the Ask package: ${data.map { it.name }}", data.isEmpty())
+    }
 }

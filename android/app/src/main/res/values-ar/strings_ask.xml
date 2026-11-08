@@ -14,12 +14,6 @@
     <string name="ask_greeting_empty">لسه مفيش مصروفات الشهر ده. جرب سؤال:</string>
     <string name="ask_you_asked">سألت: %1$s</string>
 
-    <string name="ask_visit_one">زيارة واحدة</string>
-    <string name="ask_visit_n">%1$s زيارات</string>
-    <string name="ask_times_one">مرة واحدة</string>
-    <string name="ask_times_n">%1$s مرة</string>
-    <string name="ask_entries_one">عملية واحدة</string>
-    <string name="ask_entries_n">%1$s عملية</string>
 
     <string name="ask_p_today">النهارده</string>
     <string name="ask_p_yesterday">امبارح</string>
@@ -28,7 +22,6 @@
     <string name="ask_p_this_month">الشهر ده</string>
     <string name="ask_p_last_month">الشهر اللي فات</string>
     <string name="ask_p_this_year">السنة دي</string>
-    <string name="ask_p_last_days">في آخر %1$s يوم</string>
     <string name="ask_p_month">في %1$s</string>
     <string name="ask_p_range">من %1$s لـ %2$s</string>
 
@@ -36,8 +29,6 @@
     <string name="ask_spend_all">صرفت %1$s %2$s</string>
     <string name="ask_spend_none_subject">مفيش مصروفات على %1$s %2$s</string>
     <string name="ask_spend_none">مفيش مصروفات متسجلة %1$s</string>
-    <string name="ask_other_currency_one">عملية واحدة بعملة تانية مش محسوبة</string>
-    <string name="ask_other_currency_n">%1$s عمليات بعملات تانية مش محسوبة</string>
     <string name="ask_unknown_subject">مش عارف فئة اسمها “%1$s”. قصدك:</string>
     <string name="ask_not_understood">معلش مفهمتش السؤال. جرب واحد من دول:</string>
 
@@ -61,8 +52,6 @@
     <string name="ask_top_none">مفيش أماكن متسجلة %1$s</string>
     <string name="ask_top_row">%1$s، %2$s، %3$s</string>
 
-    <string name="ask_payday_days_one">فاضل يوم على القبض</string>
-    <string name="ask_payday_days_n">فاضل %1$s يوم على القبض</string>
     <string name="ask_payday_income">الدخل %1$s، صرفت %2$s، فاضل %3$s</string>
     <string name="ask_payday_over">الدخل %1$s، صرفت %2$s، زيادة %3$s</string>
     <string name="ask_payday_pace">بالمعدل ده هتصرف حوالي %1$s لحد القبض</string>
@@ -99,4 +88,57 @@
     <string name="ask_chip_compare_prev">قارنها بالفترة اللي قبلها</string>
     <string name="ask_chip_top_places">أكتر أماكن بصرف فيها</string>
     <string name="ask_chip_biggest">أكبر مصروف</string>
+    <string name="ask_other">أخرى</string>
+    <string name="ask_p_last_year">السنة اللي فاتت</string>
+    <string name="ask_period_unreadable">معرفتش أقرا الفترة دي. جرب “الشهر ده” أو “السنة اللي فاتت” أو “في أكتوبر” أو “آخر ٣٠ يوم”.</string>
+    <string name="ask_one_at_a_time">أقدر أجاوب على حاجة واحدة في المرة. اختار واحدة:</string>
+
+    <plurals name="ask_visits">
+        <item quantity="zero">لا زيارات</item>
+        <item quantity="one">زيارة واحدة</item>
+        <item quantity="two">زيارتان</item>
+        <item quantity="few">%1$s زيارات</item>
+        <item quantity="many">%1$s زيارة</item>
+        <item quantity="other">%1$s زيارة</item>
+    </plurals>
+    <plurals name="ask_times">
+        <item quantity="zero">ولا مرة</item>
+        <item quantity="one">مرة واحدة</item>
+        <item quantity="two">مرتين</item>
+        <item quantity="few">%1$s مرات</item>
+        <item quantity="many">%1$s مرة</item>
+        <item quantity="other">%1$s مرة</item>
+    </plurals>
+    <plurals name="ask_entries">
+        <item quantity="zero">لا عمليات</item>
+        <item quantity="one">عملية واحدة</item>
+        <item quantity="two">عمليتان</item>
+        <item quantity="few">%1$s عمليات</item>
+        <item quantity="many">%1$s عملية</item>
+        <item quantity="other">%1$s عملية</item>
+    </plurals>
+    <plurals name="ask_other_currency">
+        <item quantity="zero">مفيش عمليات بعملات تانية</item>
+        <item quantity="one">عملية واحدة بعملة تانية مش محسوبة</item>
+        <item quantity="two">عمليتان بعملة تانية مش محسوبتين</item>
+        <item quantity="few">%1$s عمليات بعملات تانية مش محسوبة</item>
+        <item quantity="many">%1$s عملية بعملات تانية مش محسوبة</item>
+        <item quantity="other">%1$s عملية بعملات تانية مش محسوبة</item>
+    </plurals>
+    <plurals name="ask_payday_days">
+        <item quantity="zero">فاضل %1$s يوم على القبض</item>
+        <item quantity="one">فاضل يوم على القبض</item>
+        <item quantity="two">فاضل يومين على القبض</item>
+        <item quantity="few">فاضل %1$s أيام على القبض</item>
+        <item quantity="many">فاضل %1$s يوم على القبض</item>
+        <item quantity="other">فاضل %1$s يوم على القبض</item>
+    </plurals>
+    <plurals name="ask_p_last_days">
+        <item quantity="zero">في آخر %1$s يوم</item>
+        <item quantity="one">في آخر يوم</item>
+        <item quantity="two">في آخر يومين</item>
+        <item quantity="few">في آخر %1$s أيام</item>
+        <item quantity="many">في آخر %1$s يوم</item>
+        <item quantity="other">في آخر %1$s يوم</item>
+    </plurals>
 </resources>

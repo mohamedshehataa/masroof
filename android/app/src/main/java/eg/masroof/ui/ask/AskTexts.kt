@@ -46,6 +46,9 @@ class AskTexts(
 
     private fun percent(bps: Int) = PercentFormat.format(bps, style.arabic, style.digits, signed = true)
 
+    /** A share's name; the "Other" slice has none of its own. */
+    fun shareName(share: eg.masroof.ask.CategoryShare): String = if (share.isOther) res.getString(R.string.ask_other) else name(share.name)
+
     fun name(text: LocalizedText): String = if (style.arabic) text.ar else text.en
 
     private fun monthName(info: PeriodInfo): String {
@@ -71,7 +74,11 @@ class AskTexts(
             AskPeriodKind.THIS_MONTH -> res.getString(R.string.ask_p_this_month)
             AskPeriodKind.LAST_MONTH -> res.getString(R.string.ask_p_last_month)
             AskPeriodKind.THIS_YEAR -> res.getString(R.string.ask_p_this_year)
-            AskPeriodKind.LAST_DAYS -> res.getString(R.string.ask_p_last_days, number(p.days))
+            AskPeriodKind.LAST_DAYS -> res.getQuantityString(R.plurals.ask_p_last_days, p.days, number(p.days))
+            AskPeriodKind.LAST_YEAR -> res.getString(R.string.ask_p_last_year)
+            AskPeriodKind.YEAR -> res.getString(R.string.ask_p_month, DateFormat.digitsAs(info.from.year.toString(), style.digits))
+            AskPeriodKind.MONTHS_AGO -> res.getString(R.string.ask_p_month, monthName(info))
+            AskPeriodKind.DAY_RANGE -> range(info)
             AskPeriodKind.MONTH_OF_YEAR -> res.getString(R.string.ask_p_month, monthName(info))
         }
     }
@@ -80,31 +87,21 @@ class AskTexts(
     fun barLabel(info: PeriodInfo): String {
         val p = info.period ?: return DateFormat.shortDate(info.from, style.arabic, style.digits)
         return when (p.kind) {
-            AskPeriodKind.MONTH_OF_YEAR -> monthName(info)
-            AskPeriodKind.LAST_DAYS -> DateFormat.shortDate(info.from, style.arabic, style.digits)
+            AskPeriodKind.MONTH_OF_YEAR, AskPeriodKind.MONTHS_AGO -> monthName(info)
+            AskPeriodKind.YEAR, AskPeriodKind.LAST_YEAR -> DateFormat.digitsAs(info.from.year.toString(), style.digits)
+            AskPeriodKind.LAST_DAYS, AskPeriodKind.DAY_RANGE -> DateFormat.shortDate(info.from, style.arabic, style.digits)
             else -> periodPhrase(info).replaceFirstChar { it.titlecase(locale) }
         }
     }
 
-    private fun times(n: Int) = if (n == 1) res.getString(R.string.ask_times_one) else res.getString(R.string.ask_times_n, number(n))
+    private fun times(n: Int) = res.getQuantityString(R.plurals.ask_times, n, number(n))
 
-    fun visits(n: Int) = if (n == 1) res.getString(R.string.ask_visit_one) else res.getString(R.string.ask_visit_n, number(n))
+    fun visits(n: Int) = res.getQuantityString(R.plurals.ask_visits, n, number(n))
 
-    private fun entriesCount(n: Int) =
-        if (n ==
-            1
-        ) {
-            res.getString(R.string.ask_entries_one)
-        } else {
-            res.getString(R.string.ask_entries_n, number(n))
-        }
+    private fun entriesCount(n: Int) = res.getQuantityString(R.plurals.ask_entries, n, number(n))
 
     private fun otherCurrency(n: Int): String? =
-        when {
-            n <= 0 -> null
-            n == 1 -> res.getString(R.string.ask_other_currency_one)
-            else -> res.getString(R.string.ask_other_currency_n, number(n))
-        }
+        if (n <= 0) null else res.getQuantityString(R.plurals.ask_other_currency, n, number(n))
 
     fun chipLabel(chip: AskChip): String {
         val arg = chip.arg?.let(::name).orEmpty()
@@ -164,6 +161,8 @@ class AskTexts(
                 } else {
                     AnswerText(null, roastLine(answer.lines.first()), answer.lines.drop(1).map(::roastLine))
                 }
+            is AskAnswer.PeriodUnreadable -> AnswerText(null, res.getString(R.string.ask_period_unreadable), emptyList())
+            is AskAnswer.OneAtATime -> AnswerText(null, res.getString(R.string.ask_one_at_a_time), emptyList())
             is AskAnswer.NotUnderstood -> AnswerText(null, res.getString(R.string.ask_not_understood), emptyList())
             AskAnswer.Failed -> AnswerText(null, res.getString(R.string.ask_failed), emptyList())
         }
@@ -244,9 +243,9 @@ class AskTexts(
 
     private fun visitsText(a: AskAnswer.MerchantVisits): AnswerText {
         val period = periodPhrase(a.period)
-        if (a.visits == 0) return AnswerText(null, res.getString(R.string.ask_visits_none, a.name, period), emptyList())
+        if (a.visits == 0) return AnswerText(null, res.getString(R.string.ask_visits_none, name(a.name), period), emptyList())
         val head = res.getString(R.string.ask_visits_head, times(a.visits), period, money(a.totalMinor), money(a.averageMinor))
-        return AnswerText(a.name, head, emptyList())
+        return AnswerText(name(a.name), head, emptyList())
     }
 
     private fun topText(a: AskAnswer.TopMerchants): AnswerText {
@@ -258,12 +257,7 @@ class AskTexts(
     fun topRow(m: MerchantStat): String = res.getString(R.string.ask_top_row, m.name, money(m.totalMinor), visits(m.visits))
 
     private fun paydayText(a: AskAnswer.Payday): AnswerText {
-        val head =
-            if (a.daysToPayday == 1) {
-                res.getString(R.string.ask_payday_days_one)
-            } else {
-                res.getString(R.string.ask_payday_days_n, number(a.daysToPayday))
-            }
+        val head = res.getQuantityString(R.plurals.ask_payday_days, a.daysToPayday, number(a.daysToPayday))
         if (!a.hasData) return AnswerText(null, head, listOf(res.getString(R.string.ask_payday_empty)))
         val lines = ArrayList<String>()
         val left = a.leftMinor

@@ -11,8 +11,11 @@ internal object ParserLexicon {
     private fun phrases(text: String): List<String> =
         text.split('|').map { ArabicText.tokens(it).joinToString(" ") }.filter { it.isNotEmpty() }
 
-    /** Substrings of the whole normalised question. */
-    val ROAST: List<String> = listOf("roast", "تريق", "هزق", "etre2", "et2ala3").map(ArabicText::normalize)
+    /** "roast me" is a request; "roast chicken" is not, so English needs a pronoun (or the word alone). */
+    val ROAST_PHRASES: List<String> = phrases("roast me|roast us|roast my|roast our|roast it")
+
+    /** Arabic stems that appear inside one word ("اتريق", "هزقني"). */
+    val ROAST_STEMS: List<String> = listOf("تريق", "هزق").map(ArabicText::normalize)
 
     val PAYDAY_WORDS: Set<String> = words("payday القبض قبض el2abd 2abd e2abd el2obd 2obd")
     val PAYDAY_PHRASES: List<String> =
@@ -89,7 +92,7 @@ internal object ParserLexicon {
             than more less so there has have had been over under into per any all every each some also just only very really often
             times time visits visit order orders ordered go went going goes buy bought shop shopping eat ate top places place
             merchants merchant shops stores expensive left remaining until till payday day roast breakdown week month year days
-            last past current previous ago now lately recently got many
+            last past current previous ago now lately recently got many may too might should
             على علي في من الى الي عن ب مع و قد انا انت انتا بقي بقى ده دا دي دول لو سمحت ممكن عايز عاوز عايزه عاوزه اعرف قولي قوللي
             وريني هات فلوس فلوسي فلوسنا جنيه جنيها بتاع بتاعي بتاعت اللي باللي فات اخر شهر اسبوع سنه يوم ايام النهارده مره مرات
             اكتر اقل اماكن مكان محلات طلبت رحت روحت بروح بطلب اشتريت بشتري اشتري اروح اطلب راحت فين اوي جدا تاني فاضل باقي لحد حد

@@ -14,12 +14,6 @@
     <string name="ask_greeting_empty">No entries yet this month. Try a question:</string>
     <string name="ask_you_asked">You asked: %1$s</string>
 
-    <string name="ask_visit_one">1 visit</string>
-    <string name="ask_visit_n">%1$s visits</string>
-    <string name="ask_times_one">once</string>
-    <string name="ask_times_n">%1$s times</string>
-    <string name="ask_entries_one">1 entry</string>
-    <string name="ask_entries_n">%1$s entries</string>
 
     <string name="ask_p_today">today</string>
     <string name="ask_p_yesterday">yesterday</string>
@@ -28,7 +22,6 @@
     <string name="ask_p_this_month">this month</string>
     <string name="ask_p_last_month">last month</string>
     <string name="ask_p_this_year">this year</string>
-    <string name="ask_p_last_days">in the last %1$s days</string>
     <string name="ask_p_month">in %1$s</string>
     <string name="ask_p_range">from %1$s to %2$s</string>
 
@@ -36,8 +29,6 @@
     <string name="ask_spend_all">%1$s spent %2$s</string>
     <string name="ask_spend_none_subject">Nothing spent on %1$s %2$s</string>
     <string name="ask_spend_none">No spending recorded %1$s</string>
-    <string name="ask_other_currency_one">1 entry in another currency is not included</string>
-    <string name="ask_other_currency_n">%1$s entries in other currencies not included</string>
     <string name="ask_unknown_subject">I don’t know a category called “%1$s”. Did you mean:</string>
     <string name="ask_not_understood">Sorry, I didn’t understand that. Try one of these:</string>
 
@@ -61,8 +52,6 @@
     <string name="ask_top_none">No places recorded %1$s</string>
     <string name="ask_top_row">%1$s, %2$s, %3$s</string>
 
-    <string name="ask_payday_days_one">1 day to payday</string>
-    <string name="ask_payday_days_n">%1$s days to payday</string>
     <string name="ask_payday_income">Income %1$s, spent %2$s, %3$s left</string>
     <string name="ask_payday_over">Income %1$s, spent %2$s, over by %3$s</string>
     <string name="ask_payday_pace">At your pace you will spend about %1$s by payday</string>
@@ -99,4 +88,33 @@
     <string name="ask_chip_compare_prev">Compare with the previous period</string>
     <string name="ask_chip_top_places">Top places</string>
     <string name="ask_chip_biggest">Biggest expense</string>
+    <string name="ask_other">Other</string>
+    <string name="ask_p_last_year">last year</string>
+    <string name="ask_period_unreadable">I can’t read that period. Try “this month”, “last year”, “in October” or “last 30 days”.</string>
+    <string name="ask_one_at_a_time">I can only answer about one thing at a time. Pick one:</string>
+
+    <plurals name="ask_visits">
+        <item quantity="one">%1$s visit</item>
+        <item quantity="other">%1$s visits</item>
+    </plurals>
+    <plurals name="ask_times">
+        <item quantity="one">once</item>
+        <item quantity="other">%1$s times</item>
+    </plurals>
+    <plurals name="ask_entries">
+        <item quantity="one">%1$s entry</item>
+        <item quantity="other">%1$s entries</item>
+    </plurals>
+    <plurals name="ask_other_currency">
+        <item quantity="one">%1$s entry in another currency is not included</item>
+        <item quantity="other">%1$s entries in other currencies not included</item>
+    </plurals>
+    <plurals name="ask_payday_days">
+        <item quantity="one">%1$s day to payday</item>
+        <item quantity="other">%1$s days to payday</item>
+    </plurals>
+    <plurals name="ask_p_last_days">
+        <item quantity="one">in the last day</item>
+        <item quantity="other">in the last %1$s days</item>
+    </plurals>
 </resources>

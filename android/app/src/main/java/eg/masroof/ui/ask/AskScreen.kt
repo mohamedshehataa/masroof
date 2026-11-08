@@ -41,7 +41,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,7 +146,8 @@ fun AskContent(
 
 @Composable
 private fun InputBar(onSend: (String) -> Unit) {
-    var text by rememberSaveable { mutableStateOf("") }
+    // Plain remember: the question text must never reach the saved-state bundle
+    var text by remember { mutableStateOf("") }
     val send = {
         if (text.isNotBlank()) {
             onSend(text)
@@ -280,7 +280,7 @@ private fun BreakdownChart(
         stringResource(
             R.string.ask_donut_desc,
             shares.joinToString(", ") {
-                texts.name(it.name) + " " + PercentFormat.format(it.percent * PERCENT_TO_BPS, style.arabic, style.digits)
+                texts.shareName(it) + " " + PercentFormat.format(it.percent * PERCENT_TO_BPS, style.arabic, style.digits)
             },
         )
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -308,7 +308,7 @@ private fun ShareRow(
     onQuery: (AskQuery, String) -> Unit,
 ) {
     val style = LocalMoneyStyle.current
-    val name = texts.name(share.name)
+    val name = texts.shareName(share)
     val percent = PercentFormat.format(share.percent * PERCENT_TO_BPS, style.arabic, style.digits)
     val spoken = stringResource(R.string.ask_share_row, name, percent, texts.money(share.amountMinor))
     val query = share.query

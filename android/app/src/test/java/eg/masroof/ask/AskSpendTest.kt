@@ -190,4 +190,78 @@ class AskSpendTest : AskEngineFixture() {
         }
 
     // endregion
+
+    @Test
+    fun `REQ-AN-160 last year, a bare year, months ago, a day range and weeks all resolve to the right Cairo days`() =
+        runTest {
+            seedCategories()
+            now = Instant.parse("2026-10-20T09:00:00Z")
+            put("y25", 5_000, "2025-06-10T10:00:00Z", category = GROCERIES)
+            put("aug", 7_000, "2026-08-10T10:00:00Z", category = GROCERIES)
+            put("oct3", 11_000, "2026-10-03T10:00:00Z", category = GROCERIES)
+            put("oct8", 17_000, "2026-10-08T10:00:00Z", category = GROCERIES)
+            put("oct16", 13_000, "2026-10-16T10:00:00Z", category = GROCERIES)
+            assertEquals(5_000L, (spend("groceries last year") as AskAnswer.SpendTotal).totalMinor)
+            assertEquals(5_000L, (spend("groceries in 2025") as AskAnswer.SpendTotal).totalMinor)
+            assertEquals(48_000L, (spend("groceries in 2026") as AskAnswer.SpendTotal).totalMinor)
+            val ago = spend("groceries 2 months ago") as AskAnswer.SpendTotal
+            assertEquals(7_000L, ago.totalMinor)
+            assertEquals(LocalDate.of(2026, 8, 1), ago.period.from)
+            val range = spend("groceries from 1 to 15 october") as AskAnswer.SpendTotal
+            assertEquals(28_000L, range.totalMinor)
+            assertEquals(LocalDate.of(2026, 10, 15), range.period.to)
+            assertEquals("280 EGP on Groceries from 1 Oct to 15 Oct", en().text(range).headline)
+            assertEquals(30_000L, (spend("groceries past 2 weeks") as AskAnswer.SpendTotal).totalMinor)
+            assertEquals("50 EGP on Groceries in 2025", en().text(spend("groceries in 2025")).headline)
+        }
+
+    @Test
+    fun `REQ-AN-160 a period that cannot be read is never answered for this month`() =
+        runTest {
+            seedOctober()
+            for (q in listOf(
+                "how much did I spend in 1999",
+                "spent 3 weeks ago",
+                "groceries last 2 months",
+                "spent from 20 to 5 october",
+            )) {
+                val answer = spend(q)
+                assertTrue("$q -> $answer", answer is AskAnswer.PeriodUnreadable)
+                assertTrue(answer.followUps.isNotEmpty())
+            }
+            val text = en().text(spend("how much did I spend in 1999"))
+            assertTrue(text.headline.startsWith("I can’t read that period"))
+            assertTrue(ar().text(spend("how much did I spend in 1999")).headline.startsWith("معرفتش أقرا الفترة دي"))
+        }
+
+    @Test
+    fun `REQ-AN-160 the word may is a month only with a cue`() =
+        runTest {
+            seedCategories()
+            put("may", 9_000, "2026-05-10T10:00:00Z", category = GROCERIES)
+            put("oct", 1_000, "2026-10-10T10:00:00Z", category = GROCERIES)
+            val modal = spend("I may have spent too much on groceries") as AskAnswer.SpendTotal
+            assertEquals(1_000L, modal.totalMinor)
+            assertEquals(AskPeriod.THIS_MONTH, modal.period.period)
+            assertEquals(9_000L, (spend("groceries in may") as AskAnswer.SpendTotal).totalMinor)
+            assertEquals(9_000L, (spend("groceries may 2026") as AskAnswer.SpendTotal).totalMinor)
+        }
+
+    @Test
+    fun `REQ-AN-160 groceries and fuel is one question over both, and a mix of kinds asks for one at a time`() =
+        runTest {
+            seedOctober()
+            val both = spend("how much did I spend on groceries and fuel this month") as AskAnswer.SpendTotal
+            assertEquals(432_000L, both.totalMinor)
+            assertEquals(4, both.count)
+            assertEquals("Groceries + Fuel", both.subject?.en)
+            assertEquals("4,320 EGP on Groceries + Fuel this month", en().text(both).headline)
+            val mixed = spend("how much did I spend on groceries and talabat this month") as AskAnswer.OneAtATime
+            assertEquals(2, mixed.followUps.size)
+            assertEquals("I can only answer about one thing at a time. Pick one:", en().text(mixed).headline)
+            val tapped = ask().answer(mixed.followUps.first { it.arg?.en == "Groceries" }.query) as AskAnswer.SpendTotal
+            assertEquals(402_000L, tapped.totalMinor)
+            val partly = spend("how much did I spend on groceries and xyzzy this month") as AskAnswer.UnknownSubject
+            assertEquals("groceries xyzzy", partly.text)
+        }
 }

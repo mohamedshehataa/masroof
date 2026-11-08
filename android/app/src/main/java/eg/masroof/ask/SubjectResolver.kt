@@ -153,7 +153,7 @@ internal object SubjectResolver {
         categories: List<AnalyticsCategory>,
     ): AskSubject.Category? {
         val phrase = tokens.joinToString(" ")
-        val keys = synonyms[phrase] ?: tokens.firstNotNullOfOrNull { synonyms[it] } ?: return null
+        val keys = synonyms[phrase] ?: return null
         val byId = categories.filter { !it.archived }.associateBy { it.id }
         val picked = keys.mapNotNull { byId[seededCategoryId(it)] }
         if (picked.isEmpty()) return null
@@ -216,6 +216,22 @@ internal object SubjectResolver {
         val hits = merchants.filter { merchantMatches(it, key) }
         if (hits.isEmpty()) return null
         return AskSubject.Merchant(key.joinToString(" "), hits.minOf { it.trim() })
+    }
+
+    /**
+     * "groceries and fuel": when [text] as a whole is nothing, each word is resolved on its own. Two or more subjects, or an
+     * empty list when any word matches nothing (a word is never silently dropped).
+     */
+    fun resolveParts(
+        text: String,
+        categories: List<AnalyticsCategory>,
+        accounts: List<AskAccount>,
+        merchants: List<String>,
+    ): List<AskSubject> {
+        val tokens = ArabicText.tokens(text)
+        if (tokens.size < 2) return emptyList()
+        val parts = tokens.map { resolve(it, categories, accounts, merchants) }
+        return if (parts.all { it != null }) parts.filterNotNull().distinct() else emptyList()
     }
 
     /** The [limit] top-level categories whose names are closest to [text], for "did you mean". */

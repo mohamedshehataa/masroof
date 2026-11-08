@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AskIntroRoastTest : AskEngineFixture() {
@@ -132,4 +133,35 @@ class AskIntroRoastTest : AskEngineFixture() {
         }
 
     // endregion
+
+    @Test
+    fun `REQ-AN-165 the roast percent rounds half away from zero like the breakdown, not down`() =
+        runTest {
+            seedCategories()
+            put("a", 20_000, "2026-10-05T10:00:00Z", category = GROCERIES)
+            put("b", 10_000, "2026-10-06T10:00:00Z", category = DINING)
+            val answer = spend("roast me") as AskAnswer.Roast
+            // 20,000 of 30,000 is 6,667 bps = 66.67 percent: 67, never 66
+            assertEquals(67, answer.lines.first { it.kind == RoastKind.BIGGEST_CATEGORY }.percent)
+        }
+
+    @Test
+    fun `REQ-AN-165 counts use plural forms in English and Arabic and Other is a resource`() {
+        assertEquals("1 visit", en().visits(1))
+        assertEquals("2 visits", en().visits(2))
+        assertEquals("زيارة واحدة", ar().visits(1))
+        assertEquals("زيارتان", ar().visits(2))
+        assertEquals("٣ زيارات", ar().visits(3))
+        assertEquals("١١ زيارة", ar().visits(11))
+        val share = CategoryShare(null, LocalizedText("", ""), 100, 10_000, 100, null, isOther = true)
+        assertEquals("Other", en().shareName(share))
+        assertEquals("أخرى", ar().shareName(share))
+        val period = PeriodInfo(AskPeriod.THIS_MONTH, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31))
+
+        fun spent(others: Int) = AskAnswer.SpendTotal(period, null, 100, 2, others, emptyList(), emptyList())
+        assertTrue(ar().text(spent(2)).lines.contains("عمليتان بعملة تانية مش محسوبتين"))
+        assertTrue(ar().text(spent(5)).lines.contains("٥ عمليات بعملات تانية مش محسوبة"))
+        assertTrue(ar().text(spent(2)).lines.contains("عمليتان"))
+        assertTrue(en().text(spent(3)).lines.contains("3 entries in other currencies not included"))
+    }
 }

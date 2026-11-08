@@ -4,31 +4,14 @@ import eg.masroof.core.analytics.AnalyticsCalculator
 import eg.masroof.core.analytics.AnalyticsCategory
 import eg.masroof.core.analytics.AnalyticsExtras
 import eg.masroof.core.analytics.AnalyticsPeriod
-import eg.masroof.core.analytics.AnalyticsRow
 import eg.masroof.core.analytics.BusinessCalendar
 import eg.masroof.core.analytics.CategoryLine
 import eg.masroof.core.analytics.MerchantLine
 import eg.masroof.core.analytics.Projections
-import java.time.DayOfWeek
+import eg.masroof.data.db.AskRow
 import java.time.Instant
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.temporal.ChronoUnit
-
-/** One stored entry as Ask needs it: the analytics columns plus the id (to open it) and the account (to filter by it). */
-data class AskRow(
-    val id: String,
-    val type: String,
-    val status: String,
-    val currency: String,
-    val amountMinor: Long,
-    val occurredAtMillis: Long,
-    val categoryId: String?,
-    val merchant: String?,
-    val accountId: String?,
-) {
-    fun toAnalytics() = AnalyticsRow(type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant)
-}
 
 /** Everything the calculator reads: the settings, the lookups and the entries of the span [AskCalculator.span] asked for. */
 data class AskContext(
@@ -61,78 +44,6 @@ object AskCalculator {
 
     // region periods
 
-    internal fun resolve(
-        p: AskPeriod,
-        today: LocalDate,
-        monthStartDay: Int,
-    ): AnalyticsPeriod =
-        when (p.kind) {
-            AskPeriodKind.TODAY -> day(today)
-            AskPeriodKind.YESTERDAY -> day(today.minusDays(1))
-            AskPeriodKind.THIS_WEEK -> AnalyticsPeriod.week(today.with(DayOfWeek.MONDAY))
-            AskPeriodKind.LAST_WEEK -> AnalyticsPeriod.week(today.with(DayOfWeek.MONDAY).minusDays(WEEK_DAYS))
-            AskPeriodKind.THIS_MONTH -> AnalyticsPeriod.currentMonth(today, monthStartDay)
-            AskPeriodKind.LAST_MONTH -> AnalyticsPeriod.currentMonth(today, monthStartDay).previous()
-            AskPeriodKind.THIS_YEAR ->
-                AnalyticsPeriod(
-                    today.year.toString(),
-                    LocalDate.of(today.year, 1, 1),
-                    LocalDate.of(today.year, 12, 31),
-                    false,
-                )
-            AskPeriodKind.LAST_DAYS -> AnalyticsPeriod("last-${p.days}", today.minusDays(p.days - 1L), today, false)
-            AskPeriodKind.MONTH_OF_YEAR -> AnalyticsPeriod.month(monthOf(p, today, monthStartDay), monthStartDay)
-        }
-
-    private const val WEEK_DAYS = 7L
-
-    private fun day(d: LocalDate) = AnalyticsPeriod(d.toString(), d, d, false)
-
-    /** A month named without a year is the most recent one that is not after the current household month. */
-    private fun monthOf(
-        p: AskPeriod,
-        today: LocalDate,
-        monthStartDay: Int,
-    ): YearMonth {
-        p.year?.let { return YearMonth.of(it, p.month) }
-        val current = YearMonth.from(AnalyticsPeriod.currentMonth(today, monthStartDay).from)
-        val candidate = YearMonth.of(current.year, p.month)
-        return if (candidate.isAfter(current)) candidate.minusYears(1) else candidate
-    }
-
-    /** The period right before [a], of the same kind. */
-    private fun previousOf(
-        p: AskPeriod,
-        a: AnalyticsPeriod,
-    ): AnalyticsPeriod =
-        when (p.kind) {
-            AskPeriodKind.THIS_MONTH, AskPeriodKind.LAST_MONTH, AskPeriodKind.MONTH_OF_YEAR,
-            AskPeriodKind.THIS_WEEK, AskPeriodKind.LAST_WEEK,
-            -> a.previous()
-            AskPeriodKind.THIS_YEAR ->
-                AnalyticsPeriod((a.from.year - 1).toString(), a.from.minusYears(1), a.to.minusYears(1), false)
-            AskPeriodKind.TODAY, AskPeriodKind.YESTERDAY, AskPeriodKind.LAST_DAYS -> {
-                val len = a.lengthDays().toLong()
-                AnalyticsPeriod("before-${a.from}", a.from.minusDays(len), a.from.minusDays(1), false)
-            }
-        }
-
-    /** The name of the period before one that has a name, when there is one; otherwise the UI shows dates. */
-    private fun previousName(
-        p: AskPeriod,
-        a: AnalyticsPeriod,
-    ): AskPeriod? =
-        when (p.kind) {
-            AskPeriodKind.THIS_MONTH -> AskPeriod.LAST_MONTH
-            AskPeriodKind.THIS_WEEK -> AskPeriod.LAST_WEEK
-            AskPeriodKind.TODAY -> AskPeriod.YESTERDAY
-            AskPeriodKind.LAST_MONTH, AskPeriodKind.MONTH_OF_YEAR -> {
-                val ym = YearMonth.from(a.from).minusMonths(1)
-                AskPeriod.monthOfYear(ym.monthValue, ym.year)
-            }
-            else -> null
-        }
-
     private fun info(
         p: AskPeriod?,
         a: AnalyticsPeriod,
@@ -147,13 +58,13 @@ object AskCalculator {
         val periods = ArrayList<AnalyticsPeriod>()
 
         fun add(p: AskPeriod) {
-            periods.add(resolve(p, today, monthStartDay))
+            periods.add(AskPeriods.resolve(p, today, monthStartDay))
         }
 
         fun addWithPrevious(p: AskPeriod) {
-            val a = resolve(p, today, monthStartDay)
+            val a = AskPeriods.resolve(p, today, monthStartDay)
             periods.add(a)
-            periods.add(previousOf(p, a))
+            periods.add(AskPeriods.previousOf(p, a))
         }
         when (query) {
             is AskQuery.Spend -> add(query.period)
@@ -167,7 +78,7 @@ object AskCalculator {
                 addWithPrevious(query.current)
                 query.previous?.let(::add)
             }
-            AskQuery.Payday, AskQuery.Roast, AskQuery.NotUnderstood -> add(AskPeriod.THIS_MONTH)
+            AskQuery.Payday, AskQuery.Roast, AskQuery.NotUnderstood, AskQuery.PeriodUnreadable -> add(AskPeriod.THIS_MONTH)
         }
         val from = periods.minOf { it.start() }.toEpochMilli()
         val to = periods.maxOf { it.endExclusive() }.toEpochMilli()
@@ -271,6 +182,7 @@ object AskCalculator {
             is AskQuery.Why -> why(query, ctx)
             AskQuery.Roast -> roast(ctx)
             AskQuery.NotUnderstood -> AskAnswer.NotUnderstood(intro(ctx).chips)
+            AskQuery.PeriodUnreadable -> AskAnswer.PeriodUnreadable(intro(ctx).chips)
         }
 
     // region subjects
@@ -280,20 +192,47 @@ object AskCalculator {
             val subject: AskSubject?,
         ) : Resolution
 
-        data class Unknown(
-            val text: String,
+        /** No subject: [answer] says why. [unknown] is true when the words matched nothing at all. */
+        data class Failed(
+            val answer: AskAnswer,
+            val unknown: Boolean,
         ) : Resolution
     }
 
     private fun resolveSubject(
         subject: AskSubject?,
+        period: AskPeriod,
         ctx: AskContext,
     ): Resolution {
         if (subject !is AskSubject.Text) return Resolution.Found(subject)
         val merchants = ctx.rows.mapNotNull { it.merchant }.distinct()
-        val found = SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants)
-        return if (found == null) Resolution.Unknown(subject.text) else Resolution.Found(found)
+        SubjectResolver.resolve(subject.text, ctx.categories, ctx.accounts, merchants)?.let { return Resolution.Found(it) }
+        val parts = SubjectResolver.resolveParts(subject.text, ctx.categories, ctx.accounts, merchants)
+        return when {
+            parts.isEmpty() -> Resolution.Failed(unknown(subject.text, period, ctx), unknown = true)
+            parts.all { it is AskSubject.Category } ->
+                Resolution.Found(mergeCategories(parts.filterIsInstance<AskSubject.Category>()))
+            else -> Resolution.Failed(oneAtATime(parts, period), unknown = false)
+        }
     }
+
+    /** "groceries and fuel" is one question over both: the ids are joined and the label names both. */
+    private fun mergeCategories(parts: List<AskSubject.Category>) =
+        AskSubject.Category(
+            parts.flatMap { it.ids }.toSet(),
+            parts.joinToString(" + ") { it.nameEn },
+            parts.joinToString(" + ") { it.nameAr },
+        )
+
+    private fun oneAtATime(
+        parts: List<AskSubject>,
+        period: AskPeriod,
+    ): AskAnswer.OneAtATime =
+        AskAnswer.OneAtATime(
+            parts.mapNotNull { part ->
+                label(part)?.let { AskChip(AskChipKind.SUGGESTED_CATEGORY, AskQuery.Spend(period, part), it) }
+            },
+        )
 
     private fun unknown(
         text: String,
@@ -322,17 +261,11 @@ object AskCalculator {
         ctx: AskContext,
     ): AskAnswer {
         val subject =
-            when (val r = resolveSubject(q.subject, ctx)) {
+            when (val r = resolveSubject(q.subject, q.period, ctx)) {
                 is Resolution.Found -> r.subject
-                is Resolution.Unknown -> return if (q.implicit) {
-                    AskAnswer.NotUnderstood(
-                        intro(ctx).chips,
-                    )
-                } else {
-                    unknown(r.text, q.period, ctx)
-                }
+                is Resolution.Failed -> return if (q.implicit && r.unknown) AskAnswer.NotUnderstood(intro(ctx).chips) else r.answer
             }
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
         val match = predicate(subject)
         val inP = inPeriod(ctx.rows, a)
         val counted = inP.filter { it.counts(ctx.includeCash) && match(it) }
@@ -358,11 +291,11 @@ object AskCalculator {
         ctx: AskContext,
     ): AskAnswer {
         val subject =
-            when (val r = resolveSubject(q.subject, ctx)) {
+            when (val r = resolveSubject(q.subject, q.period, ctx)) {
                 is Resolution.Found -> r.subject
-                is Resolution.Unknown -> return unknown(r.text, q.period, ctx)
+                is Resolution.Failed -> return r.answer
             }
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
         val match = predicate(subject)
         val counted = newestFirst(inPeriod(ctx.rows, a).filter { it.counts(ctx.includeCash) && match(it) })
         val chips =
@@ -402,7 +335,7 @@ object AskCalculator {
         q: AskQuery.Breakdown,
         ctx: AskContext,
     ): AskAnswer {
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
         val inP = inPeriod(ctx.rows, a)
         val counted = inP.filter { it.counts(ctx.includeCash) }
         val others = inP.count { it.currency != EGP && it.countsAsSpend(ctx.includeCash) }
@@ -427,7 +360,7 @@ object AskCalculator {
                         subject?.let { AskQuery.Spend(q.period, it) },
                     )
                 } else {
-                    CategoryShare(null, LocalizedText("Other", "أخرى"), amounts[i], bps[i], percents[i], null, isOther = true)
+                    CategoryShare(null, LocalizedText("", ""), amounts[i], bps[i], percents[i], null, isOther = true)
                 }
             }
         val chips =
@@ -447,14 +380,14 @@ object AskCalculator {
         ctx: AskContext,
     ): AskAnswer {
         val subject =
-            when (val r = resolveSubject(q.subject, ctx)) {
+            when (val r = resolveSubject(q.subject, q.current, ctx)) {
                 is Resolution.Found -> r.subject
-                is Resolution.Unknown -> return unknown(r.text, q.current, ctx)
+                is Resolution.Failed -> return r.answer
             }
         var curAsk: AskPeriod? = q.current
-        var cur = resolve(q.current, ctx.today, ctx.monthStartDay)
-        var prevAsk: AskPeriod? = q.previous ?: previousName(q.current, cur)
-        var prev = q.previous?.let { resolve(it, ctx.today, ctx.monthStartDay) } ?: previousOf(q.current, cur)
+        var cur = AskPeriods.resolve(q.current, ctx.today, ctx.monthStartDay)
+        var prevAsk: AskPeriod? = q.previous ?: AskPeriods.previousName(q.current, cur)
+        var prev = q.previous?.let { AskPeriods.resolve(it, ctx.today, ctx.monthStartDay) } ?: AskPeriods.previousOf(q.current, cur)
         if (prev.from.isAfter(cur.from)) {
             cur = prev.also { prev = cur }
             curAsk = prevAsk.also { prevAsk = curAsk }
@@ -500,28 +433,58 @@ object AskCalculator {
 
     // region REQ-AN-163
 
-    private fun merchantStats(
+    /** The Insights merchant rule for one merchant: grouped by `lower(trim(name))`, no cash, positive net only. */
+    private fun merchantFigures(
         rows: List<AskRow>,
         key: List<String>,
-    ) = AnalyticsExtras
-        .merchants(rows.map { it.toAnalytics() })
-        .filter { SubjectResolver.merchantMatches(it.name, key) }
+    ): Triple<String?, Int, Long> {
+        val groups =
+            rows
+                .filter { it.counts(false) && SubjectResolver.merchantMatches(it.merchant, key) }
+                .groupBy {
+                    it.merchant
+                        .orEmpty()
+                        .trim(' ')
+                        .lowercase()
+                }.values
+                .filter { g -> g.sumOf { it.signed() } > 0 }
+        val name = groups.maxByOrNull { g -> g.sumOf { it.signed() } }?.minOf { it.merchant.orEmpty().trim(' ') }
+        return Triple(name, groups.sumOf { it.size }, groups.sumOf { g -> g.sumOf { it.signed() } })
+    }
 
     private fun merchantVisits(
         q: AskQuery.MerchantVisits,
         ctx: AskContext,
     ): AskAnswer {
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
-        val key = SubjectResolver.canonTokens(q.merchant)
-        val matched = merchantStats(inPeriod(ctx.rows, a), key)
-        val visits = matched.sumOf { it.visits }
-        val total = matched.sumOf { it.total }
-        val average = if (visits > 0) Projections.divideRounded(total, visits.toLong()) else 0L
-        val name = matched.maxByOrNull { it.total }?.name ?: q.merchant
-        val chips = ArrayList<AskChip>()
-        if (visits > 0) {
-            chips.add(AskChip(AskChipKind.SHOW_ENTRIES, AskQuery.Entries(q.period, AskSubject.Merchant(key.joinToString(" "), name))))
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
+        val inP = inPeriod(ctx.rows, a)
+        val subject =
+            when (val r = resolveSubject(AskSubject.Text(q.merchant), q.period, ctx)) {
+                is Resolution.Found -> r.subject
+                is Resolution.Failed -> if (r.unknown) null else return r.answer
+            }
+        val typed = LocalizedText(q.merchant, q.merchant)
+        var name = label(subject) ?: typed
+        var visits = 0
+        var total = 0L
+        when (subject) {
+            is AskSubject.Merchant -> {
+                val (found, count, sum) = merchantFigures(inP, subject.key.split(' ').filter { it.isNotEmpty() })
+                visits = count
+                total = sum
+                if (found != null) name = LocalizedText(found, found)
+            }
+            null -> Unit
+            else -> {
+                val match = predicate(subject)
+                val rows = inP.filter { it.counts(ctx.includeCash) && match(it) }
+                visits = rows.size
+                total = total(rows)
+            }
         }
+        val average = if (visits > 0) Projections.divideRounded(total, visits.toLong()) else 0L
+        val chips = ArrayList<AskChip>()
+        if (visits > 0 && subject != null) chips.add(AskChip(AskChipKind.SHOW_ENTRIES, AskQuery.Entries(q.period, subject)))
         chips.add(AskChip(AskChipKind.TOP_PLACES, AskQuery.TopMerchants(q.period)))
         return AskAnswer.MerchantVisits(info(q.period, a), name, visits, total, average, chips)
     }
@@ -530,7 +493,7 @@ object AskCalculator {
         q: AskQuery.TopMerchants,
         ctx: AskContext,
     ): AskAnswer {
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
         val top =
             AnalyticsExtras
                 .merchants(inPeriod(ctx.rows, a).map { it.toAnalytics() })
@@ -578,7 +541,7 @@ object AskCalculator {
         q: AskQuery.Biggest,
         ctx: AskContext,
     ): AskAnswer {
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
         val top =
             inPeriod(ctx.rows, a)
                 .filter { it.currency == EGP && (it.type == TYPE_EXPENSE || (ctx.includeCash && it.type == TYPE_CASH)) }
@@ -599,12 +562,12 @@ object AskCalculator {
         ctx: AskContext,
     ): AskAnswer {
         val subject =
-            when (val r = resolveSubject(q.subject, ctx)) {
+            when (val r = resolveSubject(q.subject, q.period, ctx)) {
                 is Resolution.Found -> r.subject
-                is Resolution.Unknown -> return unknown(r.text, q.period, ctx)
+                is Resolution.Failed -> return r.answer
             } ?: return AskAnswer.NotUnderstood(intro(ctx).chips)
-        val a = resolve(q.period, ctx.today, ctx.monthStartDay)
-        val prev = previousOf(q.period, a)
+        val a = AskPeriods.resolve(q.period, ctx.today, ctx.monthStartDay)
+        val prev = AskPeriods.previousOf(q.period, a)
         val match = predicate(subject)
         val cur = inPeriod(ctx.rows, a).filter { it.counts(ctx.includeCash) && match(it) }
         val before = inPeriod(ctx.rows, prev).filter { it.counts(ctx.includeCash) && match(it) }
@@ -652,7 +615,7 @@ object AskCalculator {
         }
         val biggest = lines(rows, ctx).firstOrNull()
         if (biggest != null) {
-            val percent = biggest.shareBps / (BPS / PERCENT)
+            val percent = Projections.divideRounded(biggest.shareBps.toLong(), (BPS / PERCENT).toLong()).toInt()
             out.add(RoastLine(RoastKind.BIGGEST_CATEGORY, LocalizedText(biggest.nameEn, biggest.nameAr), biggest.count, percent))
         }
         val late = rows.count { it.counts(false) && it.type == TYPE_EXPENSE && lateNight(it) }

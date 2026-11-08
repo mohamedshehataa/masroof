@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
+import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AskMerchantPaydayTest : AskEngineFixture() {
@@ -77,7 +78,7 @@ class AskMerchantPaydayTest : AskEngineFixture() {
             assertEquals("5 days to payday", text.headline)
             assertEquals("Income 20,000 EGP, spent 9,000 EGP, 11,000 EGP left", text.lines.first())
             assertTrue(text.lines.last().startsWith("At your pace you will spend about "))
-            assertEquals("فاضل ٥ يوم على القبض", ar().text(answer).headline)
+            assertEquals("فاضل ٥ أيام على القبض", ar().text(answer).headline)
         }
 
     @Test
@@ -157,4 +158,36 @@ class AskMerchantPaydayTest : AskEngineFixture() {
         }
 
     // endregion
+
+    @Test
+    fun `REQ-AN-163 a merchant outside the Insights top 50 still gets its visits, total and average`() =
+        runTest {
+            seedCategories()
+            for (i in 1..60) put("shop$i", 100_000, "2026-10-05T10:00:00Z", merchant = String.format(Locale.ROOT, "Shop%02d", i))
+            for (i in 1..3) put("tal$i", 5_000, "2026-10-0${i + 5}T10:00:00Z", merchant = "Talabat")
+            assertTrue(current().merchants.none { it.name.equals("talabat", ignoreCase = true) })
+            val answer = spend("how often do I order talabat") as AskAnswer.MerchantVisits
+            assertEquals(3, answer.visits)
+            assertEquals(15_000L, answer.totalMinor)
+            assertEquals(5_000L, answer.averageMinor)
+            assertEquals("3 times this month, 150 EGP, average 50 EGP", en().text(answer).headline)
+            val spent = spend("how much did I spend at talabat this month") as AskAnswer.SpendTotal
+            assertEquals(answer.totalMinor, spent.totalMinor)
+            assertEquals(answer.visits, spent.count)
+        }
+
+    @Test
+    fun `REQ-AN-163 how many times did I buy groceries answers for the category, not a merchant`() =
+        runTest {
+            seedOctober()
+            val answer = spend("how many times did I buy groceries this month") as AskAnswer.MerchantVisits
+            assertEquals(3, answer.visits)
+            assertEquals(402_000L, answer.totalMinor)
+            assertEquals(134_000L, answer.averageMinor)
+            assertEquals("Groceries", answer.name.en)
+            assertEquals("3 times this month, 4,020 EGP, average 1,340 EGP", en().text(answer).headline)
+            assertTrue(AskChipKind.SHOW_ENTRIES in answer.followUps.map { it.kind })
+            val arabic = spend("كام مرة اشتريت بقالة الشهر ده") as AskAnswer.MerchantVisits
+            assertEquals(3, arabic.visits)
+        }
 }

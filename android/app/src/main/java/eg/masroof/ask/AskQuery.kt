@@ -1,15 +1,31 @@
 package eg.masroof.ask
 
 /** When a question is about. Resolved against today and the household month start day by the engine (Cairo dates). */
-enum class AskPeriodKind { TODAY, YESTERDAY, THIS_WEEK, LAST_WEEK, THIS_MONTH, LAST_MONTH, THIS_YEAR, LAST_DAYS, MONTH_OF_YEAR }
+enum class AskPeriodKind {
+    TODAY,
+    YESTERDAY,
+    THIS_WEEK,
+    LAST_WEEK,
+    THIS_MONTH,
+    LAST_MONTH,
+    THIS_YEAR,
+    LAST_YEAR,
+    LAST_DAYS,
+    MONTH_OF_YEAR,
+    MONTHS_AGO,
+    YEAR,
+    DAY_RANGE,
+}
 
 data class AskPeriod(
     val kind: AskPeriodKind,
-    /** Number of days for [AskPeriodKind.LAST_DAYS]. */
+    /** Number of days for [AskPeriodKind.LAST_DAYS], months for [AskPeriodKind.MONTHS_AGO], first day for [AskPeriodKind.DAY_RANGE]. */
     val days: Int = 0,
+    /** Last day for [AskPeriodKind.DAY_RANGE] (of calendar [month]). */
+    val toDay: Int = 0,
     /** 1..12 for [AskPeriodKind.MONTH_OF_YEAR]. */
     val month: Int = 0,
-    /** Null means the most recent such month. */
+    /** Null means the most recent such month (or, for [AskPeriodKind.YEAR], never null). */
     val year: Int? = null,
 ) {
     companion object {
@@ -20,6 +36,18 @@ data class AskPeriod(
         val THIS_MONTH = AskPeriod(AskPeriodKind.THIS_MONTH)
         val LAST_MONTH = AskPeriod(AskPeriodKind.LAST_MONTH)
         val THIS_YEAR = AskPeriod(AskPeriodKind.THIS_YEAR)
+        val LAST_YEAR = AskPeriod(AskPeriodKind.LAST_YEAR)
+
+        fun year(y: Int) = AskPeriod(AskPeriodKind.YEAR, year = y)
+
+        fun monthsAgo(n: Int) = AskPeriod(AskPeriodKind.MONTHS_AGO, days = n)
+
+        fun dayRange(
+            from: Int,
+            to: Int,
+            month: Int,
+            year: Int? = null,
+        ) = AskPeriod(AskPeriodKind.DAY_RANGE, days = from, toDay = to, month = month, year = year)
 
         fun lastDays(n: Int) = AskPeriod(AskPeriodKind.LAST_DAYS, days = n)
 
@@ -110,4 +138,7 @@ sealed interface AskQuery {
     data object Roast : AskQuery
 
     data object NotUnderstood : AskQuery
+
+    /** The question names a period (a year, "ago", "from ... to") that could not be read: never answered for this month instead. */
+    data object PeriodUnreadable : AskQuery
 }
