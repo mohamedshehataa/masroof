@@ -16,19 +16,31 @@ import androidx.compose.ui.unit.dp
 import eg.masroof.R
 import eg.masroof.ui.components.SectionCard
 
-/** "Your money": a plain list of rows into the money-life screens (Goals now; STORY-206 moves these into the app's tabs). */
+/** "Your money": a plain list of rows into the money-life screens (Bills, Goals now; STORY-206 moves these into the app's tabs). */
 @Composable
-fun YourMoneySection(onOpenGoals: () -> Unit) {
+fun YourMoneySection(
+    onOpenGoals: () -> Unit = {},
+    onOpenBills: () -> Unit = {},
+) {
     SectionCard(stringResource(R.string.goals_settings_section)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable(onClick = onOpenGoals)
-                .semantics { role = Role.Button },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(R.string.goals_settings_row))
-        }
+        MoneyRow(stringResource(R.string.bills_title), onOpenBills)
+        MoneyRow(stringResource(R.string.goals_settings_row), onOpenGoals)
+    }
+}
+
+@Composable
+private fun MoneyRow(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick)
+            .semantics { role = Role.Button },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label)
     }
 }
