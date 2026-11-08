@@ -47,7 +47,7 @@ data class BackfillState(
  */
 class BackfillStore(
     private val prefs: SharedPreferences,
-    /** Seals the remembered times (production: the phone's own `LocalKeystore`, which a logout or a server forget never destroys); null only in tests that read the file. */
+    /** Seals the remembered times (production: the phone's own `LocalKeystore`, never destroyed by logout); null only in tests. */
     private val aead: Aead? = null,
 ) : HandledMemory {
     private val mutable = MutableStateFlow(read())
