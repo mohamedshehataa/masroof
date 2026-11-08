@@ -31,7 +31,6 @@
     <string name="wallet_coming_payout">Payout</string>
     <string name="wallet_coming_payday">Payday</string>
     <string name="wallet_recent">Recent</string>
-    <string name="wallet_recent_empty">No entries yet</string>
     <string name="wallet_view_all">View all</string>
 
     <string name="wallet_tiles_title">Insights</string>
@@ -40,8 +39,12 @@
     <string name="tile_bills_due">Bills due</string>
     <string name="tile_bills_none">Nothing due</string>
     <plurals name="tile_bills_count">
-        <item quantity="one">%1$s due this week</item>
-        <item quantity="other">%1$s due this week</item>
+        <item quantity="one">%1$s due</item>
+        <item quantity="other">%1$s due</item>
+    </plurals>
+    <plurals name="tile_bills_other">
+        <item quantity="one">+ %1$s in another currency</item>
+        <item quantity="other">+ %1$s in other currencies</item>
     </plurals>
     <string name="tile_budget">Budget</string>
     <string name="tile_in_out">Money in vs out</string>

@@ -4,9 +4,6 @@
 
     <string name="nav_add">Add expense</string>
 
-    <string name="home_this_month">Spent this month</string>
-    <string name="home_recent">Recent expenses</string>
-    <string name="home_see_all">See all</string>
 
     <string name="transactions_title">Transactions</string>
 

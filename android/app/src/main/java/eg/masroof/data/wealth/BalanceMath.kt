@@ -63,23 +63,30 @@ object BalanceMath {
         }
     }
 
+    /** The id of the one active account [row] belongs to, or null (no account named, or a last four shared by several). */
+    fun accountOf(
+        accounts: List<AccountEntity>,
+        row: AccountFlowRow,
+    ): String? {
+        val active = accounts.filter { !it.archived }
+        val last4 = row.instrumentLast4
+        val named = row.accountId
+        return when {
+            named != null -> active.firstOrNull { it.id == named }?.id
+            last4 != null -> active.filter { it.last4 == last4 && it.currency == row.currency }.singleOrNull()?.id
+            else -> null
+        }
+    }
+
     fun attribute(
         accounts: List<AccountEntity>,
         rows: List<AccountFlowRow>,
     ): Map<String, List<AccountFlowRow>> {
         val active = accounts.filter { !it.archived }
-        val byId = active.associateBy { it.id }
         val result = mutableMapOf<String, MutableList<AccountFlowRow>>()
         rows.forEach { r ->
-            val last4 = r.instrumentLast4
-            val named = r.accountId
-            val target =
-                when {
-                    named != null -> byId[named]
-                    last4 != null -> active.filter { it.last4 == last4 && it.currency == r.currency }.singleOrNull()
-                    else -> null
-                }
-            if (target != null) result.getOrPut(target.id) { mutableListOf() } += r
+            val target = accountOf(active, r)
+            if (target != null) result.getOrPut(target) { mutableListOf() } += r
         }
         return result
     }

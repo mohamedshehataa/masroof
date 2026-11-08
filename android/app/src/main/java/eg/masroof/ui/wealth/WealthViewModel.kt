@@ -9,6 +9,9 @@ import eg.masroof.data.db.NetWorthSnapshotEntity
 import eg.masroof.data.wealth.AssetDraft
 import eg.masroof.data.wealth.AssetView
 import eg.masroof.data.wealth.DebtDraft
+import eg.masroof.data.wealth.HoldingDraft
+import eg.masroof.data.wealth.LotDraft
+import eg.masroof.data.wealth.MetalOutcome
 import eg.masroof.data.wealth.NetWorth
 import eg.masroof.data.wealth.WealthRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +42,8 @@ class WealthActions(
     val onDeleteDebt: (DebtEntity) -> Unit = {},
     val onHideAsset: (AssetEntity, Boolean) -> Unit = { _, _ -> },
     val onDeleteAsset: (AssetEntity) -> Unit = {},
+    val onAddMetal: (HoldingDraft, LotDraft, (MetalOutcome) -> Unit) -> Unit = { _, _, _ -> },
+    val onOpenMetal: (String) -> Unit = {},
 )
 
 @HiltViewModel

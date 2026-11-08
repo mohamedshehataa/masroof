@@ -56,17 +56,23 @@ import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
 import eg.masroof.ui.ask.AskIcon
 import eg.masroof.ui.budgets.BudgetRowUi
+import eg.masroof.ui.budgets.HomeBudgetsCard
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.components.SkeletonList
+import eg.masroof.ui.components.StatusBanner
 import eg.masroof.ui.components.StopLearningDialog
+import eg.masroof.ui.insights.BarChart
+import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.insights.InsightsIcon
+import eg.masroof.ui.insights.TrendBar
 import eg.masroof.ui.receipts.rememberCameraLaunch
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.CapturedViewModel
 import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
+import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.ReceiptListViewModel
 
 private const val TARGET_DP = 48
@@ -81,7 +87,8 @@ class WalletActions(
     val onAdd: () -> Unit = {},
     val onSayIt: () -> Unit = {},
     val onReceipt: () -> Unit = {},
-    val onAsk: () -> Unit = {},
+    /** Null hides the Ask action (no Ask screen to open). */
+    val onAsk: (() -> Unit)? = null,
     val onOpenAccounts: () -> Unit = {},
     val onOpenWealth: () -> Unit = {},
     val onOpenBills: () -> Unit = {},
@@ -91,6 +98,7 @@ class WalletActions(
     val onAddBill: () -> Unit = {},
     val onSelectPeriod: (String?) -> Unit = {},
     val onSelectAccount: (String?) -> Unit = {},
+    val onRetry: () -> Unit = {},
 )
 
 @Composable
@@ -117,7 +125,7 @@ fun WalletRoute(
     }
     WalletContent(
         state = state,
-        budget = budgets.firstOrNull(),
+        budgets = budgets,
         actions =
             WalletActions(
                 onOpenSettings = actions.onOpenSettings,
@@ -137,6 +145,7 @@ fun WalletRoute(
                 onAddBill = actions.onAddBill,
                 onSelectPeriod = viewModel::selectPeriod,
                 onSelectAccount = viewModel::selectAccount,
+                onRetry = viewModel::retry,
             ),
         capturedIds = capturedIds,
         onUndoCaptured = captured::undo,
@@ -147,7 +156,7 @@ fun WalletRoute(
 @Composable
 fun WalletContent(
     state: WalletUi,
-    budget: BudgetRowUi?,
+    budgets: List<BudgetRowUi>,
     actions: WalletActions,
     modifier: Modifier = Modifier,
     capturedIds: Map<String, String> = emptyMap(),
@@ -162,14 +171,22 @@ fun WalletContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "bar") { WalletTopBar(actions) }
-        if (!state.loaded || state.figures == null) {
+        if (!state.loaded) {
             item(key = "loading") { SkeletonList() }
             return@LazyColumn
         }
-        item(key = "hero") { HeroCard(state, actions) }
+        // Local data can still fail to load (or a stored amount can be unusable): say so with Retry, and keep the rest.
+        if (state.status != LoadStatus.READY) {
+            item(key = "status") { StatusBanner(state.status, actions.onRetry) }
+        }
+        if (state.figures != null) item(key = "hero") { HeroCard(state, actions) }
         item(key = "actions") { QuickActions(actions) }
-        if (state.figures.pendingReview > 0) {
-            item(key = "review") { ReviewBanner(state.figures.pendingReview, actions.onOpenInsights) }
+        val pending = state.figures?.pendingReview ?: 0
+        if (pending > 0) {
+            item(key = "review") { ReviewBanner(pending, actions.onOpenInsights) }
+        }
+        if (budgets.isNotEmpty()) {
+            item(key = "budgets") { HomeBudgetsCard(budgets, actions.onOpenBudgets) }
         }
         if (state.accounts.isNotEmpty()) {
             item(key = "accounts") { AccountsCarousel(state, actions) }
@@ -179,7 +196,7 @@ fun WalletContent(
         if (state.recent.isEmpty()) {
             item(key = "recent-empty") {
                 Text(
-                    stringResource(R.string.wallet_recent_empty),
+                    stringResource(R.string.empty_title),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -191,7 +208,7 @@ fun WalletContent(
         if (state.firstRun) {
             item(key = "start") { GetStartedCards(actions) }
         } else {
-            item(key = "tiles") { InsightTiles(state, budget, actions) }
+            item(key = "tiles") { InsightTiles(state, budgets.firstOrNull(), actions) }
         }
     }
 }
@@ -245,7 +262,11 @@ private fun HeroCard(
                     )
                 }
                 DeltaChip(figures.deltaBps)
+                if (figures.deltaBps != null) {
+                    Text(stringResource(R.string.home_vs_last_month), style = MaterialTheme.typography.bodySmall, color = onContainer)
+                }
             }
+            MiniTrend(figures.trend)
             BalanceBlock(state, actions)
         }
     }
@@ -312,7 +333,7 @@ private fun AccountPicker(
                 },
                 modifier = Modifier.heightIn(min = TARGET_DP.dp),
             )
-            state.accounts.forEach { view ->
+            state.accounts.filter { it.account.currency == "EGP" }.forEach { view ->
                 DropdownMenuItem(
                     text = { Text(listOfNotNull(view.account.emoji, view.account.label).joinToString(" ")) },
                     onClick = {
@@ -372,7 +393,16 @@ private fun QuickActions(actions: WalletActions) {
         QuickAction("＋", stringResource(R.string.wallet_action_add), actions.onAdd, Modifier.weight(1f))
         QuickAction("🎙", stringResource(R.string.wallet_action_say), actions.onSayIt, Modifier.weight(1f))
         QuickAction("🧾", stringResource(R.string.wallet_action_receipt), actions.onReceipt, Modifier.weight(1f))
-        QuickAction(null, stringResource(R.string.wallet_action_ask), actions.onAsk, Modifier.weight(1f), AskIcon)
+        actions.onAsk?.let {
+            QuickAction(
+                null,
+                stringResource(R.string.wallet_action_ask),
+                it,
+                Modifier.weight(1f),
+                AskIcon,
+                stringResource(R.string.ask_open),
+            )
+        }
     }
 }
 
@@ -383,9 +413,13 @@ private fun QuickAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    description: String? = null,
 ) {
     Card(
-        modifier.heightIn(min = TARGET_DP.dp).clickable(role = Role.Button, onClick = onClick).semantics(mergeDescendants = true) {},
+        modifier
+            .heightIn(min = TARGET_DP.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { description?.let { contentDescription = it } },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -581,4 +615,28 @@ private fun StartCard(
             }
         }
     }
+}
+
+/** The last months of spending as small bars (from the same rows as the figures above). */
+@Composable
+private fun MiniTrend(trend: List<TrendBar>) {
+    val style = LocalMoneyStyle.current
+    if (trend.none { it.total.amountMinor > 0 }) return
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    val description =
+        stringResource(
+            R.string.home_trend_desc,
+            trend.joinToString(", ") {
+                DateFormat.monthShort(it.start, style.arabic) + " " +
+                    MoneyFormat.format(it.total, style.arabic, style.digits)
+            },
+        )
+    BarChart(
+        items = trend.map { BarItem(DateFormat.monthShort(it.start, style.arabic), it.total.amountMinor, it.selected) },
+        description = description,
+        height = 72.dp,
+        showLabels = false,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    Text(stringResource(R.string.home_trend_title), style = MaterialTheme.typography.labelSmall, color = onContainer)
 }

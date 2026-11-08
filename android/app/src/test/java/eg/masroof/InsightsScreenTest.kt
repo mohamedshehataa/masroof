@@ -17,18 +17,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import eg.masroof.core.Money
 import eg.masroof.data.insights.InsightsPeriod
-import eg.masroof.ui.home.HomeContent
 import eg.masroof.ui.insights.InsightsContent
 import eg.masroof.ui.insights.heatLevel
 import eg.masroof.ui.insights.toUi
 import eg.masroof.ui.insights.weekdayIndex
 import eg.masroof.ui.theme.MasroofTheme
-import eg.masroof.ui.viewmodel.HomeInsight
-import eg.masroof.ui.viewmodel.HomeUiState
 import eg.masroof.ui.viewmodel.InsightsState
 import eg.masroof.ui.viewmodel.LoadStatus
+import eg.masroof.ui.wallet.WalletActions
+import eg.masroof.ui.wallet.WalletContent
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -224,15 +222,12 @@ class InsightsScreenTest {
 
     @Test
     fun `REQ-AND-074 home shows the change vs last month, the review banner and the mini trend`() {
-        val insight = HomeInsight(2_500, Money(100_000), data.trend, pendingReview = 3)
-        compose.setContent {
-            MasroofTheme {
-                HomeContent(HomeUiState(total = Money(125_000), status = LoadStatus.READY), {}, {}, insight = insight)
-            }
-        }
+        val state = walletUi(spent = 125_000, deltaBps = 2_500, pendingReview = 3, trend = data.trend.takeLast(6))
+        compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions()) } }
         compose.onNodeWithText("1,250 EGP").assertIsDisplayed()
         compose.onNodeWithText("vs last month").assertIsDisplayed()
         compose.onNodeWithText("25%").assertIsDisplayed()
+        compose.scrollWalletTo("3 expenses need review")
         compose.onNodeWithText("3 expenses need review").assertIsDisplayed()
         compose.onNode(hasContentDescription("Spending over the last 6 months: May 900 EGP", substring = true)).assertExists()
     }
@@ -249,9 +244,7 @@ class InsightsScreenTest {
 
     @Test
     fun `REQ-AND-074 home without analytics yet keeps the plain total card`() {
-        compose.setContent {
-            MasroofTheme { HomeContent(HomeUiState(total = Money(125_000), status = LoadStatus.READY), {}, {}) }
-        }
+        compose.setContent { MasroofTheme { WalletContent(walletUi(spent = 125_000), emptyList(), WalletActions()) } }
         compose.onNodeWithText("1,250 EGP").assertIsDisplayed()
         compose.onNodeWithText("vs last month").assertDoesNotExist()
     }
@@ -259,12 +252,8 @@ class InsightsScreenTest {
     @Test
     @Config(sdk = [34], qualifiers = "ar")
     fun `REQ-AND-074 home mirrors in Arabic`() {
-        val insight = HomeInsight(-1_250, Money(100_000), data.trend, pendingReview = 0)
-        compose.setContent {
-            MasroofTheme {
-                HomeContent(HomeUiState(total = Money(125_000), status = LoadStatus.READY), {}, {}, insight = insight)
-            }
-        }
+        val state = walletUi(spent = 125_000, deltaBps = -1_250, trend = data.trend.takeLast(6))
+        compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions()) } }
         compose.onNodeWithText("١٬٢٥٠ ج.م").assertIsDisplayed()
         compose.onNodeWithText("مقابل الشهر الماضي").assertIsDisplayed()
         compose.onNodeWithText("١٢٫٥٪").assertIsDisplayed()

@@ -1,5 +1,6 @@
 package eg.masroof
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
@@ -10,13 +11,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.SavedStateHandle
 import eg.masroof.core.DigitStyle
 import eg.masroof.core.Money
 import eg.masroof.core.analytics.AnalyticsCalculator
 import eg.masroof.core.analytics.AnalyticsCategory
 import eg.masroof.core.analytics.AnalyticsPeriod
 import eg.masroof.data.db.AccountEntity
-import eg.masroof.data.db.AskRow
+import eg.masroof.data.db.WalletRow
 import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
 import eg.masroof.data.wealth.AccountView
@@ -30,6 +32,7 @@ import eg.masroof.ui.wallet.WalletBalance
 import eg.masroof.ui.wallet.WalletContent
 import eg.masroof.ui.wallet.WalletFigures
 import eg.masroof.ui.wallet.WalletMath
+import eg.masroof.ui.wallet.WalletSelection
 import eg.masroof.ui.wallet.WalletUi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -58,7 +61,8 @@ private fun row(
     type: String = "EXPENSE",
     account: String? = null,
     category: String? = null,
-) = AskRow(id, type, "CONFIRMED", "EGP", amount, at(day), category, null, account)
+    last4: String? = null,
+) = WalletRow(id, type, "CONFIRMED", "EGP", amount, at(day), category, null, account, last4)
 
 private val ROWS =
     listOf(
@@ -68,6 +72,7 @@ private val ROWS =
         row("d", 200_000, "2026-11-01", type = "INCOME", account = "cib"),
         row("e", 7_000, "2026-10-20", account = "cib"),
     )
+private val ACCOUNTS = listOf(AccountEntity("cib", "CIB", "EGP", last4 = "1234"), AccountEntity("cash", "CASH", "EGP"))
 private val CATEGORIES = listOf(AnalyticsCategory("food", null, "Food", "أكل", "#0F766E", false))
 
 private fun account(
@@ -93,7 +98,7 @@ class WalletTest {
 
     @Test
     fun `REQ-UI-082 spent and today follow the D2 rule and equal the Insights calculator`() {
-        val figures = WalletMath.figures(NOV, TODAY, ROWS, CATEGORIES, includeCash = false, accountId = null)
+        val figures = WalletMath.figures(NOV, TODAY, ROWS, ACCOUNTS, CATEGORIES, includeCash = false, accountId = null)
         val insights = AnalyticsCalculator.compute(NOV, TODAY, ROWS.map { it.toAnalytics() }, CATEGORIES, false)
         assertEquals(insights.summary.total, figures.spentMinor)
         assertEquals(45_000L, figures.spentMinor) // 40,000 + 10,000 - 5,000 refund
@@ -105,8 +110,8 @@ class WalletTest {
 
     @Test
     fun `REQ-UI-082 one account filters spent`() {
-        val cib = WalletMath.figures(NOV, TODAY, ROWS, CATEGORIES, false, "cib")
-        val cash = WalletMath.figures(NOV, TODAY, ROWS, CATEGORIES, false, "cash")
+        val cib = WalletMath.figures(NOV, TODAY, ROWS, ACCOUNTS, CATEGORIES, false, "cib")
+        val cash = WalletMath.figures(NOV, TODAY, ROWS, ACCOUNTS, CATEGORIES, false, "cash")
         assertEquals(35_000L, cib.spentMinor)
         assertEquals(10_000L, cash.spentMinor)
         assertEquals(0L, cash.todayMinor)
@@ -115,7 +120,7 @@ class WalletTest {
     @Test
     fun `REQ-UI-082 another period has no today figure and uses its own month`() {
         val october = AnalyticsPeriod.month(java.time.YearMonth.of(2026, 10), 1)
-        val figures = WalletMath.figures(october, TODAY, ROWS, CATEGORIES, false, null)
+        val figures = WalletMath.figures(october, TODAY, ROWS, ACCOUNTS, CATEGORIES, false, null)
         assertEquals(7_000L, figures.spentMinor)
         assertNull(figures.todayMinor)
     }
@@ -147,11 +152,11 @@ class WalletTest {
     }
 
     @Test
-    fun `REQ-UI-082 you owe counts debts and cards but not installments`() {
+    fun `REQ-UI-082 you owe is exactly the Debt figure Wealth shows`() {
         val worth =
             NetWorth(
                 0,
-                0,
+                981_000,
                 emptyList(),
                 listOf(
                     DebtLine("d", DebtSource.DEBT, "Ali", 50_000),
@@ -163,8 +168,82 @@ class WalletTest {
                 0,
                 true,
             )
-        assertEquals(80_000L, WalletMath.owed(worth))
+        assertEquals(worth.debtsMinor, WalletMath.owed(worth))
         assertEquals(0L, WalletMath.owed(NetWorth.EMPTY))
+    }
+
+    @Test
+    fun `REQ-UI-082 a credit card without a balance is not an account without a balance`() {
+        val views = listOf(view("cib", 10_000), view("visa", null, "CREDIT_CARD"))
+        assertEquals(WalletBalance(10_000L, 0, 1), WalletMath.balance(views, null))
+    }
+
+    @Test
+    fun `REQ-UI-082 the account picker counts SMS spending by the card last four like the balance does`() {
+        val rows =
+            listOf(
+                row("manual", 10_000, "2026-11-05", account = "cib"),
+                row("sms", 50_000, "2026-11-06", account = null, last4 = "1234"),
+                row("other", 3_000, "2026-11-06", account = null, last4 = "9999"),
+            )
+        val cib = WalletMath.figures(NOV, TODAY, rows, ACCOUNTS, CATEGORIES, false, "cib")
+        assertEquals(60_000L, cib.spentMinor)
+        assertEquals(63_000L, WalletMath.figures(NOV, TODAY, rows, ACCOUNTS, CATEGORIES, false, null).spentMinor)
+        // two accounts sharing the last four: the entry belongs to neither, exactly as in the balances
+        val twins = ACCOUNTS + AccountEntity("twin", "TWIN", "EGP", last4 = "1234")
+        assertEquals(10_000L, WalletMath.figures(NOV, TODAY, rows, twins, CATEGORIES, false, "cib").spentMinor)
+    }
+
+    @Test
+    fun `REQ-UI-082 absurd stored amounts never throw from the figures`() {
+        val rows = listOf(row("a", 5_000_000_000_000_000_000, "2026-11-05"), row("b", 5_000_000_000_000_000_000, "2026-11-06"))
+        val figures = WalletMath.figuresOrNull(NOV, TODAY, rows, ACCOUNTS, CATEGORIES, false, null)
+        assertTrue(figures == null || figures.spentMinor == Long.MAX_VALUE)
+    }
+
+    @Test
+    fun `REQ-UI-082 the trend ends with the chosen period and uses the same rows`() {
+        val figures = WalletMath.figures(NOV, TODAY, ROWS, ACCOUNTS, CATEGORIES, false, null)
+        assertEquals(WalletMath.TREND_MONTHS, figures.trend.size)
+        assertTrue(figures.trend.last().selected)
+        assertEquals(
+            figures.spentMinor,
+            figures.trend
+                .last()
+                .total.amountMinor,
+        )
+        assertEquals(7_000L, figures.trend[figures.trend.size - 2].total.amountMinor)
+    }
+
+    @Test
+    fun `REQ-UI-082 the period and account choice survive recreation`() {
+        val first = SavedStateHandle()
+        val selection = WalletSelection(first)
+        selection.selectPeriod("2026-09")
+        selection.selectAccount("cib")
+        // the system saves the handle's values and builds a new one from them
+        val restored = WalletSelection(SavedStateHandle(first.keys().associateWith { first.get<Any?>(it) }))
+        assertEquals("2026-09", restored.period.value)
+        assertEquals("cib", restored.account.value)
+    }
+
+    @Test
+    fun `REQ-UI-082 the error state offers Retry and keeps the rest of Wallet`() {
+        var retried = 0
+        val state = walletUi(status = eg.masroof.ui.viewmodel.LoadStatus.ERROR).copy(figures = null)
+        compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions(onRetry = { retried++ })) } }
+        compose.onNodeWithText("Retry").performClick()
+        assertEquals(1, retried)
+        compose.onNodeWithText("Add").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "ar", fontScale = 1.5f)
+    fun `REQ-UI-082 Arabic at font scale 1_5 still shows the amount and the actions`() {
+        compose.setContent { MasroofTheme { WalletContent(ui(), emptyList(), WalletActions(onAsk = {})) } }
+        compose.onAllNodesWithText("٤٥٠ ج.م").onFirst().assertIsDisplayed()
+        compose.scrollWalletTo("إضافة")
+        compose.onNodeWithText("إضافة").assertIsDisplayed()
     }
 
     // --- REQ-UI-081: where things live ---
@@ -219,7 +298,7 @@ class WalletTest {
                 7_750,
                 1_000,
                 2,
-                WalletMath.figures(NOV, TODAY, ROWS, CATEGORIES, false, null).categories,
+                WalletMath.figures(NOV, TODAY, ROWS, ACCOUNTS, CATEGORIES, false, null).categories,
             ),
         choices = WalletMath.periodChoices(TODAY, 1),
         accounts = accounts,
@@ -233,7 +312,7 @@ class WalletTest {
 
     @Test
     fun `REQ-UI-082 wallet shows the period pill spent today balance debts and coming up`() {
-        compose.setContent { MasroofTheme { WalletContent(ui(), null, WalletActions()) } }
+        compose.setContent { MasroofTheme { WalletContent(ui(), emptyList(), WalletActions()) } }
         compose.onNodeWithText("1 Nov - 30 Nov").assertIsDisplayed()
         compose.onNodeWithText("Spent").assertIsDisplayed()
         compose.onNodeWithText("450 EGP").assertIsDisplayed()
@@ -254,7 +333,7 @@ class WalletTest {
                 onReceipt = { calls += "receipt" },
                 onAsk = { calls += "ask" },
             )
-        compose.setContent { MasroofTheme { WalletContent(ui(), null, actions) } }
+        compose.setContent { MasroofTheme { WalletContent(ui(), emptyList(), actions) } }
         listOf("Add", "Say it", "Receipt", "Ask").forEach { compose.onAllNodesWithText(it).onFirst().performClick() }
         assertEquals(listOf("add", "say", "receipt", "ask"), calls)
     }
@@ -268,7 +347,7 @@ class WalletTest {
                 onOpenInsights = { calls += "insights" },
                 onOpenTransactions = { calls += "transactions" },
             )
-        compose.setContent { MasroofTheme { WalletContent(ui(), null, actions) } }
+        compose.setContent { MasroofTheme { WalletContent(ui(), emptyList(), actions) } }
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithContentDescription("Analytics").performClick()
         compose.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("View all"))
@@ -279,7 +358,7 @@ class WalletTest {
     @Test
     fun `REQ-UI-082 no balance at all asks the user to set balances`() {
         compose.setContent {
-            MasroofTheme { WalletContent(ui(balance = WalletBalance(null, 2, 2), owed = 0), null, WalletActions()) }
+            MasroofTheme { WalletContent(ui(balance = WalletBalance(null, 2, 2), owed = 0), emptyList(), WalletActions()) }
         }
         compose.onAllNodesWithText("Set your balances").onFirst().assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("You owe", substring = true).fetchSemanticsNodes().isEmpty())
@@ -288,7 +367,7 @@ class WalletTest {
     @Test
     fun `REQ-UI-082 a selected account is named in the picker`() {
         compose.setContent {
-            MasroofTheme { WalletContent(ui(selected = "cib", balance = WalletBalance(150_000L, 0, 1)), null, WalletActions()) }
+            MasroofTheme { WalletContent(ui(selected = "cib", balance = WalletBalance(150_000L, 0, 1)), emptyList(), WalletActions()) }
         }
         compose.onAllNodesWithText("CIB").onFirst().assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("All accounts").fetchSemanticsNodes().isEmpty())
@@ -304,7 +383,7 @@ class WalletTest {
                 onOpenBudgets = { calls += "budgets" },
                 onOpenGoals = { calls += "goals" },
             )
-        compose.setContent { MasroofTheme { WalletContent(ui(), null, actions) } }
+        compose.setContent { MasroofTheme { WalletContent(ui(), emptyList(), actions) } }
         val list = compose.onAllNodes(hasScrollAction())[0]
         listOf("Top spending", "Bills due", "Budget", "Top goal").forEach {
             list.performScrollToNode(hasText(it))
@@ -331,7 +410,7 @@ class WalletTest {
             MasroofTheme {
                 WalletContent(
                     ui(accounts = emptyList(), balance = WalletBalance(null, 0, 0), owed = 0, firstRun = true, recent = emptyList()),
-                    null,
+                    emptyList(),
                     actions,
                 )
             }
@@ -347,13 +426,22 @@ class WalletTest {
 
     @Test
     fun `REQ-UI-082 amounts use Arabic-Indic digits when that setting is on`() {
-        compose.setContent { MasroofTheme(digitOverride = DigitStyle.ARABIC_INDIC) { WalletContent(ui(), null, WalletActions()) } }
+        compose.setContent { MasroofTheme(digitOverride = DigitStyle.ARABIC_INDIC) { WalletContent(ui(), emptyList(), WalletActions()) } }
         compose.onAllNodesWithText("٤٥٠", substring = true).onFirst().assertIsDisplayed()
     }
 
     @Test
     fun `REQ-UI-082 while loading wallet shows a skeleton and no figures`() {
-        compose.setContent { MasroofTheme { WalletContent(WalletUi(), null, WalletActions()) } }
+        compose.setContent { MasroofTheme { WalletContent(WalletUi(), emptyList(), WalletActions()) } }
         assertTrue(compose.onAllNodesWithText("Spent").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `REQ-AN-175 a listed entry that is not counted carries a marker`() {
+        val excluded = ExpenseRow("x", "Gold", Money(5_000), LocalDate.of(2026, 11, 9), false, false, null, null, excluded = true)
+        val counted = ExpenseRow("y", "Cafe", Money(5_000), LocalDate.of(2026, 11, 9), false, false, null, null)
+        compose.setContent { MasroofTheme { WalletContent(walletUi(recent = listOf(excluded, counted)), emptyList(), WalletActions()) } }
+        compose.scrollWalletTo("Not counted in totals")
+        compose.onAllNodesWithText("Not counted in totals").assertCountEquals(1)
     }
 }

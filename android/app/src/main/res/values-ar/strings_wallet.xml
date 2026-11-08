@@ -35,7 +35,6 @@
     <string name="wallet_coming_payout">قبض الجمعية</string>
     <string name="wallet_coming_payday">يوم المرتب</string>
     <string name="wallet_recent">آخر العمليات</string>
-    <string name="wallet_recent_empty">لسه مفيش عمليات</string>
     <string name="wallet_view_all">عرض الكل</string>
 
     <string name="wallet_tiles_title">نظرة سريعة</string>
@@ -44,12 +43,20 @@
     <string name="tile_bills_due">فواتير مستحقة</string>
     <string name="tile_bills_none">مفيش حاجة مستحقة</string>
     <plurals name="tile_bills_count">
-        <item quantity="zero">%1$s مستحقة الأسبوع ده</item>
-        <item quantity="one">واحدة مستحقة الأسبوع ده</item>
-        <item quantity="two">اتنين مستحقين الأسبوع ده</item>
-        <item quantity="few">%1$s مستحقة الأسبوع ده</item>
-        <item quantity="many">%1$s مستحقة الأسبوع ده</item>
-        <item quantity="other">%1$s مستحقة الأسبوع ده</item>
+        <item quantity="zero">%1$s مستحقة</item>
+        <item quantity="one">واحدة مستحقة</item>
+        <item quantity="two">اتنين مستحقين</item>
+        <item quantity="few">%1$s مستحقة</item>
+        <item quantity="many">%1$s مستحقة</item>
+        <item quantity="other">%1$s مستحقة</item>
+    </plurals>
+    <plurals name="tile_bills_other">
+        <item quantity="zero">+ %1$s بعملات تانية</item>
+        <item quantity="one">+ واحدة بعملة تانية</item>
+        <item quantity="two">+ اتنين بعملة تانية</item>
+        <item quantity="few">+ %1$s بعملات تانية</item>
+        <item quantity="many">+ %1$s بعملات تانية</item>
+        <item quantity="other">+ %1$s بعملات تانية</item>
     </plurals>
     <string name="tile_budget">الميزانية</string>
     <string name="tile_in_out">داخل وخارج</string>

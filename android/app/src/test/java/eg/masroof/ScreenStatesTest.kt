@@ -7,13 +7,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import eg.masroof.core.Money
-import eg.masroof.ui.home.HomeContent
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsContent
 import eg.masroof.ui.viewmodel.ExpenseRow
-import eg.masroof.ui.viewmodel.HomeUiState
 import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.TransactionsUiState
+import eg.masroof.ui.wallet.WalletActions
+import eg.masroof.ui.wallet.WalletContent
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -31,7 +31,8 @@ class ScreenStatesTest {
 
     @Test
     fun `REQ-AND-010 empty state is shown when ready with no rows`() {
-        compose.setContent { MasroofTheme { HomeContent(HomeUiState(status = LoadStatus.READY), {}, {}) } }
+        compose.setContent { MasroofTheme { WalletContent(walletUi(), emptyList(), WalletActions()) } }
+        compose.scrollWalletTo("No expenses yet")
         compose.onNodeWithText("No expenses yet").assertIsDisplayed()
     }
 
@@ -56,13 +57,8 @@ class ScreenStatesTest {
     fun `REQ-AND-010 total and cached rows still render when offline`() {
         val row =
             ExpenseRow("1", "Cafe", Money(5_000), LocalDate.of(2026, 10, 15), false, false, null, null)
-        val state =
-            HomeUiState(
-                total = Money(125_000),
-                recent = listOf(row),
-                status = LoadStatus.OFFLINE,
-            )
-        compose.setContent { MasroofTheme { HomeContent(state, {}, {}) } }
+        val state = walletUi(spent = 125_000, recent = listOf(row), status = LoadStatus.OFFLINE)
+        compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions()) } }
         compose.onNodeWithText("1,250 EGP").assertIsDisplayed()
         compose.onNodeWithText("Offline - showing saved data").assertIsDisplayed()
     }

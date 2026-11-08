@@ -33,7 +33,7 @@ data class AssetView(
     val valueMinor: Long?,
 )
 
-enum class AssetBucket { SPENDABLE, CERTIFICATE, FUND, PROPERTY, VEHICLE, OTHER }
+enum class AssetBucket { SPENDABLE, CERTIFICATE, FUND, PROPERTY, VEHICLE, OTHER, METAL }
 
 enum class DebtSource { DEBT, CARD, OVERDRAWN, INSTALLMENTS }
 
@@ -81,6 +81,7 @@ object NetWorthMath {
             "FUND" -> AssetBucket.FUND
             "PROPERTY" -> AssetBucket.PROPERTY
             "VEHICLE" -> AssetBucket.VEHICLE
+            "GOLD", "SILVER" -> AssetBucket.METAL
             else -> AssetBucket.OTHER
         }
 

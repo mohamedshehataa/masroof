@@ -64,7 +64,10 @@ class InstallmentsComingUpSource
             }
     }
 
-/** Recurring items from the `subscription` table: subscriptions and bills fall due, a recurring INCOME is a payday. */
+/**
+ * Recurring items from the `subscription` table: subscriptions and bills fall due, a recurring INCOME is a payday. Like
+ * overdue installments, a renewal whose date has passed is still listed until it is paid and moves on.
+ */
 class SubscriptionsComingUpSource
     @Inject
     constructor(
@@ -79,7 +82,7 @@ class SubscriptionsComingUpSource
                 rows
                     .filter { it.active }
                     .map { it to CairoTime.dateOf(it.nextRenewalAtMillis) }
-                    .filter { (_, date) -> !date.isBefore(today) && !date.isAfter(end) }
+                    .filter { (_, date) -> !date.isAfter(end) }
                     .map { (row, date) ->
                         val income = row.kind == "INCOME"
                         ComingUpItem(

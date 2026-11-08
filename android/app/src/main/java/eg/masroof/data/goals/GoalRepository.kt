@@ -9,6 +9,7 @@ import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.GoalMovementEntity
 import eg.masroof.data.db.SavingsGoalEntity
+import eg.masroof.data.wealth.MetalMath
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.sync.withLock
@@ -21,6 +22,8 @@ import javax.inject.Singleton
 data class GoalSummary(
     val goal: SavingsGoalEntity,
     val savedMinor: Long,
+    /** The value of the holdings backing the goal (STORY-209), counted on top of [savedMinor]. */
+    val backedMinor: Long = 0L,
 )
 
 data class GoalDetail(
@@ -28,6 +31,17 @@ data class GoalDetail(
     val savedMinor: Long,
     /** Oldest first. */
     val movements: List<GoalMovementEntity>,
+    val backing: List<GoalBacking> = emptyList(),
+) {
+    val backedMinor: Long get() = backing.sumOf { it.valueMinor }
+}
+
+/** A gold or silver holding that backs a goal, at its current value. */
+data class GoalBacking(
+    val assetId: String,
+    val name: String,
+    val kind: String,
+    val valueMinor: Long,
 )
 
 data class GoalDraft(
@@ -75,16 +89,48 @@ class GoalRepository
         private val clock: Clock,
         private val eraseLock: EraseLock,
     ) {
-        /** Active (not archived) goals in list order with what each holds. */
+        /** Active (not archived) goals in list order with what each holds, plus the gold or silver backing each one. */
         fun observeGoals(): Flow<List<GoalSummary>> =
-            combine(db.savingsGoals().observeAll(), db.goalMovements().observeAll()) { goals, moves ->
+            combine(db.savingsGoals().observeAll(), db.goalMovements().observeAll(), observeBacking()) { goals, moves, backing ->
                 val sums = moves.groupBy { it.goalId }.mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
-                goals.filter { it.archivedAtMillis == null }.map { GoalSummary(it, sums[it.id] ?: 0L) }
+                goals.filter { it.archivedAtMillis == null }.map { g ->
+                    GoalSummary(g, sums[g.id] ?: 0L, backing[g.id].orEmpty().filter { it.currency == g.currency }.sumOf { it.valueMinor })
+                }
             }
 
         fun observeGoal(id: String): Flow<GoalDetail?> =
-            combine(db.savingsGoals().observeById(id), db.goalMovements().observeForGoal(id)) { goal, moves ->
-                goal?.let { GoalDetail(it, moves.sumOf { m -> m.amountMinor }, moves) }
+            combine(db.savingsGoals().observeById(id), db.goalMovements().observeForGoal(id), observeBacking()) { goal, moves, backing ->
+                goal?.let { g ->
+                    val held = backing[g.id].orEmpty().filter { it.currency == g.currency }
+                    GoalDetail(
+                        g,
+                        moves.sumOf { m ->
+                            m.amountMinor
+                        },
+                        moves,
+                        held.map { GoalBacking(it.assetId, it.name, it.kind, it.valueMinor) },
+                    )
+                }
+            }
+
+        private class Backer(
+            val assetId: String,
+            val name: String,
+            val kind: String,
+            val currency: String,
+            val valueMinor: Long,
+        )
+
+        // Holdings linked to a goal, by goal id, valued from their lots and the typed price (a holding with no lots adds nothing).
+        private fun observeBacking(): Flow<Map<String, List<Backer>>> =
+            combine(db.assets().observeAll(), db.assetLots().observeAll(), db.metalPrices().observeAll()) { assets, lots, prices ->
+                val today = CairoTime.today(clock.instant())
+                assets
+                    .filter { it.goalId != null && !it.archived && MetalMath.isMetal(it.kind) && lots.any { l -> l.assetId == it.id } }
+                    .groupBy({ it.goalId!! }) {
+                        val value = MetalMath.valuationOf(it, lots, prices, today, CairoTime::dateOf).valueMinor
+                        Backer(it.id, it.name, it.kind, it.currency, value)
+                    }
             }
 
         suspend fun find(id: String): SavingsGoalEntity? = db.savingsGoals().find(id)

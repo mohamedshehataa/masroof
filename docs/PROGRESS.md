@@ -125,3 +125,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 · P7 · STORY-207 · integrate · GREEN · Category emoji, custom categories, merchant rules (EXPENSE only, apply to past with exact Undo); verify PASS loop 3, security APPROVE
 2026-11-08 · P7 · STORY-199 · integrate · GREEN · Ask Masroof: bilingual on-device questions (totals, breakdown, compare, merchants, payday, roast) with Insights parity; explicit-cue period grammar; verify PASS loop 6
 2026-11-08 · P7 · STORY-200 · integrate · GREEN · Say it: on-device voice and one-line entry (EN/Egyptian Arabic/Franco number words, fractions, currencies, dates) pre-fills Add; Income + currency on Add; verify PASS loop 6, security APPROVE
+2026-11-08 · P7 · STORY-209 · integrate · GREEN · Gold and silver by the gram: lots, typed price, value and gain, goals backed by gold; linked purchases leave spending (Insights, Home, Ask); verify PASS loop 2

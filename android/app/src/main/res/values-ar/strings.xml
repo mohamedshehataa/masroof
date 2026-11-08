@@ -4,9 +4,6 @@
 
     <string name="nav_add">إضافة مصروف</string>
 
-    <string name="home_this_month">المصروف هذا الشهر</string>
-    <string name="home_recent">آخر المصروفات</string>
-    <string name="home_see_all">عرض الكل</string>
 
     <string name="transactions_title">المعاملات</string>
 

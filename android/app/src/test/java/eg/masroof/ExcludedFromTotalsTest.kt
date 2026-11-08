@@ -87,7 +87,7 @@ class ExcludedFromTotalsTest {
                 listOf("a"),
                 db
                     .expenses()
-                    .observeAskRows(from, to)
+                    .observeWalletRows(from, to)
                     .first()
                     .map { it.id },
             )

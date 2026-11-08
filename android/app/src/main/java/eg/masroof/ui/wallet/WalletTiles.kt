@@ -168,8 +168,15 @@ private fun BillsDueTile(
         }
     Tile(title, "$title. $value", actions.onOpenBills, modifier) {
         Text(value, style = MaterialTheme.typography.titleMedium)
-        if (due.count > 0) {
+        if (due.count > due.otherCurrency) {
             Text(money(due.totalMinor), style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"))
+        }
+        if (due.otherCurrency > 0) {
+            Text(
+                pluralStringResource(R.plurals.tile_bills_other, due.otherCurrency, DateFormat.number(due.otherCurrency, digits)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

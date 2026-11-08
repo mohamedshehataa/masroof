@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -63,6 +62,8 @@ import eg.masroof.ui.goals.GoalDetailRoute
 import eg.masroof.ui.goals.GoalFormRoute
 import eg.masroof.ui.goals.GoalsRoute
 import eg.masroof.ui.insights.InsightsRoute
+import eg.masroof.ui.nav.openIn
+import eg.masroof.ui.nav.openTab
 import eg.masroof.ui.plan.PlanScreen
 import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
@@ -259,14 +260,12 @@ private fun MasroofRoot(
         }
     }
 
-    // Switching tabs saves the tab being left (scroll position, selections) and restores the one being opened.
-    fun openTab(route: String) {
-        nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
+    fun openTab(route: String) = nav.openTab(route)
+
+    fun openIn(
+        tab: Tab,
+        route: String,
+    ) = nav.openIn(tab.route, route)
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
@@ -301,19 +300,19 @@ private fun MasroofRoot(
                             onAdd = { nav.navigate("add") },
                             onSayIt = { nav.navigate("add?mic=true") },
                             onAsk = { openTab(Tab.Ask.route) },
-                            onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) },
+                            onOpenAccounts = { openIn(Tab.Wealth, ACCOUNTS_ROUTE) },
                             onOpenWealth = { openTab(Tab.Wealth.route) },
                             onOpenBills = { openTab(Tab.Bills.route) },
-                            onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
-                            onOpenGoals = { nav.navigate(GOALS_ROUTE) },
+                            onOpenBudgets = { openTab(Tab.Plan.route) },
+                            onOpenGoals = { openIn(Tab.Plan, GOALS_ROUTE) },
                             onTurnOnCapture = { nav.navigate(SETTINGS_ROUTE) },
-                            onAddBill = { nav.navigate(BILL_ADD_ROUTE) },
+                            onAddBill = { openIn(Tab.Bills, BILL_ADD_ROUTE) },
                         ),
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
                 )
             }
             composable(INSIGHTS_ROUTE) {
-                InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }, onOpenAsk = { openTab(Tab.Ask.route) })
+                InsightsRoute(onOpenBudgets = { openTab(Tab.Plan.route) }, onOpenAsk = { openTab(Tab.Ask.route) })
             }
             composable(Tab.Ask.route) { AskRoute(onBack = { nav.popBackStack() }, onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(Tab.Plan.route) {
