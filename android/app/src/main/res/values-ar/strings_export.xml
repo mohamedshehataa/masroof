@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="export_title">تصدير CSV</string>
+    <string name="export_hint">احفظ مصاريفك في ملف يتفتح في إكسل أو جوجل شيتس. الملف بيفضل على تليفونك لحد ما تشاركه.</string>
+    <string name="export_range_this_month">الشهر ده</string>
+    <string name="export_range_last_month">الشهر اللي فات</string>
+    <string name="export_range_this_year">السنة دي</string>
+    <string name="export_range_custom">فترة تانية</string>
+    <string name="export_from">من: %1$s</string>
+    <string name="export_to">إلى: %1$s</string>
+    <string name="export_end_before_start">تاريخ النهاية قبل تاريخ البداية</string>
+    <string name="export_action">تصدير</string>
+    <string name="export_working">بيتصدّر…</string>
+    <string name="export_failed">التصدير فشل</string>
+    <string name="export_dismiss">إخفاء</string>
+    <string name="export_date_ok">تمام</string>
+    <string name="export_date_cancel">إلغاء</string>
+    <plurals name="export_done">
+        <item quantity="zero">اتصدّر %1$,d عملية</item>
+        <item quantity="one">اتصدّرت عملية واحدة</item>
+        <item quantity="two">اتصدّرت عمليتين</item>
+        <item quantity="few">اتصدّرت %1$,d عمليات</item>
+        <item quantity="many">اتصدّرت %1$,d عملية</item>
+        <item quantity="other">اتصدّرت %1$,d عملية</item>
+    </plurals>
+</resources>

@@ -68,6 +68,7 @@ fun SettingsRoute(
             BackupSection()
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
+            ExportCsvSection()
             MembersRoute()
         },
     )
