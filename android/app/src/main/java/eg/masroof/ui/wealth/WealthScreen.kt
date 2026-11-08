@@ -138,12 +138,23 @@ fun WealthContent(
             1 -> AssetsTab(state, actions)
             else -> DebtTab(state, actions)
         }
-        Hints(state.netWorth)
+        Hints(state.netWorth, state.unmatchedEntries)
     }
 }
 
 @Composable
-private fun Hints(net: NetWorth) {
+private fun Hints(
+    net: NetWorth,
+    unmatched: Int,
+) {
+    if (unmatched > 0) {
+        val n = DateFormat.number(unmatched, LocalMoneyStyle.current.digits)
+        Text(
+            pluralStringResource(R.plurals.wealth_unmatched, unmatched, n),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
     if (net.uncountedAccounts > 0) {
         val n = DateFormat.number(net.uncountedAccounts, LocalMoneyStyle.current.digits)
         Text(
@@ -224,7 +235,13 @@ private fun NetWorthTab(state: WealthUiState) {
         val current =
             NetWorthSnapshotEntity("current", state.today.toString(), net.assetsMinor, net.debtsMinor, net.netMinor, Money.EGP, "", 0)
         val rangeLabel = stringResource(labels.first { it.first == range }.second)
-        NetWorthChart(if (history.size <= 1) listOf(current) else history, rangeLabel)
+        val shown =
+            when {
+                history.isEmpty() -> listOf(current)
+                history.size == 1 && history[0].cairoDate != current.cairoDate -> history + current
+                else -> history
+            }
+        NetWorthChart(shown, rangeLabel)
     }
 }
 
@@ -324,6 +341,13 @@ private fun AssetRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (matured) {
+                Text(
+                    stringResource(R.string.wealth_cert_matured_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(

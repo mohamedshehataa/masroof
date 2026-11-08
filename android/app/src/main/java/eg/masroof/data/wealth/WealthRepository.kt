@@ -52,6 +52,12 @@ class WealthRepository
                 }
             }
 
+        /** Captured entries that name only a last four shared by several active accounts: counted for none of them. */
+        fun observeUnmatched(): Flow<Int> =
+            combine(db.lookups().observeAccounts(), db.accountBalances().observeFlowRows()) { accounts, flows ->
+                BalanceMath.unmatchedCount(accounts, flows)
+            }
+
         internal fun accountView(
             account: AccountEntity,
             check: AccountBalanceEntity?,

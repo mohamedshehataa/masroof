@@ -131,14 +131,32 @@ object WealthValidation {
      * The moment of a balance check in Cairo: both blank is [nowMillis]; a date alone means 12:00 that day; a time alone is
      * today. Returns the millis, or the fields that are wrong (a moment after [nowMillis] is FUTURE).
      */
+    private val CLOCK = Regex("""(\d{1,2}):(\d{2})""")
+
+    /** `9:30`, `09:30`, `٩:٣٠`; null when it is not a time of day. */
+    private fun parseClock(text: String): java.time.LocalTime? {
+        val m = CLOCK.matchEntire(western(text)) ?: return null
+        return runCatching { java.time.LocalTime.of(m.groupValues[1].toInt(), m.groupValues[2].toInt()) }.getOrNull()
+    }
+
     fun balanceMoment(
         date: String,
         time: String,
         nowMillis: Long,
     ): Checked<Long, BalanceField> {
         if (date.isBlank() && time.isBlank()) return Checked(nowMillis, emptySet())
-        val day = if (date.isBlank()) CairoTime.dateOf(nowMillis) else parseDate(date)
-        val clock = if (time.isBlank()) java.time.LocalTime.NOON else runCatching { java.time.LocalTime.parse(western(time)) }.getOrNull()
+        val today = CairoTime.dateOf(nowMillis)
+        val day = if (date.isBlank()) today else parseDate(date)
+        val clock =
+            when {
+                time.isNotBlank() -> parseClock(time)
+                day == today ->
+                    java.time.Instant
+                        .ofEpochMilli(nowMillis)
+                        .atZone(CairoTime.zone)
+                        .toLocalTime()
+                else -> java.time.LocalTime.NOON
+            }
         val errors =
             buildSet {
                 if (day == null) add(BalanceField.DATE)
@@ -173,11 +191,10 @@ object WealthValidation {
     ): Boolean = (last4.length == LAST4 && last4.all { it in '0'..'9' }) || (last4.isEmpty() && kind == AccountKinds.CASH)
 
     private fun isDuplicate(
-        form: AccountForm,
         last4: String,
         existing: List<AccountEntity>,
         editingId: String?,
-    ): Boolean = last4.isNotEmpty() && existing.any { it.id != editingId && !it.archived && it.kind == form.kind && it.last4 == last4 }
+    ): Boolean = last4.isNotEmpty() && existing.any { it.id != editingId && !it.archived && it.last4 == last4 }
 
     private class CardFields(
         val limit: Long? = null,
@@ -211,7 +228,7 @@ object WealthValidation {
         val last4 = western(form.last4)
         if (!last4Valid(last4, form.kind)) {
             errors += AccountField.LAST4
-        } else if (isDuplicate(form, last4, existing, editingId)) {
+        } else if (isDuplicate(last4, existing, editingId)) {
             errors += AccountField.DUPLICATE
         }
         if (form.currency.trim().uppercase() !in SUPPORTED_CURRENCIES) errors += AccountField.CURRENCY

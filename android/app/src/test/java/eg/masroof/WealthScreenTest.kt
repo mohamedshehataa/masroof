@@ -168,6 +168,21 @@ class WealthScreenTest {
     }
 
     @Test
+    fun `REQ-AN-169 one earlier snapshot and none for today shows both points, not the starts-today message`() {
+        wealth(filled(listOf(snap("2026-11-01", 1_000_000))))
+        compose.onNodeWithText("History starts today").assertDoesNotExist()
+        compose.onNodeWithText("8 Nov: 12,500 EGP").assertExists()
+    }
+
+    @Test
+    fun `REQ-AN-168 unmatched captured entries are reported on Wealth`() {
+        compose.setContent {
+            MasroofTheme { WealthContent(filled(emptyList()).copy(unmatchedEntries = 3), WealthActions()) }
+        }
+        compose.onNodeWithText("3 captured entries could not be matched to an account").assertExists()
+    }
+
+    @Test
     fun `REQ-AN-169 year change shows no percent when it would be meaningless`() {
         wealth(filled(listOf(snap("2026-01-05", -9_587_400), snap("2026-11-08", 1_250_000))))
         compose.onNodeWithText("Change this year").assertIsDisplayed()

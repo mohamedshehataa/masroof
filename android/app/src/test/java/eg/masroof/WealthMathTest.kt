@@ -273,7 +273,9 @@ class WealthMathTest {
                 .toLocalDate()
         }
         val maturity = dateOf(cert.maturityAtMillis!!)
-        assertEquals(10_000_000L, AssetValuation.valueOf(cert, maturity.plusYears(1), dateOf))
+        assertEquals(0L, AssetValuation.valueOf(cert, maturity, dateOf))
+        assertEquals(0L, AssetValuation.valueOf(cert, maturity.plusYears(1), dateOf))
+        assertEquals(10_000_000L, AssetValuation.valueOf(cert, maturity.minusDays(1), dateOf))
         assertTrue(AssetValuation.isMatured(cert, maturity, dateOf))
         assertFalse(AssetValuation.isMatured(cert, maturity.minusDays(1), dateOf))
     }
@@ -352,6 +354,40 @@ class WealthMathTest {
     }
 
     @Test
+    fun `REQ-EXP-057 balance moment - a date alone is now when today, noon when past, and single digit hours work`() {
+        val now =
+            java.time.ZonedDateTime
+                .of(2026, 11, 8, 15, 20, 0, 0, eg.masroof.core.CairoTime.zone)
+                .toInstant()
+                .toEpochMilli()
+        assertEquals(now, WealthValidation.balanceMoment("2026-11-08", "", now).value)
+        val noon =
+            java.time.ZonedDateTime
+                .of(2026, 11, 3, 12, 0, 0, 0, eg.masroof.core.CairoTime.zone)
+                .toInstant()
+                .toEpochMilli()
+        assertEquals(noon, WealthValidation.balanceMoment("2026-11-03", "", now).value)
+        val nine30 =
+            java.time.ZonedDateTime
+                .of(2026, 11, 8, 9, 30, 0, 0, eg.masroof.core.CairoTime.zone)
+                .toInstant()
+                .toEpochMilli()
+        assertEquals(nine30, WealthValidation.balanceMoment("2026-11-08", "9:30", now).value)
+        assertEquals(nine30, WealthValidation.balanceMoment("", "٩:٣٠", now).value)
+        assertNull(WealthValidation.balanceMoment("", "9:3", now).value)
+    }
+
+    @Test
+    fun `REQ-AN-168 captured entries matching several active accounts are counted as unmatched`() {
+        val a = account("a").copy(last4 = "1234")
+        val b = account("b").copy(last4 = "1234")
+        val sms = AccountFlowRow(null, "1234", "EXPENSE", "CONFIRMED", 100, "EGP", checkAt + 1)
+        assertEquals(1, BalanceMath.unmatchedCount(listOf(a, b), listOf(sms, sms)).coerceAtMost(1))
+        assertEquals(2, BalanceMath.unmatchedCount(listOf(a, b), listOf(sms, sms)))
+        assertEquals(0, BalanceMath.unmatchedCount(listOf(a, b.copy(archived = true)), listOf(sms)))
+    }
+
+    @Test
     fun `REQ-EXP-059 maturity equal to the start is rejected`() {
         val cert = AssetForm("CERTIFICATE", "NBE", principal = "1000", rate = "10", start = "2026-01-01", maturity = "2026-01-01")
         assertEquals(setOf(AssetField.MATURITY), WealthValidation.asset(cert).errors)
@@ -376,7 +412,7 @@ class WealthMathTest {
         val form = AccountForm(label = "New", last4 = "1234")
         assertEquals(setOf(AccountField.DUPLICATE), WealthValidation.account(form, existing).errors)
         assertNotNull(WealthValidation.account(form, existing, editingId = "e1").value)
-        assertNotNull(WealthValidation.account(form.copy(kind = AccountKinds.WALLET), existing).value)
+        assertEquals(setOf(AccountField.DUPLICATE), WealthValidation.account(form.copy(kind = AccountKinds.WALLET), existing).errors)
         assertNotNull(WealthValidation.account(form, listOf(existing[0].copy(archived = true))).value)
     }
 

@@ -54,6 +54,7 @@ object AssetValuation {
         val principal = asset.principalMinor
         val start = asset.startAtMillis?.let(dateOf)
         return when {
+            asset.kind == "CERTIFICATE" && isMatured(asset, today, dateOf) -> 0L
             asset.kind == "CERTIFICATE" && principal != null -> certificate(principal)
             asset.kind == "FUND" && principal != null && start != null -> fund(principal, asset.annualRateBp ?: 0, start, today)
             else -> asset.valueMinor ?: principal

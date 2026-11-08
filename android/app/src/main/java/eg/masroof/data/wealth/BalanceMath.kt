@@ -51,6 +51,18 @@ object BalanceMath {
      * then it goes to the one active account of the same currency with that last four. When two or more match, the entry is
      * attributed to none rather than counted twice (the user fixes it by giving the cards different last digits).
      */
+    fun unmatchedCount(
+        accounts: List<AccountEntity>,
+        rows: List<AccountFlowRow>,
+    ): Int {
+        val active = accounts.filter { !it.archived }
+        return rows.count { r ->
+            r.accountId == null &&
+                r.instrumentLast4 != null &&
+                active.count { it.last4 == r.instrumentLast4 && it.currency == r.currency } > 1
+        }
+    }
+
     fun attribute(
         accounts: List<AccountEntity>,
         rows: List<AccountFlowRow>,

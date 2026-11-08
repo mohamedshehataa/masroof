@@ -28,6 +28,7 @@ data class WealthUiState(
     val snapshots: List<NetWorthSnapshotEntity> = emptyList(),
     val today: LocalDate = LocalDate.of(1970, 1, 1),
     val loaded: Boolean = false,
+    val unmatchedEntries: Int = 0,
 )
 
 class WealthActions(
@@ -52,8 +53,9 @@ class WealthViewModel
                 repository.observeAssetViews(),
                 repository.observeDebts(),
                 repository.observeSnapshots(),
-            ) { net, assets, debts, snapshots ->
-                WealthUiState(net, assets, debts, snapshots, repository.today(), loaded = true)
+                repository.observeUnmatched(),
+            ) { net, assets, debts, snapshots, unmatched ->
+                WealthUiState(net, assets, debts, snapshots, repository.today(), loaded = true, unmatchedEntries = unmatched)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), WealthUiState())
 
         init {

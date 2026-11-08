@@ -110,7 +110,7 @@
     <string name="accounts_field_due_day">Payment due day (1–31)</string>
     <string name="accounts_error_label">Enter a name</string>
     <string name="accounts_error_last4">Enter exactly 4 digits, never the full number</string>
-    <string name="accounts_error_duplicate">You already have an account of this kind with these digits</string>
+    <string name="accounts_error_duplicate">Another account already uses these last 4 digits</string>
     <string name="accounts_error_limit">Enter a limit above zero</string>
     <string name="accounts_error_day">Enter a day from 1 to 31</string>
     <string name="accounts_balance_field">Balance</string>
@@ -121,7 +121,12 @@
     <string name="accounts_save">Save</string>
     <string name="accounts_cancel">Cancel</string>
     <string name="wealth_cert_monthly">Pays interest monthly (counted as income in your account)</string>
-    <string name="wealth_cert_matured">Matured</string>
+    <string name="wealth_cert_matured">Matured - principal returned to your account</string>
+    <string name="wealth_cert_matured_hint">Set that account\'s balance so it counts again.</string>
+    <plurals name="wealth_unmatched">
+        <item quantity="one">%1$s captured entry could not be matched to an account</item>
+        <item quantity="other">%1$s captured entries could not be matched to an account</item>
+    </plurals>
     <string name="wealth_change_capped">&gt;%1$s</string>
     <string name="wealth_chart_summary">Net worth over time (%1$s). Latest %2$s, lowest %3$s, highest %4$s</string>
     <string name="accounts_balance_time">Time, optional (HH:mm)</string>
