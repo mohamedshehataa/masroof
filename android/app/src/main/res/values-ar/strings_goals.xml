@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="goals_settings_section">فلوسك</string>
+    <string name="goals_settings_row">الأهداف</string>
+
+    <string name="goals_title">الأهداف</string>
+    <string name="goals_new">هدف جديد</string>
+    <string name="goals_empty_title">وفّر لحاجة بتحلم بيها</string>
+    <string name="goals_empty_body">ضيف هدف زي عربية جديدة أو الساحل أو مصاريف المدرسة. سجّل الفلوس اللي بتحوشها وشوف محتاج كام كل شهر.</string>
+    <string name="goals_error">مقدرناش نحمّل أهدافك</string>
+    <string name="goals_total_title">كل الأهداف</string>
+    <string name="goals_of">%1$s من %2$s</string>
+    <string name="goals_ring_desc">%1$s - وفّرت %2$s من الهدف</string>
+    <string name="goals_total_desc">إجمالي اللي اتوفّر %1$s</string>
+    <plurals name="goals_other_currency">
+        <item quantity="zero">%1$s هدف بعملة تانية مش محسوب</item>
+        <item quantity="one">هدف واحد بعملة تانية مش محسوب</item>
+        <item quantity="two">هدفين بعملة تانية مش محسوبين</item>
+        <item quantity="few">%1$s أهداف بعملة تانية مش محسوبة</item>
+        <item quantity="many">%1$s هدف بعملة تانية مش محسوب</item>
+        <item quantity="other">%1$s هدف بعملة تانية مش محسوب</item>
+    </plurals>
+
+    <plurals name="goals_days_to_go">
+        <item quantity="zero">فاضل %1$s يوم</item>
+        <item quantity="one">فاضل يوم واحد</item>
+        <item quantity="two">فاضل يومين</item>
+        <item quantity="few">فاضل %1$s أيام</item>
+        <item quantity="many">فاضل %1$s يوم</item>
+        <item quantity="other">فاضل %1$s يوم</item>
+    </plurals>
+    <string name="goals_needs_month">محتاج %1$s في الشهر عشان توصل</string>
+    <string name="goals_on_track">ماشي صح</string>
+    <string name="goals_behind">متأخر بـ %1$s</string>
+    <string name="goals_past_date">عدّى الموعد - فاضل %1$s</string>
+    <string name="goals_reached">اتحقق</string>
+    <string name="goals_add_money">ضيف فلوس</string>
+    <string name="goals_take_out">اسحب فلوس</string>
+    <string name="goals_chart_title">الفلوس اللي ضفتها</string>
+    <string name="goals_chart_desc">رسم بياني بالإجمالي اللي اتوفّر، دلوقتي %1$s</string>
+    <string name="goals_history">السجل</string>
+    <string name="goals_history_empty">لسه ما سجلتش فلوس</string>
+    <string name="goals_history_added">ضفت %1$s</string>
+    <string name="goals_history_taken">سحبت %1$s</string>
+    <string name="goals_edit">تعديل</string>
+    <string name="goals_archive">أرشفة</string>
+    <string name="goals_delete">حذف</string>
+    <string name="goals_delete_title">تحذف الهدف ده؟</string>
+    <string name="goals_delete_body">الهدف وسجل فلوسه هيتمسحوا. مصاريفك مش هتتأثر.</string>
+    <string name="goals_reached_title">حققت هدفك!</string>
+    <string name="goals_reached_body">وفّرت %1$s لـ %2$s.</string>
+    <string name="goals_not_found">الهدف ده مبقاش موجود</string>
+    <string name="goals_nothing_moves">مفيش فلوس بتتحرك في أي بنك. ده بس تسجيل للفلوس اللي بتحوشها.</string>
+
+    <string name="goals_amount">المبلغ</string>
+    <string name="goals_note">ملاحظة (اختياري)</string>
+    <string name="goals_date">التاريخ yyyy-mm-dd (اختياري)</string>
+    <string name="goals_save">حفظ</string>
+    <string name="goals_done">تمام</string>
+    <string name="goals_cancel">إلغاء</string>
+    <string name="goals_err_amount">اكتب مبلغ أكبر من صفر</string>
+    <string name="goals_err_too_large">المبلغ ده كبير أوي</string>
+    <string name="goals_err_date">اكتب التاريخ بالشكل yyyy-mm-dd</string>
+    <string name="goals_err_only_have">معاك %1$s بس في الهدف ده</string>
+
+    <string name="goals_form_new_title">هدف جديد</string>
+    <string name="goals_form_edit_title">تعديل الهدف</string>
+    <string name="goals_name">الاسم</string>
+    <string name="goals_name_error">اكتب اسم</string>
+    <string name="goals_target">المبلغ المستهدف</string>
+    <string name="goals_target_date">تاريخ الهدف yyyy-mm-dd (اختياري)</string>
+    <string name="goals_pick_emoji">اختار إيموجي</string>
+    <string name="goals_emoji_desc">إيموجي %1$s</string>
+</resources>

@@ -52,6 +52,9 @@ import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.budgets.BudgetsRoute
 import eg.masroof.ui.edit.EditExpenseRoute
+import eg.masroof.ui.goals.GoalDetailRoute
+import eg.masroof.ui.goals.GoalFormRoute
+import eg.masroof.ui.goals.GoalsRoute
 import eg.masroof.ui.home.HomeRoute
 import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.InsightsRoute
@@ -89,6 +92,10 @@ private const val BUDGETS_ROUTE = "budgets"
 private const val WEALTH_ROUTE = "wealth"
 private const val ACCOUNTS_ROUTE = "accounts"
 private const val EDIT_ROUTE = "edit/{id}"
+private const val GOALS_ROUTE = "goals"
+private const val GOAL_NEW_ROUTE = "goals-new"
+private const val GOAL_DETAIL_ROUTE = "goals/{id}"
+private const val GOAL_EDIT_ROUTE = "goals/{id}/edit"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
 
@@ -240,10 +247,19 @@ private fun MasroofRoot(
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
                     onOpenWealth = { nav.navigate(WEALTH_ROUTE) },
+                    onOpenGoals = { nav.navigate(GOALS_ROUTE) },
                 )
             }
             composable(WEALTH_ROUTE) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
             composable(ACCOUNTS_ROUTE) { AccountsRoute() }
+            composable(GOALS_ROUTE) {
+                GoalsRoute(onOpenGoal = { id -> nav.navigate("goals/$id") }, onNewGoal = { nav.navigate(GOAL_NEW_ROUTE) })
+            }
+            composable(GOAL_NEW_ROUTE) { GoalFormRoute(onDone = { nav.popBackStack() }) }
+            composable(GOAL_DETAIL_ROUTE) {
+                GoalDetailRoute(onEdit = { id -> nav.navigate("goals/$id/edit") }, onClosed = { nav.popBackStack() })
+            }
+            composable(GOAL_EDIT_ROUTE) { GoalFormRoute(onDone = { nav.popBackStack() }) }
             composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
             composable(REVIEW_ADD_ROUTE) { entry ->
                 ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })

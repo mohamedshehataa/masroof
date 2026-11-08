@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_section_money">Your money</string>
     <string name="settings_wealth_row">Wealth</string>
 
     <string name="wealth_title">Wealth</string>

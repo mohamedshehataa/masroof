@@ -172,6 +172,12 @@ interface SavingsGoalDao {
 
     @Query("SELECT * FROM savings_goal WHERE id = :id")
     fun observeById(id: String): Flow<SavingsGoalEntity?>
+
+    @Query("SELECT * FROM savings_goal WHERE id = :id")
+    suspend fun find(id: String): SavingsGoalEntity?
+
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM savings_goal")
+    suspend fun nextSortOrder(): Int
 }
 
 @Dao
@@ -190,6 +196,15 @@ interface GoalMovementDao {
 
     @Query("SELECT * FROM goal_movement WHERE id = :id")
     fun observeById(id: String): Flow<GoalMovementEntity?>
+
+    @Query("SELECT * FROM goal_movement WHERE goalId = :goalId ORDER BY atMillis, id")
+    fun observeForGoal(goalId: String): Flow<List<GoalMovementEntity>>
+
+    @Query("SELECT * FROM goal_movement WHERE goalId = :goalId ORDER BY atMillis, id")
+    suspend fun forGoal(goalId: String): List<GoalMovementEntity>
+
+    @Query("SELECT COALESCE(SUM(amountMinor), 0) FROM goal_movement WHERE goalId = :goalId")
+    suspend fun total(goalId: String): Long
 }
 
 @Dao
