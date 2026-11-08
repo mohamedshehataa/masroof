@@ -9,6 +9,7 @@ import eg.masroof.ingest.parse.TxKind
 
 internal const val CHANNEL_SMS = "SMS"
 internal const val CHANNEL_PUSH = "PUSH"
+internal const val CHANNEL_BACKFILL = "BACKFILL"
 
 /** The local rows a parsed record becomes (ADR-0009 D3). Shared by the capture pipeline and the review list's Save. */
 internal object CaptureRows {
@@ -79,10 +80,11 @@ internal object CaptureRows {
         r: ParsedRecord,
         localId: String,
         receivedAt: Long,
+        channelOverride: String? = null,
     ) = ExpenseSourceEntity(
         id = id,
         expenseId = expenseId,
-        channel = channel(r),
+        channel = channelOverride ?: channel(r),
         localSourceId = localId,
         receivedAtMillis = receivedAt,
         senderId = r.senderId,

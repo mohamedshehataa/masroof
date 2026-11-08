@@ -91,6 +91,9 @@ class WorkManagerSmsScheduler
 /** What the pipeline did with one message. [RECORDED] is also the answer for a message that was recorded before. */
 enum class Disposition { RECORDED, REVIEW, DROPPED }
 
+/** Where a message came from inside the app: the live receiver/listener, or the user's "Read past SMS" run (STORY-186). */
+enum class CaptureChannel { LIVE, BACKFILL }
+
 /** What one write transaction decided; the notices are shown after it committed, never inside it. */
 private data class Stored(
     val disposition: Disposition,
@@ -128,9 +131,16 @@ class SmsPipeline
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
-        suspend fun accept(message: IncomingMessage): Disposition {
+        /**
+         * [channel] BACKFILL (STORY-186) is the same pipeline with two differences only: the source row says `BACKFILL`, and no
+         * per-message notice is posted. A backfill is a user action, so it does not depend on the live "SMS capture" switch.
+         */
+        suspend fun accept(
+            message: IncomingMessage,
+            channel: CaptureChannel = CaptureChannel.LIVE,
+        ): Disposition {
             // Capture switched off (or an erase running): nothing is read, recorded or kept.
-            if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
+            if (!gate.isOpen() || !isAllowed(message, channel)) return Disposition.DROPPED
             val id = LocalIdHasher.id(idKey.get(), message)
             if (!gate.isOpen()) {
                 // A wipe raced us and the key may have been recreated after it: forget it again.
@@ -149,9 +159,9 @@ class SmsPipeline
                 eraseLock.mutex.withLock {
                     db.withTransaction {
                         if (gate.isOpen() &&
-                            isAllowed(message)
+                            isAllowed(message, channel)
                         ) {
-                            store(message, id, outcome, applied.templateId, answerState)
+                            store(message, id, outcome, applied.templateId, answerState, channel)
                         } else {
                             Stored(Disposition.DROPPED)
                         }
@@ -166,7 +176,8 @@ class SmsPipeline
                 }
             }
             stored.withdraw?.let(notifier::cancel)
-            stored.notice?.let(notifier::captured)
+            // a backfill posts one summary at its end, never one notice per message
+            if (channel == CaptureChannel.LIVE) stored.notice?.let(notifier::captured)
             if (stored.changed) signal.changed()
             return stored.disposition
         }
@@ -183,6 +194,7 @@ class SmsPipeline
             outcome: ParseOutcome,
             templateId: String?,
             answerState: AnswerState,
+            channel: CaptureChannel,
         ): Stored =
             when (outcome) {
                 is ParseOutcome.Record ->
@@ -192,6 +204,7 @@ class SmsPipeline
                         templateId,
                         message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis(),
                         answerState,
+                        channel,
                     )
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
@@ -222,6 +235,7 @@ class SmsPipeline
             templateId: String?,
             receivedAt: Long,
             answerState: AnswerState,
+            channel: CaptureChannel,
         ): Stored {
             val now = clock.millis()
             db.captured().purgeBefore(capturedCutoff(now))
@@ -235,7 +249,7 @@ class SmsPipeline
             if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
             // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
             val twin = pairing.claimTwin(r, id, receivedAt)
-            if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
+            if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now, channel)
             val expenseId = ids.next()
             // "Link to an existing account" (REQ-EXP-066): a card tail linked to an account files its captures under it
             val entry =
@@ -246,7 +260,7 @@ class SmsPipeline
                     if (usable) e.copy(accountId = linked) else e
                 }
             db.expenses().insert(entry)
-            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
+            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt, channel.sourceChannel()))
             // the safety net: a record the phone made by itself can be undone for a while
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = null)
             db.captured().insert(item)
@@ -305,9 +319,10 @@ class SmsPipeline
             templateId: String?,
             receivedAt: Long,
             now: Long,
+            channel: CaptureChannel,
         ): Stored {
             val expenseId = twin.expense.id
-            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
+            db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt, channel.sourceChannel()))
             val richer = twin.captured.instrumentLast4 == null && r.instrumentLast4 != null
             if (twin.captured.templateId == CaptureRows.REVIEW_SAVED) {
                 // the user saved the first one by hand: take what this one knows, but no new notice and no Undo chip
@@ -375,9 +390,15 @@ class SmsPipeline
                 else -> r.institution
             }
 
-        private fun isAllowed(message: IncomingMessage): Boolean =
+        private fun CaptureChannel.sourceChannel(): String? = if (this == CaptureChannel.BACKFILL) CHANNEL_BACKFILL else null
+
+        private fun isAllowed(
+            message: IncomingMessage,
+            channel: CaptureChannel,
+        ): Boolean =
             when (message.source) {
-                CaptureSource.SMS -> settings.smsCaptureEnabled() && settings.policy().isAllowed(message.sender)
+                CaptureSource.SMS ->
+                    (channel == CaptureChannel.BACKFILL || settings.smsCaptureEnabled()) && settings.policy().isAllowed(message.sender)
                 CaptureSource.NOTIFICATION -> notifications.enabled() && notifications.isMonitored(message.sender)
             }
 

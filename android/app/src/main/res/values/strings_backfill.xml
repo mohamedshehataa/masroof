@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-186: Read past SMS (backfill of the inbox into entries). -->
+    <string name="backfill_title">Read past SMS</string>
+    <string name="backfill_body">Turns the messages already in your inbox from your bank and wallet senders into entries. It happens on this phone and nothing is sent anywhere.</string>
+    <string name="backfill_range_title">Range</string>
+    <string name="backfill_range_30">Last 30 days</string>
+    <string name="backfill_range_90">Last 90 days</string>
+    <string name="backfill_range_180">Last 6 months</string>
+    <string name="backfill_range_custom">Since a date</string>
+    <string name="backfill_range_since">Since %1$s</string>
+    <string name="backfill_start">Start</string>
+    <string name="backfill_resume">Continue</string>
+    <string name="backfill_cancel">Cancel</string>
+    <string name="backfill_ok">OK</string>
+    <string name="backfill_pick_date">Choose a date</string>
+    <string name="backfill_pick_ok">OK</string>
+    <string name="backfill_pick_cancel">Cancel</string>
+    <string name="backfill_rationale_title">Allow reading messages?</string>
+    <string name="backfill_rationale">Masroof reads bank messages from the senders you allow, only on this phone.</string>
+    <string name="backfill_rationale_continue">Continue</string>
+    <string name="backfill_rationale_cancel">Not now</string>
+    <string name="backfill_denied">Past messages can\'t be read without permission</string>
+    <string name="backfill_open_settings">Open app settings</string>
+    <string name="backfill_counting">Counting messages…</string>
+    <plurals name="backfill_progress">
+        <item quantity="one">Read %1$s of %2$s messages - %3$s entry, %4$s to review</item>
+        <item quantity="other">Read %1$s of %2$s messages - %3$s entries, %4$s to review</item>
+    </plurals>
+    <plurals name="backfill_stopped">
+        <item quantity="one">Stopped - %1$s entry added</item>
+        <item quantity="other">Stopped - %1$s entries added</item>
+    </plurals>
+    <plurals name="backfill_done">
+        <item quantity="one">Done - %1$s entry added, %2$s to review</item>
+        <item quantity="other">Done - %1$s entries added, %2$s to review</item>
+    </plurals>
+    <string name="backfill_empty">No bank messages in this range</string>
+    <string name="backfill_progress_desc">Reading past messages</string>
+    <string name="backfill_channel_name">Read past SMS</string>
+    <string name="backfill_notice_title">Past messages read</string>
+    <plurals name="backfill_notice_text">
+        <item quantity="one">%1$d entry added, %2$d to review</item>
+        <item quantity="other">%1$d entries added, %2$d to review</item>
+    </plurals>
+</resources>

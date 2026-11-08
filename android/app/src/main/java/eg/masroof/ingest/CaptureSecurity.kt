@@ -148,7 +148,7 @@ class PrefsCaptureData(
     private val key: LocalIdKey,
 ) : CaptureData {
     override fun clear() {
-        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device")) {
+        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device", "masroof_backfill")) {
             context.getSharedPreferences(name, Context.MODE_PRIVATE).edit(commit = true) { clear() }
         }
         key.wipe()

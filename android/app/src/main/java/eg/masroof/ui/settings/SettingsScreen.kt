@@ -64,6 +64,7 @@ fun SettingsRoute(
         extra = {
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
+            BackfillSection()
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
