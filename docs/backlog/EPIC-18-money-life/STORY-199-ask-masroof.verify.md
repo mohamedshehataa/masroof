@@ -69,3 +69,14 @@ FINDINGS:
 - [MINOR] "october 2030" accepted; "بسنة 2024" not read. Generated test oracle restates the rule (696 combinations, not
   1,152)
 STATUS: FAIL -> fix round 4: explicit-cue rules (orchestrator product decision, DECISIONS)
+
+## Loop 5 - head `82933ac`
+Gate GREEN in 95s; `--rerun` 750 tests, 0 failures; TEST_INTEGRITY: OK. 200 questions x start day 1 and 25; parity exact.
+- Loop-4 MAJORs: PASS (2000 as an amount; "may 31 2026" one day; "april may june" unreadable); cue rules hold for 20+
+  new questions incl. Arabic بسنة/لسنة and same-period answers
+FINDINGS:
+- [MAJOR] "مقارنة 2025 و 2024" -> this month vs last month (و missing as a connector; template removed from the test)
+- [MAJOR] "this year vs 2024" -> vs 2025; "groceries this month vs 2025" -> vs last month (year dropped next to a named period)
+- [MINOR] "since 2024" answers one year; for/of cues read amounts as years; Franco year cues; two bare years + "and" ->
+  this month; "may 31" ignores the day
+STATUS: FAIL -> fix round 5 (small, targeted) + severity rubric (DECISIONS)

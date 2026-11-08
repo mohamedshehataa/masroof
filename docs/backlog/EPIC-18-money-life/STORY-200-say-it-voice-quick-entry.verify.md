@@ -70,3 +70,12 @@ FINDINGS:
 - [MINOR] regression: lone `k` -> 1,000 EGP; `نص ٥٠٠` -> 500; ألفين إلا ربع / تلات تلاف إلا ربع / ربع مليون وخمسين
   ألف now no amount (allowed, a loss)
 STATUS: FAIL -> fix round 4 (currency-word halves, k only after digits, wider generated space)
+
+## Loop 5 - head `57235e8`
+Gate GREEN in 35s; `--rerun` 755 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 320). 234 parser cases.
+- Loop-4 MAJOR (`50 جنيه ونص` -> 50.50) and MINORs (lone k, `نص ٥٠٠`): PASS; 16 new currency+fraction phrases exact
+FINDINGS:
+- [MAJOR] a currency word bridged into a run hides it from `currencyNear`: `ألف جنيه ونص إيجار 3 شهور` -> 3 EGP
+- [MAJOR] `ألف جنيه إلا ربع` -> 1,000 (partial)
+- [MINOR] `مدفعتش إلا 50` now no amount; generated test oracle mirrors the parser's run choice
+STATUS: FAIL -> fix round 5 (small, targeted) + severity rubric (DECISIONS)
