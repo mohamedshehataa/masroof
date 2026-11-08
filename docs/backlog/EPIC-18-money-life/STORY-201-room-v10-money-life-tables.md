@@ -3,7 +3,7 @@ id: STORY-201
 epic: EPIC-18
 title: Updating the app adds the money-life tables and keeps every existing row
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -114,3 +114,6 @@ None.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 (Say teardown), speed mode |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 97a338c; fix rounds: true upserts + exact SQL (20dcb70), semgrep one-literal SQL (ab92975, 865fa1c) |
+| 2026-11-08 | 6 verify | qa-verifier | PASS loop 1 (2 MINOR fixed), PASS loop 2 (655 tests, 0 failures) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE - PR #94 |
