@@ -106,6 +106,15 @@ class RoomDataWiper
                 listOf(
                     { withContext(io) { deleteReceipts() } },
                     { withContext(io) { deleteSafetyCopies() } },
+                    // a restore's staging folder (checked backup data), its marker and the old receipts of an interrupted swap
+                    {
+                        withContext(io) {
+                            check(
+                                eg.masroof.data.backup.RestoreStage
+                                    .sweep(receiptsDir),
+                            ) { "restore staging could not be deleted" }
+                        }
+                    },
                     // staged backup rows a killed backup left behind (encrypted, but still data)
                     {
                         withContext(io) {

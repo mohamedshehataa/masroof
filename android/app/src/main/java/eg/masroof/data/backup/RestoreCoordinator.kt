@@ -1,0 +1,243 @@
+package eg.masroof.data.backup
+
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.work.WorkManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import eg.masroof.data.auth.EraseLock
+import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.di.AppScope
+import eg.masroof.di.IoDispatcher
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.io.InputStream
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Where the restore flow stands (REQ-SEC-068/OPS-178): pick file, passphrase, checking, confirmation, restoring, done or error. */
+sealed interface RestoreState {
+    data object Idle : RestoreState
+
+    /** The header is fine (checks 1 and 2): ask for the passphrase. Nothing beyond the header was read. */
+    data object NeedsPassphrase : RestoreState
+
+    /** [progress] is 0..1, null while the file size is unknown. */
+    data class Checking(
+        val progress: Float?,
+    ) : RestoreState
+
+    data class Confirm(
+        val info: RestoreInfo,
+    ) : RestoreState
+
+    data object Restoring : RestoreState
+
+    data object Done : RestoreState
+
+    data class Failed(
+        val failure: RestoreFailure,
+        val neededMb: Long = 0L,
+    ) : RestoreState
+}
+
+/** Opens the picked document; faked in tests. */
+interface RestoreSources {
+    fun open(uri: Uri): InputStream
+
+    /** Size in bytes, 0 when the provider does not say. */
+    fun size(uri: Uri): Long
+}
+
+class AndroidRestoreSources
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
+    ) : RestoreSources {
+        override fun open(uri: Uri): InputStream = context.contentResolver.openInputStream(uri) ?: throw IOException("no stream")
+
+        override fun size(uri: Uri): Long =
+            runCatching {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use {
+                    if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else 0L
+                }
+            }.getOrNull() ?: 0L
+    }
+
+/** True while something that writes the same data is running: a backup (it reads the receipts) or an SMS scan (STORY-186). */
+fun interface RestoreBlockers {
+    suspend fun busy(): Boolean
+}
+
+class WorkRestoreBlockers
+    @Inject
+    constructor(
+        private val workManager: WorkManager,
+    ) : RestoreBlockers {
+        override suspend fun busy(): Boolean =
+            listOf(BackupWorker.UNIQUE_NAME, SMS_BACKFILL_WORK_NAME).any { name ->
+                workManager.getWorkInfosForUniqueWorkFlow(name).first().any { !it.state.isFinished }
+            }
+
+        private companion object {
+            // STORY-186's unique work name (ingest/backfill/BackfillWork.kt); a name with no work behind it simply never blocks.
+            const val SMS_BACKFILL_WORK_NAME = "sms-backfill"
+        }
+    }
+
+/**
+ * Runs the restore flow in the application scope, so leaving the screen cannot cancel a restore half way. It holds the erase lock
+ * around the replace like every other writer, and refuses while a backup or an SMS scan runs. The passphrase is passed through and
+ * never stored; the staging folder is deleted on Cancel, on any failure and after a restore.
+ */
+@Singleton
+class RestoreCoordinator
+    @Inject
+    constructor(
+        private val restorer: BackupRestorer,
+        private val lock: EraseLock,
+        private val blockers: RestoreBlockers,
+        private val sources: RestoreSources,
+        @AppScope private val scope: CoroutineScope,
+        @IoDispatcher private val io: CoroutineDispatcher,
+    ) {
+        private val mutableState = MutableStateFlow<RestoreState>(RestoreState.Idle)
+        val state: StateFlow<RestoreState> get() = mutableState
+
+        private var uri: Uri? = null
+        private var header: BackupHeader? = null
+        private var staged: StagedRestore? = null
+        private var job: Job? = null
+
+        /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read here. */
+        fun onPicked(picked: Uri?) {
+            if (picked == null || mutableState.value is RestoreState.Checking || mutableState.value is RestoreState.Restoring) return
+            reset()
+            uri = picked
+            job =
+                scope.launch(io) {
+                    mutableState.value =
+                        try {
+                            header = sources.open(picked).use { restorer.checkHeader(it) }
+                            RestoreState.NeedsPassphrase
+                        } catch (e: RestoreException) {
+                            reset()
+                            RestoreState.Failed(e.failure, e.neededMb)
+                        } catch (_: IOException) {
+                            reset()
+                            RestoreState.Failed(RestoreFailure.CANNOT_READ)
+                        } catch (_: SecurityException) {
+                            reset()
+                            RestoreState.Failed(RestoreFailure.CANNOT_READ)
+                        }
+                }
+        }
+
+        fun onPassphrase(passphrase: String) {
+            val picked = uri
+            val head = header
+            if (picked == null || head == null || mutableState.value != RestoreState.NeedsPassphrase) return
+            mutableState.value = RestoreState.Checking(null)
+            job =
+                scope.launch(io) {
+                    mutableState.value =
+                        try {
+                            if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
+                            val result =
+                                restorer.stage({ sources.open(picked) }, sources.size(picked), head, passphrase) { p ->
+                                    mutableState.value = RestoreState.Checking(p)
+                                }
+                            staged = result
+                            RestoreState.Confirm(result.info)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: RestoreException) {
+                            failed(e)
+                        }
+                }
+        }
+
+        fun onConfirm() {
+            val pending = staged ?: return
+            if (mutableState.value !is RestoreState.Confirm) return
+            mutableState.value = RestoreState.Restoring
+            job =
+                scope.launch(io) {
+                    mutableState.value =
+                        try {
+                            withContext(NonCancellable) {
+                                lock.mutex.withLock {
+                                    if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
+                                    restorer.apply(pending)
+                                }
+                            }
+                            reset()
+                            RestoreState.Done
+                        } catch (e: RestoreException) {
+                            failed(e)
+                        }
+                }
+        }
+
+        /** Cancel at any step: a running check stops, the staging folder is deleted, nothing changed. */
+        fun onCancel() {
+            if (mutableState.value is RestoreState.Restoring) return
+            val running = job
+            reset()
+            scope.launch(io) {
+                running?.cancelAndJoinQuietly()
+                restorer.discard(null)
+            }
+        }
+
+        fun onDismiss() {
+            if (mutableState.value is RestoreState.Done || mutableState.value is RestoreState.Failed) mutableState.value = RestoreState.Idle
+        }
+
+        private fun failed(e: RestoreException): RestoreState {
+            restorer.discard(staged)
+            staged = null
+            return RestoreState.Failed(e.failure, e.neededMb)
+        }
+
+        private fun reset() {
+            uri = null
+            header = null
+            staged = null
+            job = null
+            mutableState.value = RestoreState.Idle
+        }
+
+        private suspend fun Job.cancelAndJoinQuietly() {
+            cancel()
+            join()
+        }
+
+        /**
+         * At app start (REQ-OPS-179): finishes a restore that committed, or removes the staging of one that did not. Takes the erase lock
+         * before the UI can save anything.
+         */
+        fun recoverInterrupted(): Job? {
+            if (DatabaseStartup.isBlocked()) return null
+            // Taken here, on the calling thread, so a save made right after start waits for the recovery (as DataEraser does).
+            val taken = lock.mutex.tryLock()
+            return scope.launch(io) {
+                if (!taken) lock.mutex.lock()
+                try {
+                    runCatching { restorer.recover() }
+                } finally {
+                    lock.mutex.unlock()
+                }
+            }
+        }
+    }

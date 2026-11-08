@@ -46,6 +46,7 @@ fun SettingsRoute(
     onOpenReceipts: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
     onOpenRules: () -> Unit = {},
+    onRestored: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -66,6 +67,7 @@ fun SettingsRoute(
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
             BackupSection()
+            RestoreSection(onDone = onRestored)
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
             ExportCsvSection()

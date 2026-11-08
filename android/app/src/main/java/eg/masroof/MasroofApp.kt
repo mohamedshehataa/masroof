@@ -27,6 +27,8 @@ class MasroofApp :
 
     @Inject lateinit var eraser: DataEraser
 
+    @Inject lateinit var restore: eg.masroof.data.backup.RestoreCoordinator
+
     @Inject lateinit var purgeScheduler: PurgeScheduler
 
     @Inject lateinit var netWorthScheduler: eg.masroof.work.NetWorthSnapshotScheduler
@@ -57,6 +59,8 @@ class MasroofApp :
         deleteLegacyInsightsCache(java.io.File(filesDir, "insights"))
         // An erase that was cut short (process died) is finished before anything else is captured.
         eraser.recoverInterrupted()
+        // A restore that was killed after its commit is finished, one killed before it is removed (REQ-OPS-179).
+        restore.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
         purgeScheduler.schedule()
         // One net worth point per Cairo day: at app start and once a day (REQ-AN-169).

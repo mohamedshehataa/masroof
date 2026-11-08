@@ -335,6 +335,7 @@ private fun MasroofRoot(
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
                     onOpenCategories = { nav.navigate(CATEGORIES_ROUTE) },
                     onOpenRules = { nav.navigate(RULES_ROUTE) },
+                    onRestored = { nav.popBackStack() },
                 )
             }
             composable(CATEGORIES_ROUTE) { CategoriesRoute() }

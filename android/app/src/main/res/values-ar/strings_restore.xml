@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="restore_title">استرجاع من نسخة احتياطية</string>
+    <string name="restore_explain">رجّع كل حاجة من ملف نسخة احتياطية .masroof. ده بيستبدل كل البيانات اللي على الموبايل ده.</string>
+    <string name="restore_button">استرجع من نسخة احتياطية</string>
+    <string name="restore_pass_title">كلمة سر النسخة الاحتياطية</string>
+    <string name="restore_pass_field">كلمة السر</string>
+    <string name="restore_continue">كمّل</string>
+    <string name="restore_cancel">إلغاء</string>
+    <string name="restore_ok">تمام</string>
+    <string name="restore_checking">بنفحص النسخة الاحتياطية…</string>
+    <string name="restore_restoring">بنسترجع…</string>
+    <string name="restore_progress_desc">تقدّم الاسترجاع</string>
+    <string name="restore_done">كل حاجة اتسترجعت</string>
+    <string name="restore_confirm_title">نستبدل كل حاجة على الموبايل ده؟</string>
+    <string name="restore_confirm">نسخة احتياطية بتاريخ %1$s - %2$s، %3$s، %4$s. ده بيستبدل كل البيانات اللي على الموبايل ده (%5$s).</string>
+    <string name="restore_confirm_button">استرجع</string>
+    <plurals name="restore_budgets">
+        <item quantity="zero">%1$s ميزانية</item>
+        <item quantity="one">ميزانية واحدة</item>
+        <item quantity="two">ميزانيتين</item>
+        <item quantity="few">%1$s ميزانيات</item>
+        <item quantity="many">%1$s ميزانية</item>
+        <item quantity="other">%1$s ميزانية</item>
+    </plurals>
+
+    <string name="restore_err_not_backup">ده مش ملف نسخة احتياطية من مصروف</string>
+    <string name="restore_err_newer">حدّث التطبيق عشان تفتح النسخة دي</string>
+    <string name="restore_err_cannot_open">مش قادرين نفتح النسخة دي</string>
+    <string name="restore_err_wrong">كلمة السر غلط أو الملف تالف</string>
+    <string name="restore_err_too_old">النسخة دي قديمة قوي</string>
+    <string name="restore_err_space">مفيش مساحة كفاية للاسترجاع (محتاج %1$s ميجا). مفيش حاجة اتغيّرت.</string>
+    <string name="restore_err_read">معرفناش نقرا الملف. مفيش حاجة اتغيّرت.</string>
+    <string name="restore_err_busy">فيه نسخة احتياطية أو فحص رسائل شغّال. جرّب تاني لما يخلص.</string>
+    <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
+</resources>

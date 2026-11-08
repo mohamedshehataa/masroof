@@ -109,6 +109,30 @@ class KeystoreLocalIdKey(
     @Synchronized
     override fun wipe() = prefs.edit(commit = true) { clear() }
 
+    /**
+     * Seals [key] (a restored backup's local-id key) under THIS phone's Keystore (STORY-184). Same keyset as [get] today. Crash-safe:
+     * the new sealed copy must decrypt to the same bytes BEFORE it replaces the stored one, and the replace is one atomic commit, so
+     * there is never a moment without a decryptable key and a failure leaves the old key in place (restore recovery repeats this).
+     */
+    fun install(key: ByteArray) = installWith(TinkKeystore.aead(context), key)
+
+    @Synchronized
+    internal fun installWith(
+        aead: com.google.crypto.tink.Aead,
+        key: ByteArray,
+    ) {
+        val sealed = aead.encrypt(key, AAD)
+        val check = aead.decrypt(sealed, AAD)
+        try {
+            check(check.contentEquals(key)) { "sealed key does not round trip" }
+        } finally {
+            check.fill(0)
+        }
+        @SuppressLint("UseKtx") // the KTX edit() hides the commit() result, which decides whether the key is installed
+        val ok = prefs.edit().putString(KEY, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
+        check(ok) { "could not store the sealed key" }
+    }
+
     private companion object {
         const val KEY = "k"
         const val KEY_BYTES = 32

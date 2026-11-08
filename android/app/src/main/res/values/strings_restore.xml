@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="restore_title">Restore from backup</string>
+    <string name="restore_explain">Bring back everything from a .masroof backup file. It replaces all data on this phone.</string>
+    <string name="restore_button">Restore from backup</string>
+    <string name="restore_pass_title">Backup passphrase</string>
+    <string name="restore_pass_field">Passphrase</string>
+    <string name="restore_continue">Continue</string>
+    <string name="restore_cancel">Cancel</string>
+    <string name="restore_ok">OK</string>
+    <string name="restore_checking">Checking the backup…</string>
+    <string name="restore_restoring">Restoring…</string>
+    <string name="restore_progress_desc">Restore progress</string>
+    <string name="restore_done">Everything was restored</string>
+    <string name="restore_confirm_title">Replace everything on this phone?</string>
+    <string name="restore_confirm">Backup from %1$s - %2$s, %3$s, %4$s. This replaces all data on this phone (%5$s).</string>
+    <string name="restore_confirm_button">Restore</string>
+    <plurals name="restore_budgets">
+        <item quantity="one">%1$s budget</item>
+        <item quantity="other">%1$s budgets</item>
+    </plurals>
+
+    <string name="restore_err_not_backup">This is not a Masroof backup</string>
+    <string name="restore_err_newer">Update the app to open this backup</string>
+    <string name="restore_err_cannot_open">This backup can\'t be opened</string>
+    <string name="restore_err_wrong">Wrong passphrase or damaged file</string>
+    <string name="restore_err_too_old">This backup is too old</string>
+    <string name="restore_err_space">Not enough space to restore (needs %1$s MB). Nothing was changed.</string>
+    <string name="restore_err_read">The file could not be read. Nothing was changed.</string>
+    <string name="restore_err_busy">A backup or an SMS scan is running. Try again when it finishes.</string>
+    <string name="restore_err_failed">The restore could not finish. Nothing was changed.</string>
+</resources>
