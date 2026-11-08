@@ -72,6 +72,17 @@ interface ExpenseDao {
         to: Long,
     ): List<AnalyticsRow>
 
+    /** The same rows as [analyticsRows] plus the id and account, for Ask Masroof (STORY-199): read-only, the same filter. */
+    @Query(
+        """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
+            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    suspend fun askRows(
+        from: Long,
+        to: Long,
+    ): List<AskRow>
+
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.
     @Insert(onConflict = OnConflictStrategy.ABORT)

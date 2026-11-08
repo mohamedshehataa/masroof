@@ -50,6 +50,7 @@ import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.ask.AskRoute
 import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
 import eg.masroof.ui.bills.PlanDetailRoute
@@ -97,6 +98,7 @@ private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
 private const val CATEGORIES_ROUTE = "settings/categories"
 private const val RULES_ROUTE = "settings/merchant-rules"
+private const val ASK_ROUTE = "ask"
 private const val WEALTH_ROUTE = "wealth"
 private const val ACCOUNTS_ROUTE = "accounts"
 private const val EDIT_ROUTE = "edit/{id}"
@@ -110,11 +112,11 @@ private const val BILLS_ROUTE = "bills"
 private const val BILL_ADD_ROUTE = "bills/add"
 private const val BILL_DETAIL_ROUTE = "bills/{id}"
 
-/** Forms that have their own Save: the global add button is hidden there. */
-private val FORM_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE)
-
 /** The only route a notification may open: a bills plan by its UUID (the shape UuidIdFactory makes). */
 private val OPENABLE_ROUTE = Regex("""bills/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
+
+// No floating add button on screens with their own primary action or an input field at the bottom.
+private val FAB_HIDDEN_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE, ASK_ROUTE)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -260,7 +262,7 @@ private fun MasroofRoot(
             }
         },
         floatingActionButton = {
-            if (destination?.route !in FORM_ROUTES) {
+            if (destination?.route !in FAB_HIDDEN_ROUTES) {
                 FloatingActionButton(onClick = { nav.navigate("add") }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
@@ -274,9 +276,13 @@ private fun MasroofRoot(
                     onOpenInsights = { nav.navigate(Tab.Insights.route) },
                     onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) },
                     onOpenExpense = { id -> nav.navigate("edit/$id") },
+                    onOpenAsk = { nav.navigate(ASK_ROUTE) },
                 )
             }
-            composable(Tab.Insights.route) { InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }) }
+            composable(Tab.Insights.route) {
+                InsightsRoute(onOpenBudgets = { nav.navigate(BUDGETS_ROUTE) }, onOpenAsk = { nav.navigate(ASK_ROUTE) })
+            }
+            composable(ASK_ROUTE) { AskRoute(onBack = { nav.popBackStack() }, onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(BUDGETS_ROUTE) { BudgetsRoute() }
             composable(Tab.Transactions.route) { TransactionsRoute(onOpenExpense = { id -> nav.navigate("edit/$id") }) }
             composable(EDIT_ROUTE) { EditExpenseRoute(onDone = { nav.popBackStack() }) }

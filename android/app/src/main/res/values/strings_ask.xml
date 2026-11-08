@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ask Masroof (STORY-199): questions about your money, answered on the phone. -->
+    <string name="ask_title">Ask Masroof</string>
+    <string name="ask_open">Ask Masroof</string>
+    <string name="ask_back">Back</string>
+    <string name="ask_input_hint">Ask about your money</string>
+    <string name="ask_send">Send question</string>
+    <string name="ask_thinking">Working it out…</string>
+    <string name="ask_failed">Couldn’t work that out.</string>
+    <string name="ask_retry">Try again</string>
+    <string name="ask_greeting">Hi! Ask me about your money.</string>
+    <string name="ask_greeting_fact">%1$s to %2$s this month, %3$s</string>
+    <string name="ask_greeting_empty">No entries yet this month. Try a question:</string>
+    <string name="ask_you_asked">You asked: %1$s</string>
+
+
+    <string name="ask_p_today">today</string>
+    <string name="ask_p_yesterday">yesterday</string>
+    <string name="ask_p_this_week">this week</string>
+    <string name="ask_p_last_week">last week</string>
+    <string name="ask_p_this_month">this month</string>
+    <string name="ask_p_last_month">last month</string>
+    <string name="ask_p_this_year">this year</string>
+    <string name="ask_p_month">in %1$s</string>
+    <string name="ask_p_range">from %1$s to %2$s</string>
+
+    <string name="ask_spend_subject">%1$s on %2$s %3$s</string>
+    <string name="ask_spend_all">%1$s spent %2$s</string>
+    <string name="ask_spend_none_subject">Nothing spent on %1$s %2$s</string>
+    <string name="ask_spend_none">No spending recorded %1$s</string>
+    <string name="ask_unknown_subject">I don’t know a category called “%1$s”. Did you mean:</string>
+    <string name="ask_not_understood">Sorry, I didn’t understand that. Try one of these:</string>
+
+    <string name="ask_breakdown_total">Spent %1$s %2$s</string>
+    <string name="ask_donut_desc">Spending by category: %1$s</string>
+    <string name="ask_share_row">%1$s, %2$s, %3$s</string>
+
+    <string name="ask_compare_head">Spent %1$s %2$s vs %3$s %4$s</string>
+    <string name="ask_compare_head_subject">%1$s: %2$s %3$s vs %4$s %5$s</string>
+    <string name="ask_compare_diff">Difference: %1$s (%2$s)</string>
+    <string name="ask_compare_diff_plain">Difference: %1$s</string>
+    <string name="ask_compare_no_prev">No spending %1$s to compare with</string>
+    <string name="ask_compare_moves">Biggest changes</string>
+    <string name="ask_move_row">%1$s: %2$s</string>
+    <string name="ask_bars_desc">%1$s %2$s, %3$s %4$s</string>
+
+    <string name="ask_visits_head">%1$s %2$s, %3$s, average %4$s</string>
+    <string name="ask_visits_none">No entries for %1$s %2$s</string>
+
+    <string name="ask_top_head">Top places %1$s</string>
+    <string name="ask_top_none">No places recorded %1$s</string>
+    <string name="ask_top_row">%1$s, %2$s, %3$s</string>
+
+    <string name="ask_payday_income">Income %1$s, spent %2$s, %3$s left</string>
+    <string name="ask_payday_over">Income %1$s, spent %2$s, over by %3$s</string>
+    <string name="ask_payday_pace">At your pace you will spend about %1$s by payday</string>
+    <string name="ask_payday_no_income">Spent so far %1$s, daily average %2$s</string>
+    <string name="ask_payday_empty">Nothing recorded yet this month.</string>
+
+    <string name="ask_biggest_head">Biggest expense %1$s: %2$s</string>
+    <string name="ask_biggest_line">%1$s - %2$s</string>
+    <string name="ask_no_merchant">No merchant</string>
+
+    <string name="ask_why_prev">Previous period: %1$s (%2$s)</string>
+    <string name="ask_why_no_prev">No spending in the previous period to compare with</string>
+    <string name="ask_why_places">Mostly at: %1$s</string>
+
+    <string name="ask_entries_head_subject">Entries for %1$s %2$s</string>
+    <string name="ask_entries_head">Entries %1$s</string>
+    <string name="ask_entries_none">No entries %1$s</string>
+    <string name="ask_entries_shown">Showing the latest %1$s of %2$s</string>
+    <string name="ask_entry_desc">Open entry: %1$s, %2$s, %3$s</string>
+
+    <string name="ask_roast_merchant">%1$s again? That is %2$s this month. They should name a sandwich after you.</string>
+    <string name="ask_roast_category">%1$s took %2$s of everything you spent. Bold choice.</string>
+    <string name="ask_roast_late">%1$s purchases late at night. Nothing good happens at the checkout at midnight.</string>
+    <string name="ask_roast_generic">Not bad overall. Add more entries and I will have better material.</string>
+    <string name="ask_roast_empty">Nothing to roast yet. Add a few entries first.</string>
+
+    <string name="ask_chip_frequency">How often do I go to %1$s?</string>
+    <string name="ask_chip_why">Why is %1$s so high?</string>
+    <string name="ask_chip_compare_months">This month vs last month</string>
+    <string name="ask_chip_where">Where did my money go?</string>
+    <string name="ask_chip_payday">What’s left until payday?</string>
+    <string name="ask_chip_roast">Roast me</string>
+    <string name="ask_chip_show_entries">Show these entries</string>
+    <string name="ask_chip_compare_prev">Compare with the previous period</string>
+    <string name="ask_chip_top_places">Top places</string>
+    <string name="ask_chip_biggest">Biggest expense</string>
+    <string name="ask_other">Other</string>
+    <string name="ask_p_last_year">last year</string>
+    <string name="ask_period_unreadable">I can’t read that period. Try “this month”, “last year”, “in October” or “last 30 days”.</string>
+    <string name="ask_one_at_a_time">I can only answer about one thing at a time. Pick one:</string>
+
+    <plurals name="ask_visits">
+        <item quantity="one">%1$s visit</item>
+        <item quantity="other">%1$s visits</item>
+    </plurals>
+    <plurals name="ask_times">
+        <item quantity="one">once</item>
+        <item quantity="other">%1$s times</item>
+    </plurals>
+    <plurals name="ask_entries">
+        <item quantity="one">%1$s entry</item>
+        <item quantity="other">%1$s entries</item>
+    </plurals>
+    <plurals name="ask_other_currency">
+        <item quantity="one">%1$s entry in another currency is not included</item>
+        <item quantity="other">%1$s entries in other currencies not included</item>
+    </plurals>
+    <plurals name="ask_payday_days">
+        <item quantity="one">%1$s day to payday</item>
+        <item quantity="other">%1$s days to payday</item>
+    </plurals>
+    <plurals name="ask_p_last_days">
+        <item quantity="one">in the last day</item>
+        <item quantity="other">in the last %1$s days</item>
+    </plurals>
+    <string name="ask_ignored">Answered for %1$s only. I didn’t use: %2$s</string>
+    <string name="ask_same_period">Those are the same period, so there is nothing to compare. Try two different periods.</string>
+    <string name="ask_p_on">on %1$s</string>
+    <string name="ask_p_since">since %1$s</string>
+</resources>
