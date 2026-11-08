@@ -12,6 +12,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -111,6 +112,39 @@ class BackupFixRoundTest {
         assertEquals(PassphraseProblem.Empty, PassphraseRules.check(" ".repeat(12), " ".repeat(12)))
         assertEquals(PassphraseProblem.Empty, PassphraseRules.check("\t  ".repeat(5), "\t  ".repeat(5)))
         assertEquals(null, PassphraseRules.check("a" + " ".repeat(11), "a" + " ".repeat(11)))
+    }
+
+    @Test
+    fun `REQ-OPS-176 the pinned columns are compared with the schema of the CURRENT database version, a new column fails`() {
+        val dir =
+            File.createTempFile("schema", "dir").also {
+                it.delete()
+                it.mkdirs()
+            }
+        try {
+            val base = File("schemas/eg.masroof.data.db.AppDatabase/10.json").readText()
+            // a pretend version 11 that adds one column to expense
+            File(
+                dir,
+                "11.json",
+            ).writeText(
+                base.replaceFirst(
+                    "\"fields\": [",
+                    "\"fields\": [\n{\"fieldPath\": \"rawText\", \"columnName\": \"rawText\", \"affinity\": \"TEXT\"},",
+                ),
+            )
+            val v11 = PinnedColumns.fromSchema(11, dir)
+            assertTrue(v11.getValue("expense").contains("rawText") || v11.values.any { it.contains("rawText") })
+            assertTrue("the pinned list does not know the new column", PinnedColumns.expected != v11)
+            try {
+                PinnedColumns.fromSchema(12, dir)
+                fail("a missing schema file must fail")
+            } catch (_: IllegalStateException) {
+                // expected
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

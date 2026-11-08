@@ -46,6 +46,7 @@
     <string name="backup_reason_key_lost">السبب: النسخة وقفت قبل ما تبدأ. جرّب تاني.</string>
     <string name="backup_interrupted">النسخة الاحتياطية وقفت في النص - ابدأ من تاني من فضلك</string>
     <string name="backup_start_failed">معرفناش نبدأ النسخة الاحتياطية - جرّب تاني من فضلك</string>
+    <string name="backup_file_kept">النسخة الاحتياطية مابدأتش؛ ملفك القديم ما اتغيّرش</string>
     <string name="backup_already_running">فيه نسخة احتياطية شغالة دلوقتي</string>
     <string name="backup_reason_other">السبب: معرفناش نكتب الملف.</string>
 

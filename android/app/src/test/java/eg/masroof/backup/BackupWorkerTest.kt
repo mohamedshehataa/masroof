@@ -135,6 +135,21 @@ class BackupWorkerTest {
     }
 
     @Test
+    fun `REQ-SEC-066 a backup starts by emptying the stage folder a killed backup left behind`() {
+        val stage =
+            eg.masroof.data.backup.BackupStage
+                .dir(context.noBackupFilesDir)
+        stage.mkdirs()
+        val stale = File(stage, "masroof-stage-stale.bin").also { it.writeBytes(byteArrayOf(1, 2, 3)) }
+        shadowOf(context.contentResolver).registerOutputStream(uri, ByteArrayOutputStream())
+        pending.put(workId, input())
+        val result = runBlocking { worker().doWork() }
+        assertTrue(result is ListenableWorker.Result.Success)
+        assertFalse("the leftover is gone", stale.exists())
+        assertEquals("nothing is left after the run either", 0, stage.listFiles()?.size ?: 0)
+    }
+
+    @Test
     fun `REQ-OPS-177 a provider failure mid-write fails the task with a reason, keeps the last backup line and the app data`() {
         status.record(LastBackup(1_700_000_000_000L, 5, 1, 1024))
         val before = status.last.value

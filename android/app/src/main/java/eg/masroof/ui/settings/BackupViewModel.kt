@@ -47,6 +47,8 @@ data class BackupUiState(
     val preparing: Boolean = false,
     val defaultFileName: String = "",
     val notice: BackupNotice? = null,
+    /** The picked document was not removed (it holds data): "Backup did not start; your existing file was not changed". */
+    val fileKept: Boolean = false,
 ) {
     val problem: PassphraseProblem? get() = PassphraseRules.check(passphrase, again)
     val canContinue: Boolean get() = problem == null
@@ -71,13 +73,14 @@ class BackupViewModel
             val again: String = "",
             val preparing: Boolean = false,
             val notice: BackupNotice? = null,
+            val fileKept: Boolean = false,
         )
 
         private val local = MutableStateFlow(Local())
 
         val state: StateFlow<BackupUiState> =
             combine(local, status.last, launcher.run) { l, last, run ->
-                BackupUiState(last, run, l.step, l.understood, l.passphrase, l.again, l.preparing, defaultFileName(), l.notice)
+                BackupUiState(last, run, l.step, l.understood, l.passphrase, l.again, l.preparing, defaultFileName(), l.notice, l.fileKept)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), BackupUiState())
 
         /** `masroof-2026-10-27.masroof`, the Cairo date. */
@@ -131,8 +134,11 @@ class BackupViewModel
                 return
             }
             if (typed.step != BackupStep.PICKING) {
-                launcher.discard(uri)
                 local.value = Local(notice = BackupNotice.INTERRUPTED)
+                viewModelScope.launch {
+                    val removed = launcher.discard(uri)
+                    local.update { it.copy(fileKept = !removed) }
+                }
                 return
             }
             local.update { it.copy(preparing = true, passphrase = "", again = "") }
@@ -149,6 +155,7 @@ class BackupViewModel
             var key: ByteArray? = null
             var started = false
             var notice: BackupNotice? = null
+            var kept = false
             try {
                 val header = BackupHeader.fresh()
                 key = withContext(NonCancellable + io) { PassphraseKdf.deriveKey(passphrase, header) }
@@ -160,11 +167,14 @@ class BackupViewModel
             } catch (e: Throwable) {
                 notice = BackupNotice.START_FAILED
             } finally {
-                if (!started) key?.fill(0)
+                // Also when this was cancelled: the key is zeroed and an empty document the picker made does not stay behind.
+                if (!started) {
+                    key?.fill(0)
+                    withContext(NonCancellable) { kept = !launcher.discard(uri) }
+                }
                 // The field is cleared whether the task started or not.
-                local.value = Local(notice = notice)
+                local.value = Local(notice = notice, fileKept = kept)
             }
-            if (!started) launcher.discard(uri)
         }
 
         fun onDismissNotice() = local.update { it.copy(notice = null) }

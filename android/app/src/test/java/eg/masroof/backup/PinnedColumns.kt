@@ -1,5 +1,6 @@
 package eg.masroof.backup
 
+import eg.masroof.data.db.DB_VERSION
 import java.io.File
 
 /**
@@ -159,9 +160,17 @@ object PinnedColumns {
                 listOf("id", "cairoDate", "assetsMinor", "debtsMinor", "netMinor", "currency", "breakdown", "createdAtMillis"),
         )
 
-    /** The columns the exported Room schema of the current version declares, for the included tables only. */
-    fun fromSchema(): Map<String, List<String>> {
-        val text = File("schemas/eg.masroof.data.db.AppDatabase/10.json").readText()
+    /**
+     * The columns the exported Room schema of [version] (the current database version by default) declares, for the included tables only.
+     * A missing schema file fails: a version bump without its exported schema must not pass quietly.
+     */
+    fun fromSchema(
+        version: Int = DB_VERSION,
+        dir: File = File("schemas/eg.masroof.data.db.AppDatabase"),
+    ): Map<String, List<String>> {
+        val file = File(dir, "$version.json")
+        check(file.isFile) { "no exported schema for database version $version: ${file.path}" }
+        val text = file.readText()
         val result = LinkedHashMap<String, List<String>>()
         // Each entity is one "tableName" ... "fields": [ ... ] ... block; the fields list ends at the first "]".
         for (entity in text.split("\"tableName\": \"").drop(1)) {

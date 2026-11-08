@@ -106,7 +106,14 @@ object PassphraseKdf {
     /** NFC: the same text typed in a different Unicode composition form is the same passphrase. */
     fun normalise(passphrase: String): String = Normalizer.normalize(passphrase, Normalizer.Form.NFC)
 
-    fun codePoints(passphrase: String): Int = normalise(passphrase).let { it.codePointCount(0, it.length) }
+    /** The passphrase without format and control characters (zero-width spaces, BOM, ...): what the user can actually see and type. */
+    fun visible(passphrase: String): String =
+        normalise(passphrase).filterNot {
+            Character.getType(it) == Character.FORMAT.toInt() || Character.getType(it) == Character.CONTROL.toInt()
+        }
+
+    /** Code points after NFC, not counting invisible characters. */
+    fun codePoints(passphrase: String): Int = visible(passphrase).let { it.codePointCount(0, it.length) }
 
     fun isLongEnough(passphrase: String): Boolean = codePoints(passphrase) >= BackupFormat.MIN_PASSPHRASE_CODE_POINTS
 

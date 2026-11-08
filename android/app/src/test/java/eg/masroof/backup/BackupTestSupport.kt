@@ -91,11 +91,14 @@ class FakeBackupDb(
     var inSnapshot = false
     var snapshots = 0
 
+    /** Runs at the end of the snapshot, after every table was staged: lets a test look at (or damage) the temp files. */
+    var onSnapshotEnd: (() -> Unit)? = null
+
     override fun <T> snapshot(block: () -> T): T {
         inSnapshot = true
         snapshots++
         try {
-            return block()
+            return block().also { onSnapshotEnd?.invoke() }
         } finally {
             inSnapshot = false
         }
@@ -123,7 +126,8 @@ fun environment(
     files: ReceiptFiles = ReceiptFiles { null },
     localKey: ByteArray = ByteArray(32) { 9 },
     now: Long = 1_793_000_000_000L,
-) = BackupEnvironment(db, prefs, { localKey.copyOf() }, files, "0.1.7", now)
+    tempDir: java.io.File = java.io.File(System.getProperty("java.io.tmpdir").orEmpty()),
+) = BackupEnvironment(db, prefs, { localKey.copyOf() }, files, "0.1.7", now, tempDir)
 
 /** Writes a backup into memory with a throwaway key; returns the file bytes and the writer's result. */
 fun writeBackup(

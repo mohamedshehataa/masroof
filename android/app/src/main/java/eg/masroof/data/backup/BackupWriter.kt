@@ -162,6 +162,7 @@ class BackupWriter(
                 if (!fingerprints.containsKey(ref.id)) fingerprints[ref.id] = measure(ref, progress, cancelled)
             }
             val names = entryNames(receiptList)
+            stage.verify(cancelled)
 
             counting.write(headerBytes)
             val zip = ZipOutputStream(BackupCipher.encrypt(counting, input.key, headerBytes))
@@ -208,13 +209,15 @@ class BackupWriter(
             val file = File.createTempFile("masroof-stage", ".bin", dir)
             files[table] = file
             var rows = 0L
-            BackupCipher.encrypt(FileOutputStream(file), key, NO_AAD).use { out ->
-                env.db.forEachRow(table) { columns, values ->
-                    if (rows % CANCEL_EVERY == 0L) cancelled()
-                    out.write(BackupJson.obj(columns.indices.map { columns[it] to BackupJson.value(values[it]) }).toByteArray(UTF8))
-                    out.write(NEWLINE)
-                    rows++
-                    progress.add(ROW_UNITS)
+            FileOutputStream(file).use { raw ->
+                BackupCipher.encrypt(raw, key, aad(table)).use { out ->
+                    env.db.forEachRow(table) { columns, values ->
+                        if (rows % CANCEL_EVERY == 0L) cancelled()
+                        out.write(BackupJson.obj(columns.indices.map { columns[it] to BackupJson.value(values[it]) }).toByteArray(UTF8))
+                        out.write(NEWLINE)
+                        rows++
+                        progress.add(ROW_UNITS)
+                    }
                 }
             }
             if (rows != expected) throw IOException("table changed during snapshot")
@@ -225,15 +228,22 @@ class BackupWriter(
             out: OutputStream,
             cancelled: () -> Unit,
         ) {
-            BackupCipher.decrypt(FileInputStream(files.getValue(table)), key, NO_AAD).use { stream ->
-                val buf = ByteArray(CHUNK)
-                while (true) {
-                    cancelled()
-                    val n = stream.read(buf)
-                    if (n < 0) break
-                    out.write(buf, 0, n)
+            FileInputStream(files.getValue(table)).use { raw ->
+                BackupCipher.decrypt(raw, key, aad(table)).use { stream ->
+                    val buf = ByteArray(CHUNK)
+                    while (true) {
+                        cancelled()
+                        val n = stream.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                    }
                 }
             }
+        }
+
+        /** Reads every temp file to its end: a damaged or swapped one fails here, before anything is written to the provider. */
+        fun verify(cancelled: () -> Unit) {
+            for (table in files.keys) copyTo(table, OutputStream.nullOutputStream(), cancelled)
         }
 
         fun delete() {
@@ -389,7 +399,8 @@ class BackupWriter(
         private const val ESTIMATED_ROWS = 2_000L
         private const val CANCEL_EVERY = 256L
 
-        private val NO_AAD = ByteArray(0)
+        /** The table name is the associated data of its temp stream, so a temp file cannot be swapped for another table's. */
+        private fun aad(table: String) = table.toByteArray(UTF8)
 
         /**
          * `receipts/<id>.<ext>` per receipt: id and extension are reduced to safe characters so a restored name can never escape the

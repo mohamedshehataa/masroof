@@ -73,22 +73,27 @@ object BackupPrefsInventory {
             "masroof_backup" to "describes this phone's last backup file, not the data",
         )
 
-    /** Preference key names that are deliberately not in the backup (any store), with the reason. */
-    val OUT_KEYS: Map<String, String> =
+    /** Per store (`datastore:<name>` / `shared:<file>`): keys that are deliberately not in the backup, with the reason. */
+    val OUT_KEYS: Map<String, Map<String, String>> =
         mapOf(
-            "server_url" to "a server address belongs to one install",
-            "access_token" to "legacy plaintext token, removed at upgrade",
-            "session" to "session tokens",
-            "last_member" to "session state",
-            "device_id" to "install identity for the frozen server upload",
-            "erase_stage" to "erase-in-progress state",
-            "k" to "sealed local-id key; travels as keys/local-id.key",
-            "voice_online_notice_seen" to "one-time hint, shown again after a restore",
-            "last_at" to "last backup line",
-            "last_entries" to "last backup line",
-            "last_receipts" to "last backup line",
-            "last_bytes" to "last backup line",
-            "ack_id" to "which finished backup run the user has seen",
+            "datastore:settings" to
+                mapOf(
+                    "server_url" to "a server address belongs to one install",
+                    "access_token" to "legacy plaintext token, removed at upgrade",
+                ),
+            "shared:masroof_session" to mapOf("session" to "session tokens", "last_member" to "session state"),
+            "shared:masroof_device" to mapOf("device_id" to "install identity for the frozen server upload"),
+            "shared:masroof_capture" to mapOf("erase_stage" to "erase-in-progress state"),
+            "shared:masroof_capture_key" to mapOf("k" to "sealed local-id key; travels as keys/local-id.key"),
+            "shared:masroof_ui" to mapOf("voice_online_notice_seen" to "one-time hint, shown again after a restore"),
+            "shared:masroof_backup" to
+                mapOf(
+                    "last_at" to "last backup line",
+                    "last_entries" to "last backup line",
+                    "last_receipts" to "last backup line",
+                    "last_bytes" to "last backup line",
+                    "ack_id" to "which finished backup run the user has seen",
+                ),
         )
 }
 

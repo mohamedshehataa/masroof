@@ -126,6 +126,7 @@ fun BackupSectionContent(
                 ),
                 color = MaterialTheme.colorScheme.error,
             )
+            if (state.fileKept) Text(stringResource(R.string.backup_file_kept))
             TextButton(
                 onClick = actions.onAcknowledge,
                 modifier = Modifier.heightIn(min = 48.dp),

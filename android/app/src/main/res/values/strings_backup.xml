@@ -34,6 +34,7 @@
     <string name="backup_reason_key_lost">Reason: the backup was interrupted before it started. Try again.</string>
     <string name="backup_interrupted">Backup was interrupted - please start again</string>
     <string name="backup_start_failed">The backup could not start - please try again</string>
+    <string name="backup_file_kept">Backup did not start; your existing file was not changed</string>
     <string name="backup_already_running">A backup is already running</string>
     <string name="backup_reason_other">Reason: the file could not be written.</string>
 

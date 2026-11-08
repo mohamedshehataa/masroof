@@ -2,6 +2,7 @@ package eg.masroof.backup
 
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import eg.masroof.data.backup.BackupHeader
 import eg.masroof.data.backup.BackupInput
@@ -17,6 +18,8 @@ import eg.masroof.ui.settings.BackupUiState
 import eg.masroof.ui.settings.BackupViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -59,8 +62,11 @@ private class FakeLauncher : BackupLauncher {
         return startResult
     }
 
-    override fun discard(destination: Uri) {
+    var discardResult = true
+
+    override suspend fun discard(destination: Uri): Boolean {
         discarded += destination
+        return discardResult
     }
 
     override fun cancel() {
@@ -308,5 +314,43 @@ class BackupViewModelTest {
             pickWith()
             await { it.notice == BackupNotice.START_FAILED && !it.preparing }
             assertTrue(launcher.started.isEmpty())
+        }
+
+    @Test
+    fun `REQ-OPS-177 a picked file that holds data is kept and the user is told the existing file was not changed`() =
+        runTest {
+            hadBackup()
+            launcher.discardResult = false // the provider reports an existing non-empty file (the user chose Overwrite)
+            vm.onPicked(uri)
+            val s = await { it.notice == BackupNotice.INTERRUPTED && it.fileKept }
+            assertTrue(s.fileKept)
+            assertEquals(listOf(uri), launcher.discarded)
+        }
+
+    @Test
+    fun `REQ-OPS-177 cancelling during key derivation still zeroes the key and removes the empty document`() =
+        runTest {
+            hadBackup()
+            val release = java.util.concurrent.CountDownLatch(1)
+            val slow =
+                java.util.concurrent.Executors
+                    .newSingleThreadExecutor()
+            val blocked = BackupViewModel(launcher, status, clock, slow.asCoroutineDispatcher())
+            vm = blocked
+            blocked.onBackUpNow()
+            blocked.onPassphrase("correct horse battery")
+            blocked.onAgain("correct horse battery")
+            blocked.onContinuePassphrase()
+            // the executor's only thread is busy: the derivation waits behind this task while the scope is cancelled
+            slow.execute { release.await() }
+            blocked.onPicked(uri)
+            blocked.viewModelScope.cancel()
+            release.countDown()
+            withContext(Dispatchers.Default) {
+                withTimeout(20_000) { while (launcher.discarded.isEmpty()) kotlinx.coroutines.delay(10) }
+            }
+            assertEquals(listOf(uri), launcher.discarded)
+            assertTrue("a cancelled backup never started a task", launcher.started.isEmpty())
+            slow.shutdown()
         }
 }

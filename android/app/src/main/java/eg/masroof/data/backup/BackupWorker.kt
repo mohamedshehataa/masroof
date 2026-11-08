@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -18,15 +19,20 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import eg.masroof.R
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.Clock
@@ -51,8 +57,13 @@ class BackupWorker
         override suspend fun doWork(): Result {
             val destination = inputData.getString(KEY_URI)?.let(Uri::parse)
             val input = pending.take(id)
-            if (destination == null || input == null) return failure(BackupFailure.KEY_LOST)
+            if (destination == null || input == null) {
+                input?.key?.fill(0)
+                return failure(BackupFailure.KEY_LOST)
+            }
             try {
+                // Leftovers of a backup that was killed: the unique work guarantees nothing else uses the folder.
+                BackupStage.sweep(BackupStage.dir(context.noBackupFilesDir))
                 setForeground(foregroundInfo(context, id, 0))
                 val sink = context.contentResolver.openOutputStream(destination, "wt") ?: throw FileNotFoundException()
                 val result =
@@ -159,7 +170,7 @@ class BackupEnvironmentFactory
                 receipts = DirectoryReceiptFiles(receiptsDir),
                 appVersion = eg.masroof.BuildConfig.VERSION_NAME,
                 nowMillis = nowMillis,
-                tempDir = context.cacheDir,
+                tempDir = BackupStage.dir(context.noBackupFilesDir),
             )
     }
 
@@ -202,8 +213,12 @@ interface BackupLauncher {
     /** The user has seen the result of the finished run: it is shown as idle from now on. Other work is not touched. */
     suspend fun acknowledge()
 
-    /** Best effort: removes a document the picker created but that will never be written (the provider may refuse). */
-    fun discard(destination: Uri)
+    /**
+     * Removes the document the picker returned, but ONLY if it is still empty (0 bytes): the picker lets the user choose an existing file
+     * and confirm "Overwrite", and a good earlier backup must never be deleted because a new one did not start. True when an empty
+     * document was removed; false when it was left alone (it holds data, its size is unknown, or the provider refused).
+     */
+    suspend fun discard(destination: Uri): Boolean
 
     val run: Flow<BackupRun>
 }
@@ -217,7 +232,18 @@ class WorkBackupLauncher
         private val pending: PendingBackupKey,
         private val status: BackupStatusStore,
     ) : BackupLauncher {
+        private val startLock = Mutex()
+        private val documents = DocumentDiscarder(AndroidDocumentGate(context))
+
         override suspend fun start(
+            destination: Uri,
+            input: BackupInput,
+        ): Boolean =
+            startLock.withLock {
+                startLocked(destination, input).also { started -> if (!started) input.key.fill(0) }
+            }
+
+        private suspend fun startLocked(
             destination: Uri,
             input: BackupInput,
         ): Boolean {
@@ -231,12 +257,15 @@ class WorkBackupLauncher
                     .build()
             pending.put(request.id, input)
             try {
-                workManager.enqueueUniqueWork(BackupWorker.UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
+                workManager.enqueueUniqueWork(BackupWorker.UNIQUE_NAME, ExistingWorkPolicy.KEEP, request).await()
             } catch (e: IllegalStateException) {
                 pending.discard(request.id)
                 throw e
             }
-            return true
+            // KEEP drops a request when other work got in first: then this key must not stay in memory.
+            val queued = workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME).first().any { it.id == request.id }
+            if (!queued) pending.discard(request.id)
+            return queued
         }
 
         override fun cancel() {
@@ -248,9 +277,7 @@ class WorkBackupLauncher
             if (latest.state.isFinished) status.acknowledge(latest.id.toString())
         }
 
-        override fun discard(destination: Uri) {
-            runCatching { DocumentsContract.deleteDocument(context.contentResolver, destination) }
-        }
+        override suspend fun discard(destination: Uri): Boolean = documents.discard(destination)
 
         override val run: Flow<BackupRun> =
             combine(workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.UNIQUE_NAME), status.acknowledged) { infos, ack ->
@@ -278,3 +305,40 @@ internal fun WorkInfo?.toRun(): BackupRun =
             )
         WorkInfo.State.CANCELLED -> BackupRun.Cancelled
     }
+
+/** The two things the discard rule needs from a document provider; faked in tests. */
+interface DocumentGate {
+    /** The document's size in bytes, null when the provider does not say. */
+    fun size(uri: Uri): Long?
+
+    fun delete(uri: Uri): Boolean
+}
+
+class AndroidDocumentGate(
+    private val context: Context,
+) : DocumentGate {
+    override fun size(uri: Uri): Long? =
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use {
+                if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null
+            }
+        }.getOrNull()
+
+    override fun delete(uri: Uri): Boolean =
+        runCatching {
+            DocumentsContract.deleteDocument(
+                context.contentResolver,
+                uri,
+            )
+        }.getOrDefault(false)
+}
+
+/** Deletes a document only when it is known to be empty: an existing backup the user chose to overwrite is never lost. */
+class DocumentDiscarder(
+    private val gate: DocumentGate,
+) {
+    suspend fun discard(uri: Uri): Boolean =
+        withContext(Dispatchers.IO) {
+            if (gate.size(uri) == 0L) gate.delete(uri) else false
+        }
+}
