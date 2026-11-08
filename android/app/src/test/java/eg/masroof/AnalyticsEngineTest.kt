@@ -541,27 +541,49 @@ class AnalyticsEngineTest {
                     eg.masroof.data.UuidIdFactory(),
                     eg.masroof.data.LocalDataSignal(),
                 )
+            val wealth =
+                eg.masroof.data.wealth
+                    .WealthRepository(db, clock)
+            val goals =
+                eg.masroof.data.goals
+                    .GoalRepository(
+                        db,
+                        eg.masroof.data.UuidIdFactory(),
+                        clock,
+                        eg.masroof.data.auth
+                            .EraseLock(),
+                    )
+            val real =
+                eg.masroof.data.wallet
+                    .RoomWalletSource(db, wealth, goals)
             val home =
-                eg.masroof.ui.viewmodel
-                    .HomeViewModel(repo, engine())
+                eg.masroof.ui.wallet
+                    .WalletViewModel(real, repo, settings, emptySet(), clock, androidx.lifecycle.SavedStateHandle())
             val job = backgroundScope.launch(Dispatchers.Unconfined) { home.state.collect {} }
-            val state = home.state.first { it.status == eg.masroof.ui.viewmodel.LoadStatus.READY }
-            assertEquals(engine().compute("current").summary.total, state.total.amountMinor)
-            assertEquals(5_000L, state.total.amountMinor)
-            assertTrue(state.summaryAvailable)
+            val state = home.state.first { it.loaded }
+            assertEquals(engine().compute("current").summary.total, state.figures?.spentMinor)
+            assertEquals(5_000L, state.figures?.spentMinor)
+            assertTrue(state.status == eg.masroof.ui.viewmodel.LoadStatus.READY)
             job.cancel()
             val broken =
-                object : AnalyticsEngine {
-                    override fun observe(spec: String): Flow<PeriodAnalytics> = flow { error("boom") }
-
-                    override suspend fun compute(spec: String): PeriodAnalytics = error("boom")
+                object : eg.masroof.data.wallet.WalletSource by real {
+                    override fun rows(
+                        from: Long,
+                        to: Long,
+                    ): Flow<List<eg.masroof.data.db.WalletRow>> = flow { error("boom") }
                 }
             val failed =
-                eg.masroof.ui.viewmodel
-                    .HomeViewModel(repo, broken)
+                eg.masroof.ui.wallet.WalletViewModel(
+                    broken,
+                    repo,
+                    settings,
+                    emptySet(),
+                    clock,
+                    androidx.lifecycle.SavedStateHandle(),
+                )
             val job2 = backgroundScope.launch(Dispatchers.Unconfined) { failed.state.collect {} }
-            val fs = failed.state.first { it.status == eg.masroof.ui.viewmodel.LoadStatus.READY }
-            assertTrue(!fs.summaryAvailable)
+            val fs = failed.state.first { it.loaded }
+            assertTrue(fs.figures == null && fs.status == eg.masroof.ui.viewmodel.LoadStatus.ERROR)
             assertEquals(2, fs.recent.size)
             job2.cancel()
         }

@@ -3,6 +3,8 @@ package eg.masroof
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -16,6 +18,7 @@ import eg.masroof.ui.edit.EditActions
 import eg.masroof.ui.edit.EditExpenseContent
 import eg.masroof.ui.nav.openIn
 import eg.masroof.ui.nav.openTab
+import eg.masroof.ui.nav.selectedTab
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.viewmodel.EditFormState
 import eg.masroof.ui.viewmodel.EditUiState
@@ -32,7 +35,8 @@ private fun TabHost(onNav: (NavHostController) -> Unit) {
     val nav = rememberNavController()
     onNav(nav)
     NavHost(nav, startDestination = "home") {
-        listOf("home", "bills", "plan", "wealth", "ask", "goals", "accounts", "settings").forEach { route ->
+        val routes = listOf("home", "bills", "bills/{id}", "plan", "wealth", "ask", "goals", "accounts", "settings", "add", "edit/{id}")
+        routes.forEach { route ->
             composable(route) { Text("screen-$route") }
         }
     }
@@ -78,6 +82,46 @@ class WalletNavigationTest {
     }
 
     @Test
+    fun `REQ-UI-081 a reminder opens inside the Bills tab and Back returns to it`() {
+        compose.setContent { TabHost { nav = it } }
+        compose.runOnIdle { nav.openIn(tabRouteOf("bills/0b9a7a52"), "bills/abc") }
+        compose.waitForIdle()
+        assertEquals("bills/{id}", route())
+        assertEquals("bills", selectedTab(nav.currentBackStack.value.map { it.destination.route }))
+        compose.runOnIdle { nav.popBackStack() }
+        compose.waitForIdle()
+        assertEquals("bills", route())
+    }
+
+    @Test
+    fun `REQ-UI-081 a shared screen keeps the highlight of the tab whose stack it is on`() {
+        val add = "add?receipt={receipt}&mic={mic}"
+        assertEquals("home", selectedTab(listOf(null, "home", add)))
+        assertEquals("bills", selectedTab(listOf(null, "home", "bills", add)))
+        assertEquals("plan", selectedTab(listOf(null, "home", "plan", add)))
+        assertEquals("wealth", selectedTab(listOf(null, "home", "wealth", add)))
+        assertEquals("ask", selectedTab(listOf(null, "home", "ask", "edit/{id}")))
+        assertEquals("bills", selectedTab(listOf(null, "home", "bills", "bills/{id}", "edit/{id}")))
+        assertEquals("home", selectedTab(listOf(null, "home", "review", "receipts")))
+        assertEquals("home", selectedTab(emptyList()))
+    }
+
+    @Test
+    fun `REQ-UI-081 the highlight follows the real back stack of a shared screen`() {
+        compose.setContent { TabHost { nav = it } }
+        compose.runOnIdle {
+            nav.openTab("bills")
+            nav.navigate("add")
+        }
+        compose.waitForIdle()
+        assertEquals("add", route())
+        assertEquals("bills", selectedTab(nav.currentBackStack.value.map { it.destination.route }))
+        compose.runOnIdle { nav.popBackStack() }
+        compose.waitForIdle()
+        assertEquals("bills", route())
+    }
+
+    @Test
     fun `REQ-UI-081 the selected tab survives recreation`() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent { TabHost { nav = it } }
@@ -105,7 +149,11 @@ class EditExcludeToggleTest {
         compose.setContent {
             MasroofTheme { EditExpenseContent(state, EditActions(onExcluded = { changes += it })) }
         }
-        compose.onNodeWithText("Don't count in totals").performScrollTo().assertIsDisplayed()
+        compose
+            .onNodeWithText("Don't count in totals")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsOff()
         compose.onNodeWithText("Don't count in totals").performClick()
         assertEquals(listOf(true), changes)
     }
@@ -114,6 +162,10 @@ class EditExcludeToggleTest {
     fun `REQ-AN-175 an excluded entry opens the Edit screen with the switch present`() {
         val state = EditUiState(EditFormState(loaded = true, excluded = true))
         compose.setContent { MasroofTheme { EditExpenseContent(state, EditActions()) } }
-        compose.onNodeWithText("Don't count in totals").performScrollTo().assertIsDisplayed()
+        compose
+            .onNodeWithText("Don't count in totals")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsOn()
     }
 }

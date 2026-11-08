@@ -18,8 +18,8 @@ import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
 import eg.masroof.data.remote.RemoteSource
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
-import eg.masroof.ui.viewmodel.HomeViewModel
 import eg.masroof.ui.viewmodel.TransactionsViewModel
+import eg.masroof.ui.wallet.WalletViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -163,7 +163,7 @@ class LocalManualEntryTest {
             listOf(
                 DefaultExpenseRepository::class.java,
                 AddExpenseViewModel::class.java,
-                HomeViewModel::class.java,
+                WalletViewModel::class.java,
                 TransactionsViewModel::class.java,
             )
         for (type in types) {

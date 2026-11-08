@@ -38,6 +38,7 @@ import eg.masroof.core.PercentFormat
 import eg.masroof.core.analytics.Projections
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.budgetName
+import eg.masroof.ui.goals.cards
 import eg.masroof.ui.insights.CategoryDonut
 import eg.masroof.ui.insights.DonutSlice
 import eg.masroof.ui.theme.CategoryPalette
@@ -303,9 +304,11 @@ private fun GoalTile(
         }
         return
     }
-    val shownProgress = bps(goal.savedMinor, goal.goal.targetMinor) / BPS_FULL
+    // The same figure the Goals screen shows: money recorded plus the gold and silver that backs the goal.
+    val progress = cards(listOf(goal), state.today, 1)[0].progress
+    val shownProgress = bps(progress.savedMinor, progress.targetMinor) / BPS_FULL
     val label = listOfNotNull(goal.goal.emoji, goal.goal.name).joinToString(" ")
-    val of = stringResource(R.string.goals_of, money(goal.savedMinor), money(goal.goal.targetMinor))
+    val of = stringResource(R.string.goals_of, money(progress.savedMinor), money(progress.targetMinor))
     Tile(title, "$title. $label, $of", actions.onOpenGoals, modifier) {
         Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         LinearProgressIndicator(

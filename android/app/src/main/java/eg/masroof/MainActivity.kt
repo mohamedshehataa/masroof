@@ -1,5 +1,6 @@
 package eg.masroof
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -67,6 +68,8 @@ import eg.masroof.ui.goals.GoalsRoute
 import eg.masroof.ui.insights.InsightsRoute
 import eg.masroof.ui.nav.openIn
 import eg.masroof.ui.nav.openTab
+import eg.masroof.ui.nav.selectedTab
+import eg.masroof.ui.nav.tabOwnerOf
 import eg.masroof.ui.plan.PlanScreen
 import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
@@ -104,16 +107,8 @@ private const val INSIGHTS_ROUTE = "insights"
 private const val TRANSACTIONS_ROUTE = "transactions"
 private const val SETTINGS_ROUTE = "settings"
 
-/** The tab a destination belongs to, so a sub-screen keeps its tab highlighted. Anything else lives under Wallet. */
-internal fun tabRouteOf(route: String?): String =
-    when {
-        route == null -> START_ROUTE
-        route == "bills" || route.startsWith("bills/") || route.startsWith("subscriptions/") -> "bills"
-        route == "plan" || route == "budgets" || route == "goals" || route.startsWith("goals/") || route == "goals-new" -> "plan"
-        route == "wealth" || route == "accounts" -> "wealth"
-        route == "ask" -> "ask"
-        else -> START_ROUTE
-    }
+/** The tab one destination belongs to; a screen shared by several tabs counts as Wallet here ([selectedTab] gives the real highlight). */
+internal fun tabRouteOf(route: String?): String = tabOwnerOf(route) ?: START_ROUTE
 
 // "add" opens a blank form; "add?receipt=<id>" opens it with a waiting receipt that is attached on Save (REQ-RCPT-023).
 private const val ADD_ROUTE = "add?receipt={receipt}&mic={mic}"
@@ -232,6 +227,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// currentBackStack is the only way to read the whole stack (the highlight needs the nearest tab-owned entry under a shared screen).
+@SuppressLint("RestrictedApi")
 @Composable
 private fun MasroofRoot(
     openReceipts: Boolean,
@@ -243,6 +240,8 @@ private fun MasroofRoot(
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val destination = entry?.destination
+    val stack by nav.currentBackStack.collectAsState()
+    val selected = selectedTab(stack.map { it.destination.route })
     val snackbars = remember { SnackbarHostState() }
     val undo: UndoDeleteViewModel = hiltViewModel()
     LaunchedEffect(openReceipts) {
@@ -253,7 +252,8 @@ private fun MasroofRoot(
     }
     LaunchedEffect(openRoute) {
         if (openRoute != null) {
-            nav.navigate(openRoute)
+            // A reminder opens inside the tab that owns it, so the highlight and Back agree.
+            nav.openIn(tabRouteOf(openRoute), openRoute)
             onRouteOpened()
         }
     }
@@ -279,7 +279,7 @@ private fun MasroofRoot(
             NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
-                        selected = tabRouteOf(destination?.route) == tab.route,
+                        selected = selected == tab.route,
                         onClick = { openTab(tab.route) },
                         icon = { Icon(tab.icon, contentDescription = null) },
                         label = { Text(stringResource(tab.label)) },
