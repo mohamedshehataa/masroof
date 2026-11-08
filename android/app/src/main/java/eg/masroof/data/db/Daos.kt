@@ -101,7 +101,7 @@ interface ExpenseDao {
     /** The same rows as [analyticsRows] plus the id and account, for Ask Masroof (STORY-199): read-only, the same filter. */
     @Query(
         """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun askRows(

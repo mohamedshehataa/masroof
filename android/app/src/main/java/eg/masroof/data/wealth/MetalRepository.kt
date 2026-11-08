@@ -312,6 +312,21 @@ class MetalRepository
                 }
             }
 
+        /** Undo of a link change: the lot goes back to [previousExpenseId] (null = no entry) and the entries' counting follows. */
+        suspend fun restoreEntry(
+            lotId: String,
+            previousExpenseId: String?,
+        ) {
+            eraseLock.mutex.withLock {
+                db.withTransaction {
+                    val old = db.assetLots().find(lotId) ?: return@withTransaction
+                    old.expenseId?.let { release(it, lotId) }
+                    val back = previousExpenseId?.takeIf { claim(it) }
+                    db.assetLots().update(old.copy(expenseId = back))
+                }
+            }
+        }
+
         suspend fun entryOf(lotId: String): String? = db.assetLots().find(lotId)?.expenseId
 
         /** Deletes the holding and its lots under the erase lock; entries only its lots linked count as spending again. */

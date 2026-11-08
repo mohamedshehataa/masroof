@@ -58,6 +58,7 @@ class MetalViewModel
         private val assetId = MutableStateFlow<String?>(null)
         private val candidates = MutableStateFlow(emptyList<ExpenseEntity>())
         private val undo = MutableStateFlow<String?>(null)
+        private var undoPrevious: String? = null
 
         @OptIn(ExperimentalCoroutinesApi::class)
         val state: StateFlow<MetalUiState> =
@@ -90,14 +91,10 @@ class MetalViewModel
         ) {
             val id = assetId.value ?: return
             viewModelScope.launch {
+                // The previous link is read before the write, so editing a lot onto another entry still offers Undo.
+                val before = lotId?.let { l -> repository.entryOf(l) }
                 val out = if (lotId == null) repository.addLot(id, draft) else repository.updateLot(lotId, draft)
-                val before =
-                    lotId?.let { l ->
-                        state.value.holding
-                            ?.lots
-                            ?.firstOrNull { it.id == l }
-                            ?.expenseId
-                    }
+                undoPrevious = before
                 // Undo is offered only when this save really linked an entry (one that counted until now).
                 val newLink = draft.expenseId != null && draft.expenseId != before
                 if (out is MetalOutcome.Saved && newLink && repository.entryOf(out.id) != null) undo.value = out.id
@@ -139,7 +136,8 @@ class MetalViewModel
 
         fun undoEntry(lotId: String) {
             undo.value = null
-            viewModelScope.launch { repository.detachEntry(lotId) }
+            val previous = undoPrevious
+            viewModelScope.launch { repository.restoreEntry(lotId, previous) }
         }
 
         fun dismissUndo() {
