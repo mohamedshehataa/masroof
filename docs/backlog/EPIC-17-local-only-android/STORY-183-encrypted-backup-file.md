@@ -118,3 +118,6 @@ STORY-174 (receipts), STORY-181 (budgets table)
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D5) |
+
+## Note from STORY-203 (backup scope)
+The "subscriptions" DataStore (`subscriptions.preferences_pb`) holds data that is not in Room and must be part of the backup file and its restore: per-subscription anchor day (`anchor_days`, entries `id:day`, plus `since:<id>` resume cutoffs), dismissed suggestion keys (`dismissed_suggestions`) and pending price notices (`price_notices`). Without the anchor days a restored 30th-of-month subscription falls back to the month-end rule.
