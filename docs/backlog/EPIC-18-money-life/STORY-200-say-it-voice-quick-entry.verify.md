@@ -1,0 +1,92 @@
+# STORY-200 verify report (qa-verifier, fresh context)
+
+## Loop 1 - base origin/main `ee4e824`, head `30cae43`, 2026-11-08
+Runs on a byte-identical `git archive` copy of the branch; throwaway probe tests (104 parser inputs, 6 view-model
+scenarios, 4 screen/RTL/TalkBack checks, 1 recognizer flow) deleted before the full suite.
+Gate: `bash scripts/make/check-fast.sh android` -> `check-fast GREEN [android] in 102s`; `:app:testDebugUnitTest --rerun`
+-> 704 tests, 0 failures, 0 skipped. TEST_INTEGRITY: OK (`test-integrity-check.sh origin/main`: 0 -> 216 assertions in 4
+new files; `AddExpenseScreenTest` unchanged and passing; its REQ-AND-013 intent re-proved with the new controls on).
+
+STORY: STORY-200
+CRITERIA:
+- Claim1-tables + adversarial lines: FAIL -- all 12 story rows exact; 18 of the verifier's own lines wrong (below)
+- Claim2-integer money: PASS -- no Double/Float/BigDecimal on money; overflow and 1,000,000,000,000 cap hold
+- Claim3-nothing saved without Save: PASS -- probe through fill, mic, deny forever, error, late text, close -> 0 rows
+- Claim4-mic/permission/recognizer: PASS (on-device branch confirmed by reading only)
+- Claim5-Income/USD save: PASS -- real Room: INCOME, USD, 2000, no category; D2 code untouched
+- Claim6-no network/logging, strings: PASS -- 23 keys in en and ar
+- Claim7-test integrity: PASS
+- Claim8-REQ ids: PASS (PARSE-098 19, PARSE-099 14, AND-144 23, EXP-052 13 passing tests)
+- Claim9-gate: PASS
+- REQ-PARSE-098: FAIL (MAJOR 1); REQ-PARSE-099: FAIL (MAJOR 3); REQ-AND-144: FAIL (MAJOR 2); REQ-EXP-052: PASS
+FINDINGS:
+- [MAJOR] `ingest/quick/QuickDates.kt` monthDate yearIndex -- a 4-digit amount after a date becomes the year:
+  `3 oct 1500 pounds uber` -> 1500-10-03, no amount; `uber oct 3 2500 le` -> 2500-10-03 (future); `rent 5 nov 2000`
+- [MAJOR] `ui/viewmodel/QuickFill.kt` apply sets `quickText = ""` -- the recognised text is never shown (REQ-AND-144)
+- [MAJOR] `ingest/quick/QuickLexicon.kt` SCALE_WORDS lacks colloquial تلاف: `خمس تلاف جنيه` -> 500 (1000x too low)
+- [MINOR] malformed digit groups give wrong amounts (`1,2345 fuel` -> 500, `150.5.5 fuel` -> 500, `1k5` -> 100500)
+- [MINOR] paying a salary reads as INCOME (`paid salary to nanny 3000`, `دفعت مرتب الشغالة 3000`)
+- [MINOR] `E£150` -> GBP; no fallback on ERROR_LANGUAGE_NOT_SUPPORTED; typed text lost when voice text arrives; income
+  sticky across lines; a two-number line replaces the user's note; weak test `assertTextContains("")`
+- [NIT] minus sign dropped (`-150 fuel` -> 15000); `ميت جنيه`, `تلت آلاف` -> no amount; `100 جنيه وخمسين قرش` drops piasters
+EXPLORATORY: 115 cases, 23 problems (listed above); Cairo midnight and summer-time defaults correct; RTL mic placement
+and Arabic labels correct; 10k-char inputs capped at 400 chars, 0-1 ms
+TEST_INTEGRITY: OK
+STATUS: FAIL -> fix round 1 sent with the security review's MINORs (see `.review.md`)
+
+## Loop 2 - head `04997c1`
+Gate: `bash scripts/make/check-fast.sh android` -> GREEN in 119s; `--rerun` 721 tests, 0 failures. TEST_INTEGRITY: OK (0 ->
+264; 4 assertions replaced by stricter ones for the fixes). 145 parser cases (104 from loop 1, 0 regressions, 15 changed
+exactly as intended) + 41 new; 12 view-model steps.
+- MAJOR 1 years: PASS (`3 oct 1500 pounds uber` -> 1,500 EGP on 2026-10-03; future years dropped)
+- MAJOR 2 heard text: PASS (kept, editable, Done re-parses; typing ignored while listening)
+- MAJOR 3 تلاف: PASS (`خمس تلاف جنيه` -> 5,000; 15 new Arabic number phrases correct)
+- Verifier and security MINORs: PASS (online notice, bidi strip, merchant cap, require checks - single caller, KWD removed)
+FINDINGS:
+- [MAJOR] `QuickNumbers.kt` -- نص/ربع before a scale word: `نص مليون` -> 1,000,000 (should be 500,000);
+  `خمسة ونص ألف` -> 5,000.50; `ألف إلا ربع` -> 1,000
+- [MINOR] `150E£`/`£E 150` -> GBP; online notice skipped on the language fallback; unsupported currency words -> EGP;
+  ISO date `2026-10-03` kills the amount
+STATUS: FAIL -> fix round 2 sent (owner rule: keep iterating; see DECISIONS)
+
+## Loop 3 - head `d84ae28`
+Gate: `bash scripts/make/check-fast.sh android` -> GREEN in 45s; `--rerun` 745 tests, 0 failures. TEST_INTEGRITY: OK
+(0 -> 280, no assertion removed). 176 parser lines (145 old: 0 regressions, 9 changed as intended) + 16 VM steps.
+- Loop-2 MAJOR rows: PASS (نص مليون 500,000; ربع مليون 250,000; خمسة ونص ألف 5,500; ألف إلا ربع 750; ...)
+- MINORs (E£ spellings, unsupported currencies, ISO date, fallback notice, Type instead): PASS
+FINDINGS:
+- [MAJOR] `QuickNumbers.kt` fraction() -- a half after a hundreds word before a scale: `مية ونص ألف` -> 100,500
+  (should be 150,000); `ميتين ونص ألف` -> 200,500; `نص مية` -> 100 (should be 50)
+- [MINOR] fallback notice while Processing leaves the panel stuck; [NIT] future/impossible ISO date marked as stated
+STATUS: FAIL -> fix round 3 (whitelist grammar + generated combination test), past the 3-loop limit by owner rule
+
+## Loop 4 - head `6e1e5ae`
+Gate GREEN in 40s; `--rerun` 752 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 299). 208 parser lines (176 old) + 16 VM steps.
+- Loop-3 rows exact (مية ونص ألف 150,000; ميتين ونص ألف 250,000; نص مية 50); 24 of 32 new attack lines exact, 10 no amount
+- Generated test (57,800 phrases) independent of the parser's code but limited to 17 word tokens (no digits, currency
+  words, glued ونص or k)
+FINDINGS:
+- [MAJOR] `50 جنيه ونص` -> 50 EGP (currency word splits the run, the half is dropped)
+- [MINOR] regression: lone `k` -> 1,000 EGP; `نص ٥٠٠` -> 500; ألفين إلا ربع / تلات تلاف إلا ربع / ربع مليون وخمسين
+  ألف now no amount (allowed, a loss)
+STATUS: FAIL -> fix round 4 (currency-word halves, k only after digits, wider generated space)
+
+## Loop 5 - head `57235e8`
+Gate GREEN in 35s; `--rerun` 755 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 320). 234 parser cases.
+- Loop-4 MAJOR (`50 جنيه ونص` -> 50.50) and MINORs (lone k, `نص ٥٠٠`): PASS; 16 new currency+fraction phrases exact
+FINDINGS:
+- [MAJOR] a currency word bridged into a run hides it from `currencyNear`: `ألف جنيه ونص إيجار 3 شهور` -> 3 EGP
+- [MAJOR] `ألف جنيه إلا ربع` -> 1,000 (partial)
+- [MINOR] `مدفعتش إلا 50` now no amount; generated test oracle mirrors the parser's run choice
+STATUS: FAIL -> fix round 5 (small, targeted) + severity rubric (DECISIONS)
+
+## Loop 6 - head `9bcf7eb` (severity rubric from DECISIONS applied)
+Gate GREEN in 34s; `--rerun` 796 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 324). 242 parser cases + 16 VM steps.
+- Loop-5 MAJORs: PASS (`ألف جنيه ونص إيجار 3 شهور` -> 1,500; `150 جنيه ونص لـ 2 كيلو` -> 150.50; `ألف جنيه إلا ربع` -> 750)
+- MINORs: PASS (`مدفعتش إلا 50` -> 50; `50 جنيه ونص 2 قهوة` -> 50.50); split oracle: single-phrase generated test (332,411
+  phrases) + run-selection table; listed digit patterns covered by explicit table tests
+- No regression across all earlier lines; REQ-PARSE-098, REQ-PARSE-099, REQ-AND-144, REQ-EXP-052: PASS
+FINDINGS (MINOR under the rubric; known limitations): digits before ونص read the half as half a pound
+(`١٠٠٠ جنيه ونص` -> 1,000.50 while the words `ألف جنيه ونص` -> 1,500; recognizers often output digits - candidate
+follow-up); `50 جنيه ونص و 2 قهوة` -> no amount; `50 نص 500` -> 500 (unlisted).
+STATUS: PASS

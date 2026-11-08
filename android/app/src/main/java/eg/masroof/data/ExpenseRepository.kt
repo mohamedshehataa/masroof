@@ -49,7 +49,12 @@ data class NewExpense(
     val paidByMemberId: String? = null,
     /** A receipt that waited unattached (REQ-RCPT-023): attached in the same write as the entry, or not at all. */
     val receiptId: String? = null,
-    /** Optional merchant text; with no [categoryId] a merchant rule may file the entry (a chosen category always wins). */
+    /** "EXPENSE" (default) or "INCOME"; income is listed but never counts as spending (ADR-0009 D2). */
+    val type: String = "EXPENSE",
+    /**
+     * Shop or payee (e.g. from a spoken line); null = none. With no [categoryId] a merchant rule may file the entry
+     * (a chosen category always wins).
+     */
     val merchant: String? = null,
 )
 
@@ -96,6 +101,8 @@ interface ExpenseRepository {
 
 const val CHANNEL_MANUAL = "MANUAL"
 
+private val CURRENCY_CODE = Regex("[A-Z]{3}")
+
 @Singleton
 class DefaultExpenseRepository
     @Inject
@@ -131,6 +138,8 @@ class DefaultExpenseRepository
         override fun observeMembers() = db.lookups().observeMembers()
 
         override suspend fun add(entry: NewExpense): String {
+            require(entry.type == "EXPENSE" || entry.type == "INCOME") { "Unknown entry type" }
+            require(CURRENCY_CODE.matches(entry.amount.currency)) { "Currency must be a 3-letter ISO code" }
             val now = clock.millis()
             val id = ids.next()
             val sourceId = ids.next()
@@ -147,6 +156,7 @@ class DefaultExpenseRepository
                             currency = entry.amount.currency,
                             occurredAtMillis = occurredAt,
                             merchant = entry.merchant?.trim()?.takeIf { it.isNotEmpty() },
+                            type = entry.type,
                             categoryId = entry.categoryId,
                             accountId = entry.accountId,
                             notes = entry.notes,
