@@ -156,7 +156,7 @@ class EditExpenseViewModel
                         pairs.linksOf(id).firstOrNull { l ->
                             l.kind == LinkKind.REFUND && l.deletablePartnerOf(id)?.let { editor.find(it) } != null
                         }
-                    val linked = pairs.linksOf(id).any { l -> editor.find(l.first) != null && editor.find(l.second) != null }
+                    val linked = pairs.linksOf(id).isNotEmpty()
                     form.value =
                         found.toForm().copy(
                             hasPartner = partner != null,

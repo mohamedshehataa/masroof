@@ -178,7 +178,12 @@ class DefaultExpenseEditor
                 (changes.amountMinor != null && changes.amountMinor != old.amountMinor) ||
                     (changes.currency != null && changes.currency != old.currency) ||
                     (changes.type != null && changes.type != old.type) ||
-                    (changes.occurredAtMillis != null && changes.occurredAtMillis != old.occurredAtMillis)
+                    (changes.occurredAtMillis != null && changes.occurredAtMillis != old.occurredAtMillis) ||
+                    // "Don't count in totals" on one side would leave the other side netting alone
+                    (changes.excludedFromTotals != null && changes.excludedFromTotals != old.excludedFromTotals)
+            // the survivor of a broken pair keeps its type until it is unlinked: a type edit would be written back by the link rules
+            val typeOfConverted = changes.type != null && changes.type != old.type && links.any { it.converted == old.id }
+            if (typeOfConverted) return true
             if (!touchesMoney) return false
             return links.any { link ->
                 val a = db.expenses().find(link.first)

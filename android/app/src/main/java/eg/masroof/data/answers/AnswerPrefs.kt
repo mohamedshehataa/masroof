@@ -49,6 +49,8 @@ data class EntryLink(
     val pairAccountId: String = "",
     val origStatus: String = "",
     val origCategoryId: String = "",
+    /** Makes every link unique: an Undo token applies to the very link its answer made, not to an equal one made later. */
+    val nonce: String = "",
 ) {
     /** The row that goes away together with [id]: an inserted transfer side, or the refund of a purchase. Null for a real entry. */
     fun deletablePartnerOf(id: String): String? =
@@ -99,6 +101,9 @@ interface AnswerPrefs {
 
     suspend fun current(): AnswerState = state.first()
 
+    /** Counts the erases this process has seen: an Undo token from before an "Erase all data" never applies again. */
+    val epoch: Long get() = 0L
+
     /** One atomic read-modify-write. */
     suspend fun edit(transform: (AnswerState) -> AnswerState)
 
@@ -123,7 +128,7 @@ private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
 
-private const val LINK_FIELDS = 12
+private const val LINK_FIELDS = 13
 
 private fun EntryLink.encode() =
     listOf(
@@ -139,6 +144,7 @@ private fun EntryLink.encode() =
         origStatus,
         origCategoryId,
         newAccountId,
+        nonce,
     ).joinToString("|")
 
 private fun decodeLink(raw: String): EntryLink? {
@@ -158,6 +164,7 @@ private fun decodeLink(raw: String): EntryLink? {
         origStatus = parts[9],
         origCategoryId = parts[10],
         newAccountId = parts[11],
+        nonce = parts[12],
     )
 }
 
@@ -202,7 +209,14 @@ class DataStoreAnswerPrefs
             context.answerStore.edit { p -> encode(p, transform(decode(p))) }
         }
 
+        private val erases =
+            java.util.concurrent.atomic
+                .AtomicLong()
+
+        override val epoch: Long get() = erases.get()
+
         override suspend fun clear() {
+            erases.incrementAndGet()
             context.answerStore.edit { it.clear() }
         }
     }

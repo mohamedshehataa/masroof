@@ -14,7 +14,7 @@ class ExpenseWritePathTest {
     private val write =
         Regex(
             "expenses\\(\\)\\s*\\.\\s*(insert|update|upsert|softDelete|restore|delete|deleteAll|setFailed|" +
-                "moveSources|setExcluded|enrichFromTwin|purgeDeletedBefore)\\(",
+                "moveSources|setExcluded|claimExcluded|deleteBatch|enrichFromTwin|purgeDeletedBefore)\\(",
         )
     private val categoryWrite = Regex("\\b(setEntryCategory|restoreCategory)\\(")
 
@@ -36,8 +36,8 @@ class ExpenseWritePathTest {
             "ui/viewmodel/ReviewViewModel.kt" to 2,
             // gam3eya: refuses a linked row (candidates exclude them), creates its own entries, restores its own conversion on Undo
             "data/bills/InstallmentRepository.kt" to 4,
-            // flags that are not money fields (excluded from totals) and the 30-day purge of deleted rows
-            "data/wealth/MetalRepository.kt" to 1,
+            // flags that are not money fields (excluded from totals; a claim refuses linked rows) and the 30-day purge of deleted rows
+            "data/wealth/MetalRepository.kt" to 2,
             "data/wealth/WealthRepository.kt" to 1,
             "data/edit/DeletedEntryPurge.kt" to 1,
             // the DAO declarations and the frozen server-import upserts
@@ -69,6 +69,22 @@ class ExpenseWritePathTest {
         found.forEach { (file, count) ->
             assertTrue("$file has $count expense writes, the list says ${allowed[file]}", count == (allowed[file] ?: 0))
         }
+    }
+
+    @Test
+    fun `REQ-EXP-065 no code keeps the expense DAO in a variable, so no write can hide behind an alias`() {
+        val alias = Regex("(val|var)\\s+\\w+(\\s*:\\s*\\w+)?\\s*=\\s*[\\w.]*expenses\\(\\)\\s*$", RegexOption.MULTILINE)
+        val aliasGetter =
+            Regex(
+                "(val|fun)\\s+\\w+\\s*(\\(\\))?\\s*(:\\s*\\w+\\s*)?(get\\(\\)\\s*)?=\\s*[\\w.]*expenses\\(\\)\\s*$",
+                RegexOption.MULTILINE,
+            )
+        val offenders =
+            sources()
+                .filter { it.invariantSeparatorsPath.substringAfter("eg/masroof/") != "data/db/Daos.kt" }
+                .filter { alias.containsMatchIn(it.readText()) || aliasGetter.containsMatchIn(it.readText()) }
+                .map { it.name }
+        assertTrue("an expense DAO alias hides writes from this scan: $offenders", offenders.isEmpty())
     }
 
     @Test

@@ -164,6 +164,7 @@ class DefaultAnswerRepository
                         origType = refund.type,
                         origStatus = refund.status,
                         origCategoryId = refund.categoryId.orEmpty(),
+                        nonce = ids.next(),
                     )
                 AnswerUndo(
                     added = AnswerState(answered = setOf(refundId), links = setOf(link)),
@@ -293,6 +294,7 @@ class DefaultAnswerRepository
             pairType = if (converted == null) "" else ExpenseTypes.TRANSFER_IN,
             pairAccountId = pairAccount,
             origStatus = converted?.status.orEmpty(),
+            nonce = ids.next(),
         )
 
         /** A captured entry that is already a TRANSFER_IN was converted by an answer that lost its link: it was an INCOME. */
@@ -333,6 +335,7 @@ class DefaultAnswerRepository
                         },
                     pairAccountId = entry.accountId.orEmpty(),
                     origStatus = entry.status,
+                    nonce = ids.next(),
                 )
             return AnswerUndo(added = AnswerState(answered = setOf(entry.id, side.id), links = setOf(link)))
         }
@@ -370,12 +373,21 @@ class DefaultAnswerRepository
         override suspend fun trackCash(entryId: String): AnswerUndo? {
             val before = settings.current().includeCashWithdrawals
             val undo =
-                answer(done(entryId)) {
+                answer(done(entryId)) { state ->
+                    val now = clock.millis()
+                    // a new answer makes the older link of this withdrawal final, so its Undo token can no longer apply
+                    val old = state.links.filter { it.involves(entryId) }.toSet()
+                    val settled = AnswerWrites.settle(db, old, now)
                     val entry =
                         live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL && it.currency == "EGP" } ?: return@answer null
-                    val tracked =
-                        AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), clock.millis())
-                    tracked.copy(added = tracked.added.copy(atmChoice = AtmChoice.TRACK), includeCashBefore = before)
+                    val tracked = AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), now)
+                    tracked.copy(
+                        added = tracked.added.copy(atmChoice = AtmChoice.TRACK),
+                        includeCashBefore = before,
+                        replacedLinks = old,
+                        settledRows = settled.rows,
+                        settledInserted = settled.insertedDeleted,
+                    )
                 } ?: return null
             // one source of truth: Track it turns the "Count ATM withdrawals as spending" switch off
             settings.update { it.copy(includeCashWithdrawals = false) }
@@ -385,9 +397,17 @@ class DefaultAnswerRepository
         override suspend fun countCash(entryId: String): AnswerUndo? {
             val before = settings.current().includeCashWithdrawals
             val undo =
-                answer(done(entryId)) {
+                answer(done(entryId)) { state ->
+                    val old = state.links.filter { it.involves(entryId) }.toSet()
+                    val settled = AnswerWrites.settle(db, old, clock.millis())
                     live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
-                    AnswerUndo(added = AnswerState(answered = setOf(entryId), atmChoice = AtmChoice.COUNT), includeCashBefore = before)
+                    AnswerUndo(
+                        added = AnswerState(answered = setOf(entryId), atmChoice = AtmChoice.COUNT),
+                        includeCashBefore = before,
+                        replacedLinks = old,
+                        settledRows = settled.rows,
+                        settledInserted = settled.insertedDeleted,
+                    )
                 } ?: return null
             settings.update { it.copy(includeCashWithdrawals = true) }
             return undo
@@ -419,7 +439,7 @@ class DefaultAnswerRepository
             val ok =
                 eraseLock.mutex.withLock {
                     // an answer that a newer one replaced (or that was unlinked) can no longer be undone: its rows belong to the new link
-                    if (!prefs.current().links.containsAll(token.added.links)) return@withLock false
+                    if (!stillApplies(token)) return@withLock false
                     val done =
                         db.withTransaction {
                             val now = clock.millis()
@@ -449,6 +469,19 @@ class DefaultAnswerRepository
             return ok
         }
 
+        /**
+         * An Undo applies only to the state it was made in: not after an erase, and not once a newer answer replaced its link or
+         * changed the same entry or the ATM choice.
+         */
+        private suspend fun stillApplies(token: AnswerUndo): Boolean {
+            val s = prefs.current()
+            val a = token.added
+            return token.epoch == prefs.epoch &&
+                s.links.containsAll(a.links) &&
+                s.answered.containsAll(a.answered) &&
+                (a.atmChoice == null || s.atmChoice == a.atmChoice)
+        }
+
         /** Puts back what settling links changed (the converted rows, the inserted rows) and re-applies the links to them. */
         private suspend fun restoreSettled(
             token: AnswerUndo,
@@ -469,7 +502,12 @@ class DefaultAnswerRepository
                     val settled = db.withTransaction { AnswerWrites.settle(db, links, clock.millis()) }
                     val ids = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
                     prefs.edit { s -> s.copy(links = s.links - links, answered = s.answered - ids) }
-                    AnswerUndo(replacedLinks = links, settledRows = settled.rows, settledInserted = settled.insertedDeleted)
+                    AnswerUndo(
+                        replacedLinks = links,
+                        settledRows = settled.rows,
+                        settledInserted = settled.insertedDeleted,
+                        epoch = prefs.epoch,
+                    )
                 } ?: return null
             signal.changed()
             return token
@@ -479,6 +517,7 @@ class DefaultAnswerRepository
             eraseLock.mutex.withLock {
                 val ids = token.replacedLinks.flatMapTo(HashSet()) { listOf(it.first, it.second) }
                 // the entries were answered again meanwhile: the old pair is gone for good
+                if (token.epoch != prefs.epoch) return@withLock
                 if (prefs.current().links.any { it.first in ids || it.second in ids }) return@withLock
                 db.withTransaction { restoreSettled(token, clock.millis()) }
                 prefs.edit { s -> s.copy(links = s.links + token.replacedLinks, answered = s.answered + ids) }
@@ -514,7 +553,7 @@ class DefaultAnswerRepository
                             atmChoice = a.atmChoice ?: s.atmChoice,
                         )
                     }
-                    if (a.atmChoice != null) done.copy(atmBefore = atmBefore) else done
+                    done.copy(atmBefore = if (a.atmChoice != null) atmBefore else done.atmBefore, epoch = prefs.epoch)
                 } ?: return null
             signal.changed()
             return undo

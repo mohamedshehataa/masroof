@@ -253,13 +253,29 @@ class AnswerGeneratedTest {
                 val w1 = ev("w1")
                 val ok = w1 != null && w1.alive && !m.settled("w1") && !m.pairs.any { m.typed(it) && it.src == "w1" }
                 val before = m.include
+                // a new answer on the withdrawal makes its older link final, like every other answer
+                val replaced =
+                    if (ok) {
+                        replace(
+                            listOf("w1"),
+                        ) { oldPairs, oldRefunds -> Token(replacedPairs = oldPairs, replacedRefunds = oldRefunds) }
+                    } else {
+                        null
+                    }
                 if (ok) {
                     m.plain += "w1"
                     m.include = true
                 }
                 val product = w.repo.countCash("w1")
-                if (ok) {
-                    tokens += Token(plain = "w1", includeBefore = before, product = product)
+                if (ok && replaced != null) {
+                    tokens +=
+                        Token(
+                            plain = "w1",
+                            includeBefore = before,
+                            replacedPairs = replaced.replacedPairs,
+                            replacedRefunds = replaced.replacedRefunds,
+                            product = product,
+                        )
                 } else {
                     assertTrue(
                         "counted what the ledger refuses",

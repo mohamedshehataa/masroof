@@ -435,6 +435,7 @@ class SmsUploader
         private val notifier: CapturedNotifier = NoCapturedNotifier,
         private val refresher: UploadedRecordsRefresher = NoUploadedRecordsRefresher,
         private val upload: UploadSession = AlwaysSignedIn,
+        private val answers: AnswerPrefs = NoAnswerPrefs,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -579,6 +580,8 @@ class SmsUploader
             expenseId: String,
         ) {
             if (!deleter.deleteExpense(expenseId)) return
+            // a row that an answer linked is never hard-deleted here: it leaves through the editor, which reconciles its pair
+            if (expenseId in answers.current().linkedIds()) return
             db.withTransaction {
                 db.expenses().delete(expenseId)
                 db.captured().delete(localId)

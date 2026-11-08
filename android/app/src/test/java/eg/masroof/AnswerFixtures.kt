@@ -26,7 +26,14 @@ internal class FakeAnswerPrefs(
         flow.value = transform(flow.value)
     }
 
+    private val erases =
+        java.util.concurrent.atomic
+            .AtomicLong()
+
+    override val epoch: Long get() = erases.get()
+
     override suspend fun clear() {
+        erases.incrementAndGet()
         flow.value = AnswerState()
     }
 }

@@ -28,6 +28,8 @@ data class AnswerUndo(
     /** Rows of the replaced (or unlinked) links that were fixed in their original type, and inserted rows that were deleted. */
     val settledRows: List<RowChange> = emptyList(),
     val settledInserted: List<String> = emptyList(),
+    /** The erase generation the answer was made in: after "Erase all data" no Undo applies. */
+    val epoch: Long = 0L,
 ) {
     // Never prints entries (merchants, amounts).
     override fun toString() = "AnswerUndo(restore=${restore.size}, inserted=${deleteExpenses.size})"
@@ -306,6 +308,7 @@ internal object AnswerWrites {
                 pairAccountId = entry.accountId.orEmpty(),
                 origStatus = entry.status,
                 newAccountId = cashId.takeIf { existing == null }.orEmpty(),
+                nonce = ids.next(),
             )
         return AnswerUndo(
             deleteExpenses = listOf(inId),
