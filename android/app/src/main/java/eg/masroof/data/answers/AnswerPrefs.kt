@@ -75,6 +75,8 @@ data class AnswerState(
     /** Last four to account id: "Link to an existing account". */
     val aliases: Map<String, String> = emptyMap(),
     val atmChoice: AtmChoice? = null,
+    /** STORY-173: "Keep both" pairs (`manualId|captureId`): a look-alike pair the user said is two purchases never gets a card again. */
+    val keptApart: Set<String> = emptySet(),
 ) {
     fun linkedIds(): Set<String> = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
 
@@ -127,6 +129,7 @@ private val linksKey = stringSetPreferencesKey("entry_links")
 private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
+private val keptApartKey = stringSetPreferencesKey("kept_apart_pairs")
 
 private const val LINK_FIELDS = 13
 
@@ -179,6 +182,7 @@ private fun decode(p: Preferences) =
                 .mapNotNull { e -> e.substringBefore(':').takeIf(::isLast4)?.let { it to e.substringAfter(':') } }
                 .toMap(),
         atmChoice = p[atmKey]?.let { runCatching { AtmChoice.valueOf(it) }.getOrNull() },
+        keptApart = p[keptApartKey].orEmpty(),
     )
 
 private fun encode(
@@ -195,6 +199,7 @@ private fun encode(
             .toSet()
     val atm = s.atmChoice
     if (atm == null) p.remove(atmKey) else p[atmKey] = atm.name
+    p[keptApartKey] = s.keptApart
 }
 
 @Singleton

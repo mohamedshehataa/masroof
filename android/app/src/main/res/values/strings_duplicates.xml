@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="duplicates_title">Possible duplicate</string>
+    <string name="duplicates_intro">You typed this and the phone also captured it. Merge them to count the purchase once.</string>
+    <string name="duplicates_manual">Manual entry</string>
+    <string name="duplicates_source_from">%1$s from %2$s</string>
+    <string name="duplicates_no_merchant">No merchant</string>
+    <string name="duplicates_date_time">%1$s, %2$s</string>
+    <string name="duplicates_merge">Merge</string>
+    <string name="duplicates_keep_both">Keep both</string>
+    <string name="duplicates_a11y">Possible duplicate: %1$s manual entry and %2$s %3$s</string>
+    <string name="duplicates_merged">Merged</string>
+    <string name="duplicates_undo">Undo</string>
+    <string name="duplicates_out_of_date">This suggestion is out of date</string>
+    <string name="duplicates_failed">Couldn\'t merge, try again</string>
+    <string name="duplicates_undo_failed">Can\'t undo: one of the entries changed</string>
+</resources>
