@@ -35,7 +35,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.format.DateTimeParseException
 import javax.inject.Inject
 
 /** Where a list stands. Expense lists read only Room, so they are always READY; Insights and Budgets still use the rest. */
@@ -337,11 +336,8 @@ class AddExpenseViewModel
             if (f.saving || f.saved) return // double tap: one entry only
             val amount = MoneyFormat.parseEntry(f.amountText)
             val date =
-                try {
-                    LocalDate.parse(f.dateText.trim())
-                } catch (_: DateTimeParseException) {
-                    null
-                }
+                eg.masroof.core.UserDate
+                    .parse(f.dateText) // plain four-digit years only (the restore's range)
             if (amount !is MoneyFormat.EntryAmount.Valid || date == null) {
                 form.update {
                     it.copy(

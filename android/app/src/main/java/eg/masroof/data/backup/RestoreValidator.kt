@@ -237,6 +237,7 @@ class RestoreValidator(
                 if (table.name == "receipt") {
                     val name = row["fileName"] as? String ?: throw fail(6)
                     receiptRows[id] = name
+                    tracked += (id.length + name.length) * 2L + ENTRY_OVERHEAD
                     if (!receiptNames.add(name)) throw fail(6)
                 }
             }

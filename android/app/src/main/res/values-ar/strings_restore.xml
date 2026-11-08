@@ -36,5 +36,7 @@
     <string name="restore_err_incomplete">الاسترجاع ماخلصش. اقفل مصروف وافتحه تاني وهيكمّل.</string>
     <string name="restore_err_partial">بياناتك اتبدلت بس الاسترجاع ماخلصش. استرجع نفس الملف تاني.</string>
     <string name="restore_err_memory">الذاكرة مش كفاية عشان نفحص النسخة دي. اقفل التطبيقات التانية وجرّب تاني. مفيش حاجة اتغيّرت.</string>
+    <string name="restore_pending_banner">التقاط الرسائل والنسخ الاحتياطي واقفين لحد ما الاسترجاع يخلص.</string>
+    <string name="restore_pending_finish">كمّل الاسترجاع</string>
     <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
 </resources>

@@ -335,13 +335,31 @@ class RestoreFixRound2Test {
     }
 
     @Test
-    fun `REQ-OPS-179 a disk error reading the staging after the commit ends in PARTIAL and a re-restore completes`() {
-        assertPartialThenReRestoreCompletes(
+    fun `REQ-OPS-179 a transient read error after the commit is INCOMPLETE, not broken, and the next start finishes it`() {
+        val settings = File(target.stage, "settings.json")
+        var saved = ByteArray(0)
+        val hooks =
             settingsEditedAfterCommit {
-                File(target.stage, "settings.json").delete()
-                File(target.stage, "settings.json").mkdir() // reading a directory is an IOException
-            },
-        )
+                saved = settings.readBytes()
+                settings.delete()
+                settings.mkdir() // reading a directory is an IOException
+            }
+        val restorer = target.restorer(hooks = hooks)
+        val staged = stage(restorer)
+        try {
+            runBlocking { restorer.apply(staged) }
+            fail("expected INCOMPLETE")
+        } catch (e: RestoreException) {
+            assertEquals(RestoreFailure.INCOMPLETE, e.failure)
+        }
+        assertTrue(target.marker.exists())
+        assertFalse("a read error is not proof of change: the marker is not broken", restorer.markerBroken())
+        settings.delete() // the disk is readable again
+        settings.writeBytes(saved)
+        runBlocking { target.restorer().recover() }
+        assertFalse(target.marker.exists())
+        assertArrayEquals(LOCAL_KEY, target.installedKey)
+        assertEquals(mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)), target.receiptHashes())
     }
 
     @Test
@@ -464,7 +482,8 @@ class RestoreFixRound2Test {
     }
 
     @Test
-    fun `REQ-OPS-178 an SMS that arrives while a restore is unfinished is not stored under a stale key`() {
+    fun `REQ-OPS-178 an SMS that arrives while a restore is unfinished is deferred, then recorded once`() {
+        var pendingNow = true
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         try {
             val clock = Clock.fixed(Instant.parse("2026-10-15T09:00:00Z"), ZoneOffset.UTC)
@@ -475,7 +494,15 @@ class RestoreFixRound2Test {
                     override fun wipe() = Unit
                 }
             val pipeline =
-                SmsPipeline(db, MemorySettings(), MemoryNotifications(), clock, MemoryGate(), key, restorePending = RestorePending { true })
+                SmsPipeline(
+                    db,
+                    MemorySettings(),
+                    MemoryNotifications(),
+                    clock,
+                    MemoryGate(),
+                    key,
+                    restorePending = RestorePending { pendingNow },
+                )
             val message =
                 IncomingMessage(
                     CaptureSource.SMS,
@@ -483,9 +510,13 @@ class RestoreFixRound2Test {
                     "Your card ending 4512 was charged EGP 99.00 at PHARMACY on 12/03/2026 14:05",
                     1_000L,
                 )
-            assertEquals(Disposition.DROPPED, runBlocking { pipeline.accept(message) })
+            assertEquals(Disposition.DEFERRED, runBlocking { pipeline.accept(message) })
             assertTrue(runBlocking { db.sources().all() }.isEmpty())
             assertTrue(runBlocking { db.expenses().all() }.isEmpty())
+            pendingNow = false // the restore is finished: the same job records it, exactly once
+            assertEquals(Disposition.RECORDED, runBlocking { pipeline.accept(message) })
+            assertEquals(Disposition.RECORDED, runBlocking { pipeline.accept(message) })
+            assertEquals(1, runBlocking { db.sources().all() }.size)
         } finally {
             db.close()
         }

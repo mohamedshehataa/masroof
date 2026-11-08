@@ -112,7 +112,9 @@ object WealthValidation {
                 }
             }.joinToString("")
 
-    fun parseDate(text: String): LocalDate? = runCatching { LocalDate.parse(western(text)) }.getOrNull()
+    fun parseDate(text: String): LocalDate? =
+        eg.masroof.core.UserDate
+            .parse(text)
 
     /** A signed balance: `12,500.50`, `-300`, `0`. Null when it is not an amount. */
     fun parseBalance(text: String): Long? {

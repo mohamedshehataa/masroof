@@ -88,8 +88,11 @@ class WorkManagerSmsScheduler
         }
     }
 
-/** What the pipeline did with one message. [RECORDED] is also the answer for a message that was recorded before. */
-enum class Disposition { RECORDED, REVIEW, DROPPED }
+/**
+ * What the pipeline did with one message. [RECORDED] is also the answer for a message that was recorded before. [DEFERRED]: nothing was
+ * stored because a restore is unfinished; the job is tried again later (never dropped).
+ */
+enum class Disposition { RECORDED, REVIEW, DROPPED, DEFERRED }
 
 /** What one write transaction decided; the notices are shown after it committed, never inside it. */
 private data class Stored(
@@ -152,8 +155,11 @@ class SmsPipeline
                     // After a restore the key is the backup's: the id is hashed with whatever key is current under the lock.
                     val id = LocalIdHasher.id(idKey.get(), message)
                     // A restore that committed and did not finish (or is running) has not installed its key yet: an id hashed now would
-                    // be wrong. The message is dropped (a later SMS scan finds it again); nothing is stored under a stale key.
-                    if (restorePending.active()) return@withLock Stored(Disposition.DROPPED)
+                    // be wrong. The message is DEFERRED, never dropped: the job is retried and records it once the restore is finished.
+                    if (restorePending.active()) {
+                        android.util.Log.i("SmsIntake", "intake deferred: restore pending")
+                        return@withLock Stored(Disposition.DEFERRED)
+                    }
                     db.withTransaction {
                         if (gate.isOpen() &&
                             isAllowed(message)
@@ -639,6 +645,9 @@ class SmsUploader
 /** After this many tries a message the database keeps refusing is given up on (its text leaves the WorkManager input with the job). */
 internal const val MAX_INTAKE_ATTEMPTS = 10
 
+/** A deferred message (restore unfinished) has its own, much longer cap: about six days at WorkManager's five-hour backoff ceiling. */
+internal const val MAX_DEFERRED_ATTEMPTS = 40
+
 /**
  * Turns the outcome of one intake into the job result: a database that cannot write (full disk, locked) wrote nothing, so the job
  * is tried again later with its input intact; any other failure is final. Nothing here touches the network.
@@ -648,8 +657,12 @@ internal suspend fun intakeResult(
     accept: suspend () -> Disposition,
 ): ListenableWorker.Result =
     try {
-        accept()
-        ListenableWorker.Result.success()
+        if (accept() == Disposition.DEFERRED) {
+            // A restore is unfinished: the message waits in the job (WorkManager's backoff tops out at hours), for days, then is given up.
+            if (attempt < MAX_DEFERRED_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+        } else {
+            ListenableWorker.Result.success()
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (

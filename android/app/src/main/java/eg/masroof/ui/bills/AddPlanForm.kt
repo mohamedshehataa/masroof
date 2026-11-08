@@ -57,7 +57,9 @@ data class FormDerived(
 
 private fun western(text: String): String = text.trim().map { if (it in '٠'..'٩') '0' + (it - '٠') else it }.joinToString("")
 
-fun parseDate(text: String): LocalDate? = runCatching { LocalDate.parse(western(text)) }.getOrNull()
+fun parseDate(text: String): LocalDate? =
+    eg.masroof.core.UserDate
+        .parse(text)
 
 private fun parseInt(text: String): Int? = western(text).toIntOrNull()
 

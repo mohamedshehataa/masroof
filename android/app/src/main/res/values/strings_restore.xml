@@ -32,5 +32,7 @@
     <string name="restore_err_incomplete">The restore did not finish. Close and reopen Masroof and it will complete.</string>
     <string name="restore_err_partial">Your data was replaced but the restore did not finish. Restore the same file again.</string>
     <string name="restore_err_memory">Not enough memory to check this backup. Close other apps and try again. Nothing was changed.</string>
+    <string name="restore_pending_banner">SMS capture and backups are paused until the restore finishes.</string>
+    <string name="restore_pending_finish">Finish the restore</string>
     <string name="restore_err_failed">The restore could not finish. Nothing was changed.</string>
 </resources>

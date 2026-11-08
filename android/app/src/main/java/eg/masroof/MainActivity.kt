@@ -287,6 +287,10 @@ private fun MasroofRoot(
                 }
             }
         },
+        topBar = {
+            eg.masroof.ui.settings
+                .RestorePendingBanner(onOpenSettings = { nav.navigate(SETTINGS_ROUTE) })
+        },
         floatingActionButton = {
             if (destination?.route !in FAB_HIDDEN_ROUTES) {
                 FloatingActionButton(onClick = { nav.navigate("add") }) {

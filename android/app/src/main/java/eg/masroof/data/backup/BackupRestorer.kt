@@ -440,22 +440,27 @@ class BackupRestorer(
         validatedSha: String,
         swapped: Boolean,
         includeTables: Boolean,
-    ): Boolean =
+    ): Staging =
         try {
             val validated = File(env.stageRoot, VALIDATED_FILE)
             val info = JSONObject(validated.readText())
             val fresh = File(env.stageRoot, NEW_RECEIPTS)
-            sha256File(validated) == validatedSha &&
-                sha256File(File(env.stageRoot, SETTINGS_FILE)) == info.getString("settings") &&
-                sha256File(File(env.stageRoot, KEY_FILE)) == info.getString("key") &&
-                // a missing receipts folder is accepted only once the marker says the swap began (the folder was verified before it moved)
-                (if (fresh.exists()) receiptsDigest(fresh) == info.getString("receipts") else swapped) &&
-                (!includeTables || tablesDigest() == info.getString("tables"))
+            val same =
+                sha256File(validated) == validatedSha &&
+                    sha256File(File(env.stageRoot, SETTINGS_FILE)) == info.getString("settings") &&
+                    sha256File(File(env.stageRoot, KEY_FILE)) == info.getString("key") &&
+                    // a missing receipts folder is accepted only once the marker says the swap began (it was verified before it moved)
+                    (if (fresh.exists()) receiptsDigest(fresh) == info.getString("receipts") else swapped) &&
+                    (!includeTables || tablesDigest() == info.getString("tables"))
+            if (same) Staging.MATCH else Staging.DIFFERS
         } catch (_: IOException) {
-            false
+            // A read error is not proof that the files changed: the caller retries instead of marking the restore broken.
+            Staging.UNREADABLE
         } catch (_: org.json.JSONException) {
-            false
+            Staging.DIFFERS
         }
+
+    private enum class Staging { MATCH, DIFFERS, UNREADABLE }
 
     fun hasMarker(): Boolean = markerFile().exists()
 
@@ -489,8 +494,9 @@ class BackupRestorer(
     /** Deletes a staged restore (Cancel at the confirmation, or a failure): nothing else was changed. */
     @Suppress("UnusedParameter") // kept so callers pass what they staged
     fun discard(staged: StagedRestore?) {
-        // A committed restore that did not finish owns the staging folder: Cancel and failures never delete it.
-        if (!hasMarker()) wipeStage()
+        // A committed restore that did not finish owns the staging folder: Cancel and failures never delete it. A BROKEN marker needs
+        // nothing from it (the same file is restored again), so the new staging, and the raw key in it, is wiped and the marker stays.
+        if (!hasMarker() || markerBroken()) wipeStage()
     }
 
     /**
@@ -501,11 +507,13 @@ class BackupRestorer(
     suspend fun apply(staged: StagedRestore) {
         // BEFORE anything changes: the staging (settings, key, receipts and the table files) must still be exactly what check 7 passed.
         // The digest is the one computed in memory when the checks passed, so editing the files AND validated.json is caught too.
-        if (!stagingMatches(staged.validatedSha, swapped = false, includeTables = true)) {
-            wipeStage()
-            throw RestoreException(RestoreFailure.FAILED)
-        }
         val previous = readMarker()
+        // With a broken marker the phone is still partly restored: a refusal here must say so, not "nothing changed".
+        val refused = if (previous?.broken == true) RestoreFailure.PARTIAL else RestoreFailure.FAILED
+        if (stagingMatches(staged.validatedSha, swapped = false, includeTables = true) != Staging.MATCH) {
+            wipeStage()
+            throw RestoreException(refused)
+        }
         val nonce = pickNonce()
         writeMarker(Marker(nonce, staged.validatedSha, swapped = false, broken = false))
         try {
@@ -517,7 +525,7 @@ class BackupRestorer(
             // Rolled back: nothing changed. The previous data and receipts are intact (and an earlier unfinished restore stays marked).
             if (previous != null) writeMarker(previous) else discardMarker()
             if (previous == null) wipeStage()
-            throw RestoreException(RestoreFailure.FAILED).also { it.addSuppressed(e) }
+            throw RestoreException(refused).also { it.addSuppressed(e) }
         }
         env.hooks.afterCommit()
         finishGuarded()
@@ -545,10 +553,15 @@ class BackupRestorer(
         val marker = readMarker() ?: throw RestoreException(RestoreFailure.PARTIAL)
         // The commit is done: staging that is not what was confirmed (or cannot be read) is never applied and never dropped. The marker
         // is marked broken and the user restores the same file again, which replaces everything and completes the restore.
-        if (!stagingMatches(marker.validated, marker.swapped, includeTables = false)) {
-            returnOldReceipts()
-            writeMarker(Marker(marker.nonce, marker.validated, marker.swapped, broken = true))
-            throw RestoreException(RestoreFailure.PARTIAL)
+        when (stagingMatches(marker.validated, marker.swapped, includeTables = false)) {
+            Staging.MATCH -> Unit
+            // A read error proves nothing: the marker stays as it is and the next start (or the banner's action) retries.
+            Staging.UNREADABLE -> throw RestoreException(RestoreFailure.INCOMPLETE)
+            Staging.DIFFERS -> {
+                returnOldReceipts()
+                writeMarker(Marker(marker.nonce, marker.validated, marker.swapped, broken = true))
+                throw RestoreException(RestoreFailure.PARTIAL)
+            }
         }
         if (!marker.swapped) writeMarker(Marker(marker.nonce, marker.validated, swapped = true, broken = false))
         swapReceipts()

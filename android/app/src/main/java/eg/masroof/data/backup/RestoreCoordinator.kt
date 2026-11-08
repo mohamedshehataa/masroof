@@ -114,6 +114,29 @@ class RestoreCoordinator
         private val mutableState = MutableStateFlow<RestoreState>(RestoreState.Idle)
         val state: StateFlow<RestoreState> get() = mutableState
 
+        private val mutablePending = MutableStateFlow(false)
+
+        /** True while a restore marker is on disk: SMS capture and backups are paused until it is finished (shown as a lasting banner). */
+        val pending: StateFlow<Boolean> get() = mutablePending
+
+        private fun refreshPending() {
+            mutablePending.value = runCatching { restorer.hasMarker() }.getOrDefault(false)
+        }
+
+        init {
+            refreshPending()
+            // Every state change can move the marker (a failure after the commit keeps it, a finished restore removes it).
+            scope.launch { mutableState.collect { refreshPending() } }
+        }
+
+        /** The banner's action: runs the recovery now (a broken marker needs the same file restored again, which the message says). */
+        fun finishPending() {
+            scope.launch(io) {
+                lock.mutex.withLock { recoverCore()?.let { mutableState.value = RestoreState.Failed(it.failure, it.neededMb) } }
+                refreshPending()
+            }
+        }
+
         private var uri: Uri? = null
         private var header: BackupHeader? = null
         private var staged: StagedRestore? = null
@@ -301,6 +324,7 @@ class RestoreCoordinator
                 try {
                     // Never crashes the app: a failure becomes a message the Settings section shows.
                     recoverCore()?.let { mutableState.value = RestoreState.Failed(it.failure, it.neededMb) }
+                    refreshPending()
                 } finally {
                     lock.mutex.unlock()
                 }

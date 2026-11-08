@@ -188,6 +188,7 @@ class RestoreFixRoundTest {
         File(target.stage, "local-id.key").writeBytes(ByteArray(32) { 7 }) // another file's key, swapped in after the checks
         try {
             runBlocking { target.restorer().recover() }
+            fail("changed staging must end in PARTIAL")
         } catch (e: RestoreException) {
             assertEquals(RestoreFailure.PARTIAL, e.failure)
         }

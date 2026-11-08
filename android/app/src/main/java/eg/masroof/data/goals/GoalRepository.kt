@@ -272,17 +272,9 @@ class GoalRepository
 /** What the goal forms make of typed text. */
 object GoalInput {
     /** A calendar date typed as `yyyy-mm-dd` in Western or Arabic-Indic digits; null when it is not a real date. */
-    fun parseDate(text: String): LocalDate? {
-        val western = text.trim().map { if (it in '٠'..'٩') '0' + (it - '٠') else it }.joinToString("")
-        if (!DATE.matches(western)) return null
-        return try {
-            LocalDate.parse(western)
-        } catch (_: java.time.DateTimeException) {
-            null
-        }
-    }
-
-    private val DATE = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")
+    fun parseDate(text: String): LocalDate? =
+        eg.masroof.core.UserDate
+            .parse(text)
 }
 
 /** Emoji for the picker: money, saving, home, travel, school, family. */
