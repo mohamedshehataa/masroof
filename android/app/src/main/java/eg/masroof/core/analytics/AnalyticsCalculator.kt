@@ -48,7 +48,7 @@ data class SummaryResult(
     val projectedWeekdayAware: Long,
     val income: Long,
     val savingsRateBps: Int?,
-    /** Null while no total budget exists (budgets come with STORY-180). */
+    /** The monthly total budget's remaining amount (REQ-AN-155); null while none exists. */
     val remainingBudget: Long?,
     val topCategories: List<CategoryLine>,
     val daysLeft: Int,
@@ -94,6 +94,7 @@ object AnalyticsCalculator {
     internal const val PENDING = "PENDING_REVIEW"
 
     /**
+     * @param budgets stored budgets; only the total one feeds `remainingBudget`
      * @param rows entries from the start of the previous period to the end of [period]; each is assigned to its period here
      */
     fun compute(
@@ -102,6 +103,7 @@ object AnalyticsCalculator {
         rows: List<AnalyticsRow>,
         categories: List<AnalyticsCategory>,
         includeCash: Boolean,
+        budgets: List<BudgetSpec> = emptyList(),
     ): PeriodAnalytics {
         val prev = period.previous()
         val cur = inRange(rows, period)
@@ -127,7 +129,8 @@ object AnalyticsCalculator {
                     Projections.weekdayAware(period.from, daily(cur, period, elapsed, includeCash), period.lengthDays()),
                 income = income,
                 savingsRateBps = Projections.savingsRateBps(income, total),
-                remainingBudget = null,
+                remainingBudget =
+                    BudgetCalculator.totalRemaining(budgets, period, period.from.dayOfMonth, today, rows, categories, includeCash),
                 topCategories = lines.take(TOP_CATEGORIES),
                 daysLeft = period.daysLeft(today),
                 pendingReviewCount = cur.count { it.status == PENDING },
