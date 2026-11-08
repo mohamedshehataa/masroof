@@ -42,6 +42,7 @@ private const val MIN = 60_000L
 class ServerImportDuplicateTest {
     private lateinit var w: AnswerWorld
     private val source = FakeImportSource(rows = emptyList())
+    private val importStore = MemoryImportStore()
     private lateinit var repo: DefaultDuplicateRepository
 
     @Before
@@ -89,6 +90,7 @@ class ServerImportDuplicateTest {
             LocalDataSignal(),
             w.clock,
             Dispatchers.Unconfined,
+            importStore,
         ).run {}
     }
 
@@ -176,12 +178,13 @@ class ServerImportDuplicateTest {
         }
 
     @Test
-    fun `REQ-DEDUP-066 a server row far in the past gets no PENDING_REVIEW because no card could show`() =
+    fun `REQ-DEDUP-066 a twin older than 100 days is still PENDING_REVIEW with a card (no age limit)`() =
         runTest {
-            val old = Instant.parse("2026-05-01T10:00:00Z").toEpochMilli()
+            val old = Instant.parse("2026-06-01T21:04:10Z").toEpochMilli()
             local(at = old)
-            import(serverExpense("srv-old", amount = 100, at = old + MIN))
-            assertEquals("CONFIRMED", row("srv-old").status)
+            import(serverExpense("srv-old", amount = 100, at = old + 80_000))
+            assertEquals("PENDING_REVIEW", row("srv-old").status)
+            assertEquals(listOf("local|srv-old"), cards().map { it.key })
         }
 
     @Test

@@ -110,13 +110,18 @@ class DefaultDuplicateRepository
     ) : DuplicateRepository {
         override fun observeCards(): Flow<List<DuplicateCard>> {
             val since = clock.millis() - DUPLICATE_LOOKBACK_DAYS * DAY_MS
+            // the STORY-182 server pairs have no age limit: their rows come from their own queries, merged in by id
+            val serverRows = combine(db.expenses().observeServerPairRows(), db.sources().observeServerPairChannels()) { r, c -> r to c }
             return combine(
                 db.expenses().observeLiveSince(since),
                 db.sources().observeChannels(since),
                 db.expenses().observeReferencedIds(),
                 prefs.state,
-            ) { entries, channels, referenced, state ->
+                serverRows,
+            ) { recent, recentChannels, referenced, state, (server, serverChannels) ->
                 val blocked = state.linkedIds() + referenced
+                val entries = (recent + server).distinctBy { it.id }
+                val channels = (recentChannels + serverChannels).distinctBy { it.id }
                 DuplicateMatcher
                     .pairs(entries, group(channels), blocked, state.keptApart)
                     .map { DuplicateCard(it.manual, it.capture, it.captureSources) }

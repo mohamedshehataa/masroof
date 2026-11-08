@@ -174,6 +174,13 @@ private fun Result(
             )
         }
     }
+    if (d.skippedOther > 0) {
+        Text(
+            pluralStringResource(R.plurals.import_skipped_other, d.skippedOther, importCount(d.skippedOther, digits)),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
     TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = TARGET_DP.dp)) {
         Text(stringResource(R.string.import_dismiss))
     }

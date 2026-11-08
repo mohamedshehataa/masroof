@@ -1,11 +1,9 @@
 package eg.masroof.data.serverimport
 
-import android.content.Context
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.auth.SessionManager
-import eg.masroof.data.auth.TinkKeystore
-import eg.masroof.ingest.LocalIdKey
 import kotlinx.coroutines.CancellationException
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,10 +23,16 @@ interface SessionKeystore {
  * sealed again under the keyset the next use creates ([LocalIdKey.surviving]).
  */
 class TinkSessionKeystore(
-    private val context: Context,
-    private val localIdKey: LocalIdKey,
+    private val onDestroyed: () -> Unit = {},
 ) : SessionKeystore {
-    override fun destroy() = localIdKey.surviving { TinkKeystore.destroy(context) }
+    /**
+     * INTERIM (fix round 1): the keyset is NOT deleted yet. The local message id key still lives in it, and a kill between deleting
+     * the keyset and sealing that key again would lose the key. It is deleted once the key moves to `LocalKeystore` (STORY-186), in
+     * a crash-safe order; until then only the session blob is gone.
+     */
+    override fun destroy() {
+        onDestroyed()
+    }
 }
 
 /**
@@ -60,11 +64,22 @@ class DefaultServerForgetter
             } catch (_: Exception) {
                 // the blob is already gone: an undeletable key protects nothing
             }
-            settings.update { it.copy(serverUrl = NO_SERVER) }
+            // a DataStore write can fail (full disk): retried, and if it still fails the caller keeps `forgetPending` and tries again
+            var failure: IOException? = null
+            repeat(URL_ATTEMPTS) {
+                try {
+                    settings.update { it.copy(serverUrl = NO_SERVER) }
+                    return
+                } catch (e: IOException) {
+                    failure = e
+                }
+            }
+            throw failure ?: IOException("server URL not deleted")
         }
 
         companion object {
             /** An empty stored URL means "no server": the base URL cannot be built, so no request can be made. */
             const val NO_SERVER = ""
+            private const val URL_ATTEMPTS = 3
         }
     }

@@ -187,7 +187,7 @@ class ApiRemoteSource
     constructor(
         private val settings: SettingsRepository,
         bare: OkHttpClient,
-        session: SessionManager,
+        private val session: SessionManager,
     ) : RemoteSource, ParsedRemote, ExpenseDeleter {
         private var cachedKey: String? = null
         private var cachedRetrofit: Retrofit? = null
@@ -198,12 +198,19 @@ class ApiRemoteSource
                 .newBuilder()
                 .addInterceptor(BearerInterceptor(session))
                 .authenticator(TokenAuthenticator(session))
+                // a redirect would re-send the bearer token to wherever it points: never follow (REQ-SEC-065)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                // a hostile server cannot make the phone buffer an unbounded body
+                .addNetworkInterceptor(BoundedBodyInterceptor(MAX_RESPONSE_BYTES))
                 // no request outlives the claim the uploader holds on its row (UPLOAD_CLAIM_TTL_MILLIS)
                 .callTimeout(CALL_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
 
         /** The authenticated Retrofit; the one-time import (`data/serverimport`) builds its read-only calls on it. */
         internal suspend fun retrofit(): Retrofit {
+            // no session, no request: after the one-time import (or before a sign-in) nothing can reach the network (REQ-SEC-065)
+            if (session.memberId() == null) throw IOException("No session")
             val s = settings.current()
             val base = normalizeServerUrl(s.serverUrl) ?: throw IOException("Invalid server URL")
             val key = base
@@ -374,5 +381,6 @@ class ApiRemoteSource
         private companion object {
             const val PAGE_LIMIT = 200
             const val CALL_TIMEOUT_SECONDS = 90L
+            const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
         }
     }

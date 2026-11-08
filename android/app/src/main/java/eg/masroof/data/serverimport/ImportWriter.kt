@@ -5,7 +5,6 @@ import eg.masroof.data.answers.EntrySources
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
-import eg.masroof.data.edit.DUPLICATE_LOOKBACK_DAYS
 
 /** What the run knows when it writes a chunk of expenses. */
 internal class ImportContext(
@@ -35,7 +34,6 @@ internal enum class WriteOutcome {
     CLASH,
 }
 
-private const val MS_PER_DAY = 24L * 60 * 60 * 1000
 private const val PENDING_REVIEW = "PENDING_REVIEW"
 private const val UNKNOWN_METHOD = "UNKNOWN"
 
@@ -104,7 +102,7 @@ internal class ImportWriter(
         server: ExpenseEntity,
         ctx: ImportContext,
     ): Boolean {
-        if (server.occurredAtMillis < ctx.nowMillis - DUPLICATE_LOOKBACK_DAYS * MS_PER_DAY) return false
+        // no age limit: a server row never becomes a silent duplicate (the card reads its pair at any age)
         val asPending = server.copy(status = PENDING_REVIEW)
         val serverSources = EntrySources(setOf(DuplicateMatcher.SERVER_IMPORT))
         return db

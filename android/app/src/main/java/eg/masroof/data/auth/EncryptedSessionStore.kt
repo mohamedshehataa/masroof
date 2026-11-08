@@ -87,9 +87,17 @@ class EncryptedSessionStore(
 
 /** Defers building the Keystore-backed cipher until first use. */
 class LazyTokenCipher(
-    factory: () -> TokenCipher,
+    private val factory: () -> TokenCipher,
 ) : TokenCipher {
-    private val delegate by lazy(factory)
+    @Volatile private var cached: TokenCipher? = null
+
+    private val delegate: TokenCipher
+        get() = cached ?: synchronized(this) { cached ?: factory().also { cached = it } }
+
+    /** The Keystore key was deleted (the one-time import forgot the server): the next use builds a fresh cipher, never the old one. */
+    fun invalidate() {
+        cached = null
+    }
 
     override fun encrypt(plain: ByteArray) = delegate.encrypt(plain)
 

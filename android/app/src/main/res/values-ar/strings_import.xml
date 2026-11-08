@@ -25,6 +25,14 @@
         <item quantity="many">%1$s عملية معرفناش نستوردها</item>
         <item quantity="other">%1$s عملية معرفناش نستوردها</item>
     </plurals>
+    <plurals name="import_skipped_other">
+        <item quantity="zero">%1$s ميزانية أو حساب معرفناش نستوردهم</item>
+        <item quantity="one">ميزانية أو حساب واحد معرفناش نستورده</item>
+        <item quantity="two">ميزانيتين أو حسابين معرفناش نستوردهم</item>
+        <item quantity="few">%1$s ميزانيات أو حسابات معرفناش نستوردها</item>
+        <item quantity="many">%1$s ميزانية أو حساب معرفناش نستوردهم</item>
+        <item quantity="other">%1$s ميزانية أو حساب معرفناش نستوردهم</item>
+    </plurals>
     <string name="import_error_network">معرفناش نوصل للسيرفر، جرب تاني</string>
     <string name="import_error_server">السيرفر فيه مشكلة، جرب تاني</string>
     <string name="import_error_data">السيرفر بعت بيانات مش متوقعة</string>

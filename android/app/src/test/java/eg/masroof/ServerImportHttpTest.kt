@@ -63,6 +63,7 @@ class ServerImportHttpTest {
     private lateinit var w: AnswerWorld
     private val server = MockWebServer()
     private val seen = CopyOnWriteArrayList<String>()
+    private val importStore = MemoryImportStore()
     private val expensePages = AtomicInteger()
 
     /** Every request of any client, recorded before it leaves (REQ-SEC-065). */
@@ -85,6 +86,8 @@ class ServerImportHttpTest {
     @Volatile private var pageBody: ((Int, Int) -> String)? = null
 
     @Volatile private var refreshStatus = 200
+
+    @Volatile private var categoriesOverride: MockResponse? = null
     private var liveCount = 1_240
     private val store = FakeSessionStore(LoadedSession.Found(session("access-1", "refresh-1", ME_ID)))
 
@@ -150,7 +153,7 @@ class ServerImportHttpTest {
                                     401,
                                 ).build()
                         path.endsWith("/api/expenses") -> expenses(request)
-                        path.endsWith("/api/categories") -> json(categories())
+                        path.endsWith("/api/categories") -> categoriesOverride ?: json(categories())
                         path.endsWith("/api/accounts") -> json(accounts())
                         path.endsWith("/api/members") -> json(members())
                         path.endsWith("/api/budgets") -> json(budgets())
@@ -235,6 +238,7 @@ class ServerImportHttpTest {
             LocalDataSignal(),
             w.clock,
             Dispatchers.IO,
+            importStore,
         )
 
     @Test
@@ -320,6 +324,43 @@ class ServerImportHttpTest {
         }
 
     @Test
+    fun `REQ-SEC-065 a response body above the cap stops the run as unexpected data`() =
+        runTest {
+            build()
+            categoriesOverride = json("{\"items\":[],\"pad\":\"" + "x".repeat(9 * 1024 * 1024) + "\"}")
+            assertEquals(ImportResult.Failed(ImportFailureKind.UNEXPECTED_DATA), importer().run {})
+            assertEquals(0, w.db.expenses().count())
+        }
+
+    @Test
+    fun `REQ-SEC-065 a redirect is never followed (the bearer token would go with it)`() =
+        runTest {
+            build()
+            categoriesOverride =
+                MockResponse
+                    .Builder()
+                    .code(302)
+                    .addHeader("Location", "https://evil.example/x")
+                    .build()
+            assertEquals(ImportResult.Failed(ImportFailureKind.SERVER), importer().run {})
+            assertTrue(seen.none { it.contains("evil") })
+            assertEquals(1, server.requestCount)
+        }
+
+    @Test
+    fun `REQ-SEC-065 a lookup list above the cap stops the run`() =
+        runTest {
+            build()
+            val many =
+                (0 until 2_001).joinToString(",") { i ->
+                    "{\"id\":\"${uuid(1, i)}\",\"householdId\":\"$HOUSEHOLD\",\"nameEn\":\"c$i\",\"nameAr\":\"x\",\"isEssential\":false," +
+                        "\"sortOrder\":$i,\"archived\":false,\"color\":\"red\"}"
+                }
+            categoriesOverride = json("{\"items\":[$many]}")
+            assertEquals(ImportResult.Failed(ImportFailureKind.UNEXPECTED_DATA), importer().run {})
+        }
+
+    @Test
     fun `REQ-OPS-174 a refresh token the server rejects ends the run with Sign in again and leaves local data alone`() =
         runTest {
             build()
@@ -402,7 +443,23 @@ class ServerImportHttpTest {
             budgets.create(BudgetDraft("cat-groceries", 50_000, rollover = false))
             budgets.observe().first()
             // even a direct call of the frozen client cannot build a request: the server URL is gone
+            // CSV export, Settings (its view model restores the session and saves) and the review list: Room only
+            eg.masroof.data.export
+                .CsvExporter(w.db)
+                .export(
+                    eg.masroof.data.export
+                        .ExportRange(java.time.LocalDate.of(2026, 1, 1), java.time.LocalDate.of(2026, 12, 31)),
+                    java.io.ByteArrayOutputStream(),
+                )
+            val settingsVm =
+                eg.masroof.ui.viewmodel
+                    .SettingsViewModel(w.settings, manager2, TestAuth.eraser())
+            settingsVm.state.first { it.showServer == false }
+            settingsVm.save()
+            // even with a server URL typed in again, nothing is sent without a session
+            w.settings.update { it.copy(serverUrl = server.url("/").toString()) }
             runCatching { remote2.fetchCategories() }
+            runCatching { remote2.fetchAccounts() }
             assertEquals(emptyList<String>(), seen.toList())
             assertEquals(requestsBefore, server.requestCount)
         }

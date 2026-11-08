@@ -34,6 +34,7 @@ class ServerImportViewModelTest {
     private lateinit var w: AnswerWorld
     private val store = FakeSessionStore(LoadedSession.Found(session("a", "r", SRV_ME)))
     private val source = FakeImportSource()
+    private val importStore = MemoryImportStore()
     private val network = FakeNetwork()
     private lateinit var manager: SessionManager
 
@@ -64,8 +65,9 @@ class ServerImportViewModelTest {
                 LocalDataSignal(),
                 w.clock,
                 Dispatchers.IO,
+                importStore,
             )
-        return ImportViewModel(importer, manager, network)
+        return ImportViewModel(importer, manager, network, importStore)
     }
 
     @Test
@@ -89,14 +91,77 @@ class ServerImportViewModelTest {
                         LocalDataSignal(),
                         w.clock,
                         Dispatchers.IO,
+                        MemoryImportStore(),
                     ),
                     fresh,
                     network,
+                    MemoryImportStore(),
                 )
             // the session state is Restoring until read, then SignedOut: the card never shows
             none.state.await { true }
             fresh.restore()
             assertFalse(none.state.value.visible)
+        }
+
+    @Test
+    fun `REQ-OPS-174 REQ-SEC-065 a lost session keeps the card with Sign in until an import completes, even after leaving Settings`() =
+        runTest {
+            val first = vm()
+            first.state.await { it.visible }
+            assertTrue(importStore.pending)
+            // the server rejected the refresh token: the session ends; Settings is left and opened again (a new view model)
+            manager.logout()
+            val reopened = vm()
+            val s = reopened.state.await { it.visible && it.phase == ImportPhase.Failed(ImportFailureKind.SESSION) }
+            assertTrue(s.visible)
+            // the sign-in form opens only from the card
+            reopened.openSignIn()
+            assertTrue(reopened.state.await { it.signInOpen }.signInOpen)
+        }
+
+    @Test
+    fun `REQ-OPS-174 a fresh install with no session never sees the card`() =
+        runTest {
+            store.stored = LoadedSession.Empty
+            val fresh = SessionManager(store, FakeAuthRemote(), w.settings, Dispatchers.Unconfined)
+            fresh.restore()
+            val s =
+                ImportViewModel(
+                    ServerImporter(
+                        w.db,
+                        source,
+                        fresh,
+                        w.settings,
+                        w.repo,
+                        w.prefs,
+                        RecordingForgetter(),
+                        EraseLock(),
+                        LocalDataSignal(),
+                        w.clock,
+                        Dispatchers.IO,
+                        importStore,
+                    ),
+                    fresh,
+                    network,
+                    importStore,
+                ).state.await { true }
+            assertFalse(s.visible)
+        }
+
+    @Test
+    fun `REQ-SEC-065 the Server section and Members show only while a session exists`() =
+        runTest {
+            val settingsVm =
+                eg.masroof.ui.viewmodel
+                    .SettingsViewModel(w.settings, manager, TestAuth.eraser())
+            assertTrue(settingsVm.state.await { it.showServer }.showServer)
+            manager.logout()
+            assertFalse(settingsVm.state.await { !it.showServer }.showServer)
+            // saving digits with the URL gone still works (a blank URL is "no server")
+            settingsVm.onDigits(eg.masroof.core.DigitStyle.ARABIC_INDIC)
+            settingsVm.save()
+            settingsVm.state.await { it.saved }
+            assertEquals(eg.masroof.core.DigitStyle.ARABIC_INDIC, w.settings.current().digitStyle)
         }
 
     @Test

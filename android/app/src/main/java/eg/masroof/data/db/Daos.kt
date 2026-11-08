@@ -182,6 +182,18 @@ interface ExpenseDao {
     suspend fun findByServerId(serverId: String): ExpenseEntity?
 
     /**
+     * STORY-182 (REQ-DEDUP-066): imported rows still waiting on a decision, and the local rows that look like one of them, at any
+     * age (a pair is two rows 2 minutes apart, so no date window is needed). Typed columns only.
+     */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND (
+              (serverId IS NOT NULL AND source = 'SERVER_IMPORT' AND status = 'PENDING_REVIEW')
+              OR (serverId IS NULL AND amountMinor IN (SELECT amountMinor FROM expense WHERE serverId IS NOT NULL
+                AND source = 'SERVER_IMPORT' AND status = 'PENDING_REVIEW' AND deletedAtMillis IS NULL)))""",
+    )
+    fun observeServerPairRows(): Flow<List<ExpenseEntity>>
+
+    /**
      * STORY-182 (REQ-DEDUP-066): local rows with no server id that a server row of [amountMinor] / [currency] / [type] at [from]..[to]
      * (inclusive) may duplicate. Typed columns only; the matcher applies the whole rule.
      */
@@ -344,6 +356,17 @@ interface ExpenseSourceDao {
             WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since) ORDER BY id""",
     )
     fun observeChannels(since: Long): Flow<List<SourceChannel>>
+
+    /** STORY-182 (REQ-DEDUP-066): the channels of [ExpenseDao.observeServerPairRows], at any age. Typed columns only. */
+    @Query(
+        """SELECT id, expenseId, channel, senderId FROM expense_source WHERE expenseId IN (
+            SELECT id FROM expense WHERE deletedAtMillis IS NULL AND (
+              (serverId IS NOT NULL AND source = 'SERVER_IMPORT' AND status = 'PENDING_REVIEW')
+              OR (serverId IS NULL AND amountMinor IN (SELECT amountMinor FROM expense WHERE serverId IS NOT NULL
+                AND source = 'SERVER_IMPORT' AND status = 'PENDING_REVIEW' AND deletedAtMillis IS NULL))))
+            ORDER BY id""",
+    )
+    fun observeServerPairChannels(): Flow<List<SourceChannel>>
 
     /** STORY-173: a merge re-points exactly these sources to the surviving entry; Undo points them back. */
     @Query("UPDATE expense_source SET expenseId = :to WHERE id IN (:ids)")

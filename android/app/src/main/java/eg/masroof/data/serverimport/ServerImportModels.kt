@@ -129,3 +129,14 @@ interface ServerImportSource {
 
 /** Largest page the contract allows (`Limit` parameter). */
 const val IMPORT_PAGE_LIMIT = 200
+
+/** ISO 4217 codes that are not money (no currency, test, metals, funds): never imported. */
+private val NOT_MONEY = setOf("XXX", "XTS", "XAU", "XAG", "XPT", "XPD", "XDR", "XSU", "XUA", "XBA", "XBB", "XBC", "XBD")
+private const val CURRENCY_LENGTH = 3
+
+/** A real, spendable currency code: three capital letters that java knows, and not one of [NOT_MONEY]. */
+fun isRealCurrency(code: String): Boolean =
+    code.length == CURRENCY_LENGTH &&
+        code.all { it in 'A'..'Z' } &&
+        code !in NOT_MONEY &&
+        runCatching { java.util.Currency.getInstance(code) }.isSuccess

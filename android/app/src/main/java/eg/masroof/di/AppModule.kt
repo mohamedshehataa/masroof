@@ -210,12 +210,21 @@ object ProvidersModule {
         )
 
     @Provides @Singleton
-    fun sessionKeystore(
-        @ApplicationContext context: Context,
-        key: LocalIdKey,
-    ): eg.masroof.data.serverimport.SessionKeystore =
+    fun sessionKeystore(cipher: LazyTokenCipher): eg.masroof.data.serverimport.SessionKeystore =
         eg.masroof.data.serverimport
-            .TinkSessionKeystore(context, key)
+            .TinkSessionKeystore { cipher.invalidate() }
+
+    @Provides @Singleton
+    fun tokenCipher(
+        @ApplicationContext context: Context,
+    ): LazyTokenCipher = LazyTokenCipher { AeadTokenCipher(TinkKeystore.aead(context)) }
+
+    @Provides @Singleton
+    fun importStore(
+        @ApplicationContext context: Context,
+    ): eg.masroof.data.serverimport.ImportStore =
+        eg.masroof.data.serverimport
+            .PrefsImportStore(context.getSharedPreferences("masroof_server_import", Context.MODE_PRIVATE))
 
     @Provides @Singleton
     fun localIdKey(
@@ -282,10 +291,7 @@ object ProvidersModule {
     @Provides @Singleton
     fun sessionStore(
         @ApplicationContext context: Context,
-    ): SessionStore =
-        EncryptedSessionStore(
-            context.getSharedPreferences("masroof_session", Context.MODE_PRIVATE),
-            // Lazy: the Keystore is touched on the first (IO-thread) read, not at injection time on the main thread.
-            LazyTokenCipher { AeadTokenCipher(TinkKeystore.aead(context)) },
-        )
+        // Lazy: the Keystore is touched on the first (IO-thread) read, not at injection time on the main thread.
+        cipher: LazyTokenCipher,
+    ): SessionStore = EncryptedSessionStore(context.getSharedPreferences("masroof_session", Context.MODE_PRIVATE), cipher)
 }

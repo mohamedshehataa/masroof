@@ -25,8 +25,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.time.Clock
-import java.util.Currency
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,6 +44,8 @@ sealed interface ImportResult {
     data class Completed(
         val imported: Int,
         val skipped: Int,
+        /** Budgets (and accounts) that broke a limit: counted apart from entries. */
+        val skippedOther: Int = 0,
     ) : ImportResult
 
     /** The run stopped; credentials are kept so Import can be tapped again. */
@@ -53,8 +55,8 @@ sealed interface ImportResult {
 }
 
 private const val CHUNK = 200
-private const val MAX_PAGES = 5_000
-private const val CURRENCY_LENGTH = 3
+private const val MAX_PAGES = 600
+private const val MAX_ROWS = 100_000
 private const val MAX_THRESHOLD = 200
 private val EXPENSE_TYPES = setOf("EXPENSE", "INCOME", "REFUND", "TRANSFER", "CASH_WITHDRAWAL")
 private val STATUSES = setOf("CONFIRMED", "PENDING_REVIEW", "POSSIBLE_DUPLICATE", "IGNORED")
@@ -86,6 +88,7 @@ class ServerImporter
         private val signal: LocalDataSignal,
         private val clock: Clock,
         @IoDispatcher private val io: CoroutineDispatcher,
+        private val store: ImportStore,
     ) {
         private val writer = ImportWriter(db)
 
@@ -97,9 +100,28 @@ class ServerImporter
                 ImportResult.Failed(e.kind)
             } catch (_: SQLException) {
                 ImportResult.Failed(ImportFailureKind.STORAGE)
+            } catch (_: IOException) {
+                // a settings (DataStore) or preferences write that failed: an error state, never a crash
+                ImportResult.Failed(ImportFailureKind.STORAGE)
             }
 
+        /** True when a finished import still has credentials or the URL to delete (the forget was cut short or failed). */
+        fun forgetUnfinished(): Boolean = store.forgetPending
+
+        private suspend fun forgetNow() {
+            store.forgetPending = true
+            // a cancel arriving here cannot half-do it; the forgetter retries until the credentials and the URL are gone
+            withContext(NonCancellable) { forgetter.forget() }
+            store.clear()
+        }
+
         private suspend fun runChecked(onProgress: (ImportProgress) -> Unit): ImportResult {
+            // the import completed earlier but forgetting the server did not finish: finish it, import nothing again
+            if (store.forgetPending) {
+                forgetNow()
+                signal.changed()
+                return ImportResult.Completed(0, 0)
+            }
             // no session: nothing to import with, and no request is made
             val me = session.memberId() ?: return ImportResult.Failed(ImportFailureKind.SESSION)
             val stamp = clock.millis()
@@ -109,10 +131,10 @@ class ServerImporter
             applySettings(lookups.settings)
             val skippedBudgets = ctx.skippedBudgets
             val (imported, rejected) = writeExpenses(download.live, ctx.context, onProgress)
-            // the run completed: only now is the server forgotten, and a cancel arriving here cannot half-do it
-            withContext(NonCancellable) { forgetter.forget() }
+            // the run completed: only now is the server forgotten
+            forgetNow()
             signal.changed()
-            return ImportResult.Completed(imported, download.invalid + rejected + skippedBudgets)
+            return ImportResult.Completed(imported, download.invalid + rejected, skippedBudgets)
         }
 
         private class Lookups(
@@ -137,36 +159,38 @@ class ServerImporter
             var pages = 0
             do {
                 currentCoroutineContext().ensureActive()
-                if (++pages > MAX_PAGES) throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
+                if (++pages > MAX_PAGES) unexpected()
                 val batch = source.expenses(cursor, IMPORT_PAGE_LIMIT)
                 for (row in batch.rows) {
                     // soft-deleted and ignored rows are not imported; a row the server lists twice counts once
                     val e = (row as? ServerExpenseRow.Valid)?.expense
                     when {
                         e == null -> invalid++
-                        e.deleted || e.status == IGNORED || !seen.add(e.id) -> Unit
+                        e.deleted || !seen.add(e.id) -> Unit
+                        // ignored on the server: not imported, and said so in the message (it is one the household dropped there)
+                        e.status == IGNORED -> invalid++
                         valid(e) -> live += e
                         else -> invalid++
                     }
                 }
+                if (live.size + invalid > MAX_ROWS) unexpected()
                 onProgress(ImportProgress(ImportStage.DOWNLOADING, live.size + invalid, null))
                 cursor = batch.nextCursor
                 // a cursor that comes back would page forever
-                if (cursor != null && !cursors.add(cursor)) throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
+                if (cursor != null && !cursors.add(cursor)) unexpected()
             } while (cursor != null)
             return Downloaded(live, invalid)
         }
 
+        private fun unexpected(): Nothing = throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
+
         /** The checks of REQ-OPS-175: amount, currency, enums. The category id is checked against the category list when writing. */
         private fun valid(e: ServerExpense): Boolean =
             e.amountMinor in 1..MAX_MINOR &&
-                validCurrency(e.currency) &&
+                isRealCurrency(e.currency) &&
                 e.type in EXPENSE_TYPES &&
                 e.status in STATUSES &&
                 e.id.isNotBlank()
-
-        private fun validCurrency(code: String): Boolean =
-            code.length == CURRENCY_LENGTH && code.all { it in 'A'..'Z' } && runCatching { Currency.getInstance(code) }.isSuccess
 
         private class Written(
             val context: ImportContext,
@@ -187,8 +211,16 @@ class ServerImporter
                             .allCategories()
                             .filter { it.id.startsWith(DEFAULT_PREFIX) }
                             .associateBy { it.nameEn.trim().lowercase() }
-                    // a server category that is one of the phone's defaults (same English name) maps onto it; the rest keep their id
-                    val categoryMap = l.categories.associate { it.id to (defaults[it.nameEn.trim().lowercase()]?.id ?: it.id) }
+                    // The FIRST run maps a server category that is one of the phone's defaults (same English name) onto it and the rest
+                    // to their own id, and records that. Later runs only read the record: a rename on the phone never re-maps.
+                    val categoryMap =
+                        l.categories.associate { c ->
+                            c.id to
+                                (
+                                    store.categoryOf(c.id)
+                                        ?: (defaults[c.nameEn.trim().lowercase()]?.id ?: c.id).also { store.mapCategory(c.id, it) }
+                                )
+                        }
                     for (c in l.categories) {
                         if (categoryMap[c.id] != c.id) continue
                         lookups.insertCategoryIfAbsent(
@@ -204,25 +236,31 @@ class ServerImporter
                             ),
                         )
                     }
-                    for (a in l.accounts) {
+                    // accounts keep their server id (no name is ever matched); one with a currency that is not real is not imported
+                    val goodAccounts = l.accounts.filter { isRealCurrency(it.currency) }
+                    for (a in goodAccounts) {
                         lookups.insertAccountIfAbsent(AccountEntity(a.id, a.label, a.currency, a.kind, a.institution, a.last4))
                     }
                     val memberMap = HashMap<String, String>()
                     l.members.forEachIndexed { i, m ->
-                        if (m.id == signedInMemberId) {
-                            memberMap[m.id] = ME_MEMBER_ID
+                        val known = store.memberOf(m.id)
+                        val local = known ?: (if (m.id == signedInMemberId) ME_MEMBER_ID else m.id).also { store.mapMember(m.id, it) }
+                        memberMap[m.id] = local
+                        if (local == ME_MEMBER_ID) {
                             // the phone's own "Me" takes the signed-in member's name, unless the user already renamed it
                             if (m.displayName.isNotBlank()) lookups.renameMemberIf(ME_MEMBER_ID, ME_MEMBER_NAME, m.displayName)
                         } else {
-                            memberMap[m.id] = m.id
-                            lookups.insertMemberIfAbsent(MemberEntity(m.id, m.displayName, i + 1))
+                            lookups.insertMemberIfAbsent(MemberEntity(local, m.displayName, i + 1))
                         }
                     }
-                    val skipped = writeBudgets(l.budgets, categoryMap, stamp)
+                    val liveCategories = lookups.allCategories().mapTo(HashSet()) { it.id }
+                    val skipped =
+                        writeBudgets(l.budgets, categoryMap.filterValues { it in liveCategories }, stamp) +
+                            (l.accounts.size - goodAccounts.size)
                     Written(
                         ImportContext(
                             categories = categoryMap,
-                            accountIds = l.accounts.mapTo(HashSet()) { it.id },
+                            accountIds = goodAccounts.mapTo(HashSet()) { it.id },
                             members = memberMap,
                             stampMillis = stamp,
                             nowMillis = stamp,
@@ -247,7 +285,7 @@ class ServerImporter
             for (b in budgets) {
                 val category = b.categoryId?.let { categoryMap[it] }
                 val unknownCategory = b.categoryId != null && category == null
-                if (b.amountMinor !in 1..MAX_BUDGET_MINOR || !validCurrency(b.currency) || unknownCategory) {
+                if (b.amountMinor !in 1..MAX_BUDGET_MINOR || !isRealCurrency(b.currency) || unknownCategory) {
                     skipped++
                     continue
                 }

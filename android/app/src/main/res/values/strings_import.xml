@@ -17,6 +17,10 @@
         <item quantity="one">%1$s entry could not be imported</item>
         <item quantity="other">%1$s entries could not be imported</item>
     </plurals>
+    <plurals name="import_skipped_other">
+        <item quantity="one">%1$s budget or account could not be imported</item>
+        <item quantity="other">%1$s budgets or accounts could not be imported</item>
+    </plurals>
     <string name="import_error_network">Couldn\'t reach the server, try again</string>
     <string name="import_error_server">The server had a problem, try again</string>
     <string name="import_error_data">The server sent unexpected data</string>

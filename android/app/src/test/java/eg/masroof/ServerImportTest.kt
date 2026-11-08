@@ -37,12 +37,14 @@ import org.robolectric.annotation.Config
 /** The importer on a scripted fake server (no network): REQ-OPS-175, REQ-SEC-065. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@Suppress("LargeClass") // one world (db, session, fake server) shared by every REQ of the importer
 class ServerImportTest {
     private lateinit var w: AnswerWorld
     private val store = FakeSessionStore(LoadedSession.Found(session("access-1", "refresh-1", SRV_ME)))
     private val auth = FakeAuthRemote()
     private val keystore = FakeSessionKeystore()
     private val source = FakeImportSource()
+    private val importStore = MemoryImportStore()
     private lateinit var manager: SessionManager
     private val progress = mutableListOf<ImportProgress>()
 
@@ -70,6 +72,7 @@ class ServerImportTest {
             LocalDataSignal(),
             w.clock,
             Dispatchers.Unconfined,
+            importStore,
         )
 
     private suspend fun run(importer: ServerImporter = importer()) = importer.run { progress += it }
@@ -230,7 +233,7 @@ class ServerImportTest {
                 )
             val result = run()
             // b4 (unknown category) and b5 (amount 0) break a limit: skipped and counted with the entries
-            assertEquals(ImportResult.Completed(1_240, 2), result)
+            assertEquals(ImportResult.Completed(1_240, 0, 2), result)
             assertEquals(
                 listOf("b1", "b2", "b3"),
                 w.db
@@ -283,6 +286,47 @@ class ServerImportTest {
                     .observeMembers()
                     .first()
                     .size,
+            )
+        }
+
+    @Test
+    fun `REQ-OPS-175 a category renamed on the phone between runs is not mapped again and nothing moves`() =
+        runTest {
+            val keep = RecordingForgetter()
+            // the first run is killed while saving (after the lookups and 600 rows were written)
+            try {
+                importer(keep).run { p -> if (p.stage == ImportStage.SAVING && p.done == 600) throw CancellationException("killed") }
+            } catch (_: CancellationException) {
+                // the process died
+            }
+            val groceries =
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .single { it.id == "cat-groceries" }
+            w.db.lookups().upsertCategories(listOf(groceries.copy(nameEn = "Supermarket")))
+            run(importer(keep))
+            val all = w.db.lookups().allCategories()
+            assertEquals(all.filter { it.id.startsWith("srv-") }.joinToString { "${it.id}/${it.nameEn}" }, 31, all.size)
+            assertEquals(
+                "cat-groceries",
+                w.db
+                    .expenses()
+                    .findByServerId("srv-exp-0031")!!
+                    .categoryId,
+            )
+            assertEquals(
+                "cat-groceries",
+                w.db
+                    .budgets()
+                    .byId("srv-bud-2")!!
+                    .categoryId,
+            )
+            assertTrue(
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .none { it.nameEn == "Groceries" },
             )
         }
 
@@ -459,7 +503,7 @@ class ServerImportTest {
                     ServerExpenseRow.Valid(serverExpense("ignored", status = "IGNORED")),
                     ServerExpenseRow.Valid(serverExpense("b", status = "POSSIBLE_DUPLICATE")),
                 )
-            assertEquals(ImportResult.Completed(2, 0), run())
+            assertEquals(ImportResult.Completed(2, 1), run())
             assertEquals(
                 setOf("a", "b"),
                 w.db
@@ -611,6 +655,81 @@ class ServerImportTest {
             )
             assertEquals("", w.settings.current().serverUrl)
             assertTrue(store.stored is LoadedSession.Empty)
+        }
+
+    /** A settings store whose write of an empty server URL fails [failures] times with an I/O error (a full disk). */
+    private inner class FlakyUrlSettings(
+        var failures: Int,
+    ) : eg.masroof.data.SettingsRepository by w.settings {
+        override suspend fun update(transform: (eg.masroof.data.AppSettings) -> eg.masroof.data.AppSettings) {
+            if (transform(w.settings.current()).serverUrl.isEmpty() && failures-- > 0) throw java.io.IOException("disk full")
+            w.settings.update(transform)
+        }
+    }
+
+    @Test
+    fun `REQ-SEC-065 a failed write of the server URL is retried, then reported, and the next Import finishes forgetting`() =
+        runTest {
+            w.settings.update { it.copy(serverUrl = "https://masroof.example/") }
+            val flaky = FlakyUrlSettings(failures = 3)
+            val forgetter = DefaultServerForgetter(manager, flaky, keystore)
+            // all 3 attempts of the first forget fail: an error state, never an exception out of run()
+            assertEquals(ImportResult.Failed(ImportFailureKind.STORAGE), run(importer(forgetter)))
+            assertTrue(importStore.forgetPending)
+            assertEquals("https://masroof.example/", w.settings.current().serverUrl)
+            val callsBefore = source.calls
+            // the next tap imports nothing again and only finishes forgetting
+            assertEquals(ImportResult.Completed(0, 0), run(importer(forgetter)))
+            assertEquals(callsBefore, source.calls)
+            assertEquals("", w.settings.current().serverUrl)
+            assertFalse(importStore.forgetPending)
+            assertFalse(importStore.pending)
+        }
+
+    @Test
+    fun `REQ-SEC-065 a forget that fails once is retried inside the same run`() =
+        runTest {
+            w.settings.update { it.copy(serverUrl = "https://masroof.example/") }
+            val forgetter = DefaultServerForgetter(manager, FlakyUrlSettings(failures = 1), keystore)
+            assertEquals(ImportResult.Completed(1_240, 0), run(importer(forgetter)))
+            assertEquals("", w.settings.current().serverUrl)
+        }
+
+    @Test
+    fun `REQ-OPS-175 more than 100,000 rows from a hostile server stop the run and store nothing`() =
+        runTest {
+            source.rows = (0..100_000).map { ServerExpenseRow.Valid(serverExpense("h-$it")) }
+            assertEquals(ImportResult.Failed(ImportFailureKind.UNEXPECTED_DATA), run())
+            assertEquals(0, count())
+        }
+
+    @Test
+    fun `REQ-OPS-175 a currency that is not money is not imported (XXX, XTS, XAU) and an account with one is skipped`() =
+        runTest {
+            source.accounts = serverAccounts() +
+                eg.masroof.data.serverimport
+                    .ServerAccount("acc-x", "X", "XXX", "CASH", null, null)
+            source.rows =
+                listOf(
+                    ServerExpenseRow.Valid(serverExpense("xxx", currency = "XXX")),
+                    ServerExpenseRow.Valid(serverExpense("xts", currency = "XTS")),
+                    ServerExpenseRow.Valid(serverExpense("xau", currency = "XAU")),
+                    ServerExpenseRow.Valid(serverExpense("usd", currency = "USD")),
+                )
+            // 3 entries and 1 account could not be imported; entries and others are counted apart
+            assertEquals(ImportResult.Completed(1, 3, 1), run())
+            assertTrue(w.db.expenses().find("xxx") == null)
+        }
+
+    @Test
+    fun `REQ-OPS-175 a second import offers nothing twice (budgets skipped count apart from entries)`() =
+        runTest {
+            source.budgets =
+                listOf(
+                    eg.masroof.data.serverimport
+                        .ServerBudget("b0", null, "MONTHLY", 0, "EGP", false, emptyList()),
+                )
+            assertEquals(ImportResult.Completed(1_240, 0, 1), run())
         }
 
     @Test

@@ -6,6 +6,7 @@ import eg.masroof.api.apis.CategoriesApi
 import eg.masroof.api.apis.MembersApi
 import eg.masroof.api.models.Expense
 import eg.masroof.data.remote.ApiRemoteSource
+import eg.masroof.data.remote.ResponseTooLargeException
 import eg.masroof.data.remote.apiJson
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
@@ -32,6 +33,8 @@ private const val MAX_TAGS = 10
 private const val MAX_TAG = 30
 private const val MAX_ANY_STRING = 4_000
 private const val MAX_NAME = 200
+private const val MAX_LIST = 2_000
+private val COLOR = Regex("^#[0-9A-Fa-f]{6}$")
 
 /**
  * The two reads the typed generated calls cannot do for this import: the expense page is decoded row by row with the generated
@@ -73,6 +76,8 @@ class ApiServerImportSource
                         throw ImportException(ImportFailureKind.SERVER)
                     }
                 }
+            } catch (_: ResponseTooLargeException) {
+                throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
             } catch (_: IOException) {
                 throw ImportException(ImportFailureKind.NETWORK)
             } catch (_: SerializationException) {
@@ -165,14 +170,24 @@ class ApiServerImportSource
         override suspend fun categories(): List<ServerCategory> =
             call { it.create(CategoriesApi::class.java).listCategories(includeArchived = true) }
                 .items
+                .also { capList(it.size) }
                 .map {
                     checkNames(it.nameEn, it.nameAr)
-                    ServerCategory(it.id.toString(), it.nameEn, it.nameAr, it.sortOrder, it.parentId?.toString(), it.color, it.archived)
+                    ServerCategory(
+                        it.id.toString(),
+                        it.nameEn,
+                        it.nameAr,
+                        it.sortOrder,
+                        it.parentId?.toString(),
+                        it.color?.takeIf { c -> COLOR.matches(c) },
+                        it.archived,
+                    )
                 }
 
         override suspend fun accounts(): List<ServerAccount> =
             call { it.create(AccountsApi::class.java).listAccounts() }
                 .items
+                .also { capList(it.size) }
                 .map {
                     checkNames(it.nickname.orEmpty(), it.institution.orEmpty(), it.last4.orEmpty())
                     val label =
@@ -183,6 +198,7 @@ class ApiServerImportSource
 
         override suspend fun members(): List<ServerMember> =
             call { it.create(MembersApi::class.java).listMembers() }
+                .also { capList(it.size) }
                 .map {
                     checkNames(it.displayName)
                     ServerMember(it.id.toString(), it.displayName)
@@ -191,6 +207,7 @@ class ApiServerImportSource
         override suspend fun budgets(): List<ServerBudget> =
             call { it.create(BudgetsApi::class.java).listBudgets() }
                 .items
+                .also { capList(it.size) }
                 .map {
                     ServerBudget(
                         id = it.id.toString(),
@@ -209,6 +226,11 @@ class ApiServerImportSource
             val atm = (root?.get("countAtmWithdrawalsAsSpending") as? JsonPrimitive)?.booleanOrNull
             if (day == null || atm == null) throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
             return ServerSettings(day, atm)
+        }
+
+        /** A hostile server cannot make the phone hold an unbounded lookup list. */
+        private fun capList(size: Int) {
+            if (size > MAX_LIST) throw ImportException(ImportFailureKind.UNEXPECTED_DATA)
         }
 
         private fun checkNames(vararg names: String) {

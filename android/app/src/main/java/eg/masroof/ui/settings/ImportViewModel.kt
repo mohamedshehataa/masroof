@@ -10,6 +10,7 @@ import eg.masroof.data.serverimport.ImportFailureKind
 import eg.masroof.data.serverimport.ImportProgress
 import eg.masroof.data.serverimport.ImportResult
 import eg.masroof.data.serverimport.ImportStage
+import eg.masroof.data.serverimport.ImportStore
 import eg.masroof.data.serverimport.ServerImporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -38,6 +39,7 @@ sealed interface ImportPhase {
     data class Done(
         val imported: Int,
         val skipped: Int,
+        val skippedOther: Int = 0,
     ) : ImportPhase
 
     data class Failed(
@@ -60,6 +62,8 @@ data class ImportUiState(
 private data class ImportInputs(
     val phase: ImportPhase,
     val signInOpen: Boolean,
+    /** An import was offered and has not completed: the card stays even without a session (REQ-OPS-174, decision in DECISIONS). */
+    val pending: Boolean = false,
 )
 
 /** Drives the card: the run itself lives in [ServerImporter]; this only maps its progress and result to UI state. */
@@ -70,8 +74,9 @@ class ImportViewModel
         private val importer: ServerImporter,
         private val session: SessionManager,
         network: NetworkMonitor,
+        private val store: ImportStore,
     ) : ViewModel() {
-        private val inputs = MutableStateFlow(ImportInputs(ImportPhase.Idle, signInOpen = false))
+        private val inputs = MutableStateFlow(ImportInputs(ImportPhase.Idle, signInOpen = false, pending = store.pending))
         private var job: Job? = null
 
         val state: StateFlow<ImportUiState> =
@@ -81,9 +86,11 @@ class ImportViewModel
                     i.phase is ImportPhase.Running ||
                         i.phase is ImportPhase.Done ||
                         (i.phase as? ImportPhase.Failed)?.kind == ImportFailureKind.SESSION
+                // pending and no session: "Sign in again to import", unless only the forgetting is left (then Import finishes it)
+                val needsSignIn = !signedIn && i.pending && i.phase == ImportPhase.Idle && !importer.forgetUnfinished()
                 ImportUiState(
-                    visible = signedIn || keepsShowing,
-                    phase = i.phase,
+                    visible = signedIn || i.pending || keepsShowing,
+                    phase = if (needsSignIn) ImportPhase.Failed(ImportFailureKind.SESSION) else i.phase,
                     offline = !online,
                     signInOpen = i.signInOpen && !signedIn,
                 )
@@ -96,13 +103,13 @@ class ImportViewModel
             viewModelScope.launch {
                 session.state.collect { s ->
                     if (s is SessionState.SignedIn) {
+                        // an import is on offer and stays so until it completes, even if the session is lost before it runs
+                        if (!store.pending) store.pending = true
                         inputs.update {
-                            if ((it.phase as? ImportPhase.Failed)?.kind ==
-                                ImportFailureKind.SESSION
-                            ) {
-                                ImportInputs(ImportPhase.Idle, false)
+                            if ((it.phase as? ImportPhase.Failed)?.kind == ImportFailureKind.SESSION) {
+                                ImportInputs(ImportPhase.Idle, false, pending = true)
                             } else {
-                                it
+                                it.copy(pending = true)
                             }
                         }
                     }
@@ -125,7 +132,11 @@ class ImportViewModel
                         }
                     inputs.update {
                         when (result) {
-                            is ImportResult.Completed -> it.copy(phase = ImportPhase.Done(result.imported, result.skipped))
+                            is ImportResult.Completed ->
+                                it.copy(
+                                    phase = ImportPhase.Done(result.imported, result.skipped, result.skippedOther),
+                                    pending = false,
+                                )
                             is ImportResult.Failed ->
                                 it.copy(phase = ImportPhase.Failed(result.kind), signInOpen = result.kind == ImportFailureKind.SESSION)
                         }

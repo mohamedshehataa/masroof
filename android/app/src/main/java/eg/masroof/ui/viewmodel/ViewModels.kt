@@ -15,6 +15,7 @@ import eg.masroof.data.auth.DataEraser
 import eg.masroof.data.auth.EraseCounts
 import eg.masroof.data.auth.PartialEraseException
 import eg.masroof.data.auth.SessionManager
+import eg.masroof.data.auth.SessionState
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
@@ -406,6 +407,8 @@ data class SettingsUiState(
     val saved: Boolean = false,
     val loggingOut: Boolean = false,
     val erase: EraseState = EraseState.Idle,
+    /** The server URL field and the Members section show only while a server session exists (REQ-SEC-065). */
+    val showServer: Boolean = true,
 )
 
 @HiltViewModel
@@ -419,9 +422,14 @@ class SettingsViewModel
         private val draft = MutableStateFlow<SettingsUiState?>(null)
 
         val state: StateFlow<SettingsUiState> =
-            combine(settings.settings, draft) { stored, d ->
-                d ?: SettingsUiState(stored.serverUrl, stored.digitStyle)
+            combine(settings.settings, draft, session.state) { stored, d, s ->
+                (d ?: SettingsUiState(stored.serverUrl, stored.digitStyle)).copy(showServer = s is SessionState.SignedIn)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
+
+        init {
+            // reads the stored session once so the Server section knows whether one exists
+            viewModelScope.launch { session.restore() }
+        }
 
         private fun edit(block: (SettingsUiState) -> SettingsUiState) {
             draft.value = block(state.value).copy(saved = false)

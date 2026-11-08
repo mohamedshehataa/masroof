@@ -69,7 +69,8 @@ fun SettingsRoute(
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
             ExportCsvSection()
-            MembersRoute()
+            // no session, no Members call: it would send GET api/members on every open (REQ-SEC-065)
+            if (state.showServer) MembersRoute()
         },
     )
 }
@@ -107,17 +108,19 @@ fun SettingsContent(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() },
         )
-        SectionCard(stringResource(R.string.settings_section_server)) {
-            OutlinedTextField(
-                value = state.serverUrl,
-                onValueChange = onUrl,
-                label = { Text(stringResource(R.string.settings_server_url)) },
-                isError = state.urlInvalid,
-                supportingText = { if (state.urlInvalid) Text(stringResource(R.string.settings_server_url_error)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        if (state.showServer) {
+            SectionCard(stringResource(R.string.settings_section_server)) {
+                OutlinedTextField(
+                    value = state.serverUrl,
+                    onValueChange = onUrl,
+                    label = { Text(stringResource(R.string.settings_server_url)) },
+                    isError = state.urlInvalid,
+                    supportingText = { if (state.urlInvalid) Text(stringResource(R.string.settings_server_url_error)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         SectionCard(stringResource(R.string.settings_section_display)) {
             Row(

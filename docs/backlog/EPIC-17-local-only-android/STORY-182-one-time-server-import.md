@@ -83,7 +83,7 @@ generated client; no new endpoint.
 No schema change. Writes `serverId` on imported rows; upserts by `serverId`.
 
 ## Security / privacy / LLM-safety impact
-Trust boundary L4 (temporary): existing HTTPS and pinning, responses treated as untrusted (generated validation, money
+Trust boundary L4 (temporary): HTTPS only with the system certificate authorities (no certificate pinning exists today; accepted for this one-time import, see DECISIONS), redirects never followed, responses treated as untrusted (generated validation, money
 as integers), credentials destroyed afterwards. No new endpoint, permission or exported component. security-reviewer
 sign-off (ADR-0009 L4).
 
