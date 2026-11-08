@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="your_money_title">Your money</string>
     <string name="bills_channel_name">Bill reminders</string>
     <string name="bills_channel_description">A reminder before each installment or gam3eya payment</string>
     <string name="bills_reminder_public">A payment is due</string>
