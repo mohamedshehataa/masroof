@@ -318,7 +318,7 @@ class RoomV9MigrationTest {
     }
 
     @Test
-    fun `REQ-AND-128 a fresh install attempts no copy and creates the database directly at v9`() {
+    fun `REQ-AND-128 a fresh install attempts no copy and creates the database directly at the current version`() {
         context.deleteDatabase(name)
         val ready = DatabaseStartup.open(context, name) as DbStartup.Ready
         assertEquals(0, context.noBackupFilesDir.listFiles { f -> f.name.startsWith("pre-migration-") }!!.size)

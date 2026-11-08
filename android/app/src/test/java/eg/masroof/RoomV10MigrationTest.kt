@@ -12,6 +12,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.db.ALL_MIGRATIONS
 import eg.masroof.data.db.AccountBalanceEntity
+import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.AssetEntity
 import eg.masroof.data.db.AssetLotEntity
@@ -744,6 +745,72 @@ class RoomV10MigrationTest {
             }
             db.close()
         }
+
+    @Test
+    fun `REQ-AND-146 re-upserting a category and an account keeps their children and the v10 column values`() =
+        runTest {
+            val db = freshDb()
+            db.insertOneOfEach()
+            val sql = db.openHelper.writableDatabase
+            sql.execSQL("UPDATE category SET emoji = 'y' WHERE id = '$cat'")
+            sql.execSQL("UPDATE account SET creditLimitMinor = 5000000, statementDay = 25, dueDay = 12, emoji = 'x' WHERE id = 'a1'")
+            val category =
+                db
+                    .lookups()
+                    .observeEveryCategory()
+                    .first()
+                    .single { it.id == cat }
+            db.lookups().upsertCategories(listOf(category.copy(nameEn = "Renamed", emoji = null)))
+            db.lookups().upsertAccounts(listOf(AccountEntity("a1", "CIB renamed", "EGP"), AccountEntity("a-new", "New", "EGP")))
+            assertEquals(
+                "Renamed",
+                db
+                    .lookups()
+                    .observeEveryCategory()
+                    .first()
+                    .single { it.id == cat }
+                    .nameEn,
+            )
+            assertEquals("the category keeps its emoji", 1L, sql.count("category WHERE id = '$cat' AND emoji = 'y'"))
+            assertEquals("the merchant rule survived", 1L, sql.count("merchant_rule"))
+            assertEquals("the budget keeps its category", 1L, sql.count("budget WHERE categoryId = '$cat'"))
+            assertEquals("the balance survived", 1L, sql.count("account_balance"))
+            assertEquals(
+                "the account keeps its card facts",
+                1L,
+                sql.count(
+                    "account WHERE id = 'a1' AND label = 'CIB renamed' AND creditLimitMinor = 5000000 AND statementDay = 25 " +
+                        "AND dueDay = 12 AND emoji = 'x'",
+                ),
+            )
+            assertEquals("a new id is inserted", 1L, sql.count("account WHERE id = 'a-new'"))
+            db.close()
+        }
+
+    @Test
+    fun `REQ-AND-146 a database migrated from v9 has the same SQL as a fresh v10 database for every new table and index`() {
+        createAt(9)
+        val migrated = (DatabaseStartup.open(context, name) as DbStartup.Ready).db
+        val migratedSql = migrated.masterSql()
+        migrated.close()
+        val fresh = freshDb()
+        val freshSql = fresh.masterSql()
+        fresh.close()
+        for (table in NEW_TABLES) {
+            assertEquals("table $table", freshSql.getValue("table:$table"), migratedSql.getValue("table:$table"))
+        }
+        val indices = freshSql.keys.filter { it.startsWith("index:") && NEW_TABLES.any { t -> freshSql.getValue(it).contains("`$t`") } }
+        assertTrue(indices.size >= 9)
+        for (index in indices) assertEquals(index, freshSql.getValue(index), migratedSql[index])
+    }
+
+    private fun AppDatabase.masterSql(): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        openHelper.writableDatabase.query("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL").use {
+            while (it.moveToNext()) out["${it.getString(0)}:${it.getString(1)}"] = it.getString(2)
+        }
+        return out
+    }
 
     // ---- REQ-AND-147: Erase all data empties every new table
 
