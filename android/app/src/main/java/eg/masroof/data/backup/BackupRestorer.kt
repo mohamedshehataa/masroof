@@ -104,7 +104,7 @@ class BackupRestorer(
         passphrase: String,
         progress: (Int?) -> Unit = {},
     ): StagedRestore {
-        // A restore that committed and has not finished owns the staging folder: nothing may replace it (RestoreCoordinator finishes it first).
+        // A restore that committed and did not finish owns the staging folder: nothing may replace it (the coordinator finishes it first).
         if (hasMarker()) throw RestoreException(RestoreFailure.FAILED)
         val key = deriveKey(passphrase, header)
         try {
@@ -121,7 +121,7 @@ class BackupRestorer(
                 val extracted = extract(openSource, header, key, tick)
                 val context = currentCoroutineContext()
                 val validated =
-                    RestoreValidator(env.db.schema(), limits, env.nowMillis()).validate(extracted, env.db.liveEntryCount()) {
+                    RestoreValidator(env.db.schema(), limits).validate(extracted, env.db.liveEntryCount()) {
                         context.ensureActive()
                     }
                 arrangeReceipts(extracted, validated)
@@ -439,6 +439,7 @@ class BackupRestorer(
     }
 
     /** Deletes a staged restore (Cancel at the confirmation, or a failure): nothing else was changed. */
+    @Suppress("UnusedParameter") // kept so callers pass what they staged
     fun discard(staged: StagedRestore?) {
         // A committed restore that did not finish owns the staging folder: Cancel and failures never delete it.
         if (!hasMarker()) wipeStage()

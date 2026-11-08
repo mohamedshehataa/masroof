@@ -131,7 +131,7 @@ class SmsPipeline
         suspend fun accept(message: IncomingMessage): Disposition {
             // Capture switched off (or an erase running): nothing is read, recorded or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
-            // Makes sure the key exists (the wipe race below); the id that is stored is computed under the lock, so a restore cannot interleave.
+            // Makes sure the key exists (the wipe race below); the stored id is computed under the lock, so a restore cannot interleave.
             LocalIdHasher.id(idKey.get(), message)
             if (!gate.isOpen()) {
                 // A wipe raced us and the key may have been recreated after it: forget it again.

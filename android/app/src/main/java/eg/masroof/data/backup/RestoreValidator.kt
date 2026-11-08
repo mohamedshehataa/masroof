@@ -101,7 +101,6 @@ class ExtractedBackup(
 class RestoreValidator(
     private val schema: RestoreSchema,
     private val limits: RestoreLimits,
-    private val nowMillis: Long,
 ) {
     private class Receipt(
         val id: String,
