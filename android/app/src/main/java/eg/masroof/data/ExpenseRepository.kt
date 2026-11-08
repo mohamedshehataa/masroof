@@ -46,6 +46,10 @@ data class NewExpense(
     val paidByMemberId: String? = null,
     /** A receipt that waited unattached (REQ-RCPT-023): attached in the same write as the entry, or not at all. */
     val receiptId: String? = null,
+    /** "EXPENSE" (default) or "INCOME"; income is listed but never counts as spending (ADR-0009 D2). */
+    val type: String = "EXPENSE",
+    /** Shop or payee, e.g. from a spoken line; null = none. */
+    val merchant: String? = null,
 )
 
 /** New ids for rows. A seam so a test can make a write fail deterministically. */
@@ -141,7 +145,8 @@ class DefaultExpenseRepository
                             amountMinor = entry.amount.amountMinor,
                             currency = entry.amount.currency,
                             occurredAtMillis = occurredAt,
-                            merchant = null,
+                            merchant = entry.merchant,
+                            type = entry.type,
                             categoryId = entry.categoryId,
                             accountId = entry.accountId,
                             notes = entry.notes,

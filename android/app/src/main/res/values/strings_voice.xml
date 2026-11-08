@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-200: Say it (voice and one-line entry), income and currency on the Add form. -->
+    <string name="voice_amount_label">Amount</string>
+    <string name="voice_type_title">Type</string>
+    <string name="voice_type_expense">Expense</string>
+    <string name="voice_type_income">Income</string>
+    <string name="voice_currency_title">Currency</string>
+    <string name="voice_not_in_totals">Not included in EGP totals</string>
+    <string name="voice_merchant">Shop or payee</string>
+    <string name="voice_quick_label">Type it: 150 fuel</string>
+    <string name="voice_mic_desc">Say it</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_processing">Working it out…</string>
+    <string name="voice_stop">Stop</string>
+    <string name="voice_close">Close</string>
+    <string name="voice_level_desc">Microphone level</string>
+    <string name="voice_rationale">Masroof listens only while you say an entry. Your phone turns the speech into text and the app never saves the audio.</string>
+    <string name="voice_continue">Continue</string>
+    <string name="voice_denied">The microphone is off, so Masroof can\'t hear you. You can still type the line above.</string>
+    <string name="voice_denied_forever">The microphone is blocked for Masroof. Turn it on in Settings, or type the line above.</string>
+    <string name="voice_open_settings">Open Settings</string>
+    <string name="voice_error">Didn\'t catch that - try again or type it</string>
+    <string name="voice_try_again">Try again</string>
+    <string name="voice_say_amount">Say or type an amount</string>
+    <string name="voice_filled">Filled from what you said. Check it, then tap Save.</string>
+</resources>

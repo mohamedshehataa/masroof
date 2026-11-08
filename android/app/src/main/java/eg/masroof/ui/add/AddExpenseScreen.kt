@@ -1,5 +1,15 @@
 package eg.masroof.ui.add
 
+import android.Manifest
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,10 +35,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -36,11 +50,14 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
+import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.edit.PDF_MIME
 import eg.masroof.ui.edit.Thumbnail
@@ -48,8 +65,11 @@ import eg.masroof.ui.receipts.ReceiptOnlySection
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
+import eg.masroof.ui.viewmodel.AddField
 import eg.masroof.ui.viewmodel.AddUiState
+import eg.masroof.ui.viewmodel.MicPermission
 import eg.masroof.ui.viewmodel.PendingReceiptViewModel
+import eg.masroof.ui.viewmodel.VoiceUi
 
 @Composable
 fun AddExpenseRoute(
@@ -64,6 +84,9 @@ fun AddExpenseRoute(
     // A receipt the form was opened from is attached in the same write as the entry; a cancel leaves it waiting (REQ-RCPT-023).
     LaunchedEffect(pending.receiptId) { viewModel.setReceipt(pending.receiptId) }
     LaunchedEffect(state.form.saved) { if (state.form.saved) onDone() }
+    val quick = rememberQuickActions(viewModel, state.form.voice)
+    // Back while the listening panel is up closes it first; a second Back leaves the form and nothing was saved.
+    BackHandler(enabled = state.form.voice != VoiceUi.Idle) { quick.voice.onClose() }
     AddExpenseContent(
         state = state,
         onAmount = viewModel::onAmount,
@@ -73,6 +96,7 @@ fun AddExpenseRoute(
         onNotes = viewModel::onNotes,
         onSave = viewModel::save,
         onPaidBy = viewModel::onPaidBy,
+        quick = quick,
         extra = {
             val receipt = waiting
             if (receipt != null) {
@@ -90,6 +114,90 @@ fun AddExpenseRoute(
     )
 }
 
+private fun Context.findActivity(): android.app.Activity? =
+    when (this) {
+        is android.app.Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
+/**
+ * The mic flow's glue (REQ-AND-144): the view model keeps the state, this runs the recognizer and the permission dialog.
+ * RECORD_AUDIO is asked only when the mic is tapped; the recognizer is dropped when the screen goes away (no audio is kept).
+ */
+@Composable
+private fun rememberQuickActions(
+    viewModel: AddExpenseViewModel,
+    voiceState: VoiceUi,
+): AddQuickActions {
+    val context = LocalContext.current
+    val input: VoiceInput = remember { AndroidVoiceInput(context) }
+    val micAvailable = remember { input.isAvailable() }
+    DisposableEffect(input) { onDispose { input.cancel() } }
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val activity = context.findActivity()
+            val canAskAgain =
+                activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)
+            viewModel.onPermissionResult(granted, canAskAgain)
+        }
+    val listening = voiceState is VoiceUi.Listening
+    LaunchedEffect(listening) {
+        if (listening) {
+            val tag = if (AppLanguage.current(context) == AppLanguage.ARABIC) "ar-EG" else "en-US"
+            input.start(tag) { event ->
+                when (event) {
+                    is VoiceEvent.Level -> viewModel.onVoiceLevel(event.percent)
+                    is VoiceEvent.Text -> viewModel.onVoiceText(event.text)
+                    VoiceEvent.NoSpeech, VoiceEvent.Failed -> viewModel.onVoiceError()
+                }
+            }
+        }
+    }
+    LaunchedEffect(voiceState == VoiceUi.Requesting) {
+        if (voiceState == VoiceUi.Requesting) launcher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    return AddQuickActions(
+        onType = viewModel::onType,
+        onCurrency = viewModel::onCurrency,
+        onMerchant = viewModel::onMerchant,
+        onQuickText = viewModel::onQuickText,
+        onQuickDone = viewModel::applyQuickText,
+        voice =
+            AddVoiceActions(
+                onMic = {
+                    val granted =
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                    val activity = context.findActivity()
+                    val rationale =
+                        activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)
+                    viewModel.onMicTapped(
+                        when {
+                            granted -> MicPermission.GRANTED
+                            rationale -> MicPermission.SHOW_RATIONALE
+                            else -> MicPermission.ASK
+                        },
+                    )
+                },
+                micAvailable = micAvailable,
+                onStop = {
+                    input.stop()
+                    viewModel.onStopTapped()
+                },
+                onClose = {
+                    input.cancel()
+                    viewModel.dismissVoice()
+                },
+                onRationaleContinue = viewModel::onRationaleContinue,
+                onOpenSettings = {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                    context.startActivity(intent)
+                    viewModel.dismissVoice()
+                },
+            ),
+    )
+}
+
 @Composable
 fun AddExpenseContent(
     state: AddUiState,
@@ -101,6 +209,8 @@ fun AddExpenseContent(
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
     onPaidBy: (String?) -> Unit = {},
+    /** The Say it parts (quick line, mic, Expense/Income, currency, merchant). Null = the plain form, as before STORY-200. */
+    quick: AddQuickActions? = null,
     extra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val arabic = LocalMoneyStyle.current.arabic
@@ -116,7 +226,7 @@ fun AddExpenseContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes, onPaidBy))
+            AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes, onPaidBy, quick))
             extra()
         }
         Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
@@ -136,6 +246,7 @@ private class AddFieldActions(
     val onDate: (String) -> Unit,
     val onNotes: (String) -> Unit,
     val onPaidBy: (String?) -> Unit,
+    val quick: AddQuickActions?,
 )
 
 @Composable
@@ -156,20 +267,30 @@ private fun ColumnScope.AddFields(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() },
         )
+        val quick = actions.quick
+        if (quick != null) {
+            QuickLine(form, quick)
+            TypeSwitch(form.income, quick.onType)
+            CurrencyChips(form.currency, quick.onCurrency)
+        }
+        val inEgp = form.currency == Money.EGP
         OutlinedTextField(
             value = form.amountText,
             onValueChange = onAmount,
-            label = { Text(stringResource(R.string.add_amount)) },
-            prefix = { Text(MoneyFormat.symbol(Money.EGP, arabic)) },
+            label = { Text(stringResource(if (inEgp) R.string.add_amount else R.string.voice_amount_label)) },
+            prefix = { Text(MoneyFormat.symbol(form.currency, arabic)) },
             textStyle = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
-            isError = form.amountInvalid || form.amountTooLarge,
+            isError = form.amountInvalid || form.amountTooLarge || form.amountMissing,
             supportingText = {
                 if (form.amountInvalid) Text(stringResource(R.string.add_amount_error))
                 if (form.amountTooLarge) Text(stringResource(R.string.add_amount_too_large))
+                if (form.amountMissing) Text(stringResource(R.string.voice_say_amount))
+                if (!inEgp) Text(stringResource(R.string.voice_not_in_totals))
             },
+            colors = highlightColors(AddField.AMOUNT in form.highlight),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("amount"),
         )
         OutlinedTextField(
             value = form.dateText,
@@ -177,16 +298,30 @@ private fun ColumnScope.AddFields(
             label = { Text(stringResource(R.string.add_date)) },
             isError = form.dateInvalid,
             supportingText = { if (form.dateInvalid) Text(stringResource(R.string.add_date_error)) },
+            colors = highlightColors(AddField.DATE in form.highlight),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OptionGroup(
-            title = stringResource(R.string.add_category),
-            options = state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
-            selected = form.categoryId,
-            onSelect = onCategory,
-            tinted = true,
-        )
+        if (quick != null) {
+            OutlinedTextField(
+                value = form.merchant,
+                onValueChange = quick.onMerchant,
+                label = { Text(stringResource(R.string.voice_merchant)) },
+                colors = highlightColors(AddField.MERCHANT in form.highlight),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("merchant"),
+            )
+        }
+        // Income never counts as spending, so it has no category (REQ-EXP-052).
+        if (!form.income) {
+            OptionGroup(
+                title = stringResource(R.string.add_category),
+                options = state.categories.map { it.id to (if (arabic) it.nameAr else it.nameEn) },
+                selected = form.categoryId,
+                onSelect = onCategory,
+                tinted = true,
+            )
+        }
         OptionGroup(
             title = stringResource(R.string.add_account),
             options = state.accounts.map { it.id to it.label },
@@ -207,6 +342,7 @@ private fun ColumnScope.AddFields(
             value = form.notes,
             onValueChange = onNotes,
             label = { Text(stringResource(R.string.add_note)) },
+            colors = highlightColors(AddField.NOTES in form.highlight),
             modifier = Modifier.fillMaxWidth(),
         )
         if (form.saveFailed) {
