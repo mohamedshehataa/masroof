@@ -15,6 +15,8 @@ owner_agent: android-engineer
 
 # STORY-196 - Manage categories, payment accounts and members on the phone
 
+> **Scope note 2026-11-08** - categories are built by EPIC-18 STORY-207 and accounts by STORY-205; this stub keeps members only. REQ ids stay reserved here.
+
 > **DRAFT stub** - reuses STORY-040 / STORY-013 / STORY-014 / STORY-015 intent (descoped, server CRUD). REQ ids reserved.
 
 ## Goal

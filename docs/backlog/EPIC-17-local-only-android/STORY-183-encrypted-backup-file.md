@@ -52,7 +52,10 @@ categories, accounts, members, budgets, learned templates and settings (month st
 capture switches, digit and language settings) **When** a backup is written **Then** the decrypted ZIP has
 `manifest.json` first (format version 1, data schema version, app version, `createdAtUtc`, row count per table, size
 and SHA-256 per receipt), then `data/*.jsonl` for expenses, categories, accounts, members, budgets, expense_sources,
-receipts, learned_templates, `data/settings.json`, `keys/local-id.key` and `receipts/<uuid>.<ext>`; amounts are JSON
+receipts, learned_templates, the EPIC-18 money-life tables added by STORY-201 (account_balances, installment_plans,
+installment_payments, subscriptions, savings_goals, goal_movements, assets, asset_lots, metal_prices, merchant_rules, debts,
+net_worth_snapshots; the new category, expense and account columns travel inside their own files), `data/settings.json`,
+`keys/local-id.key` and `receipts/<uuid>.<ext>`; amounts are JSON
 integers (minor units) with an ISO-4217 code, instants are UTC epoch milliseconds; `review_item`, `captured_tx`,
 `outbox`, `parsed_outbox`, session and server data are absent.
 Unhappy path: **Given** a receipt file that is missing on disk **Then** the backup still completes, the manifest lists
