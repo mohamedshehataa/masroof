@@ -17,3 +17,19 @@ FINDINGS:
 - [MINOR] shares sum to 9999/10002; no amount cap (Long overflow); next due date can be in the past; set balance date
   only; free-text currency; chart not readable by TalkBack; branch conflicts with main
 STATUS: FAIL -> fix round 1 sent
+
+## Loop 2 - head `4c1ad15` (main merged)
+`--rerun` 705 story-branch tests, 0 failures; gate GREEN; TEST_INTEGRITY: OK (0 -> 189). ~150 cases.
+- MAJOR 1: PASS (SMS last four moves the balance once; named account wins; ambiguous last four counted for none)
+- MAJOR 2: PASS (archived accounts out of the Add picker; no screen needs them)
+- MAJOR 3: PASS (certificates at principal, "Pays interest monthly", "Matured"); MAJOR 4: PASS ("History starts today",
+  first item snapshots at once); MAJOR 5: PASS (">999%", Long extremes do not crash)
+- MINORs: PASS (shares sum to 10000; amount cap; saturating sums; next due on/after today; time field; currency chips;
+  chart description and RTL)
+- STORY-201 files identical to main
+FINDINGS:
+- [MINOR] same last four on two accounts silently drops SMS entries (no field error, no hint)
+- [MINOR] today's date with a blank time is read as noon (rejected as future before noon); `9:30` rejected
+- [MINOR] a matured certificate still counts at principal (its payout lands in the bank)
+- [NIT] a lone earlier snapshot is replaced by "History starts today"; superseded DECISIONS line; no card reminder yet
+STATUS: PASS -> MINORs fixed before integration
