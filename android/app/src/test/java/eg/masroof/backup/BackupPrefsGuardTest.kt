@@ -40,6 +40,7 @@ class BackupPrefsGuardTest {
             "AppModule.kt" to listOf("masroof_device"),
         )
 
+    @Suppress("NestedBlockDepth", "CyclomaticComplexMethod")
     private fun scan(
         sources: List<Pair<String, String>>,
         ignoreFile: (String) -> Boolean = { it.endsWith("BackupPrefsInventory.kt") },

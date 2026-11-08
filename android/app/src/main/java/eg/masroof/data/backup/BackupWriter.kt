@@ -223,6 +223,7 @@ class BackupWriter(
             if (rows != expected) throw IOException("table changed during snapshot")
         }
 
+        @Suppress("NestedBlockDepth") // two closing streams around the copy loop
         fun copyTo(
             table: String,
             out: OutputStream,
@@ -243,7 +244,17 @@ class BackupWriter(
 
         /** Reads every temp file to its end: a damaged or swapped one fails here, before anything is written to the provider. */
         fun verify(cancelled: () -> Unit) {
-            for (table in files.keys) copyTo(table, OutputStream.nullOutputStream(), cancelled)
+            val discard =
+                object : OutputStream() {
+                    override fun write(b: Int) = Unit
+
+                    override fun write(
+                        b: ByteArray,
+                        off: Int,
+                        len: Int,
+                    ) = Unit
+                }
+            for (table in files.keys) copyTo(table, discard, cancelled)
         }
 
         fun delete() {
