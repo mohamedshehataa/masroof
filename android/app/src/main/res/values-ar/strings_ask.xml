@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- اسأل مصروف (STORY-199): أسئلة عن فلوسك والإجابة على الموبايل. -->
+    <string name="ask_title">اسأل مصروف</string>
+    <string name="ask_open">اسأل مصروف</string>
+    <string name="ask_back">رجوع</string>
+    <string name="ask_input_hint">اسأل عن فلوسك</string>
+    <string name="ask_send">ابعت السؤال</string>
+    <string name="ask_thinking">بحسبها…</string>
+    <string name="ask_failed">معرفتش أحسبها.</string>
+    <string name="ask_retry">جرب تاني</string>
+    <string name="ask_greeting">أهلاً! اسألني عن فلوسك.</string>
+    <string name="ask_greeting_fact">%1$s في %2$s الشهر ده، %3$s</string>
+    <string name="ask_greeting_empty">لسه مفيش مصروفات الشهر ده. جرب سؤال:</string>
+    <string name="ask_you_asked">سألت: %1$s</string>
+
+    <string name="ask_visit_one">زيارة واحدة</string>
+    <string name="ask_visit_n">%1$s زيارات</string>
+    <string name="ask_times_one">مرة واحدة</string>
+    <string name="ask_times_n">%1$s مرة</string>
+    <string name="ask_entries_one">عملية واحدة</string>
+    <string name="ask_entries_n">%1$s عملية</string>
+
+    <string name="ask_p_today">النهارده</string>
+    <string name="ask_p_yesterday">امبارح</string>
+    <string name="ask_p_this_week">الأسبوع ده</string>
+    <string name="ask_p_last_week">الأسبوع اللي فات</string>
+    <string name="ask_p_this_month">الشهر ده</string>
+    <string name="ask_p_last_month">الشهر اللي فات</string>
+    <string name="ask_p_this_year">السنة دي</string>
+    <string name="ask_p_last_days">في آخر %1$s يوم</string>
+    <string name="ask_p_month">في %1$s</string>
+    <string name="ask_p_range">من %1$s لـ %2$s</string>
+
+    <string name="ask_spend_subject">%1$s على %2$s %3$s</string>
+    <string name="ask_spend_all">صرفت %1$s %2$s</string>
+    <string name="ask_spend_none_subject">مفيش مصروفات على %1$s %2$s</string>
+    <string name="ask_spend_none">مفيش مصروفات متسجلة %1$s</string>
+    <string name="ask_other_currency_one">عملية واحدة بعملة تانية مش محسوبة</string>
+    <string name="ask_other_currency_n">%1$s عمليات بعملات تانية مش محسوبة</string>
+    <string name="ask_unknown_subject">مش عارف فئة اسمها “%1$s”. قصدك:</string>
+    <string name="ask_not_understood">معلش مفهمتش السؤال. جرب واحد من دول:</string>
+
+    <string name="ask_breakdown_total">صرفت %1$s %2$s</string>
+    <string name="ask_donut_desc">المصروفات حسب الفئة: %1$s</string>
+    <string name="ask_share_row">%1$s، %2$s، %3$s</string>
+
+    <string name="ask_compare_head">صرفت %1$s %2$s مقابل %3$s %4$s</string>
+    <string name="ask_compare_head_subject">%1$s: %2$s %3$s مقابل %4$s %5$s</string>
+    <string name="ask_compare_diff">الفرق: %1$s (%2$s)</string>
+    <string name="ask_compare_diff_plain">الفرق: %1$s</string>
+    <string name="ask_compare_no_prev">مفيش مصروفات %1$s للمقارنة</string>
+    <string name="ask_compare_moves">أكبر التغييرات</string>
+    <string name="ask_move_row">%1$s: %2$s</string>
+    <string name="ask_bars_desc">%1$s %2$s، %3$s %4$s</string>
+
+    <string name="ask_visits_head">%1$s %2$s، %3$s، المتوسط %4$s</string>
+    <string name="ask_visits_none">مفيش عمليات لـ %1$s %2$s</string>
+
+    <string name="ask_top_head">أكتر أماكن صرفت فيها %1$s</string>
+    <string name="ask_top_none">مفيش أماكن متسجلة %1$s</string>
+    <string name="ask_top_row">%1$s، %2$s، %3$s</string>
+
+    <string name="ask_payday_days_one">فاضل يوم على القبض</string>
+    <string name="ask_payday_days_n">فاضل %1$s يوم على القبض</string>
+    <string name="ask_payday_income">الدخل %1$s، صرفت %2$s، فاضل %3$s</string>
+    <string name="ask_payday_over">الدخل %1$s، صرفت %2$s، زيادة %3$s</string>
+    <string name="ask_payday_pace">بالمعدل ده هتصرف حوالي %1$s لحد القبض</string>
+    <string name="ask_payday_no_income">صرفت لحد دلوقتي %1$s، المتوسط اليومي %2$s</string>
+    <string name="ask_payday_empty">لسه مفيش حاجة متسجلة الشهر ده.</string>
+
+    <string name="ask_biggest_head">أكبر مصروف %1$s: %2$s</string>
+    <string name="ask_biggest_line">%1$s - %2$s</string>
+    <string name="ask_no_merchant">من غير اسم محل</string>
+
+    <string name="ask_why_prev">الفترة اللي قبلها: %1$s (%2$s)</string>
+    <string name="ask_why_no_prev">مفيش مصروفات في الفترة اللي قبلها للمقارنة</string>
+    <string name="ask_why_places">أغلبها في: %1$s</string>
+
+    <string name="ask_entries_head_subject">عمليات %1$s %2$s</string>
+    <string name="ask_entries_head">العمليات %1$s</string>
+    <string name="ask_entries_none">مفيش عمليات %1$s</string>
+    <string name="ask_entries_shown">بعرض آخر %1$s من %2$s</string>
+    <string name="ask_entry_desc">افتح العملية: %1$s، %2$s، %3$s</string>
+
+    <string name="ask_roast_merchant">%1$s تاني؟ ده %2$s الشهر ده. المفروض يسموا ساندوتش باسمك.</string>
+    <string name="ask_roast_category">%1$s خدت %2$s من كل اللي صرفته. اختيار جريء.</string>
+    <string name="ask_roast_late">%1$s عملية في آخر الليل. مفيش حاجة حلوة بتحصل عند الكاشير نص الليل.</string>
+    <string name="ask_roast_generic">مش وحش عموماً. زوّد العمليات وهبقى عندي مادة أحسن.</string>
+    <string name="ask_roast_empty">لسه مفيش حاجة أتريق عليها. سجل كام عملية الأول.</string>
+
+    <string name="ask_chip_frequency">بروح %1$s كام مرة؟</string>
+    <string name="ask_chip_why">ليه %1$s غالي أوي؟</string>
+    <string name="ask_chip_compare_months">الشهر ده مقارنة باللي فات</string>
+    <string name="ask_chip_where">فلوسي راحت فين؟</string>
+    <string name="ask_chip_payday">فاضل كام لحد القبض؟</string>
+    <string name="ask_chip_roast">اتريق عليا</string>
+    <string name="ask_chip_show_entries">وريني العمليات دي</string>
+    <string name="ask_chip_compare_prev">قارنها بالفترة اللي قبلها</string>
+    <string name="ask_chip_top_places">أكتر أماكن بصرف فيها</string>
+    <string name="ask_chip_biggest">أكبر مصروف</string>
+</resources>
