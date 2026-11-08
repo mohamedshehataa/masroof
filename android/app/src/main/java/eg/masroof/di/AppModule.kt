@@ -24,10 +24,8 @@ import eg.masroof.data.auth.LocalDataWiper
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.auth.SessionStore
 import eg.masroof.data.auth.TinkKeystore
-import eg.masroof.data.budgets.ApiBudgetsRemote
-import eg.masroof.data.budgets.BudgetsRemote
 import eg.masroof.data.budgets.BudgetsRepository
-import eg.masroof.data.budgets.DefaultBudgetsRepository
+import eg.masroof.data.budgets.RoomBudgetsRepository
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
@@ -150,9 +148,7 @@ abstract class BindingsModule {
         impl: eg.masroof.data.categories.DefaultMerchantRuleRepository,
     ): eg.masroof.data.categories.MerchantRuleRepository
 
-    @Binds abstract fun budgets(impl: DefaultBudgetsRepository): BudgetsRepository
-
-    @Binds abstract fun budgetsRemote(impl: ApiBudgetsRemote): BudgetsRemote
+    @Binds abstract fun budgets(impl: RoomBudgetsRepository): BudgetsRepository
 }
 
 @Module
