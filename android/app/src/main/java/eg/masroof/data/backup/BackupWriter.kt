@@ -105,8 +105,27 @@ class BackupWriter(
     ): BackupResult {
         val context = currentCoroutineContext()
         val cancelled = { context.ensureActive() }
-        val settingsJson = settingsJson(env.prefs.snapshot())
         val localIdKey = env.localIdKey()
+        try {
+            return writeAll(sink, input, report, cancelled, localIdKey)
+        } catch (e: Throwable) {
+            // Whatever went wrong (provider failure, Cancel, a changed receipt): the provider's stream is closed and nothing is reported.
+            runCatching { sink.close() }
+            throw e
+        } finally {
+            localIdKey.fill(0)
+        }
+    }
+
+    @Suppress("LongMethod")
+    private suspend fun writeAll(
+        sink: OutputStream,
+        input: BackupInput,
+        report: (Int) -> Unit,
+        cancelled: () -> Unit,
+        localIdKey: ByteArray,
+    ): BackupResult {
+        val settingsJson = settingsJson(env.prefs.snapshot())
         val counting = CountingOutputStream(sink)
         val headerBytes = input.header.encode()
 
@@ -122,41 +141,32 @@ class BackupWriter(
         var stored = 0
         var missing = 0
         var receiptList: List<BackupReceiptRef> = emptyList()
-        try {
-            env.db.snapshot {
-                val counts = BackupTables.INCLUDED.map { it.name to env.db.count(it.name) }
-                receiptList = env.db.receipts()
-                for (ref in receiptList) {
-                    if (!fingerprints.containsKey(ref.id)) fingerprints[ref.id] = measure(ref, progress, cancelled)
-                }
-                entries = env.db.liveEntryCount()
-                writeEntry(zip, BackupTables.MANIFEST) { it.write(manifest(counts, receiptList, fingerprints).toByteArray(UTF8)) }
-                for (table in BackupTables.INCLUDED) {
-                    writeEntry(
-                        zip,
-                        table.file,
-                    ) { out -> writeRows(out, table, counts.first { it.first == table.name }.second, progress, cancelled) }
-                }
-            }
-            writeEntry(zip, BackupTables.SETTINGS) { it.write(settingsJson.toByteArray(UTF8)) }
-            writeEntry(zip, BackupTables.LOCAL_ID_KEY) { it.write(localIdKey) }
-            zip.setLevel(Deflater.NO_COMPRESSION) // JPEG and PDF do not shrink; do not spend the battery on it
+        env.db.snapshot {
+            val counts = BackupTables.INCLUDED.map { it.name to env.db.count(it.name) }
+            receiptList = env.db.receipts()
             for (ref in receiptList) {
-                val fp = fingerprints[ref.id]
-                if (fp == null) {
-                    missing++
-                    continue
-                }
-                writeEntry(zip, entryName(ref)) { copyReceipt(ref, fp, it, progress, cancelled) }
-                stored++
+                if (!fingerprints.containsKey(ref.id)) fingerprints[ref.id] = measure(ref, progress, cancelled)
             }
-            zip.close() // writes the final AEAD segment and closes the sink: a failure here is a failed backup
-        } catch (e: Throwable) {
-            runCatching { sink.close() }
-            localIdKey.fill(0)
-            throw e
+            entries = env.db.liveEntryCount()
+            writeEntry(zip, BackupTables.MANIFEST) { it.write(manifest(counts, receiptList, fingerprints).toByteArray(UTF8)) }
+            for (table in BackupTables.INCLUDED) {
+                val expected = counts.first { it.first == table.name }.second
+                writeEntry(zip, table.file) { out -> writeRows(out, table, expected, progress, cancelled) }
+            }
         }
-        localIdKey.fill(0)
+        writeEntry(zip, BackupTables.SETTINGS) { it.write(settingsJson.toByteArray(UTF8)) }
+        writeEntry(zip, BackupTables.LOCAL_ID_KEY) { it.write(localIdKey) }
+        zip.setLevel(Deflater.NO_COMPRESSION) // JPEG and PDF do not shrink; do not spend the battery on it
+        for (ref in receiptList) {
+            val fp = fingerprints[ref.id]
+            if (fp == null) {
+                missing++
+                continue
+            }
+            writeEntry(zip, entryName(ref)) { copyReceipt(ref, fp, it, progress, cancelled) }
+            stored++
+        }
+        zip.close() // writes the final AEAD segment and closes the sink: a failure here is a failed backup
         report(PERCENT_MAX)
         return BackupResult(entries, stored, missing, counting.count)
     }
