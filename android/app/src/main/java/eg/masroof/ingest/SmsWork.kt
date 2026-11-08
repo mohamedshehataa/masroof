@@ -351,13 +351,8 @@ class SmsPipeline
             // already (a record exists only after them); it waits in the review list, described from its typed fields only.
             val last4 = r.instrumentLast4
             if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
+            if (isRepeat(r, receivedAt, origin)) return storePossibleRepeat(r, id, receivedAt, now)
             // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
-            // a backfill read this message first from a row without a sent time: the same message arriving live is not a second entry
-            val repeat =
-                (channel == CaptureChannel.LIVE && repeats.isBackfilledSibling(r, receivedAt)) ||
-                    // no usable sent time and the same message was captured live a moment ago: the user decides
-                    (origin.slackMillis > 0 && repeats.isPossibleRepeat(r, receivedAt, origin.slackMillis))
-            if (repeat) return storePossibleRepeat(r, id, receivedAt, now)
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now, channel)
             if (channel == CaptureChannel.BACKFILL) backfilledTwin(r, id, receivedAt, now)?.let { return it }
@@ -382,6 +377,21 @@ class SmsPipeline
             }
             return Stored(Disposition.RECORDED, notice = item, changed = true)
         }
+
+        /**
+         * The same message handled from the other side with another time stamp: a live message after a backfill read it first from a
+         * row without a sent time, or a backfilled row without a sent time after live capture. The user decides (review).
+         */
+        private suspend fun isRepeat(
+            r: ParsedRecord,
+            receivedAt: Long,
+            origin: Origin,
+        ): Boolean =
+            if (origin.channel == CaptureChannel.LIVE) {
+                repeats.isBackfilledSibling(r, receivedAt)
+            } else {
+                origin.slackMillis > 0 && repeats.isPossibleRepeat(r, receivedAt, origin.slackMillis)
+            }
 
         /** What a backfilled transfer SMS does with the notification entry of the same transfer, if any; null: it is a new transfer. */
         private suspend fun backfilledTwin(
