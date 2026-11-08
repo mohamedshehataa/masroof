@@ -4,8 +4,10 @@ import android.content.Context
 import android.os.Looper
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import eg.masroof.core.Money
 import eg.masroof.data.DefaultExpenseRepository
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.NewExpense
 import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DefaultSeed
@@ -65,10 +67,8 @@ class QuickEntrySaveTest {
         vm.applyQuickText()
         // The form is filled once the seeded categories have been read (the quick line is cleared when it is applied).
         until {
-            vm.state.value.form.quickText
-                .isEmpty() &&
-                vm.state.value.form.amountText
-                    .isNotEmpty()
+            vm.state.value.form.amountText
+                .isNotEmpty()
         }
         vm.save()
         until { vm.state.value.form.saved }
@@ -119,6 +119,26 @@ class QuickEntrySaveTest {
                     .single()
             assertEquals(15000L, row.amountMinor)
             assertEquals("cat-car.fuel", row.categoryId)
+        }
+
+    @Test
+    fun `REQ-EXP-052 the repository refuses an unknown type or a currency that is not 3 capital letters`() =
+        runTest {
+            val repo = DefaultExpenseRepository(db, clock, UuidIdFactory(), LocalDataSignal())
+            val today = java.time.LocalDate.of(2026, 10, 15)
+            for (bad in listOf(
+                NewExpense(Money(100, "EGP"), today, null, null, null, type = "TRANSFER"),
+                NewExpense(Money(100, "usd"), today, null, null, null),
+                NewExpense(Money(100, "EG"), today, null, null, null),
+            )) {
+                try {
+                    repo.add(bad)
+                    org.junit.Assert.fail("should have been refused")
+                } catch (expected: IllegalArgumentException) {
+                    // refused before anything is written
+                }
+            }
+            assertEquals(0, db.expenses().count())
         }
 }
 

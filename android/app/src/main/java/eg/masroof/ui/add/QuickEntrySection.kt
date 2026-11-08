@@ -55,6 +55,7 @@ class AddVoiceActions(
     val onStop: () -> Unit = {},
     val onClose: () -> Unit = {},
     val onRationaleContinue: () -> Unit = {},
+    val onNoticeContinue: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
 )
 
@@ -92,6 +93,8 @@ internal fun QuickLine(
             },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { quick.onQuickDone() }),
+        // While listening the line belongs to the recognizer; the typed text is kept.
+        readOnly = form.voice is VoiceUi.Listening || form.voice == VoiceUi.Processing,
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("quick_text"),
     )
@@ -118,6 +121,17 @@ private fun VoicePanel(
                 VoiceUi.Processing -> {
                     Text(stringResource(R.string.voice_processing), style = MaterialTheme.typography.titleMedium)
                     LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                is VoiceUi.OnlineNotice -> {
+                    Message(stringResource(R.string.voice_online_notice))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = quick.voice.onNoticeContinue, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.voice_continue))
+                        }
+                        TextButton(onClick = quick.voice.onClose, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.voice_type_instead))
+                        }
+                    }
                 }
                 VoiceUi.Rationale -> {
                     Message(stringResource(R.string.voice_rationale))

@@ -69,7 +69,7 @@ class QuickEntryViewModelTest {
             assertEquals("talabat", f.merchant)
             assertEquals("cat-dining", f.categoryId)
             assertEquals("2026-10-14", f.dateText)
-            assertEquals("", f.quickText)
+            assertEquals("spent 85.5 at talabat yesterday", f.quickText)
             assertEquals(setOf(AddField.AMOUNT, AddField.DATE, AddField.CATEGORY, AddField.MERCHANT), f.highlight)
             assertTrue(repo.added.isEmpty())
         }
@@ -265,7 +265,7 @@ class QuickEntryViewModelTest {
             val vm = newVm()
             assertFalse(vm.form().income)
             assertEquals("EGP", vm.form().currency)
-            assertEquals(listOf("EGP", "USD", "EUR", "SAR", "AED", "GBP", "KWD", "QAR"), ADD_CURRENCIES)
+            assertEquals(listOf("EGP", "USD", "EUR", "SAR", "AED", "GBP", "QAR"), ADD_CURRENCIES)
         }
 
     @Test
@@ -331,5 +331,94 @@ class QuickEntryViewModelTest {
             vm.applyQuickText()
             vm.save()
             assertEquals("uber", repo.added.single().merchant)
+        }
+
+    // ---- fix round 1 ----
+
+    @Test
+    fun `REQ-AND-144 the heard text stays in the quick field and Done parses it again`() =
+        runTest {
+            val vm = newVm()
+            vm.onMicTapped(MicPermission.GRANTED)
+            vm.onVoiceText("150 pounds on fuel")
+            assertEquals("150 pounds on fuel", vm.form().quickText)
+            vm.onQuickText("250 pounds on fuel")
+            vm.applyQuickText()
+            assertEquals("250", vm.form().amountText)
+        }
+
+    @Test
+    fun `REQ-AND-144 typing while listening is ignored and the typed line survives silence`() =
+        runTest {
+            val vm = newVm()
+            vm.onQuickText("typed line")
+            vm.onMicTapped(MicPermission.GRANTED)
+            vm.onQuickText("changed")
+            vm.applyQuickText()
+            assertEquals("typed line", vm.form().quickText)
+            assertTrue(vm.form().highlight.isEmpty())
+            vm.onVoiceError()
+            assertEquals("typed line", vm.form().quickText)
+        }
+
+    @Test
+    fun `REQ-EXP-052 a later expense line resets income and a bare line keeps the choice`() =
+        runTest {
+            val vm = newVm()
+            vm.onQuickText("received 500 salary")
+            vm.applyQuickText()
+            assertTrue(vm.form().income)
+            vm.onQuickText("50 lunch")
+            vm.applyQuickText()
+            assertFalse(vm.form().income)
+            vm.onType(true)
+            vm.onQuickText("75")
+            vm.applyQuickText()
+            assertTrue(vm.form().income)
+            vm.onQuickText("paid 20 fuel")
+            vm.applyQuickText()
+            assertFalse(vm.form().income)
+        }
+
+    @Test
+    fun `REQ-AND-144 a two-number line does not replace the note the user already wrote`() =
+        runTest {
+            val vm = newVm()
+            vm.onNotes("mine")
+            vm.onQuickText("2 coffees 90")
+            vm.applyQuickText()
+            assertEquals("mine", vm.form().notes)
+            assertEquals("90", vm.form().amountText)
+            val fresh = newVm()
+            fresh.onQuickText("2 coffees 90")
+            fresh.applyQuickText()
+            assertEquals("2 coffees", fresh.form().notes)
+        }
+
+    @Test
+    fun `REQ-AND-144 the online notice comes before the mic when the phone has no on-device recognizer`() =
+        runTest {
+            val vm = newVm()
+            vm.onMicTapped(MicPermission.GRANTED, needsOnlineNotice = true)
+            assertTrue(vm.form().voice is VoiceUi.OnlineNotice)
+            vm.onNoticeContinue()
+            assertTrue(vm.form().voice is VoiceUi.Listening)
+            vm.dismissVoice()
+            vm.onMicTapped(MicPermission.ASK, needsOnlineNotice = true)
+            vm.onNoticeContinue()
+            assertEquals(VoiceUi.Requesting, vm.form().voice)
+            vm.dismissVoice()
+            vm.onMicTapped(MicPermission.GRANTED, needsOnlineNotice = true)
+            vm.dismissVoice()
+            assertEquals(VoiceUi.Idle, vm.form().voice)
+        }
+
+    @Test
+    fun `REQ-PARSE-098 the merchant from a long line is capped like the manual field`() =
+        runTest {
+            val vm = newVm()
+            vm.onQuickText("50 at " + "a".repeat(400))
+            vm.applyQuickText()
+            assertEquals(80, vm.form().merchant.length)
         }
 }

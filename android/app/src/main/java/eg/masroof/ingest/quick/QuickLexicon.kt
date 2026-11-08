@@ -32,7 +32,7 @@ internal object QuickLexicon {
             UNIT,
             1L to "واحد وحده",
             2L to "اتنين اثنين اثنان",
-            3L to "تلاته ثلاثه تلات ثلاث",
+            3L to "تلاته ثلاثه تلات ثلاث تلت",
             4L to "اربعه اربع",
             5L to "خمسه خمس",
             6L to "سته ست",
@@ -67,7 +67,7 @@ internal object QuickLexicon {
             ) +
             words(
                 HUNDRED,
-                100L to "ميه مئه مايه مائه",
+                100L to "ميه ميت مئه مايه مائه",
                 200L to "ميتين مئتين مائتين",
                 300L to "تلتميه تلاتميه ثلاثميه تلتمائه ثلاثمائه",
                 400L to "ربعميه اربعميه اربعمائه",
@@ -92,6 +92,8 @@ internal object QuickLexicon {
             "الف" to ScaleWord(THOUSAND, 1),
             "الفين" to ScaleWord(THOUSAND, 2),
             "الاف" to ScaleWord(THOUSAND, 0),
+            "تلاف" to ScaleWord(THOUSAND, 0),
+            "تلافات" to ScaleWord(THOUSAND, 0),
             "k" to ScaleWord(THOUSAND, 1),
             "thousand" to ScaleWord(THOUSAND, 1),
             "مليون" to ScaleWord(MILLION, 1),
@@ -117,7 +119,6 @@ internal object QuickLexicon {
             for (w in split("riyal riyals sar ريال ريالات")) put(w, "SAR")
             for (w in split("dirham dirhams aed درهم دراهم")) put(w, "AED")
             for (w in split("gbp £ sterling")) put(w, "GBP")
-            for (w in split("kwd dinar dinars دينار دنانير")) put(w, "KWD")
             put("qar", "QAR")
         }
 
@@ -143,6 +144,8 @@ internal object QuickLexicon {
             "حافز",
             "ارباح",
         )
+
+    val EXPENSE_VERBS: Set<String> = setOf("paid", "pay", "spent", "spend", "bought", "buy", "دفعت", "دفع", "صرفت", "اشتريت", "حولت")
 
     /** Verbs, fillers and prepositions: never a merchant, never in the note. */
     val STOP_WORDS: Set<String> =

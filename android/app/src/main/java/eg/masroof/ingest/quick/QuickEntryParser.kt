@@ -22,6 +22,8 @@ data class EntryDraft(
     val currencyStated: Boolean = false,
     /** The line named a day (otherwise [date] is just today and the form keeps its own date). */
     val dateStated: Boolean = false,
+    /** The line said "paid"/"received"-style words, so the Expense/Income choice comes from the line. */
+    val typeStated: Boolean = false,
 )
 
 /**
@@ -29,10 +31,17 @@ data class EntryDraft(
  * no network, no logging: the line is never kept or printed. Money is integer minor units only.
  */
 object QuickEntryParser {
+    /** The merchant is capped like the manual field (the Add form uses the same constant). */
+    const val MAX_MERCHANT_LENGTH = 80
     private const val MAX_LINE = 400
     private const val MAX_NOTE = 200
     private const val MAX_MERCHANT_WORDS = 3
-    private val TOKEN = Regex("""\d+(?:,\d{3})*(?:[.,]\d+)?|[${'$'}€£]|[\p{L}\p{M}]+""")
+
+    // Whole digit groups are one token so a malformed group ("1,2345", "150.5.5", "1k5", "-5") is rejected, not half read.
+    private val TOKEN =
+        Regex("""-?\d[\d.,]*[kK]\d[\d.,]*|-?\d[\d.,]*\d|-?\d|[${'$'}€£]|[\p{L}\p{M}]+""")
+    private val POUND_E = Regex("""\be£""")
+    private val BIDI = Regex("[" + 0x202A.toChar() + "-" + 0x202E.toChar() + 0x2066.toChar() + "-" + 0x2069.toChar() + "]")
     private val LATIN_LE = Regex("""\bl\.e\b\.?""")
 
     fun parse(
@@ -40,10 +49,16 @@ object QuickEntryParser {
         today: LocalDate,
     ): EntryDraft {
         val tokens = tokenize(line)
-        val dateHit = QuickDates.find(tokens, today)
+        var dateHit = QuickDates.find(tokens, today, allowYear = true)
+        var pieces = piecesOf(tokens, dateHit)
+        var runs = QuickNumbers.runs(pieces)
+        // A year only counts when another number is left to be the amount ("rent 5 nov 2026" is 2026 pounds).
+        if (dateHit?.yearUsed == true && runs.isEmpty()) {
+            dateHit = QuickDates.find(tokens, today, allowYear = false)
+            pieces = piecesOf(tokens, dateHit)
+            runs = QuickNumbers.runs(pieces)
+        }
         val used = dateHit?.used ?: emptySet()
-        val pieces = tokens.mapIndexed { i, t -> if (i in used) null else QuickNumbers.classify(t) }
-        val runs = QuickNumbers.runs(pieces)
         val ctx = Ctx(tokens, used, runs)
 
         val chosen = runs.firstOrNull { ctx.currencyAt(it.start - 1) != null || ctx.currencyAt(it.end + 1) != null } ?: runs.lastOrNull()
@@ -51,26 +66,43 @@ object QuickEntryParser {
         val stated =
             chosen?.let { ctx.currencyAt(it.end + 1) ?: ctx.currencyAt(it.start - 1) }
                 ?: tokens.indices.firstNotNullOfOrNull { ctx.currencyAt(it) }
-        val income = tokens.indices.any { it !in used && tokens[it].key in QuickLexicon.INCOME_WORDS }
-        val type = if (income) EntryType.INCOME else EntryType.EXPENSE
-        val note =
-            when {
-                value is RunValue.Bad -> line.trim().take(MAX_NOTE)
-                runs.size > 1 && chosen != null -> ctx.leftover(chosen)
-                else -> null
-            }
+        val spent = tokens.indices.any { it !in used && ctx.isExpenseVerb(it) }
+        val earned = tokens.indices.any { it !in used && tokens[it].key in QuickLexicon.INCOME_WORDS }
+        // "paid salary to nanny" is money going out: an expense verb beats an income word.
+        val type = if (earned && !spent) EntryType.INCOME else EntryType.EXPENSE
+        val dated = dateHit
+        val note = noteOf(line, value, ctx, chosen)
         return EntryDraft(
             amountMinor = (value as? RunValue.Ok)?.minor,
             currency = stated ?: Money.EGP,
             type = type,
             categoryKey = if (type == EntryType.EXPENSE) ctx.category() else null,
-            merchant = ctx.merchant(),
-            date = dateHit?.date ?: today,
+            merchant = ctx.merchant()?.take(MAX_MERCHANT_LENGTH),
+            date = dated?.date ?: today,
             note = note,
             currencyStated = stated != null,
-            dateStated = dateHit != null,
+            dateStated = dated != null,
+            typeStated = earned || spent,
         )
     }
+
+    // A phrase that is not a number keeps the whole line; two numbers keep the words that are not the amount.
+    private fun noteOf(
+        line: String,
+        value: RunValue?,
+        ctx: Ctx,
+        chosen: NumberRun?,
+    ): String? =
+        when {
+            value is RunValue.Bad -> line.replace(BIDI, "").trim().take(MAX_NOTE)
+            ctx.runs.size > 1 && chosen != null -> ctx.leftover(chosen)
+            else -> null
+        }
+
+    private fun piecesOf(
+        tokens: List<Tok>,
+        hit: DateHit?,
+    ): List<Piece?> = tokens.mapIndexed { i, t -> if (hit != null && i in hit.used) null else QuickNumbers.classify(t) }
 
     /** Digits to one set, Arabic marks removed, lower case; then words, numbers and currency symbols. */
     private fun tokenize(line: String): List<Tok> {
@@ -79,13 +111,19 @@ object QuickEntryParser {
             when (ch) {
                 in '٠'..'٩' -> light.append('0' + (ch - '٠'))
                 in '۰'..'۹' -> light.append('0' + (ch - '۰'))
+                '−' -> light.append('-')
                 '٫' -> light.append('.')
                 '٬', '،' -> light.append(',')
-                in 'ً'..'ْ', 'ـ', '‎', '‏' -> Unit
+                in 'ً'..'ْ', 'ـ', '‎', '‏', in 0x202A.toChar()..0x202E.toChar(), in 0x2066.toChar()..0x2069.toChar() -> Unit
                 else -> light.append(ch.lowercaseChar())
             }
         }
-        val text = light.toString().replace("ج.م", " جنيه ").replace(LATIN_LE, " le ")
+        val text =
+            light
+                .toString()
+                .replace("ج.م", " جنيه ")
+                .replace(LATIN_LE, " le ")
+                .replace(POUND_E, " le ")
         return TOKEN.findAll(text).map { Tok(it.value, TextNormalizer.fold(it.value)) }.toList()
     }
 
@@ -117,6 +155,9 @@ object QuickEntryParser {
                 .joinToString(" ") { tokens[it].raw }
                 .take(MAX_NOTE)
                 .ifEmpty { null }
+
+        /** "paid", "spent", "دفعت" ... but not "got paid" (money coming in). */
+        fun isExpenseVerb(i: Int): Boolean = tokens[i].key in QuickLexicon.EXPENSE_VERBS && tokens.getOrNull(i - 1)?.key != "got"
 
         private fun free(i: Int): Boolean {
             val key = tokens[i].key

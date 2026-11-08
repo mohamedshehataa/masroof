@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,7 +53,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.Money
@@ -114,6 +119,16 @@ fun AddExpenseRoute(
     )
 }
 
+private const val NOTICE_PREFS = "masroof_ui"
+private const val NOTICE_KEY = "voice_online_notice_seen"
+
+private fun noticeSeen(context: Context) = context.getSharedPreferences(NOTICE_PREFS, Context.MODE_PRIVATE).getBoolean(NOTICE_KEY, false)
+
+private fun markNoticeSeen(context: Context) =
+    context.getSharedPreferences(NOTICE_PREFS, Context.MODE_PRIVATE).edit {
+        putBoolean(NOTICE_KEY, true)
+    }
+
 private fun Context.findActivity(): android.app.Activity? =
     when (this) {
         is android.app.Activity -> this
@@ -142,8 +157,12 @@ private fun rememberQuickActions(
             viewModel.onPermissionResult(granted, canAskAgain)
         }
     val listening = voiceState is VoiceUi.Listening
+    // Listening starts only from a tap on this screen instance: after a rotation or process restore the state is dropped.
+    val armed = remember { mutableStateOf(false) }
     LaunchedEffect(listening) {
-        if (listening) {
+        if (listening && !armed.value) {
+            viewModel.dismissVoice()
+        } else if (listening) {
             val tag = if (AppLanguage.current(context) == AppLanguage.ARABIC) "ar-EG" else "en-US"
             input.start(tag) { event ->
                 when (event) {
@@ -153,6 +172,19 @@ private fun rememberQuickActions(
                 }
             }
         }
+    }
+    // Leaving the screen (home button, another app, rotation) stops listening.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, input) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) {
+                    input.cancel()
+                    viewModel.dismissVoice()
+                }
+            }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(voiceState == VoiceUi.Requesting) {
         if (voiceState == VoiceUi.Requesting) launcher.launch(Manifest.permission.RECORD_AUDIO)
@@ -171,12 +203,15 @@ private fun rememberQuickActions(
                     val activity = context.findActivity()
                     val rationale =
                         activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)
+                    armed.value = true
+                    val notice = !input.isOnDevice() && !noticeSeen(context)
                     viewModel.onMicTapped(
                         when {
                             granted -> MicPermission.GRANTED
                             rationale -> MicPermission.SHOW_RATIONALE
                             else -> MicPermission.ASK
                         },
+                        needsOnlineNotice = notice,
                     )
                 },
                 micAvailable = micAvailable,
@@ -189,6 +224,10 @@ private fun rememberQuickActions(
                     viewModel.dismissVoice()
                 },
                 onRationaleContinue = viewModel::onRationaleContinue,
+                onNoticeContinue = {
+                    markNoticeSeen(context)
+                    viewModel.onNoticeContinue()
+                },
                 onOpenSettings = {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                     context.startActivity(intent)

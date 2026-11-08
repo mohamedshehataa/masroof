@@ -27,6 +27,9 @@ internal sealed interface Piece {
 
     data object Quarter : Piece
 
+    /** A word that looks like a scale ("تلافات", "ملايين"...) but is not understood: the number is then not an amount. */
+    data object Unknown : Piece
+
     /** The Arabic "و" that joins number words. */
     data object Conn : Piece
 }
@@ -56,15 +59,26 @@ internal object QuickNumbers {
     private const val HALF_DIVISOR = 2L
     private const val QUARTER_DIVISOR = 4L
     private const val HUNDRED_MINOR = 100L * MINOR_PER_MAJOR
-    private const val MAX_DECIMALS = 2
     private val ZERO_TOKEN = Regex("""0+([.,]0+)?""")
 
+    // Only these digit shapes are amounts: 150, 85.5, 1,250.75, 1,250, 12,5. Anything else ("1,2345", "150.5.5", "-5") is not.
+    private val VALID_DIGITS = Regex("""\d+(\.\d{1,2})?|\d{1,3}(,\d{3})+(\.\d{1,2})?|\d+,\d{1,2}""")
+
+    // Scale-like words that are not in the table: reading just the number before them would be 1000x too small.
+    private val SCALE_LOOKALIKE = Regex("""[تث]لا?ف(ات|ا)?|الاف(ات)?|الفا|الفات|مل[يا][اوي]ن\p{L}*|ملايين\p{L}*""")
+
     fun classify(tok: Tok): Piece? {
-        if (tok.key.first().isDigit()) return digits(tok.key)
+        if (tok.key.first().isDigit() || tok.key.first() == '-') return digits(tok.key)
         direct(tok.key)?.let { return it }
         // "وخمسين": the joining "و" is written onto the next word.
-        if (tok.key.length > 2 && tok.key.startsWith("و")) return direct(tok.key.substring(1))
-        return if (tok.key == "و") Piece.Conn else null
+        if (tok.key.length > 2 && tok.key.startsWith("و")) {
+            direct(tok.key.substring(1))?.let { return it }
+        }
+        return when {
+            tok.key == "و" -> Piece.Conn
+            SCALE_LOOKALIKE.matches(tok.key.removePrefix("و")) -> Piece.Unknown
+            else -> null
+        }
     }
 
     private fun direct(key: String): Piece? =
@@ -77,12 +91,10 @@ internal object QuickNumbers {
         }
 
     private fun digits(token: String): Piece {
+        if (!VALID_DIGITS.matches(token)) return Piece.Digits(0L, true)
         MoneyFormat.parseMinor(token)?.let { return Piece.Digits(it, false) }
-        if (ZERO_TOKEN.matches(token)) return Piece.Digits(0L, false)
-        val fraction = token.substringAfterLast('.', "").takeIf { '.' in token } ?: ""
-        val tooPrecise = fraction.length > MAX_DECIMALS
-        // Not parseable and not zero: either too many decimals, or too big for a Long.
-        return if (tooPrecise) Piece.Digits(0L, true) else Piece.Digits(Long.MAX_VALUE, false)
+        // A well-formed number that is zero or does not fit a Long.
+        return Piece.Digits(if (ZERO_TOKEN.matches(token)) 0L else Long.MAX_VALUE, false)
     }
 
     /** Groups tokens into runs; [pieces] holds null for a token that is not part of any number (or was used as a date). */
@@ -133,7 +145,7 @@ internal object QuickNumbers {
         afterConn: Boolean,
     ): Boolean =
         when (q) {
-            is Piece.Digits -> afterConn || last is Piece.Scale
+            is Piece.Digits -> afterConn
             is Piece.Word -> afterConn || last !is Piece.Digits
             is Piece.Conn -> false
             else -> true
@@ -161,6 +173,7 @@ internal object QuickNumbers {
             val ok =
                 when (p) {
                     is Piece.Conn -> true
+                    is Piece.Unknown -> false
                     is Piece.Digits -> addDigits(s, p)
                     is Piece.Word -> addWord(s, p.word)
                     is Piece.Scale -> addScale(s, p.scale)

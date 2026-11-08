@@ -44,6 +44,7 @@ class QuickEntryScreenTest {
     private fun show(
         micAvailable: Boolean = false,
         permission: MicPermission = MicPermission.GRANTED,
+        notice: Boolean = false,
     ): AddExpenseViewModel {
         repo.categories.value =
             listOf(
@@ -71,11 +72,12 @@ class QuickEntryScreenTest {
                             onQuickDone = vm::applyQuickText,
                             voice =
                                 AddVoiceActions(
-                                    onMic = { vm.onMicTapped(permission) },
+                                    onMic = { vm.onMicTapped(permission, needsOnlineNotice = notice) },
                                     micAvailable = micAvailable,
                                     onStop = vm::onStopTapped,
                                     onClose = vm::dismissVoice,
                                     onRationaleContinue = vm::onRationaleContinue,
+                                    onNoticeContinue = vm::onNoticeContinue,
                                 ),
                         ),
                 )
@@ -93,9 +95,9 @@ class QuickEntryScreenTest {
     }
 
     @Test
-    fun `REQ-EXP-052 all eight currencies are offered`() {
+    fun `REQ-EXP-052 all seven currencies are offered`() {
         show()
-        for (code in listOf("EGP", "USD", "EUR", "SAR", "AED", "GBP", "KWD", "QAR")) {
+        for (code in listOf("EGP", "USD", "EUR", "SAR", "AED", "GBP", "QAR")) {
             compose.onNodeWithTag("currency_$code").assertExists()
         }
     }
@@ -186,7 +188,26 @@ class QuickEntryScreenTest {
         compose.onNodeWithTag("mic").performClick()
         compose.runOnIdle { vm.onVoiceError() }
         compose.onNodeWithText("Didn't catch that - try again or type it").assertIsDisplayed()
-        compose.onNodeWithTag("amount").assertTextContains("")
+        assertEquals("", vm.state.value.form.amountText)
+        assertTrue(repo.added.isEmpty())
+    }
+
+    @Test
+    fun `REQ-AND-144 the one-time online notice offers Continue and Type instead`() {
+        show(micAvailable = true, notice = true)
+        compose.onNodeWithTag("mic").performClick()
+        compose.onNodeWithText("This phone has no on-device speech service", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Type instead").assertIsDisplayed()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Listening…").assertIsDisplayed()
+    }
+
+    @Test
+    fun `REQ-AND-144 the quick field shows the heard text`() {
+        val vm = show(micAvailable = true)
+        compose.onNodeWithTag("mic").performClick()
+        compose.runOnIdle { vm.onVoiceText("150 pounds on fuel") }
+        compose.onNodeWithTag("quick_text").assertTextContains("150 pounds on fuel")
     }
 
     @Test

@@ -67,7 +67,7 @@ data class ExpenseRow(
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val RECENT_LIMIT = 5
 private const val MAX_NOTES = 500
-private const val MAX_MERCHANT = 80
+private const val MAX_MERCHANT = QuickEntryParser.MAX_MERCHANT_LENGTH
 private const val MAX_QUICK_LINE = 400
 private const val HIGHLIGHT_MS = 2_000L
 
@@ -188,6 +188,8 @@ data class AddFormState(
     val voice: VoiceUi = VoiceUi.Idle,
 )
 
+private fun AddFormState.listeningOrWorking() = voice is VoiceUi.Listening || voice == VoiceUi.Processing
+
 data class AddUiState(
     val form: AddFormState = AddFormState(),
     val categories: List<CategoryEntity> = emptyList(),
@@ -225,19 +227,31 @@ class AddExpenseViewModel
 
         fun onMerchant(text: String) = form.update { it.copy(merchant = text.take(MAX_MERCHANT)) }
 
-        fun onQuickText(text: String) = form.update { it.copy(quickText = text.take(MAX_QUICK_LINE)) }
+        // While the mic is listening the line is the recognizer's: typing then would be lost or overwritten.
+        fun onQuickText(text: String) = form.update { if (it.listeningOrWorking()) it else it.copy(quickText = text.take(MAX_QUICK_LINE)) }
 
         /** Done on the quick-text field: the same parser as the mic. Only fills the form; nothing is saved. */
         fun applyQuickText() {
             val line = form.value.quickText
-            if (line.isNotBlank()) fill(line)
+            if (line.isNotBlank() && !form.value.listeningOrWorking()) fill(line)
         }
 
         // ---- the mic flow (REQ-AND-144): the screen runs the recognizer and the permission dialog, this keeps the state ----
 
         /** The mic was tapped. Ignored while listening or working. */
-        fun onMicTapped(permission: MicPermission) {
-            if (form.value.voice is VoiceUi.Listening || form.value.voice == VoiceUi.Processing) return
+        fun onMicTapped(
+            permission: MicPermission,
+            needsOnlineNotice: Boolean = false,
+        ) {
+            if (form.value.listeningOrWorking()) return
+            if (needsOnlineNotice) {
+                form.update { it.copy(voice = VoiceUi.OnlineNotice(permission)) }
+                return
+            }
+            proceed(permission)
+        }
+
+        private fun proceed(permission: MicPermission) {
             val next =
                 when (permission) {
                     MicPermission.GRANTED -> VoiceUi.Listening()
@@ -245,6 +259,12 @@ class AddExpenseViewModel
                     MicPermission.ASK -> VoiceUi.Requesting
                 }
             form.update { it.copy(voice = next) }
+        }
+
+        /** "Continue" on the one-time online notice: on to the permission step the tap would have taken. */
+        fun onNoticeContinue() {
+            val v = form.value.voice
+            if (v is VoiceUi.OnlineNotice) proceed(v.then)
         }
 
         /** "Continue" under the reason text: now the system dialog. */
@@ -311,7 +331,7 @@ class AddExpenseViewModel
                 val rows = repository.observePickerCategories().first()
                 // The seeded id for the reference key, only when that category is on this phone (never a hard-coded row).
                 val categoryId = draft.categoryKey?.let(::seededCategoryId)?.takeIf { id -> rows.any { it.id == id } }
-                form.update { QuickFill.apply(it, draft, categoryId, today) }
+                form.update { QuickFill.apply(it, line, draft, categoryId, today) }
                 highlightJob?.cancel()
                 highlightJob =
                     launch {

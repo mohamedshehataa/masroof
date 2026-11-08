@@ -95,6 +95,8 @@ interface ExpenseRepository {
 
 const val CHANNEL_MANUAL = "MANUAL"
 
+private val CURRENCY_CODE = Regex("[A-Z]{3}")
+
 @Singleton
 class DefaultExpenseRepository
     @Inject
@@ -130,6 +132,8 @@ class DefaultExpenseRepository
         override fun observeMembers() = db.lookups().observeMembers()
 
         override suspend fun add(entry: NewExpense): String {
+            require(entry.type == "EXPENSE" || entry.type == "INCOME") { "Unknown entry type" }
+            require(CURRENCY_CODE.matches(entry.amount.currency)) { "Currency must be a 3-letter ISO code" }
             val now = clock.millis()
             val id = ids.next()
             val sourceId = ids.next()

@@ -14,7 +14,9 @@
     <string name="voice_stop">وقف</string>
     <string name="voice_close">إغلاق</string>
     <string name="voice_level_desc">مستوى الميكروفون</string>
-    <string name="voice_rationale">مصروف بيسمعك بس وإنت بتقول المصروف. موبايلك هو اللي بيحوّل الكلام لنص والتطبيق مابيحفظش الصوت.</string>
+    <string name="voice_rationale">مصروف بيسمعك بس وإنت بتقول المصروف ومابيحفظش الصوت. اسمح بالميكروفون عشان تكمّل.</string>
+    <string name="voice_online_notice">الموبايل ده مفيهوش خدمة كلام شغالة من غير نت، فممكن خدمة الكلام تبعت اللي بتقوله على الإنترنت. لو كتبت بإيدك كل حاجة بتفضل على الموبايل.</string>
+    <string name="voice_type_instead">اكتب بدل كده</string>
     <string name="voice_continue">كمّل</string>
     <string name="voice_denied">الميكروفون مقفول فمصروف مش هيسمعك. تقدر تكتب السطر اللي فوق.</string>
     <string name="voice_denied_forever">الميكروفون ممنوع لمصروف. افتحه من الإعدادات، أو اكتب السطر اللي فوق.</string>

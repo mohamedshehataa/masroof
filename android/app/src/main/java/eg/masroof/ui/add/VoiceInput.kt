@@ -31,6 +31,9 @@ interface VoiceInput {
     /** False when the phone has no recognizer at all: the mic is then hidden. */
     fun isAvailable(): Boolean
 
+    /** True when the phone's own recognizer works offline; false means its speech service may send audio online. */
+    fun isOnDevice(): Boolean
+
     /** Starts listening in [languageTag] (`ar-EG` or `en-US`); events arrive on the main thread. */
     fun start(
         languageTag: String,
@@ -53,6 +56,8 @@ class AndroidVoiceInput(
 ) : VoiceInput {
     private var recognizer: SpeechRecognizer? = null
 
+    override fun isOnDevice(): Boolean = onDevice()
+
     private fun onDevice() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
     override fun isAvailable(): Boolean = onDevice() || SpeechRecognizer.isRecognitionAvailable(context)
@@ -61,10 +66,19 @@ class AndroidVoiceInput(
         languageTag: String,
         onEvent: (VoiceEvent) -> Unit,
     ) {
+        begin(languageTag, onEvent, preferOnDevice = true)
+    }
+
+    private fun begin(
+        languageTag: String,
+        onEvent: (VoiceEvent) -> Unit,
+        preferOnDevice: Boolean,
+    ) {
         cancel()
+        val useOnDevice = preferOnDevice && onDevice()
         val created =
             try {
-                if (onDevice()) {
+                if (useOnDevice) {
                     SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
                 } else {
                     SpeechRecognizer.createSpeechRecognizer(context)
@@ -79,7 +93,9 @@ class AndroidVoiceInput(
             return
         }
         recognizer = created
-        created.setRecognitionListener(Listener(onEvent))
+        // The on-device recognizer may lack this language: one retry with the default recognizer, never a loop.
+        val retry = if (useOnDevice) ({ begin(languageTag, onEvent, preferOnDevice = false) }) else null
+        created.setRecognitionListener(Listener(onEvent, retry))
         val intent =
             Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -110,6 +126,7 @@ class AndroidVoiceInput(
 
     private inner class Listener(
         private val emit: (VoiceEvent) -> Unit,
+        private val retry: (() -> Unit)?,
     ) : RecognitionListener {
         override fun onResults(results: Bundle?) {
             val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull { it.isNotBlank() }
@@ -119,6 +136,11 @@ class AndroidVoiceInput(
 
         override fun onError(error: Int) {
             release()
+            val unsupported = error == ERROR_LANGUAGE_NOT_SUPPORTED || error == ERROR_LANGUAGE_UNAVAILABLE
+            if (unsupported && retry != null) {
+                retry.invoke()
+                return
+            }
             val silent = error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
             emit(if (silent) VoiceEvent.NoSpeech else VoiceEvent.Failed)
         }
@@ -147,5 +169,7 @@ class AndroidVoiceInput(
 
     private companion object {
         const val LEVEL_STEP = 8
+        const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
+        const val ERROR_LANGUAGE_UNAVAILABLE = 13
     }
 }

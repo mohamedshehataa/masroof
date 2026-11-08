@@ -14,6 +14,7 @@ internal class Tok(
 internal class DateHit(
     val date: LocalDate,
     val used: Set<Int>,
+    val yearUsed: Boolean = false,
 )
 
 /** "today", "yesterday", "on 3 oct", "last friday" and their Arabic forms. [today] is already the Cairo day. */
@@ -26,6 +27,7 @@ internal object QuickDates {
     fun find(
         tokens: List<Tok>,
         today: LocalDate,
+        allowYear: Boolean = true,
     ): DateHit? {
         for (i in tokens.indices) {
             val key = tokens[i].key
@@ -34,7 +36,7 @@ internal object QuickDates {
                     key in QuickLexicon.YESTERDAY -> beforeYesterday(tokens, i, today)
                     key in QuickLexicon.TODAY -> DateHit(today, setOf(i))
                     key == "last" -> lastWeekday(tokens, i, today)
-                    key in QuickLexicon.MONTHS -> monthDate(tokens, i, today)
+                    key in QuickLexicon.MONTHS -> monthDate(tokens, i, today, allowYear)
                     else -> null
                 }
             if (hit != null) return hit
@@ -74,6 +76,7 @@ internal object QuickDates {
         tokens: List<Tok>,
         i: Int,
         today: LocalDate,
+        allowYear: Boolean,
     ): DateHit? {
         val month = QuickLexicon.MONTHS.getValue(tokens[i].key)
         val before = dayNumber(tokens.getOrNull(i - 1))
@@ -81,21 +84,28 @@ internal object QuickDates {
         val dayIndex = if (before != null) i - 1 else i + 1
         val day = before ?: after ?: return null
         val used = mutableSetOf(i, dayIndex)
-        var year: Int? = null
         val yearIndex = if (before != null) i + 1 else i + 2
-        tokens.getOrNull(yearIndex)?.key?.takeIf { it.length == YEAR_DIGITS && it.all(Char::isDigit) }?.let {
-            year = it.toInt()
-            used += yearIndex
-        }
+        // A 4-digit number is a year only when it is this year or last, is not followed by a currency word (then it is the
+        // amount) and does not make the date a future one. "3 oct 1500 pounds" is 1500 pounds, never the year 1500.
+        val year =
+            tokens
+                .getOrNull(yearIndex)
+                ?.key
+                ?.takeIf { allowYear && it.length == YEAR_DIGITS && it.all(Char::isDigit) }
+                ?.toInt()
+                ?.takeIf { it in (today.year - 1)..today.year }
+                ?.takeIf { QuickLexicon.CURRENCIES[tokens.getOrNull(yearIndex + 1)?.key] == null }
         val date =
             try {
-                val candidate = LocalDate.of(year ?: today.year, month, day)
-                // No year given: a date still ahead of today means last year (an expense is never in the future).
-                if (year == null && candidate.isAfter(today)) candidate.minusYears(1) else candidate
+                val dated = year?.let { LocalDate.of(it, month, day) }?.takeUnless { it.isAfter(today) }
+                dated?.let { used += yearIndex }
+                val candidate = dated ?: LocalDate.of(today.year, month, day)
+                // No usable year: a date still ahead of today means last year (an expense is never in the future).
+                if (dated == null && candidate.isAfter(today)) candidate.minusYears(1) else candidate
             } catch (_: DateTimeException) {
                 // "31 feb": not a day that exists. The words are still a date, not an amount; the entry keeps today.
                 return DateHit(today, used)
             }
-        return DateHit(date, used)
+        return DateHit(date, used, yearUsed = yearIndex in used)
     }
 }

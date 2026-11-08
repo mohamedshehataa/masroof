@@ -149,7 +149,6 @@ class QuickEntryParserTest {
         check("100 riyals taxi", 10000, "SAR", category = "transport")
         check("75 dirhams groceries", 7500, "AED", category = "groceries")
         check("£15 gift", 1500, "GBP", category = "gifts")
-        check("5 kwd coffee", 500, "KWD", category = "dining")
         check("9 qar coffee", 900, "QAR", category = "dining")
         check("50 usd", 5000, "USD")
         check("50 egp", 5000)
@@ -280,5 +279,71 @@ class QuickEntryParserTest {
     fun `REQ-PARSE-099 a huge line is bounded and does not throw`() {
         val d = parse("150 ".repeat(5000))
         assertNotNull(d)
+    }
+
+    // ---- fix round 1 ----
+
+    @Test
+    fun `REQ-PARSE-098 a 4-digit number next to a currency word or outside this and last year is the amount not the year`() {
+        check("3 oct 1500 pounds uber", 150_000, category = "transport", merchant = "uber", date = LocalDate.of(2026, 10, 3))
+        check("uber oct 3 2500 le", 250_000, category = "transport", merchant = "uber", date = LocalDate.of(2026, 10, 3))
+        check("rent 5 nov 2000", 200_000, category = "rent", date = LocalDate.of(2026, 11, 5))
+        check("on 3 oct 1200 le uber", 120_000, category = "transport", merchant = "uber", date = LocalDate.of(2026, 10, 3))
+        check("3 oct 2026 pounds uber", 202_600, category = "transport", merchant = "uber", date = LocalDate.of(2026, 10, 3))
+    }
+
+    @Test
+    fun `REQ-PARSE-098 a year is taken only when it is plausible, not the only number and never makes a future date`() {
+        check("5 nov 2025 200 rent", 20000, category = "rent", date = LocalDate.of(2025, 11, 5))
+        // Only candidate for the amount: it is the amount, the date has no year.
+        check("rent 5 nov 2026", 202_600, category = "rent", date = LocalDate.of(2026, 11, 5))
+        // 3 Dec 2026 would be in the future: 2026 is not a year, the date is last year's 3 Dec.
+        check("3 dec 2026 50 fuel", 5000, category = "car.fuel", date = LocalDate.of(2025, 12, 3))
+    }
+
+    @Test
+    fun `REQ-PARSE-098 malformed digit groups and minus signs give no amount`() {
+        for (line in listOf("1,2345 fuel", "150.5.5 fuel", "1k5 pounds", "1 000 pounds", "-150 fuel", "\$-5", "\u2212150 fuel")) {
+            assertNull("amount of [$line]", parse(line).amountMinor)
+        }
+        assertEquals(1_000_000L, parse("1,000 fuel").amountMinor?.let { it * 10 })
+    }
+
+    @Test
+    fun `REQ-PARSE-098 paid beats an income word, got paid does not, and E pound is Egyptian`() {
+        check("paid salary to nanny 3000", 300_000)
+        check("got paid 5000 salary", 500_000, type = EntryType.INCOME)
+        val d = check("E£150 fuel", 15000, category = "car.fuel")
+        assertEquals(true, d.currencyStated)
+    }
+
+    @Test
+    fun `REQ-PARSE-099 paid beats an income word in Arabic`() {
+        check("دفعت مرتب الشغالة 3000", 300_000)
+    }
+
+    @Test
+    fun `REQ-PARSE-099 colloquial thousands and the construct of one hundred`() {
+        check("خمس تلاف جنيه", 500_000)
+        check("تلت آلاف جنيه", 300_000)
+        check("ميت جنيه", 10000)
+        check("ميت الف", 10_000_000)
+        check("اتنين تلاف", 200_000)
+    }
+
+    @Test
+    fun `REQ-PARSE-099 a scale word that is not understood gives no amount and the line stays in the note`() {
+        val d = check("خمس ملاين جنيه", null)
+        assertEquals("خمس ملاين جنيه", d.note)
+        check("خمس تلافين جنيه", 500)
+    }
+
+    @Test
+    fun `REQ-PARSE-098 the merchant is capped at 80 characters and bidi controls are not kept in the note`() {
+        val d = parse("50 at " + "a".repeat(400))
+        assertEquals(80, d.merchant?.length)
+        val n = parse("\u202Eألف ألف إيجار\u202C")
+        assertNull(n.amountMinor)
+        assertEquals(false, n.note.orEmpty().any { it in '\u202A'..'\u202E' })
     }
 }

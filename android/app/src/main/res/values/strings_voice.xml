@@ -15,7 +15,9 @@
     <string name="voice_stop">Stop</string>
     <string name="voice_close">Close</string>
     <string name="voice_level_desc">Microphone level</string>
-    <string name="voice_rationale">Masroof listens only while you say an entry. Your phone turns the speech into text and the app never saves the audio.</string>
+    <string name="voice_rationale">Masroof listens only while you say an entry and never saves the audio. Allow the microphone to continue.</string>
+    <string name="voice_online_notice">This phone has no on-device speech service, so its speech service may send what you say over the internet. Typing keeps everything on this phone.</string>
+    <string name="voice_type_instead">Type instead</string>
     <string name="voice_continue">Continue</string>
     <string name="voice_denied">The microphone is off, so Masroof can\'t hear you. You can still type the line above.</string>
     <string name="voice_denied_forever">The microphone is blocked for Masroof. Turn it on in Settings, or type the line above.</string>
