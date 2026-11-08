@@ -8,6 +8,7 @@ import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MIGRATION_7_8
 import eg.masroof.data.db.MIGRATION_8_9
+import eg.masroof.data.db.MIGRATION_9_10
 import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.parse.CaptureSource
@@ -227,7 +228,7 @@ class CapturedRaceTest {
             val migrated =
                 Room
                     .databaseBuilder(context, AppDatabase::class.java, "migration78.db")
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .allowMainThreadQueries()
                     .build()
             try {
