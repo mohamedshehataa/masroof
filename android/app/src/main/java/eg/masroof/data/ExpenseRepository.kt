@@ -126,7 +126,7 @@ class DefaultExpenseRepository
 
         override fun observePickerCategories(): Flow<List<CategoryEntity>> = db.lookups().observeAllCategories().map(::oneChipPerName)
 
-        override fun observeAccounts() = db.lookups().observeAccounts()
+        override fun observeAccounts() = db.accountBalances().observeActiveAccounts()
 
         override fun observeMembers() = db.lookups().observeMembers()
 
