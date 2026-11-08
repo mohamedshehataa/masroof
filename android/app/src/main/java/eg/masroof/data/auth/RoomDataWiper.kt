@@ -112,6 +112,18 @@ class RoomDataWiper
                 listOf(
                     { withContext(io) { deleteReceipts() } },
                     { withContext(io) { deleteSafetyCopies() } },
+                    // staged backup rows a killed backup left behind (encrypted, but still data)
+                    {
+                        withContext(io) {
+                            check(
+                                eg.masroof.data.backup.BackupStage
+                                    .sweep(
+                                        eg.masroof.data.backup.BackupStage
+                                            .dir(safetyCopyDir),
+                                    ) == 0,
+                            )
+                        }
+                    },
                     { withContext(io) { capture.clear() } },
                     // the run state and the 30-day memory of "Read past SMS": the screen must not show an erased run
                     { withContext(io) { backfillReset.reset() } },
