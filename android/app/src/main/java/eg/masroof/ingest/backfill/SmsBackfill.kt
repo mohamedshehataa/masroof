@@ -175,9 +175,11 @@ class SmsBackfill
             }
         }
 
-        /** Without a sent time (or with a different one) the provider's stamp may be seconds off the live PDU's: look a little around it. */
-        private fun slackOf(sms: InboxSms): Long =
-            if (sms.dateSentMillis <= 0) SAME_SMS_SLACK_MILLIS else minOf(abs(sms.dateMillis - sms.dateSentMillis), SAME_SMS_SLACK_MILLIS)
+        /** Without a sent time (or a different one) the provider's stamp may be seconds off the live PDU's: look around it. */
+        private fun slackOf(sms: InboxSms): Long {
+            if (sms.dateSentMillis <= 0) return SAME_SMS_SLACK_MILLIS
+            return minOf(abs(sms.dateMillis - sms.dateSentMillis), SAME_SMS_SLACK_MILLIS)
+        }
 
         private suspend fun known(id: String): Boolean =
             db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0 || db.reviews().find(id) != null

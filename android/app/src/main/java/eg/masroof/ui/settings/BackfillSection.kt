@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,8 +62,8 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * "Read past SMS" (REQ-SMS-101..103): range choice, Start with an explanation before the system permission dialog, a live progress
- * line with Cancel, and the stopped / done / permission-denied states. The permission is asked only here, only on Start.
+ * "Read past SMS" (REQ-SMS-101..103): the permission plumbing around [BackfillContent]. READ_SMS is asked only here, only after the
+ * user tapped Start and read the explanation.
  */
 @Composable
 fun BackfillSection(viewModel: BackfillViewModel = hiltViewModel()) {
@@ -70,8 +71,7 @@ fun BackfillSection(viewModel: BackfillViewModel = hiltViewModel()) {
 
     fun granted() = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
     var permitted by remember { mutableStateOf(granted()) }
-    var denied by remember { mutableStateOf(false) }
-    var explain by remember { mutableStateOf(false) }
+    var denied by rememberSaveable { mutableStateOf(false) }
     // back from the system settings page: the permission may have been given or taken away there
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         permitted = granted()
@@ -85,39 +85,72 @@ fun BackfillSection(viewModel: BackfillViewModel = hiltViewModel()) {
         }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val range by viewModel.range.collectAsStateWithLifecycle()
+    BackfillContent(
+        state = state,
+        range = range,
+        permitted = permitted,
+        denied = denied,
+        onChoose = viewModel::choose,
+        onStart = {
+            denied = false
+            viewModel.start()
+        },
+        onRequestPermission = {
+            denied = false
+            launcher.launch(Manifest.permission.READ_SMS)
+        },
+        onCancel = viewModel::cancel,
+        onDismiss = viewModel::dismiss,
+        onOpenSettings = {
+            val uri = Uri.fromParts("package", context.packageName, null)
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        },
+    )
+}
+
+/** The whole section as a function of its state (so it is testable and previewable without Hilt or a real permission). */
+@Suppress("LongParameterList") // one callback per user action
+@Composable
+internal fun BackfillContent(
+    state: BackfillState,
+    range: BackfillRange,
+    permitted: Boolean,
+    denied: Boolean,
+    onChoose: (BackfillRange) -> Unit,
+    onStart: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    var explain by rememberSaveable { mutableStateOf(false) }
     val digits = LocalMoneyStyle.current.digits
     val running = state.phase == BackfillPhase.RUNNING
+    val noPermission = denied || state.phase == BackfillPhase.PERMISSION_LOST
+    // "Continue" only for the run that was stopped; another range starts a new one
+    val continues = state.resumable && state.rangeKey == range.key
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.backfill_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.backfill_body), style = MaterialTheme.typography.bodySmall)
         if (running) {
             BackfillProgress(state, digits)
-            OutlinedButton(onClick = viewModel::cancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.backfill_cancel))
             }
         } else {
-            RangeChoices(range, digits, viewModel::choose)
-            BackfillStatus(state, digits, permissionDenied = denied || state.phase == BackfillPhase.PERMISSION_LOST)
-            if (denied || state.phase == BackfillPhase.PERMISSION_LOST) {
-                OutlinedButton(
-                    onClick = {
-                        val uri = Uri.fromParts("package", context.packageName, null)
-                        context.startActivity(
-                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) { Text(stringResource(R.string.backfill_open_settings)) }
+            RangeChoices(range, digits, onChoose)
+            BackfillStatus(state, digits, permissionDenied = noPermission)
+            if (noPermission) {
+                OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.backfill_open_settings))
+                }
             }
             Button(
-                onClick = {
-                    denied = false
-                    if (permitted) viewModel.start() else explain = true
-                },
+                onClick = { if (permitted) onStart() else explain = true },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) { Text(stringResource(if (state.resumable) R.string.backfill_resume else R.string.backfill_start)) }
+            ) { Text(stringResource(if (continues) R.string.backfill_resume else R.string.backfill_start)) }
             if (state.phase == BackfillPhase.DONE) {
-                TextButton(onClick = viewModel::dismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.backfill_ok))
                 }
             }
@@ -133,7 +166,7 @@ fun BackfillSection(viewModel: BackfillViewModel = hiltViewModel()) {
                 TextButton(
                     onClick = {
                         explain = false
-                        launcher.launch(Manifest.permission.READ_SMS)
+                        onRequestPermission()
                     },
                     modifier = Modifier.heightIn(min = 48.dp),
                 ) { Text(stringResource(R.string.backfill_rationale_continue)) }

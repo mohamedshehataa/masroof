@@ -193,10 +193,7 @@ class SmsPipeline
             val stored =
                 eraseLock.mutex.withLock {
                     db.withTransaction {
-                        if (gate.isOpen() &&
-                            isAllowed(message, channel) &&
-                            (epoch == null || eraseLock.epoch == epoch)
-                        ) {
+                        if (gate.isOpen() && isAllowed(message, channel) && inEpoch(epoch)) {
                             store(message, id, outcome, applied.templateId, answerState, Origin(channel, slackMillis))
                         } else {
                             Stored(Disposition.DROPPED)
@@ -223,6 +220,9 @@ class SmsPipeline
             if (stored.changed) signal.changed()
             return stored.disposition
         }
+
+        /** A backfill run (an epoch is given) belongs to the erase generation it began in; live capture has no epoch. */
+        private fun inEpoch(epoch: Long?): Boolean = epoch == null || eraseLock.epoch == epoch
 
         /** The remembered answers; with "Count ATM withdrawals as spending" on, the ATM choice is COUNT whatever was stored. */
         private suspend fun effectiveAnswers(): AnswerState {
