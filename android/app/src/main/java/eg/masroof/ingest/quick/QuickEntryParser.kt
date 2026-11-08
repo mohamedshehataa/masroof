@@ -82,7 +82,7 @@ object QuickEntryParser {
             date = dated?.date ?: today,
             note = note,
             currencyStated = stated != null,
-            dateStated = dated != null,
+            dateStated = dated?.stated == true,
             typeStated = earned || spent,
         )
     }

@@ -15,6 +15,8 @@ internal class DateHit(
     val date: LocalDate,
     val used: Set<Int>,
     val yearUsed: Boolean = false,
+    /** False when the words were a date but not a usable one (31 Feb, ahead of today): the entry keeps today. */
+    val stated: Boolean = true,
 )
 
 /** "today", "yesterday", "on 3 oct", "last friday" and their Arabic forms. [today] is already the Cairo day. */
@@ -58,7 +60,7 @@ internal object QuickDates {
             } catch (_: java.time.format.DateTimeParseException) {
                 null
             }
-        return DateHit(date ?: today, setOf(i))
+        return DateHit(date ?: today, setOf(i), stated = date != null)
     }
 
     // "أول امبارح" is the day before yesterday.
@@ -121,7 +123,7 @@ internal object QuickDates {
                 if (dated == null && candidate.isAfter(today)) candidate.minusYears(1) else candidate
             } catch (_: DateTimeException) {
                 // "31 feb": not a day that exists. The words are still a date, not an amount; the entry keeps today.
-                return DateHit(today, used)
+                return DateHit(today, used, stated = false)
             }
         return DateHit(date, used, yearUsed = yearIndex in used)
     }

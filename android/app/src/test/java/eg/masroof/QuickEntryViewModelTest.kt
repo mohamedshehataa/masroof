@@ -436,4 +436,21 @@ class QuickEntryViewModelTest {
             vm.onFallbackNotice()
             assertEquals(VoiceUi.Idle, vm.form().voice)
         }
+
+    @Test
+    fun `REQ-AND-144 a missing on-device language while processing goes to the notice and then back to listening or idle`() =
+        runTest {
+            val vm = newVm()
+            vm.onMicTapped(MicPermission.GRANTED)
+            vm.onStopTapped()
+            assertEquals(VoiceUi.Processing, vm.form().voice)
+            vm.onFallbackNotice()
+            assertTrue(vm.form().voice is VoiceUi.OnlineNotice)
+            vm.onNoticeContinue()
+            assertTrue(vm.form().voice is VoiceUi.Listening)
+            vm.onStopTapped()
+            vm.onFallbackNotice()
+            vm.dismissVoice()
+            assertEquals(VoiceUi.Idle, vm.form().voice)
+        }
 }

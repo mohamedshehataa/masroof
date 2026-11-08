@@ -405,4 +405,15 @@ class QuickEntryParserTest {
         check("50 on 2027-01-01", 5000)
         check("50 on 2026-02-31", 5000)
     }
+
+    @Test
+    fun `REQ-PARSE-098 a future or impossible ISO date is not a stated date`() {
+        for (line in listOf("50 on 2026-12-03", "50 on 2026-02-30")) {
+            val d = parse(line)
+            assertEquals("amount of [$line]", 5000L, d.amountMinor)
+            assertEquals("date of [$line]", today, d.date)
+            assertEquals("stated [$line]", false, d.dateStated)
+        }
+        assertEquals(true, parse("50 on 2026-10-03").dateStated)
+    }
 }
