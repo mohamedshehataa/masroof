@@ -40,15 +40,15 @@ import java.time.Clock
 import java.time.ZoneOffset
 import kotlin.time.Duration.Companion.minutes
 
-private const val MINUTE = 60_000L
-private const val DAY = 24L * 60 * MINUTE
-private val NOW = ANSWER_NOW.toEpochMilli()
+internal const val BACKFILL_MINUTE = 60_000L
+internal const val BACKFILL_DAY = 24L * 60 * BACKFILL_MINUTE
+internal val BACKFILL_NOW = ANSWER_NOW.toEpochMilli()
 
 /** A power cut: not a cancellation and not a permission problem, so the run just stops where it is. */
 private class Killed : Error()
 
 /** The inbox in memory: sorted like the system one, with hooks to fail or cancel at a page. */
-private class FakeInbox(
+internal class FakeInbox(
     rows: List<InboxSms> = emptyList(),
 ) : SmsInbox {
     var rows: List<InboxSms> = rows.sortedWith(compareBy({ it.dateMillis }, { it.id }))
@@ -73,19 +73,23 @@ private class FakeInbox(
         rows.filter { inRange(it, fromMillis, toMillis) }.forEach { visit(it.address) }
     }
 
+    val requested = mutableSetOf<String>()
+
     override fun page(
         fromMillis: Long,
         toMillis: Long,
+        addresses: Set<String>,
         after: InboxPosition?,
         limit: Int,
     ): List<InboxSms> {
         pages++
+        requested += addresses
         beforePage(pages)
         if (denied) throw SecurityException("READ_SMS")
         pageStarts += after
         val out =
             rows
-                .filter { inRange(it, fromMillis, toMillis) }
+                .filter { inRange(it, fromMillis, toMillis) && it.address in addresses }
                 .filter { after == null || it.dateMillis > after.dateMillis || (it.dateMillis == after.dateMillis && it.id > after.id) }
                 .take(limit)
         largestPage = maxOf(largestPage, out.size)
@@ -93,21 +97,21 @@ private class FakeInbox(
     }
 }
 
-private const val PURCHASE_LAST4 = "4512"
-private const val ATM = "From HSBC: 24OCT26 ATM cash withdrawal from 012-345***-678 EGP 2,000.00- Your available balance EGP 5,000.00"
-private const val UNKNOWN = "Welcome to CIB: statement notice 2026"
+internal const val PURCHASE_LAST4 = "4512"
+internal const val ATM = "From HSBC: 24OCT26 ATM cash withdrawal from 012-345***-678 EGP 2,000.00- Your available balance EGP 5,000.00"
+internal const val UNKNOWN = "Welcome to CIB: statement notice 2026"
 
-private const val INSTANT_IN =
+internal const val INSTANT_IN =
     "تم إستقبال تحويل لحظي إلى حسابكم 1094 بمبلغ 1.00 جم من MOHAMED MAHMOUD AHMED في 23:04 يوم 10/26/26 " +
         "رقم المعاملة bda86be1 للمزيد أتصل ب 16990"
 
-private fun purchase(amount: Int) = "Your card ending $PURCHASE_LAST4 was charged EGP $amount.00 at AMAZON"
+internal fun purchase(amount: Int) = "Your card ending $PURCHASE_LAST4 was charged EGP $amount.00 at AMAZON"
 
-private fun sms(
+internal fun sms(
     id: Long,
     body: String,
     sender: String = "CIB",
-    date: Long = NOW - 60 * DAY + id * MINUTE,
+    date: Long = BACKFILL_NOW - 60 * BACKFILL_DAY + id * BACKFILL_MINUTE,
 ) = InboxSms(id, sender, body, date, date)
 
 /** STORY-186: "Read past SMS" through the same pipeline as live capture. */
@@ -134,7 +138,7 @@ class BackfillEngineTest {
         }
     private val summarySink =
         object : BackfillNotifier {
-            override fun finished(state: BackfillState) {
+            override suspend fun finished(state: BackfillState) {
                 summaries += state
             }
         }
@@ -151,12 +155,23 @@ class BackfillEngineTest {
     @After
     fun tearDown() = db.close()
 
-    private fun pipeline() = SmsPipeline(db, settings, MemoryNotifications(), clock, gate, FixedKey, notifier = noticeSink, answers = prefs)
+    private fun pipeline() =
+        SmsPipeline(
+            db,
+            settings,
+            MemoryNotifications(),
+            clock,
+            gate,
+            FixedKey,
+            notifier = noticeSink,
+            answers = prefs,
+            memory = store,
+        )
 
     private fun engine(inbox: SmsInbox) = SmsBackfill(db, pipeline(), inbox, store, settings, FixedKey, gate, clock, summarySink)
 
     private fun begin(key: String = "D90") =
-        store.save(BackfillState(BackfillPhase.RUNNING, key, NOW - 90 * DAY, NOW + 1))
+        store.save(BackfillState(BackfillPhase.RUNNING, key, BACKFILL_NOW - 90 * BACKFILL_DAY, BACKFILL_NOW + 1))
 
     private suspend fun runAll(inbox: SmsInbox) = engine(inbox).run()
 
@@ -168,7 +183,7 @@ class BackfillEngineTest {
                     listOf(
                         sms(3, purchase(30)),
                         sms(1, purchase(10)),
-                        sms(2, purchase(20), date = NOW - 100 * DAY),
+                        sms(2, purchase(20), date = BACKFILL_NOW - 100 * BACKFILL_DAY),
                         sms(4, purchase(40), sender = "Pizza"),
                         sms(5, "Your order is on the way", sender = "Pizza"),
                     ),
@@ -205,13 +220,14 @@ class BackfillEngineTest {
         }
 
     @Test
-    fun `REQ-SMS-101 REQ-SMS-042 a money-like message of a sender that is not allowed only suggests the sender`() =
+    fun `REQ-SMS-101 a sender that is not allowed is never read, not even to suggest it`() =
         runTest {
             val inbox =
                 FakeInbox(listOf(sms(1, purchase(10), sender = "NewBank"), sms(2, "Hello there", sender = "Chatty"), sms(3, purchase(5))))
             begin()
             runAll(inbox)
-            assertEquals(listOf("NewBank"), settings.suggested)
+            assertTrue("no text of a stranger was read for a suggestion", settings.suggested.isEmpty())
+            assertEquals(setOf("CIB"), inbox.requested)
             assertEquals(1, db.expenses().all().size)
             assertTrue(db.reviews().all().isEmpty())
         }
@@ -239,7 +255,7 @@ class BackfillEngineTest {
             assertEquals(2, db.expenses().all().size)
             val review = db.reviews().all().single()
             assertFalse("no OTP text anywhere", db.reviews().all().any { it.text.contains("889900") })
-            assertEquals("text kept 30 days from now", NOW, review.createdAtMillis)
+            assertEquals("text kept 30 days from now", BACKFILL_NOW, review.createdAtMillis)
         }
 
     @Test
@@ -251,7 +267,17 @@ class BackfillEngineTest {
             assertEquals(1, summaries.size)
             assertEquals(5, summaries.single().entries)
             // the same pipeline still notifies for live capture
-            assertEquals(Disposition.RECORDED, pipeline().accept(IncomingMessage(CaptureSource.SMS, "CIB", purchase(999), NOW - 1_000L)))
+            assertEquals(
+                Disposition.RECORDED,
+                pipeline().accept(
+                    IncomingMessage(
+                        CaptureSource.SMS,
+                        "CIB",
+                        purchase(999),
+                        BACKFILL_NOW - 1_000L,
+                    ),
+                ),
+            )
             assertEquals(1, notices.size)
         }
 
@@ -454,8 +480,8 @@ class BackfillEngineTest {
             assertEquals(0, store.state.value.entries)
             // 31 days later the memory is gone
             val later = Clock.fixed(ANSWER_NOW.plusSeconds(31 * 24 * 3600L), ZoneOffset.UTC)
-            val pipelineLater = SmsPipeline(db, settings, MemoryNotifications(), later, gate, FixedKey, answers = prefs)
-            store.save(BackfillState(BackfillPhase.RUNNING, "D90", NOW - 90 * DAY, NOW + 1))
+            val pipelineLater = SmsPipeline(db, settings, MemoryNotifications(), later, gate, FixedKey, answers = prefs, memory = store)
+            store.save(BackfillState(BackfillPhase.RUNNING, "D90", BACKFILL_NOW - 90 * BACKFILL_DAY, BACKFILL_NOW + 1))
             SmsBackfill(db, pipelineLater, FakeInbox(listOf(row)), store, settings, FixedKey, gate, later).run()
             assertEquals(1, db.expenses().all().size)
         }
@@ -516,6 +542,8 @@ class BackfillEngineTest {
             val run: Job = launch { runAll(inbox) }
             launch {
                 store.state.first { it.entries >= 5 }
+                // what BackfillController.cancel does: the mark first, then the work
+                store.save(store.state.value.copy(phase = BackfillPhase.STOPPED))
                 run.cancel()
             }
             run.join()
@@ -541,7 +569,7 @@ class BackfillEngineTest {
     @Test
     fun `REQ-SMS-103 a run that was cancelled before the worker started reads nothing`() =
         runTest {
-            store.save(BackfillState(BackfillPhase.STOPPED, "D90", NOW - 90 * DAY, NOW + 1))
+            store.save(BackfillState(BackfillPhase.STOPPED, "D90", BACKFILL_NOW - 90 * BACKFILL_DAY, BACKFILL_NOW + 1))
             val inbox = FakeInbox(listOf(sms(1, purchase(10))))
             assertEquals(BackfillOutcome.STOPPED, runAll(inbox))
             assertEquals(0, inbox.pages)
@@ -576,6 +604,16 @@ class BackfillEngineTest {
             runAll(FakeInbox(listOf(sms(1, purchase(10)))))
             assertEquals(1, db.expenses().all().size)
             // while live capture stays off
-            assertEquals(Disposition.DROPPED, pipeline().accept(IncomingMessage(CaptureSource.SMS, "CIB", purchase(11), NOW - 5_000L)))
+            assertEquals(
+                Disposition.DROPPED,
+                pipeline().accept(
+                    IncomingMessage(
+                        CaptureSource.SMS,
+                        "CIB",
+                        purchase(11),
+                        BACKFILL_NOW - 5_000L,
+                    ),
+                ),
+            )
         }
 }

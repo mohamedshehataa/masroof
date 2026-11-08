@@ -40,7 +40,7 @@
     <string name="backfill_channel_name">Read past SMS</string>
     <string name="backfill_notice_title">Past messages read</string>
     <plurals name="backfill_notice_text">
-        <item quantity="one">%1$d entry added, %2$d to review</item>
-        <item quantity="other">%1$d entries added, %2$d to review</item>
+        <item quantity="one">%1$s entry added, %2$s to review</item>
+        <item quantity="other">%1$s entries added, %2$s to review</item>
     </plurals>
 </resources>

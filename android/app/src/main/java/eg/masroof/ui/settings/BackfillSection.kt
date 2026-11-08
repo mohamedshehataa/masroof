@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.CairoTime
+import eg.masroof.core.CountFormat
 import eg.masroof.core.DateFormat
 import eg.masroof.core.DigitStyle
 import eg.masroof.ingest.backfill.BackfillPhase
@@ -58,7 +59,6 @@ import eg.masroof.ui.viewmodel.BackfillViewModel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.Locale
 
 /**
  * "Read past SMS" (REQ-SMS-101..103): range choice, Start with an explanation before the system permission dialog, a live progress
@@ -170,10 +170,10 @@ private fun progressLine(
 ) = pluralStringResource(
     R.plurals.backfill_progress,
     state.entries,
-    countText(state.read, digits),
-    countText(state.total, digits),
-    countText(state.entries, digits),
-    countText(state.review, digits),
+    CountFormat.format(state.read, digits),
+    CountFormat.format(state.total, digits),
+    CountFormat.format(state.entries, digits),
+    CountFormat.format(state.review, digits),
 )
 
 @Composable
@@ -192,12 +192,12 @@ private fun BackfillStatus(
                 pluralStringResource(
                     R.plurals.backfill_done,
                     state.entries,
-                    countText(state.entries, digits),
-                    countText(state.review, digits),
+                    CountFormat.format(state.entries, digits),
+                    CountFormat.format(state.review, digits),
                 ),
             )
         state.phase == BackfillPhase.STOPPED || state.phase == BackfillPhase.PERMISSION_LOST ->
-            Text(pluralStringResource(R.plurals.backfill_stopped, state.entries, countText(state.entries, digits)))
+            Text(pluralStringResource(R.plurals.backfill_stopped, state.entries, CountFormat.format(state.entries, digits)))
     }
 }
 
@@ -277,25 +277,3 @@ private fun barFraction(
     read: Int,
     of: Int,
 ): Float = if (of <= 0) 1f else (read.toFloat() / of).coerceIn(0f, 1f)
-
-/** A count with thousands grouping in the chosen digits (`1,020` / `١٬٠٢٠`). */
-internal fun countText(
-    n: Int,
-    digits: DigitStyle,
-): String {
-    val western = "%,d".format(Locale.ENGLISH, n)
-    return if (digits == DigitStyle.ARABIC_INDIC) {
-        western
-            .map {
-                if (it in '0'..'9') {
-                    '٠' + (it - '0')
-                } else if (it == ',') {
-                    '٬'
-                } else {
-                    it
-                }
-            }.joinToString("")
-    } else {
-        western
-    }
-}

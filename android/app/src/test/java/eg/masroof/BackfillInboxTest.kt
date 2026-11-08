@@ -32,11 +32,19 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/** One query the provider received: what was asked for, and about whom. */
+class ProviderQuery(
+    val projection: List<String>,
+    val selection: String?,
+    val args: List<String>,
+)
+
 /** A stand-in for the system SMS provider: a real SQLite table, so the reader's selection and sort order are really executed. */
 class FakeSmsProvider : ContentProvider() {
     private lateinit var table: SQLiteDatabase
     var denied = false
     var lastSort: String? = null
+    val queries = mutableListOf<ProviderQuery>()
 
     override fun onCreate(): Boolean {
         table = SQLiteDatabase.create(null)
@@ -61,6 +69,7 @@ class FakeSmsProvider : ContentProvider() {
     ): Cursor {
         if (denied) throw SecurityException("READ_SMS")
         lastSort = sortOrder
+        queries += ProviderQuery(projection?.toList().orEmpty(), selection, selectionArgs?.toList().orEmpty())
         return table.query("sms", projection, selection, selectionArgs, null, null, sortOrder)
     }
 
@@ -109,11 +118,11 @@ class BackfillInboxTest {
         provider.add(9, "CIB", "tie c", 2_000)
         provider.add(1, "CIB", "too old", 500)
         provider.add(8, "CIB", "too new", 9_000)
-        val first = inbox.page(1_000, 9_000, null, 2)
+        val first = inbox.page(1_000, 9_000, setOf("CIB"), null, 2)
         assertEquals(listOf(2L, 3L), first.map { it.id })
-        val second = inbox.page(1_000, 9_000, InboxPosition(first.last().dateMillis, first.last().id), 2)
+        val second = inbox.page(1_000, 9_000, setOf("CIB"), InboxPosition(first.last().dateMillis, first.last().id), 2)
         assertEquals(listOf(9L, 7L), second.map { it.id })
-        val third = inbox.page(1_000, 9_000, InboxPosition(second.last().dateMillis, second.last().id), 2)
+        val third = inbox.page(1_000, 9_000, setOf("CIB"), InboxPosition(second.last().dateMillis, second.last().id), 2)
         assertTrue(third.isEmpty())
         assertTrue("the order is asked of the provider", provider.lastSort.orEmpty().startsWith("date ASC, _id ASC"))
     }
@@ -132,21 +141,21 @@ class BackfillInboxTest {
     fun `REQ-SMS-101 the sent time is used when the provider has one, else the received time`() {
         provider.add(1, "CIB", "a", date = 2_000, sent = 1_500)
         provider.add(2, "CIB", "b", date = 3_000, sent = 0)
-        val rows = inbox.page(0, 10_000, null, 10)
+        val rows = inbox.page(0, 10_000, setOf("CIB"), null, 10)
         assertEquals(listOf(1_500L, 3_000L), rows.map { it.stampMillis })
     }
 
     @Test
     fun `REQ-SMS-101 a message row never prints its body`() {
         provider.add(1, "CIB", "secret body 123456", 2_000)
-        val row = inbox.page(0, 10_000, null, 10).single()
+        val row = inbox.page(0, 10_000, setOf("CIB"), null, 10).single()
         assertFalse(row.toString().contains("secret"))
     }
 
     @Test
     fun `REQ-SMS-103 a missing READ_SMS surfaces as a SecurityException for the engine to handle`() {
         provider.denied = true
-        assertThrows(SecurityException::class.java) { inbox.page(0, 10_000, null, 10) }
+        assertThrows(SecurityException::class.java) { inbox.page(0, 10_000, setOf("CIB"), null, 10) }
         assertThrows(SecurityException::class.java) { inbox.forEachAddress(0, 10_000) {} }
     }
 
@@ -248,8 +257,8 @@ class BackfillInboxTest {
     @Test
     fun `REQ-SMS-102 the 30 day memory forgets old ids, keeps recent ones, and survives a reload`() {
         val store = BackfillStore(context.getSharedPreferences("memory-test", Context.MODE_PRIVATE))
-        store.markHandled("old", 1_000L)
-        store.markHandled("recent", 9_000L)
+        store.mark("old", 1_000L)
+        store.mark("recent", 9_000L)
         store.forgetBefore(5_000L)
         assertFalse(store.handled("old"))
         assertTrue(store.handled("recent"))

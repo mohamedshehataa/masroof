@@ -19,6 +19,9 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import eg.masroof.R
 import eg.masroof.core.CairoTime
+import eg.masroof.core.CountFormat
+import eg.masroof.core.DigitStyle
+import eg.masroof.data.SettingsRepository
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.ingest.NotificationPermission
 import java.time.Clock
@@ -103,9 +106,10 @@ class BackfillController
 
         /** Stops within one batch (the worker checks after every message) and keeps what was stored. */
         fun cancel() {
-            workManager.cancelUniqueWork(SMS_BACKFILL_WORK)
+            // first the mark (the engine refuses to save over it), then the work
             val s = store.state.value
             if (s.phase == BackfillPhase.RUNNING) store.save(s.copy(phase = BackfillPhase.STOPPED))
+            workManager.cancelUniqueWork(SMS_BACKFILL_WORK)
         }
 
         /** Hides a finished run's summary line (the screen goes back to the range picker). A stopped run keeps its resume point. */
@@ -154,9 +158,15 @@ class AndroidBackfillNotifier
     constructor(
         @ApplicationContext private val context: Context,
         private val permission: NotificationPermission,
+        private val settings: SettingsRepository,
     ) : BackfillNotifier {
-        override fun finished(state: BackfillState) {
+        override suspend fun finished(state: BackfillState) {
             if (!permission.granted()) return
+            val arabic =
+                context.resources.configuration.locales[0]
+                    .language == "ar"
+            // the digit setting of the app, as everywhere else (Arabic-Indic by default in Arabic)
+            val digits = settings.current().digitStyle ?: if (arabic) DigitStyle.ARABIC_INDIC else DigitStyle.WESTERN
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
             val channel =
                 NotificationChannel(
@@ -179,7 +189,12 @@ class AndroidBackfillNotifier
                     )
                 }
             val text =
-                context.resources.getQuantityString(R.plurals.backfill_notice_text, state.entries, state.entries, state.review)
+                context.resources.getQuantityString(
+                    R.plurals.backfill_notice_text,
+                    state.entries,
+                    CountFormat.format(state.entries, digits),
+                    CountFormat.format(state.review, digits),
+                )
             val notification =
                 NotificationCompat
                     .Builder(context, BACKFILL_CHANNEL_ID)

@@ -39,10 +39,14 @@ interface SmsInbox {
         visit: (String) -> Unit,
     )
 
-    /** At most [limit] rows of the range after [after], oldest first (date, then id). Memory is bounded by [limit]. */
+    /**
+     * At most [limit] rows of the range from exactly these [addresses], after [after], oldest first (date, then id). Rows of any other
+     * sender are never asked for, so their text is never read. Memory is bounded by [limit] (times the address chunks, a handful).
+     */
     fun page(
         fromMillis: Long,
         toMillis: Long,
+        addresses: Set<String>,
         after: InboxPosition?,
         limit: Int,
     ): List<InboxSms>
@@ -74,11 +78,28 @@ class ContentResolverSmsInbox
         override fun page(
             fromMillis: Long,
             toMillis: Long,
+            addresses: Set<String>,
             after: InboxPosition?,
             limit: Int,
         ): List<InboxSms> {
+            // each chunk's first [limit] rows after the position: the best [limit] of all chunks together are the global next page
+            val merged = ArrayList<InboxSms>()
+            for (chunk in addresses.toList().chunked(ADDRESSES_PER_QUERY)) merged += pageOf(fromMillis, toMillis, chunk, after, limit)
+            return merged.sortedWith(compareBy({ it.dateMillis }, { it.id })).take(limit)
+        }
+
+        private fun pageOf(
+            fromMillis: Long,
+            toMillis: Long,
+            addresses: List<String>,
+            after: InboxPosition?,
+            limit: Int,
+        ): List<InboxSms> {
+            // only "?" placeholders are built into the text; every value is a bound argument
+            val marks = addresses.joinToString(",") { "?" }
             val args = mutableListOf(fromMillis.toString(), toMillis.toString())
-            var selection = "${Telephony.Sms.DATE} >= ? AND ${Telephony.Sms.DATE} < ?"
+            args += addresses
+            var selection = "${Telephony.Sms.DATE} >= ? AND ${Telephony.Sms.DATE} < ? AND ${Telephony.Sms.ADDRESS} IN ($marks)"
             if (after != null) {
                 selection += " AND (${Telephony.Sms.DATE} > ? OR (${Telephony.Sms.DATE} = ? AND ${Telephony.Sms._ID} > ?))"
                 args += listOf(after.dateMillis.toString(), after.dateMillis.toString(), after.id.toString())
@@ -105,5 +126,10 @@ class ContentResolverSmsInbox
                 }
             }
             return rows
+        }
+
+        private companion object {
+            /** SQLite allows 999 bound arguments per statement; 5 are the range and the position. */
+            const val ADDRESSES_PER_QUERY = 500
         }
     }

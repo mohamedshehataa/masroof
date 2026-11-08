@@ -8,6 +8,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import eg.masroof.data.auth.BackfillReset
+import eg.masroof.ingest.HandledMemory
 import eg.masroof.ingest.backfill.AndroidBackfillNotifier
 import eg.masroof.ingest.backfill.BackfillNotifier
 import eg.masroof.ingest.backfill.BackfillStore
@@ -32,6 +34,12 @@ object BackfillProvidesModule {
     fun contentResolver(
         @ApplicationContext context: Context,
     ): ContentResolver = context.contentResolver
+
+    @Provides @Singleton
+    fun handledMemory(store: BackfillStore): HandledMemory = store
+
+    @Provides @Singleton
+    fun backfillReset(store: BackfillStore): BackfillReset = BackfillReset(store::reset)
 
     @Provides @Singleton
     fun backfillStore(

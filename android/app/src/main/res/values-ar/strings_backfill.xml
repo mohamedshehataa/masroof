@@ -52,11 +52,11 @@
     <string name="backfill_channel_name">قراءة الرسائل القديمة</string>
     <string name="backfill_notice_title">الرسائل القديمة اتقرت</string>
     <plurals name="backfill_notice_text">
-        <item quantity="zero">مفيش مصاريف اتضافت، %2$d للمراجعة</item>
-        <item quantity="one">اتضاف مصروف واحد، %2$d للمراجعة</item>
-        <item quantity="two">اتضاف مصروفين، %2$d للمراجعة</item>
-        <item quantity="few">اتضافت %1$d مصاريف، %2$d للمراجعة</item>
-        <item quantity="many">اتضاف %1$d مصروف، %2$d للمراجعة</item>
-        <item quantity="other">اتضاف %1$d مصروف، %2$d للمراجعة</item>
+        <item quantity="zero">مفيش مصاريف اتضافت، %2$s للمراجعة</item>
+        <item quantity="one">اتضاف مصروف واحد، %2$s للمراجعة</item>
+        <item quantity="two">اتضاف مصروفين، %2$s للمراجعة</item>
+        <item quantity="few">اتضافت %1$s مصاريف، %2$s للمراجعة</item>
+        <item quantity="many">اتضاف %1$s مصروف، %2$s للمراجعة</item>
+        <item quantity="other">اتضاف %1$s مصروف، %2$s للمراجعة</item>
     </plurals>
 </resources>

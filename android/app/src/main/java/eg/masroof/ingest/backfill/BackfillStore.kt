@@ -2,6 +2,7 @@ package eg.masroof.ingest.backfill
 
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import eg.masroof.ingest.HandledMemory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -42,7 +43,7 @@ data class BackfillState(
  */
 class BackfillStore(
     private val prefs: SharedPreferences,
-) {
+) : HandledMemory {
     private val mutable = MutableStateFlow(read())
     val state: StateFlow<BackfillState> = mutable
 
@@ -69,10 +70,16 @@ class BackfillStore(
 
     fun handled(id: String): Boolean = prefs.contains(SEEN + id)
 
-    fun markHandled(
+    override fun mark(
         id: String,
         nowMillis: Long,
     ) = prefs.edit { putLong(SEEN + id, nowMillis) }
+
+    /** After "Erase all data": the file is empty, so the screen goes back to the start instead of showing the erased run. */
+    fun reset() {
+        prefs.edit { clear() }
+        mutable.value = BackfillState()
+    }
 
     /** Forgets handled ids older than [cutoffMillis] (30 days): after that a deleted message may be read in again. */
     fun forgetBefore(cutoffMillis: Long) {

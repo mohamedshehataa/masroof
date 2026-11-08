@@ -270,6 +270,41 @@ interface ExpenseSourceDao {
     @Query("SELECT expenseId FROM expense_source WHERE localSourceId = :localSourceId")
     suspend fun expenseIdOfLocalSource(localSourceId: String): String?
 
+    /**
+     * A notification entry without an SMS source yet (STORY-186): the backfilled SMS of the same transfer attaches to it even when
+     * the "Recorded" row of the notification expired long ago. Not a deleted entry.
+     */
+    @Query(
+        """SELECT e.* FROM expense e JOIN expense_source s ON s.expenseId = e.id
+            WHERE s.channel = 'PUSH' AND e.deletedAtMillis IS NULL AND e.type = :type AND e.currency = :currency
+            AND e.amountMinor = :amountMinor AND s.receivedAtMillis BETWEEN :from AND :to
+            AND NOT EXISTS (SELECT 1 FROM expense_source o WHERE o.expenseId = e.id AND o.channel IN ('SMS', 'BACKFILL'))
+            ORDER BY ABS(s.receivedAtMillis - :at) LIMIT 1""",
+    )
+    suspend fun pushTwinOf(
+        type: String,
+        currency: String,
+        amountMinor: Long,
+        from: Long,
+        to: Long,
+        at: Long,
+    ): ExpenseEntity?
+
+    /** Live-captured SMS sources (deleted entries included) from one sender with the same amount and card tail in a time window. */
+    @Query(
+        """SELECT COUNT(*) FROM expense_source s JOIN expense e ON e.id = s.expenseId
+            WHERE s.channel = 'SMS' AND s.senderId = :sender AND e.currency = :currency AND e.amountMinor = :amountMinor
+            AND s.instrumentLast4 IS :last4 AND s.receivedAtMillis BETWEEN :from AND :to""",
+    )
+    suspend fun liveSmsCount(
+        sender: String,
+        currency: String,
+        amountMinor: Long,
+        last4: String?,
+        from: Long,
+        to: Long,
+    ): Int
+
     @Query("SELECT * FROM expense_source")
     suspend fun all(): List<ExpenseSourceEntity>
 }

@@ -28,6 +28,7 @@ import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CapturedTxEntity
 import eg.masroof.data.db.DatabaseStartup
+import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ParsedOutboxEntity
 import eg.masroof.data.db.REVIEW_RETENTION_DAYS
 import eg.masroof.data.db.ReviewItemEntity
@@ -89,10 +90,38 @@ class WorkManagerSmsScheduler
     }
 
 /** What the pipeline did with one message. [RECORDED] is also the answer for a message that was recorded before. */
-enum class Disposition { RECORDED, REVIEW, DROPPED }
+enum class Disposition {
+    RECORDED,
+    REVIEW,
+    DROPPED,
+
+    /** A backfilled message that an earlier capture (the other channel, or the same SMS stamped differently) already made an entry of. */
+    KNOWN,
+}
+
+/** The 30-day memory of which messages were handled (recorded or sent to review), so a deleted or dismissed one never comes back. */
+interface HandledMemory {
+    fun mark(
+        id: String,
+        nowMillis: Long,
+    )
+}
+
+object NoHandledMemory : HandledMemory {
+    override fun mark(
+        id: String,
+        nowMillis: Long,
+    ) = Unit
+}
 
 /** Where a message came from inside the app: the live receiver/listener, or the user's "Read past SMS" run (STORY-186). */
 enum class CaptureChannel { LIVE, BACKFILL }
+
+/** How a message got here: the channel, and the time slack of the "same SMS as live" check (backfill only). */
+private data class Origin(
+    val channel: CaptureChannel,
+    val slackMillis: Long = 0L,
+)
 
 /** What one write transaction decided; the notices are shown after it committed, never inside it. */
 private data class Stored(
@@ -128,16 +157,22 @@ class SmsPipeline
         private val answers: AnswerPrefs = NoAnswerPrefs,
         private val cashLabel: CashAccountLabel = CashAccountLabel { "Cash" },
         private val appSettings: SettingsRepository? = null,
+        private val memory: HandledMemory = NoHandledMemory,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
         /**
          * [channel] BACKFILL (STORY-186) is the same pipeline with two differences only: the source row says `BACKFILL`, and no
          * per-message notice is posted. A backfill is a user action, so it does not depend on the live "SMS capture" switch.
+         * [epoch] is the erase generation the backfill run started in: a write after an erase would land in the cleared database, so it
+         * is refused. [slackMillis] (backfill only) widens the "same SMS recorded live" check when the provider's time may differ from
+         * the time the live PDU carried.
          */
         suspend fun accept(
             message: IncomingMessage,
             channel: CaptureChannel = CaptureChannel.LIVE,
+            epoch: Long? = null,
+            slackMillis: Long = 0L,
         ): Disposition {
             // Capture switched off (or an erase running): nothing is read, recorded or kept.
             if (!gate.isOpen() || !isAllowed(message, channel)) return Disposition.DROPPED
@@ -159,9 +194,10 @@ class SmsPipeline
                 eraseLock.mutex.withLock {
                     db.withTransaction {
                         if (gate.isOpen() &&
-                            isAllowed(message, channel)
+                            isAllowed(message, channel) &&
+                            (epoch == null || eraseLock.epoch == epoch)
                         ) {
-                            store(message, id, outcome, applied.templateId, answerState, channel)
+                            store(message, id, outcome, applied.templateId, answerState, Origin(channel, slackMillis))
                         } else {
                             Stored(Disposition.DROPPED)
                         }
@@ -178,6 +214,12 @@ class SmsPipeline
             stored.withdraw?.let(notifier::cancel)
             // a backfill posts one summary at its end, never one notice per message
             if (channel == CaptureChannel.LIVE) stored.notice?.let(notifier::captured)
+            if (stored.disposition != Disposition.DROPPED) {
+                // under the erase lock: after an erase (or in a run that began before it) nothing is written to the cleared prefs
+                eraseLock.mutex.withLock {
+                    if (gate.isOpen() && (epoch == null || eraseLock.epoch == epoch)) memory.mark(id, clock.millis())
+                }
+            }
             if (stored.changed) signal.changed()
             return stored.disposition
         }
@@ -194,7 +236,7 @@ class SmsPipeline
             outcome: ParseOutcome,
             templateId: String?,
             answerState: AnswerState,
-            channel: CaptureChannel,
+            origin: Origin,
         ): Stored =
             when (outcome) {
                 is ParseOutcome.Record ->
@@ -204,7 +246,7 @@ class SmsPipeline
                         templateId,
                         message.receivedAtMillis.takeIf { it > 0 } ?: clock.millis(),
                         answerState,
-                        channel,
+                        origin,
                     )
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
@@ -235,8 +277,9 @@ class SmsPipeline
             templateId: String?,
             receivedAt: Long,
             answerState: AnswerState,
-            channel: CaptureChannel,
+            origin: Origin,
         ): Stored {
+            val channel = origin.channel
             val now = clock.millis()
             db.captured().purgeBefore(capturedCutoff(now))
             db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
@@ -248,8 +291,11 @@ class SmsPipeline
             val last4 = r.instrumentLast4
             if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
             // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
+            if (channel == CaptureChannel.BACKFILL && isLiveDuplicate(r, receivedAt, origin.slackMillis)) return Stored(Disposition.KNOWN)
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now, channel)
+            // the other channel's entry whose "Recorded" row has expired (7 days) is found by the entry itself
+            if (channel == CaptureChannel.BACKFILL) oldTwinOf(r, receivedAt)?.let { return attachToEntry(it, r, id, receivedAt) }
             val expenseId = ids.next()
             // "Link to an existing account" (REQ-EXP-066): a card tail linked to an account files its captures under it
             val entry =
@@ -270,6 +316,55 @@ class SmsPipeline
                 return Stored(Disposition.RECORDED, notice = item, changed = true, links = tracked.added.links)
             }
             return Stored(Disposition.RECORDED, notice = item, changed = true)
+        }
+
+        /** The same SMS that live capture already recorded, stamped a few seconds differently by the provider (no `date_sent`). */
+        private suspend fun isLiveDuplicate(
+            r: ParsedRecord,
+            receivedAt: Long,
+            slackMillis: Long,
+        ): Boolean =
+            slackMillis > 0 &&
+                db.sources().liveSmsCount(
+                    r.senderId,
+                    r.currency,
+                    r.amountMinor,
+                    r.instrumentLast4,
+                    receivedAt - slackMillis,
+                    receivedAt + slackMillis,
+                ) >
+                0
+
+        /** A notification entry recorded live whose Undo row is gone: same direction, amount and currency, within the twin window. */
+        private suspend fun oldTwinOf(
+            r: ParsedRecord,
+            receivedAt: Long,
+        ): ExpenseEntity? =
+            when (r.kind) {
+                TxKind.INCOME, TxKind.TRANSFER_IN, TxKind.TRANSFER_OUT ->
+                    db.sources().pushTwinOf(
+                        CaptureRows.typeOf(r.kind),
+                        r.currency,
+                        r.amountMinor,
+                        receivedAt - TWIN_WINDOW_MILLIS,
+                        receivedAt + TWIN_WINDOW_MILLIS,
+                        receivedAt,
+                    )
+                else -> null
+            }
+
+        /** Adds the backfilled SMS as a second source of an entry that exists, taking the card tail it knows more of (if untouched). */
+        private suspend fun attachToEntry(
+            entry: ExpenseEntity,
+            r: ParsedRecord,
+            id: String,
+            receivedAt: Long,
+        ): Stored {
+            db.sources().insert(CaptureRows.source(ids.next(), entry.id, r, id, receivedAt, CHANNEL_BACKFILL))
+            if (entry.instrumentLast4 == null && r.instrumentLast4 != null) {
+                db.expenses().enrichFromTwin(entry.id, r.instrumentLast4, CaptureRows.label(r))
+            }
+            return Stored(Disposition.KNOWN, changed = true)
         }
 
         /** An ignored card's capture: a review item built from typed fields (never message text), with the one-tap Save suggestion. */
