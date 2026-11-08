@@ -250,8 +250,8 @@ class AnswerGeneratedTest {
                 val (ins, src) = if (link.inserted == a.id) a to b else b to a
                 assertTrue("inserted ${ins.id} outlives ${src.id}", src.deletedAtMillis == null || ins.deletedAtMillis != null)
             }
-            val c = byId[link.converted]
-            if (link.converted.isNotEmpty() && c != null && c.deletedAtMillis == null && link.pairType.isNotEmpty()) {
+            val c = byId[link.converted]?.takeIf { it.deletedAtMillis == null && link.pairType.isNotEmpty() }
+            if (c != null) {
                 val other = if (link.converted == a.id) b else a
                 val whole = other.deletedAtMillis == null
                 val type = if (whole) link.pairType else link.origType
