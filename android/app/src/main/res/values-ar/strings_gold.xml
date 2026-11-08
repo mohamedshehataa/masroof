@@ -29,6 +29,7 @@
     <string name="gold_error_date">اكتب تاريخ صحيح مش بعد النهارده</string>
     <string name="gold_error_too_large">الرقم ده كبير قوي</string>
     <string name="gold_error_only_hold">معاك بس %1$s</string>
+    <string name="gold_error_goal">الهدف ده ما ينفعش يتدعم: مؤرشف أو بعملة تانية.</string>
     <string name="gold_error_linked">المقتنى ده بيدعم هدف تاني. فك الربط الأول.</string>
 
     <string name="gold_held">اللي معاك</string>

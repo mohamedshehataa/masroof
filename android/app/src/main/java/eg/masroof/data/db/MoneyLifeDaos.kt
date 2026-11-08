@@ -316,6 +316,13 @@ interface AssetLotDao {
     @Query("SELECT * FROM asset_lot WHERE assetId = :assetId ORDER BY atMillis DESC, id")
     fun observeForAsset(assetId: String): Flow<List<AssetLotEntity>>
 
+    /** Lots of other holdings pointing at this entry. */
+    @Query("SELECT COUNT(*) FROM asset_lot WHERE expenseId = :expenseId AND assetId <> :assetId")
+    suspend fun countOutsideAsset(
+        expenseId: String,
+        assetId: String,
+    ): Int
+
     /** How many other lots point at this entry (it stays excluded from totals while any does). */
     @Query("SELECT COUNT(*) FROM asset_lot WHERE expenseId = :expenseId AND id <> :exceptLotId")
     suspend fun countForExpense(

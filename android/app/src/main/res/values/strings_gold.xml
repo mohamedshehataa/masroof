@@ -29,6 +29,7 @@
     <string name="gold_error_date">Enter a real date, not after today</string>
     <string name="gold_error_too_large">That is too large</string>
     <string name="gold_error_only_hold">You hold only %1$s</string>
+    <string name="gold_error_goal">That goal can\'t be backed: it is archived or in another currency.</string>
     <string name="gold_error_linked">This holding already backs another goal. Unlink it first.</string>
 
     <string name="gold_held">Held</string>

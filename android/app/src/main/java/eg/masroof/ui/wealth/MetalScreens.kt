@@ -38,7 +38,6 @@ import eg.masroof.R
 import eg.masroof.core.CairoTime
 import eg.masroof.core.DateFormat
 import eg.masroof.core.Money
-import eg.masroof.core.PercentFormat
 import eg.masroof.data.db.AssetLotEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.wealth.Checked
@@ -340,6 +339,7 @@ private fun outcomeText(outcome: MetalOutcome): String =
         MetalOutcome.TooLarge -> stringResource(R.string.gold_error_too_large)
         MetalOutcome.InvalidAmount -> stringResource(R.string.gold_error_amount)
         MetalOutcome.AlreadyLinked -> stringResource(R.string.gold_error_linked)
+        MetalOutcome.NotEligible -> stringResource(R.string.gold_error_goal)
         else -> stringResource(R.string.gold_error_grams)
     }
 
@@ -367,7 +367,7 @@ private fun ValueCard(
                 if (bp == null) {
                     stringResource(R.string.gold_gain_no_pct, gain)
                 } else {
-                    stringResource(R.string.gold_gain, gain, PercentFormat.format(bp, style.arabic, style.digits, signed = true))
+                    stringResource(R.string.gold_gain, gain, gainPercent(bp, style.arabic, style.digits))
                 },
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -701,4 +701,24 @@ private fun ConfirmDialog(
         },
         dismissButton = { TextButton(onDismiss, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_cancel)) } },
     )
+}
+
+/** Gain as a signed percent with two decimals (1636 bp -> +16.36%), in the chosen digits. */
+internal fun gainPercent(
+    bp: Int,
+    arabic: Boolean,
+    digits: eg.masroof.core.DigitStyle,
+): String {
+    val abs = kotlin.math.abs(bp.toLong())
+    val sep = if (digits == eg.masroof.core.DigitStyle.ARABIC_INDIC) "٫" else "."
+    val number = "${abs / 100}$sep${(abs % 100).toString().padStart(2, '0')}"
+    val sign =
+        if (bp > 0) {
+            "+"
+        } else if (bp < 0) {
+            "-"
+        } else {
+            ""
+        }
+    return DateFormat.digitsAs("$sign$number", digits) + if (arabic) "٪" else "%"
 }

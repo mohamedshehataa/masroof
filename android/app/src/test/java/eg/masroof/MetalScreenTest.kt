@@ -70,7 +70,7 @@ class MetalScreenTest {
         compose.onNodeWithText("168,000", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Average paid: 4,125", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Gain: +23,625", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("16.4%", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("+16.36%", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Gain on sales: 3,375", substring = true).assertIsDisplayed()
     }
 

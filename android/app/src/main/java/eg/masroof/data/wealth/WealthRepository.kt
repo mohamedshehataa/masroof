@@ -254,15 +254,13 @@ class WealthRepository
         suspend fun deleteAsset(asset: AssetEntity) {
             db.withTransaction {
                 // Entries linked to this holding's lots count as spending again; its lots go with it, a goal link is released (FK).
-                db.assetLots().forAsset(asset.id).forEach { lot ->
-                    lot.expenseId?.let {
-                        if (db.assetLots().countForExpense(it, lot.id) ==
-                            0
-                        ) {
-                            db.expenses().setExcluded(it, false, clock.millis())
-                        }
-                    }
-                }
+                db
+                    .assetLots()
+                    .forAsset(asset.id)
+                    .mapNotNull { it.expenseId }
+                    .distinct()
+                    .filter { db.assetLots().countOutsideAsset(it, asset.id) == 0 }
+                    .forEach { db.expenses().setExcluded(it, false, clock.millis()) }
                 db.assets().delete(asset)
             }
             refreshSnapshot()

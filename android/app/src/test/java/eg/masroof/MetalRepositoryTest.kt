@@ -322,7 +322,14 @@ class MetalRepositoryTest {
             assertTrue(metal.linkGoal(asset, a) is MetalOutcome.Saved)
             assertEquals(MetalOutcome.AlreadyLinked, metal.linkGoal(asset, b))
             // A taken holding does not offer its goal twice: a is taken, b is free.
-            assertEquals(listOf(b), metal.observeLinkableGoals().first().map { it.id })
+            assertEquals(
+                setOf(a, b),
+                metal
+                    .observeLinkableGoals()
+                    .first()
+                    .map { it.id }
+                    .toSet(),
+            )
             metal.unlinkGoal(asset)
             assertNull(db.assets().find(asset)!!.goalId)
             assertEquals(
@@ -362,5 +369,116 @@ class MetalRepositoryTest {
             )
             assertNotNull(db.savingsGoals().find(goal))
             assertNull(db.assets().find(asset))
+        }
+
+    private fun total() = db.expenses().observeTotal(day(1, 1), day(12, 31))
+
+    @Test
+    fun `REQ-EXP-063 a linked entry leaves Insights and Home totals, Undo brings it back, balances keep it`() =
+        runTest {
+            db.expenses().insert(entry("e1").copy(instrumentLast4 = "1234"))
+            db.expenses().insert(entry("e2").copy(amountMinor = 50_000L))
+            val all = db.expenses().analyticsRows(day(1, 1), day(12, 31))
+            assertEquals(2, all.size)
+            assertEquals(12_050_000L, total().first())
+            val id = wedding()
+            val lot = metal.addLot(id, buy(5, 20_000, day(6, 2), "e1")) as MetalOutcome.Saved
+            assertEquals(1, db.expenses().analyticsRows(day(1, 1), day(12, 31)).size)
+            assertEquals(
+                1,
+                db
+                    .expenses()
+                    .observeAnalyticsRows(day(1, 1), day(12, 31))
+                    .first()
+                    .size,
+            )
+            assertEquals(50_000L, total().first())
+            // Still listed, and still moves the account balance.
+            assertTrue(
+                db
+                    .expenses()
+                    .observeAll()
+                    .first()
+                    .any { it.id == "e1" },
+            )
+            assertTrue(
+                db
+                    .accountBalances()
+                    .observeFlowRows()
+                    .first()
+                    .any { it.amountMinor == 12_000_000L },
+            )
+            metal.detachEntry(lot.id)
+            assertEquals(12_050_000L, total().first())
+        }
+
+    @Test
+    fun `REQ-EXP-063 an entry that was already excluded is not claimed, so Undo cannot change it`() =
+        runTest {
+            db.expenses().insert(entry("e1").copy(excludedFromTotals = true))
+            val id = wedding()
+            val lot = metal.addLot(id, buy(5, 20_000, day(6, 2), "e1")) as MetalOutcome.Saved
+            assertNull(metal.entryOf(lot.id))
+            assertTrue(
+                db
+                    .expenses()
+                    .observeAll()
+                    .first()
+                    .first { it.id == "e1" }
+                    .excludedFromTotals,
+            )
+        }
+
+    @Test
+    fun `REQ-EXP-063 deleting a holding with two lots on one entry releases it`() =
+        runTest {
+            db.expenses().insert(entry("e1"))
+            val id = (metal.createHolding(HoldingDraft("GOLD", "Ring", 21), buy(5, 20_000, day(6, 2), "e1")) as MetalOutcome.Saved).id
+            val second = metal.addLot(id, buy(1, 1_000, day(6, 3))) as MetalOutcome.Saved
+            db.assetLots().update(db.assetLots().find(second.id)!!.copy(expenseId = "e1"))
+            metal.deleteHolding(id)
+            assertFalse(
+                db
+                    .expenses()
+                    .observeAll()
+                    .first()
+                    .first { it.id == "e1" }
+                    .excludedFromTotals,
+            )
+        }
+
+    @Test
+    fun `REQ-AN-174 a goal can be backed by several holdings and only eligible goals can be linked`() =
+        runTest {
+            val a = workedExample()
+            val b = (metal.createHolding(HoldingDraft("SILVER", "Bars", 999), buy(100, 5_000, day(6, 2))) as MetalOutcome.Saved).id
+            val goal = chalet()
+            assertTrue(metal.linkGoal(a, goal) is MetalOutcome.Saved)
+            assertTrue(metal.linkGoal(b, goal) is MetalOutcome.Saved)
+            assertEquals(
+                2,
+                goals
+                    .observeGoal(goal)
+                    .first()!!
+                    .backing.size,
+            )
+            assertEquals(
+                16_800_000L + 500_000L,
+                goals
+                    .observeGoals()
+                    .first()
+                    .single()
+                    .backedMinor,
+            )
+            val usd = (goals.create(GoalDraft("Trip", null, 1_000_00L, "USD")) as GoalOutcome.Saved).id
+            assertEquals(MetalOutcome.NotEligible, metal.linkGoal(b, usd))
+            assertEquals(
+                setOf(goal),
+                metal
+                    .observeLinkableGoals()
+                    .first()
+                    .map { it.id }
+                    .toSet(),
+            )
         }
 }

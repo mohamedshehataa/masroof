@@ -14,6 +14,7 @@ import eg.masroof.data.db.MetalPriceEntity
 import eg.masroof.data.db.SavingsGoalEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import java.time.LocalDate
@@ -70,6 +71,9 @@ sealed interface MetalOutcome {
 
     data object NotFound : MetalOutcome
 
+    /** An archived goal, or one in another currency. */
+    data object NotEligible : MetalOutcome
+
     /** The holding already backs a goal; unlink it first. */
     data object AlreadyLinked : MetalOutcome
 }
@@ -81,7 +85,11 @@ object MetalInput {
 
     /** Grams typed as `30`, `7.5`, `0.125` (Western or Arabic-Indic digits) as milligrams; null when it is not a positive amount. */
     fun parseGrams(text: String): Long? {
-        val t = WealthValidation.western(text).replace(',', '.')
+        // A comma (or Arabic thousands mark) is a thousands separator as in money: 1,250 is 1250 g. The decimal mark is . or ٫.
+        val typed = WealthValidation.western(text)
+        val whole = typed.substringBefore('.')
+        if (',' in typed && !GROUPED.matches(whole)) return null
+        val t = typed.replace(",", "")
         val parts = t.split('.')
         val digits = parts.all { p -> p.all { it in '0'..'9' } }
         val ok = parts.size in 1..2 && digits && (parts[0].isNotEmpty() || parts.getOrNull(1).isNullOrEmpty().not())
@@ -93,6 +101,7 @@ object MetalInput {
     }
 
     private const val MAX_INT_DIGITS = 7
+    private val GROUPED = Regex("""\d{1,3}(,\d{3})+""")
 
     fun parseMoney(text: String): Long? = (MoneyFormat.parseEntry(text) as? MoneyFormat.EntryAmount.Valid)?.minor
 
@@ -159,9 +168,9 @@ class MetalRepository
 
         /** Open goals in the holding's currency a holding may back. */
         fun observeLinkableGoals(): Flow<List<SavingsGoalEntity>> =
-            combine(db.savingsGoals().observeAll(), db.assets().observeAll()) { goals, assets ->
-                val taken = assets.mapNotNull { it.goalId }.toSet()
-                goals.filter { it.archivedAtMillis == null && it.currency == Money.EGP && it.id !in taken }
+            db.savingsGoals().observeAll().map { goals ->
+                // A goal may be backed by several holdings; only a holding is limited to one goal.
+                goals.filter { it.archivedAtMillis == null && it.currency == Money.EGP }
             }
 
         fun observePrices(): Flow<List<MetalPriceEntity>> = db.metalPrices().observeAll()
@@ -303,6 +312,16 @@ class MetalRepository
                 }
             }
 
+        suspend fun entryOf(lotId: String): String? = db.assetLots().find(lotId)?.expenseId
+
+        /** Deletes the holding and its lots under the erase lock; entries only its lots linked count as spending again. */
+        suspend fun deleteHolding(assetId: String) {
+            eraseLock.mutex.withLock {
+                val asset = db.assets().find(assetId) ?: return@withLock
+                wealth.deleteAsset(asset)
+            }
+        }
+
         suspend fun linkGoal(
             assetId: String,
             goalId: String,
@@ -312,6 +331,11 @@ class MetalRepository
                     .withTransaction {
                         val asset = db.assets().find(assetId) ?: return@withTransaction MetalOutcome.NotFound
                         val goal = db.savingsGoals().find(goalId) ?: return@withTransaction MetalOutcome.NotFound
+                        if (goal.archivedAtMillis != null ||
+                            goal.currency != asset.currency
+                        ) {
+                            return@withTransaction MetalOutcome.NotEligible
+                        }
                         if (asset.goalId != null && asset.goalId != goal.id) return@withTransaction MetalOutcome.AlreadyLinked
                         db.assets().setGoal(assetId, goal.id, clock.millis())
                         MetalOutcome.Saved(assetId)
@@ -354,7 +378,7 @@ class MetalRepository
         }
 
         /** Excludes the entry from totals; false when the entry is gone. */
-        private suspend fun claim(expenseId: String): Boolean = db.expenses().setExcluded(expenseId, true, clock.millis()) > 0
+        private suspend fun claim(expenseId: String): Boolean = db.expenses().claimExcluded(expenseId, clock.millis()) > 0
 
         /** The entry counts as spending again unless another lot still points at it. */
         private suspend fun release(

@@ -91,7 +91,16 @@ class MetalViewModel
             val id = assetId.value ?: return
             viewModelScope.launch {
                 val out = if (lotId == null) repository.addLot(id, draft) else repository.updateLot(lotId, draft)
-                if (out is MetalOutcome.Saved && draft.expenseId != null) undo.value = out.id
+                val before =
+                    lotId?.let { l ->
+                        state.value.holding
+                            ?.lots
+                            ?.firstOrNull { it.id == l }
+                            ?.expenseId
+                    }
+                // Undo is offered only when this save really linked an entry (one that counted until now).
+                val newLink = draft.expenseId != null && draft.expenseId != before
+                if (out is MetalOutcome.Saved && newLink && repository.entryOf(out.id) != null) undo.value = out.id
                 done(out)
             }
         }
@@ -144,6 +153,6 @@ class MetalViewModel
 
         fun deleteHolding() {
             val asset = state.value.holding?.asset ?: return
-            viewModelScope.launch { wealth.deleteAsset(asset) }
+            viewModelScope.launch { repository.deleteHolding(asset.id) }
         }
     }

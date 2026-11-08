@@ -44,6 +44,16 @@ interface ExpenseDao {
         nowMillis: Long,
     ): Int
 
+    /** Excludes the entry only if it counted until now, so Undo can safely restore it. */
+    @Query(
+        """UPDATE expense SET excludedFromTotals = 1, updatedAtMillis = :nowMillis
+            WHERE id = :id AND deletedAtMillis IS NULL AND excludedFromTotals = 0""",
+    )
+    suspend fun claimExcluded(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
     /** Recent purchases a gold lot could be: live, not failed, not already excluded, not linked to another lot. */
     @Query(
         """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND type = 'EXPENSE' AND excludedFromTotals = 0
@@ -59,7 +69,7 @@ interface ExpenseDao {
     // The one spending rule (ADR-0009 D2, parity-v1.json): EGP, CONFIRMED or PENDING_REVIEW, refunds netted, no cash withdrawals here.
     @Query(
         """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
             AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
@@ -70,7 +80,7 @@ interface ExpenseDao {
     /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeAnalyticsRows(
@@ -80,7 +90,7 @@ interface ExpenseDao {
 
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun analyticsRows(
