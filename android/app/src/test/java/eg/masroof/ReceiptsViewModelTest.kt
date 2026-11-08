@@ -115,7 +115,8 @@ class ReceiptsViewModelTest {
             val receipt = await { it.receipts.size == 1 && it.adding == 0 }.receipts.single()
             vm.view(receipt)
             vm.askRemove()
-            assertTrue(vm.state.value.confirmRemove)
+            // The state is a combined flow that updates asynchronously: wait for the question to arrive.
+            assertTrue(await { it.confirmRemove }.confirmRemove)
             vm.dismissRemove()
             assertEquals(1, db.receipts().count())
             vm.askRemove()
