@@ -52,6 +52,7 @@ import eg.masroof.data.bills.CalendarItem
 import eg.masroof.data.bills.ComingUp
 import eg.masroof.data.bills.PLAN_COMPLETED
 import eg.masroof.data.bills.PlanProgress
+import eg.masroof.data.bills.Suggestion
 import eg.masroof.data.bills.providerRes
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.components.SkeletonList
@@ -99,22 +100,63 @@ class BillsActions(
 fun BillsRoute(
     onAdd: () -> Unit,
     onOpenPlan: (String) -> Unit,
+    onAddSubscription: () -> Unit,
+    onOpenSubscription: (String) -> Unit,
+    onAddSuggestion: (Suggestion) -> Unit,
     viewModel: BillsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshPermission() }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPermission() }
-    BillsContent(
-        state,
-        BillsActions(
-            onAdd = onAdd,
-            onOpenPlan = onOpenPlan,
-            onShiftMonth = viewModel::shiftMonth,
-            onAllowNotifications = {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            },
-        ),
-    )
+    var tab by rememberSaveable { mutableStateOf(BillsTab.INSTALLMENTS) }
+    Column(Modifier.fillMaxSize()) {
+        BillsTabs(tab) { tab = it }
+        if (tab == BillsTab.INSTALLMENTS) {
+            BillsContent(
+                state,
+                BillsActions(
+                    onAdd = onAdd,
+                    onOpenPlan = onOpenPlan,
+                    onShiftMonth = viewModel::shiftMonth,
+                    onAllowNotifications = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    },
+                ),
+            )
+        } else {
+            SubscriptionsRoute(tab, onAddSubscription, onOpenSubscription, onAddSuggestion)
+        }
+    }
+}
+
+/** Installments, Subscriptions and Coming in: three chips that switch the part of the Bills screen shown. */
+@Composable
+fun BillsTabs(
+    selected: BillsTab,
+    onSelect: (BillsTab) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        BillsTab.entries.forEach { tab ->
+            FilterChip(
+                selected = selected == tab,
+                onClick = { onSelect(tab) },
+                label = {
+                    Text(
+                        stringResource(
+                            when (tab) {
+                                BillsTab.INSTALLMENTS -> R.string.subs_tab_installments
+                                BillsTab.SUBSCRIPTIONS -> R.string.subs_tab_subscriptions
+                                BillsTab.COMING_IN -> R.string.subs_tab_coming_in
+                            },
+                        ),
+                    )
+                },
+                modifier = Modifier.heightIn(min = 48.dp),
+            )
+        }
+    }
 }
 
 @Composable

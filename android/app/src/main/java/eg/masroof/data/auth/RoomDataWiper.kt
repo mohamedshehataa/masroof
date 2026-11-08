@@ -45,6 +45,7 @@ class RoomDataWiper
         @SafetyCopyDir private val safetyCopyDir: File = File("no-safety-copy-dir"),
         @CameraDir private val cameraDir: File = File("no-camera-dir"),
         private val reminders: eg.masroof.work.ReminderLog = eg.masroof.work.NoReminderLog,
+        private val subscriptionPrefs: eg.masroof.data.bills.SubscriptionPrefs = eg.masroof.data.bills.NoSubscriptionPrefs,
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -110,6 +111,8 @@ class RoomDataWiper
                     { notifier.cancelAll() },
                     // the "already reminded" memory of the bill reminders
                     { withContext(io) { reminders.clear() } },
+                    // dismissed suggestions, price notices and renewal anchor days
+                    { subscriptionPrefs.clear() },
                 )
             for (step in steps) {
                 try {
