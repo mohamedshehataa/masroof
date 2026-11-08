@@ -48,3 +48,14 @@ FINDINGS:
 - [MINOR] `150E£`/`£E 150` -> GBP; online notice skipped on the language fallback; unsupported currency words -> EGP;
   ISO date `2026-10-03` kills the amount
 STATUS: FAIL -> fix round 2 sent (owner rule: keep iterating; see DECISIONS)
+
+## Loop 3 - head `d84ae28`
+Gate: `bash scripts/make/check-fast.sh android` -> GREEN in 45s; `--rerun` 745 tests, 0 failures. TEST_INTEGRITY: OK
+(0 -> 280, no assertion removed). 176 parser lines (145 old: 0 regressions, 9 changed as intended) + 16 VM steps.
+- Loop-2 MAJOR rows: PASS (نص مليون 500,000; ربع مليون 250,000; خمسة ونص ألف 5,500; ألف إلا ربع 750; ...)
+- MINORs (E£ spellings, unsupported currencies, ISO date, fallback notice, Type instead): PASS
+FINDINGS:
+- [MAJOR] `QuickNumbers.kt` fraction() -- a half after a hundreds word before a scale: `مية ونص ألف` -> 100,500
+  (should be 150,000); `ميتين ونص ألف` -> 200,500; `نص مية` -> 100 (should be 50)
+- [MINOR] fallback notice while Processing leaves the panel stuck; [NIT] future/impossible ISO date marked as stated
+STATUS: FAIL -> fix round 3 (whitelist grammar + generated combination test), past the 3-loop limit by owner rule
