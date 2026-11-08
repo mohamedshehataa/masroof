@@ -1,25 +1,17 @@
 package eg.masroof.data.budgets
 
-import eg.masroof.api.models.BudgetPeriod
-import eg.masroof.api.models.BudgetStatusList
-import kotlinx.serialization.Serializable
+import eg.masroof.core.analytics.BudgetPeriodKind
 
-/** Budget progress for the current period exactly as the server computed it; cached for offline display. */
-@Serializable
-data class BudgetsSnapshot(
-    val status: BudgetStatusList,
-    val fetchedAtMillis: Long,
-)
-
-/** What the user entered in the budget form. [categoryId] null is the whole household budget. */
+/** What the user entered in the budget form. [categoryId] null is the whole household budget ("All spending"). */
 data class BudgetDraft(
     val categoryId: String?,
     val amountMinor: Long,
-    val currency: String,
     val rollover: Boolean,
-    /** Sent as-is: editing a weekly budget must not turn it monthly. */
-    val period: BudgetPeriod = BudgetPeriod.MONTHLY,
+    val period: BudgetPeriodKind = BudgetPeriodKind.MONTHLY,
 )
 
 /** Result of a create, update or delete. Only [Ok] changed anything. */
-enum class MutationOutcome { Ok, Invalid, Duplicate, NotFound, Offline, SignIn, Failed }
+enum class MutationOutcome { Ok, Invalid, UnknownCategory, Duplicate, NotFound, Failed }
+
+/** The largest budget a user may set, in minor units (same cap as a manual entry). */
+const val MAX_BUDGET_MINOR = 1_000_000_000_000L

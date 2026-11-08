@@ -3,7 +3,7 @@ id: STORY-181
 epic: EPIC-17
 title: Create, edit and delete budgets on the phone and see their progress offline
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -95,3 +95,6 @@ STORY-180
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot, reuses STORY-092/112 budgets |
+| 2026-11-08 | 5 build | android-engineer | budgets stored in the v10 `budget` table, Budgets screen and Wallet tile on the on-device engine, server budget classes removed |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 PASS on b769c88; MINORs (exact test value, remaining shown on Wallet, erase lock, bidi marks) fixed in 650d8d1, diff reviewed |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

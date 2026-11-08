@@ -2,10 +2,12 @@ package eg.masroof
 
 import eg.masroof.core.analytics.AnalyticsEngine
 import eg.masroof.core.analytics.AnalyticsPeriod
+import eg.masroof.core.analytics.BudgetStatus
 import eg.masroof.core.analytics.ForecastResult
 import eg.masroof.core.analytics.PeriodAnalytics
 import eg.masroof.core.analytics.SummaryResult
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -16,6 +18,8 @@ class TotalEngine(
     override fun observe(spec: String): Flow<PeriodAnalytics> = totals.map { analyticsWithTotal(it) }
 
     override suspend fun compute(spec: String): PeriodAnalytics = error("not used")
+
+    override fun observeBudgets(): Flow<List<BudgetStatus>> = flowOf(emptyList())
 }
 
 fun analyticsWithTotal(total: Long): PeriodAnalytics {

@@ -192,7 +192,25 @@ private fun BudgetTile(
     val title = stringResource(R.string.tile_budget)
     val percent = budget?.let { PercentFormat.format(it.progressBps, style.arabic, style.digits) }
     val name = budget?.let { budgetName(it) }
-    Tile(title, "$title. ${name?.let { "$it $percent" } ?: stringResource(R.string.budgets_home_cta)}", actions.onOpenBudgets, modifier) {
+    // "1,000 EGP left of 4,000 EGP", or "Over by 100 EGP" once past the limit
+    val remaining = budget?.remaining?.amountMinor ?: 0L
+    val left =
+        budget?.let {
+            if (remaining >= 0) {
+                stringResource(
+                    R.string.budgets_tile_left,
+                    MoneyFormat.format(it.remaining, style.arabic, style.digits),
+                    MoneyFormat.format(it.effectiveLimit, style.arabic, style.digits),
+                )
+            } else {
+                stringResource(
+                    R.string.budgets_tile_over,
+                    MoneyFormat.format(Money(-remaining, it.remaining.currency), style.arabic, style.digits),
+                )
+            }
+        }
+    val spoken = name?.let { "$it $percent, $left" } ?: stringResource(R.string.budgets_home_cta)
+    Tile(title, "$title. $spoken", actions.onOpenBudgets, modifier) {
         if (budget == null) {
             Text(
                 stringResource(R.string.budgets_home_cta),
@@ -206,6 +224,11 @@ private fun BudgetTile(
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
             )
             Text(percent.orEmpty(), style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"))
+            Text(
+                left.orEmpty(),
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
