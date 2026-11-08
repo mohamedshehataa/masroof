@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gold_bucket">Gold &amp; silver</string>
+    <string name="gold_add_chip">Gold &amp; silver</string>
+    <string name="gold_open">Open</string>
+    <string name="gold_back">Back</string>
+    <string name="gold_ok">OK</string>
+    <string name="gold_save">Save</string>
+    <string name="gold_cancel">Cancel</string>
+    <string name="gold_edit">Edit</string>
+    <string name="gold_delete">Delete</string>
+    <string name="gold_undo">Undo</string>
+    <string name="gold_not_found">This holding is gone</string>
+
+    <string name="gold_kind_gold">Gold</string>
+    <string name="gold_kind_silver">Silver</string>
+    <string name="gold_karat_gold">Gold %1$sK</string>
+    <string name="gold_karat_silver">Silver %1$s</string>
+    <string name="gold_grams">%1$s g</string>
+
+    <string name="gold_form_name">Name (for example Wedding set)</string>
+    <string name="gold_form_grams">Grams</string>
+    <string name="gold_form_paid">Paid (EGP)</string>
+    <string name="gold_form_received">Received (EGP)</string>
+    <string name="gold_form_date">Date (yyyy-mm-dd, empty = today)</string>
+    <string name="gold_error_name">Enter a name (up to 60 characters)</string>
+    <string name="gold_error_grams">Enter the grams, more than 0</string>
+    <string name="gold_error_amount">Enter an amount more than 0</string>
+    <string name="gold_error_date">Enter a real date, not after today</string>
+    <string name="gold_error_too_large">That is too large</string>
+    <string name="gold_error_only_hold">You hold only %1$s</string>
+    <string name="gold_error_linked">This holding already backs another goal. Unlink it first.</string>
+
+    <string name="gold_held">Held</string>
+    <string name="gold_value">Worth today</string>
+    <string name="gold_value_at_cost">Worth (at cost, no price yet)</string>
+    <string name="gold_average">Average paid: %1$s a gram</string>
+    <string name="gold_gain">Gain: %1$s (%2$s)</string>
+    <string name="gold_gain_no_pct">Gain: %1$s</string>
+    <string name="gold_realised">Gain on sales: %1$s</string>
+    <string name="gold_add_price">Add today\'s price</string>
+    <string name="gold_price_line">Today\'s price: %1$s a gram (%2$s)</string>
+    <string name="gold_price_stale">Price from %1$s - update</string>
+    <string name="gold_price_sheet_gold">Gold price today</string>
+    <string name="gold_price_sheet_silver">Silver price today</string>
+    <string name="gold_price_hint">Type the price of one gram for each purity. Masroof has no live feed, so you set it.</string>
+    <string name="gold_price_field">Price of a gram, %1$s (EGP)</string>
+
+    <string name="gold_buy_more">Buy more</string>
+    <string name="gold_record_sale">Record a sale</string>
+    <string name="gold_lot_title_buy">Add a purchase</string>
+    <string name="gold_lot_title_sell">Record a sale</string>
+    <string name="gold_lot_title_edit">Edit lot</string>
+    <string name="gold_lots">Lots</string>
+    <string name="gold_lots_empty">No lots yet</string>
+    <string name="gold_lot_buy">Bought %1$s for %2$s</string>
+    <string name="gold_lot_sell">Sold %1$s for %2$s</string>
+    <string name="gold_lot_entry">Gold purchase, linked to an entry</string>
+    <string name="gold_delete_lot_title">Delete this lot?</string>
+
+    <string name="gold_link_entry">Link to an existing entry</string>
+    <string name="gold_unlink_entry">Unlink entry</string>
+    <string name="gold_entry_picker_title">Pick the entry</string>
+    <string name="gold_entry_none">No recent entries to link</string>
+    <string name="gold_entry_row">%1$s - %2$s</string>
+    <string name="gold_entry_unnamed">Entry</string>
+    <string name="gold_entry_selected">Linked: %1$s</string>
+    <string name="gold_entry_excluded">That entry no longer counts as spending: buying gold is saving.</string>
+
+    <string name="gold_goal_section">Goal</string>
+    <string name="gold_goal_none">Not backing a goal</string>
+    <string name="gold_goal_backing">Backs the goal %1$s</string>
+    <string name="gold_goal_link">Back a goal</string>
+    <string name="gold_goal_unlink">Unlink</string>
+    <string name="gold_goal_unlink_title">Unlink this goal?</string>
+    <string name="gold_goal_unlink_body">The goal will stop counting this holding, so its saved amount drops by the holding\'s value.</string>
+    <string name="gold_goal_pick_title">Back which goal?</string>
+    <string name="gold_goal_no_goals">Create a goal first, then link this holding to it.</string>
+    <string name="gold_including_gold">including gold worth %1$s</string>
+    <string name="gold_including_silver">including silver worth %1$s</string>
+
+    <string name="gold_hide">Hide from totals</string>
+    <string name="gold_delete_holding">Delete this holding</string>
+    <string name="gold_delete_holding_title">Delete this holding?</string>
+    <string name="gold_delete_holding_body">Its lots are deleted and any goal it backs stops counting it. Linked entries count as spending again.</string>
+</resources>

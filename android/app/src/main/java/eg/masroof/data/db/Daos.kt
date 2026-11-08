@@ -36,6 +36,22 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
+    /** STORY-209: buying gold is saving, so a linked entry stops counting as spending (and counts again on Undo). */
+    @Query("UPDATE expense SET excludedFromTotals = :excluded, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun setExcluded(
+        id: String,
+        excluded: Boolean,
+        nowMillis: Long,
+    ): Int
+
+    /** Recent purchases a gold lot could be: live, not failed, not already excluded, not linked to another lot. */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND type = 'EXPENSE' AND excludedFromTotals = 0
+            AND id NOT IN (SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL)
+            ORDER BY occurredAtMillis DESC, id LIMIT :limit""",
+    )
+    suspend fun metalLinkCandidates(limit: Int): List<ExpenseEntity>
+
     /** Live entries on or after [since], newest first: the "Attach to entry" picker. */
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id")
     fun observeSince(since: Long): Flow<List<ExpenseEntity>>

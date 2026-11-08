@@ -100,7 +100,7 @@ fun GoalDetailContent(
                     .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Figures(card)
+                Figures(card, state.backing)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(actions.onAdd, Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.goals_add_money)) }
                     OutlinedButton(actions.onTakeOut, Modifier.weight(1f).heightIn(min = 48.dp)) {
@@ -150,13 +150,20 @@ fun GoalDetailContent(
 }
 
 @Composable
-private fun Figures(card: GoalCardUi) {
+private fun Figures(
+    card: GoalCardUi,
+    backing: List<eg.masroof.data.goals.GoalBacking>,
+) {
     val p = card.progress
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         GoalRing(card.emoji, p.percentBp, goalRingDescription(card), size = 128.dp)
         Text(card.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text(goalSavedOfTarget(p, card.currency), style = MaterialTheme.typography.titleMedium)
         Text(wholePercent(p.percentBp), style = MaterialTheme.typography.bodyMedium)
+        backing.forEach {
+            val res = if (it.kind == "SILVER") R.string.gold_including_silver else R.string.gold_including_gold
+            Text(stringResource(res, goalMoney(it.valueMinor, card.currency)), style = MaterialTheme.typography.bodyMedium)
+        }
         p.daysToGo?.let { Text(goalDaysText(it), style = MaterialTheme.typography.bodyMedium) }
         p.monthlyNeedMinor?.let {
             Text(stringResource(R.string.goals_needs_month, goalMoney(it, card.currency)), style = MaterialTheme.typography.titleSmall)

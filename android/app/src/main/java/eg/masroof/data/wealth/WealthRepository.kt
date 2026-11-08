@@ -107,9 +107,25 @@ class WealthRepository
             }
 
         fun observeAssetViews(): Flow<List<AssetView>> =
-            db.assets().observeAll().map { list ->
+            combine(db.assets().observeAll(), db.assetLots().observeAll(), db.metalPrices().observeAll()) { list, lots, prices ->
                 val today = today()
-                list.filter { !it.archived }.map { AssetView(it, AssetValuation.valueOf(it, today, CairoTime::dateOf)) }
+                list.filter { !it.archived }.map {
+                    // Gold and silver are worth their lots at the typed price (STORY-209); no lots = nothing to count yet.
+                    val value =
+                        if (MetalMath.isMetal(it.kind)) {
+                            MetalMath
+                                .valuationOf(it, lots, prices, today, CairoTime::dateOf)
+                                .takeIf { _ ->
+                                    lots.any { l ->
+                                        l.assetId ==
+                                            it.id
+                                    }
+                                }?.valueMinor
+                        } else {
+                            AssetValuation.valueOf(it, today, CairoTime::dateOf)
+                        }
+                    AssetView(it, value)
+                }
             }
 
         fun observeDebts(): Flow<List<DebtEntity>> = db.debts().observeAll()
@@ -236,7 +252,19 @@ class WealthRepository
         }
 
         suspend fun deleteAsset(asset: AssetEntity) {
-            db.assets().delete(asset)
+            db.withTransaction {
+                // Entries linked to this holding's lots count as spending again; its lots go with it, a goal link is released (FK).
+                db.assetLots().forAsset(asset.id).forEach { lot ->
+                    lot.expenseId?.let {
+                        if (db.assetLots().countForExpense(it, lot.id) ==
+                            0
+                        ) {
+                            db.expenses().setExcluded(it, false, clock.millis())
+                        }
+                    }
+                }
+                db.assets().delete(asset)
+            }
             refreshSnapshot()
         }
 

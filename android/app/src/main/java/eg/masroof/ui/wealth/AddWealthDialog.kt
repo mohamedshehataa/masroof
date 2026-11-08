@@ -28,7 +28,10 @@ import eg.masroof.data.wealth.AssetForm
 import eg.masroof.data.wealth.DebtDraft
 import eg.masroof.data.wealth.DebtField
 import eg.masroof.data.wealth.DebtForm
+import eg.masroof.data.wealth.HoldingDraft
+import eg.masroof.data.wealth.LotDraft
 import eg.masroof.data.wealth.MANUAL_ASSET_KINDS
+import eg.masroof.data.wealth.MetalInput
 import eg.masroof.data.wealth.WealthValidation
 
 /** One dialog for the two things Wealth -> Add can create: something owned, or a debt (either direction). */
@@ -37,8 +40,12 @@ fun AddWealthDialog(
     onDismiss: () -> Unit,
     onAsset: (AssetDraft) -> Unit,
     onDebt: (DebtDraft) -> Unit,
+    today: java.time.LocalDate,
+    onMetal: (HoldingDraft, LotDraft) -> Unit,
 ) {
-    var debtMode by rememberSaveable { mutableStateOf(false) }
+    var mode by rememberSaveable { mutableStateOf(0) }
+    var metal by remember { mutableStateOf(MetalForm()) }
+    var metalErrors by remember { mutableStateOf(emptySet<MetalInput.Field>()) }
     var asset by remember { mutableStateOf(AssetForm()) }
     var debt by remember { mutableStateOf(DebtForm()) }
     var assetErrors by remember { mutableStateOf(emptySet<AssetField>()) }
@@ -49,37 +56,36 @@ fun AddWealthDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        !debtMode,
-                        { debtMode = false },
-                        { Text(stringResource(R.string.wealth_add_asset)) },
-                        Modifier.heightIn(min = 48.dp),
-                    )
-                    FilterChip(
-                        debtMode,
-                        { debtMode = true },
-                        { Text(stringResource(R.string.wealth_add_debt)) },
-                        Modifier.heightIn(min = 48.dp),
-                    )
+                    FilterChip(mode == 0, { mode = 0 }, { Text(stringResource(R.string.wealth_add_asset)) }, Modifier.heightIn(min = 48.dp))
+                    FilterChip(mode == 1, { mode = 1 }, { Text(stringResource(R.string.wealth_add_debt)) }, Modifier.heightIn(min = 48.dp))
+                    FilterChip(mode == 2, { mode = 2 }, { Text(stringResource(R.string.gold_add_chip)) }, Modifier.heightIn(min = 48.dp))
                 }
-                if (debtMode) {
-                    DebtFields(debt, debtErrors) { debt = it }
-                } else {
-                    AssetFields(asset, assetErrors) { asset = it }
+                when (mode) {
+                    1 -> DebtFields(debt, debtErrors) { debt = it }
+                    2 -> MetalCreateFields(metal, metalErrors) { metal = it }
+                    else -> AssetFields(asset, assetErrors) { asset = it }
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (debtMode) {
-                        val checked = WealthValidation.debt(debt)
-                        debtErrors = checked.errors
-                        checked.value?.let(onDebt)
-                    } else {
-                        val checked = WealthValidation.asset(asset)
-                        assetErrors = checked.errors
-                        checked.value?.let(onAsset)
+                    when (mode) {
+                        1 -> {
+                            val checked = WealthValidation.debt(debt)
+                            debtErrors = checked.errors
+                            checked.value?.let(onDebt)
+                        }
+                        2 -> {
+                            val checked = validateMetal(metal, today)
+                            metalErrors = checked.errors
+                            checked.value?.let { (holding, lot) -> onMetal(holding, lot) }
+                        }
+                        else -> {
+                            val checked = WealthValidation.asset(asset)
+                            assetErrors = checked.errors
+                            checked.value?.let(onAsset)
+                        }
                     }
                 },
                 modifier = Modifier.heightIn(min = 48.dp),
