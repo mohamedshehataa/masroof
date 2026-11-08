@@ -18,7 +18,9 @@ import eg.masroof.core.analytics.AnalyticsCalculator
 import eg.masroof.core.analytics.AnalyticsCategory
 import eg.masroof.core.analytics.AnalyticsPeriod
 import eg.masroof.data.db.AccountEntity
+import eg.masroof.data.db.SavingsGoalEntity
 import eg.masroof.data.db.WalletRow
+import eg.masroof.data.goals.GoalSummary
 import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
 import eg.masroof.data.wealth.AccountView
@@ -230,10 +232,16 @@ class WalletTest {
     @Test
     fun `REQ-UI-082 the error state offers Retry and keeps the rest of Wallet`() {
         var retried = 0
-        val state = walletUi(status = eg.masroof.ui.viewmodel.LoadStatus.ERROR).copy(figures = null)
+        val state =
+            walletUi(status = eg.masroof.ui.viewmodel.LoadStatus.ERROR)
+                .copy(figures = null, period = NOV, balance = WalletBalance(150_000L, 0, 1), owedMinor = 50_000L)
         compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions(onRetry = { retried++ })) } }
         compose.onNodeWithText("Retry").performClick()
         assertEquals(1, retried)
+        // what does not depend on the failed figures stays: period pill, balance and what you owe
+        compose.onNodeWithText("1 Nov - 30 Nov").assertIsDisplayed()
+        compose.onNodeWithText("1,500 EGP").assertIsDisplayed()
+        compose.onNodeWithText("You owe 500 EGP").assertIsDisplayed()
         compose.onNodeWithText("Add").assertIsDisplayed()
     }
 
@@ -446,5 +454,14 @@ class WalletTest {
         compose.setContent { MasroofTheme { WalletContent(walletUi(recent = listOf(excluded, counted)), emptyList(), WalletActions()) } }
         compose.scrollWalletTo("Not counted in totals")
         compose.onAllNodesWithText("Not counted in totals").assertCountEquals(1)
+    }
+
+    @Test
+    fun `REQ-UI-082 the top goal tile shows the same saved figure as Goals, gold backing included`() {
+        val goal = SavingsGoalEntity("g", "Car", null, 100_000, "EGP", null, 0, 0L, null, null)
+        val state = ui().copy(topGoal = GoalSummary(goal, savedMinor = 10_000, backedMinor = 40_000))
+        compose.setContent { MasroofTheme { WalletContent(state, emptyList(), WalletActions()) } }
+        compose.scrollWalletTo("Top goal")
+        compose.onNodeWithText("500 EGP of 1,000 EGP").assertIsDisplayed()
     }
 }

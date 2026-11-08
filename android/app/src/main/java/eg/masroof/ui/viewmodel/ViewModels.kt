@@ -7,8 +7,6 @@ import eg.masroof.core.CairoTime
 import eg.masroof.core.DigitStyle
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
-import eg.masroof.core.analytics.AnalyticsEngine
-import eg.masroof.core.analytics.PeriodAnalytics
 import eg.masroof.data.AppSettings
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NewExpense
@@ -27,11 +25,9 @@ import eg.masroof.ingest.quick.QuickEntryParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -67,7 +63,6 @@ data class ExpenseRow(
 )
 
 private const val STOP_TIMEOUT_MS = 5_000L
-private const val RECENT_LIMIT = 5
 private const val MAX_NOTES = 500
 private const val MAX_MERCHANT = QuickEntryParser.MAX_MERCHANT_LENGTH
 private const val MAX_QUICK_LINE = 400
@@ -103,42 +98,6 @@ internal fun toRows(
         )
     }
 }
-
-data class HomeUiState(
-    val total: Money = Money.zero(),
-    val recent: List<ExpenseRow> = emptyList(),
-    val status: LoadStatus = LoadStatus.LOADING,
-    /** False when the engine failed: Home then shows the list without the summary card (REQ-AN-147). */
-    val summaryAvailable: Boolean = true,
-)
-
-@HiltViewModel
-class HomeViewModel
-    @Inject
-    constructor(
-        repository: ExpenseRepository,
-        engine: AnalyticsEngine,
-    ) : ViewModel() {
-        // One spending rule for Home and Insights: the engine's total of the current household period.
-        private val total: Flow<Money?> =
-            engine
-                .observe("current")
-                .map<PeriodAnalytics, Money?> { Money(it.summary.total, Money.EGP) }
-                .catch { e ->
-                    if (e is CancellationException) throw e
-                    emit(null)
-                }
-
-        val state: StateFlow<HomeUiState> =
-            combine(
-                total,
-                repository.observeRecent(RECENT_LIMIT),
-                repository.observeLabelCategories(),
-                repository.observeMembers(),
-            ) { total, recent, categories, members ->
-                HomeUiState(total ?: Money.zero(), toRows(recent, categories, members), LoadStatus.READY, summaryAvailable = total != null)
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeUiState())
-    }
 
 data class TransactionsUiState(
     val rows: List<ExpenseRow> = emptyList(),

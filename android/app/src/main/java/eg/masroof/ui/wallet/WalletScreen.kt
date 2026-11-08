@@ -194,7 +194,7 @@ fun WalletContent(
         if (state.status != LoadStatus.READY) {
             item(key = "status") { StatusBanner(state.status, actions.onRetry) }
         }
-        if (state.figures != null) item(key = "hero") { HeroCard(state, actions) }
+        item(key = "hero") { HeroCard(state, actions) }
         item(key = "actions") { QuickActions(actions) }
         val pending = state.figures?.pendingReview ?: 0
         if (pending > 0) {
@@ -251,7 +251,7 @@ private fun HeroCard(
     state: WalletUi,
     actions: WalletActions,
 ) {
-    val figures = state.figures ?: return
+    val figures = state.figures
     val style = LocalMoneyStyle.current
     val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
     Card(
@@ -267,24 +267,34 @@ private fun HeroCard(
                 PeriodPill(state, actions, Modifier.weight(1f, fill = false))
                 AccountPicker(state, actions, Modifier.weight(1f, fill = false))
             }
-            Text(stringResource(R.string.wallet_spent), style = MaterialTheme.typography.labelLarge, color = onContainer)
-            AmountText(Money(figures.spentMinor), style = MaterialTheme.typography.displaySmall, color = onContainer)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                figures.todayMinor?.let {
-                    Text(
-                        stringResource(R.string.wallet_today, MoneyFormat.format(Money(it), style.arabic, style.digits)),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                        color = onContainer,
-                    )
-                }
-                DeltaChip(figures.deltaBps)
-                if (figures.deltaBps != null) {
-                    Text(stringResource(R.string.home_vs_last_month), style = MaterialTheme.typography.bodySmall, color = onContainer)
-                }
-            }
-            MiniTrend(figures.trend)
+            // Only the figures that failed are replaced by the error banner above; the pill, picker and balance stay.
+            if (figures != null) SpentBlock(figures)
             BalanceBlock(state, actions)
         }
+    }
+}
+
+@Composable
+private fun SpentBlock(figures: WalletFigures) {
+    val style = LocalMoneyStyle.current
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.wallet_spent), style = MaterialTheme.typography.labelLarge, color = onContainer)
+        AmountText(Money(figures.spentMinor), style = MaterialTheme.typography.displaySmall, color = onContainer)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            figures.todayMinor?.let {
+                Text(
+                    stringResource(R.string.wallet_today, MoneyFormat.format(Money(it), style.arabic, style.digits)),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = onContainer,
+                )
+            }
+            DeltaChip(figures.deltaBps)
+            if (figures.deltaBps != null) {
+                Text(stringResource(R.string.home_vs_last_month), style = MaterialTheme.typography.bodySmall, color = onContainer)
+            }
+        }
+        MiniTrend(figures.trend)
     }
 }
 
@@ -294,7 +304,7 @@ private fun PeriodPill(
     actions: WalletActions,
     modifier: Modifier = Modifier,
 ) {
-    val figures = state.figures ?: return
+    val period = state.figures?.period ?: state.period ?: return
     val style = LocalMoneyStyle.current
     var open by remember { mutableStateOf(false) }
 
@@ -307,7 +317,7 @@ private fun PeriodPill(
         )
     Box(modifier) {
         OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = TARGET_DP.dp)) {
-            Text(range(figures.period), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(range(period), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             state.choices.forEachIndexed { index, p ->

@@ -48,7 +48,6 @@ import eg.masroof.ui.components.ExpenseListItem
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.viewmodel.EraseState
 import eg.masroof.ui.viewmodel.ExpenseRow
-import eg.masroof.ui.viewmodel.HomeViewModel
 import eg.masroof.ui.viewmodel.SettingsViewModel
 import eg.masroof.ui.viewmodel.TransactionsViewModel
 import eg.masroof.work.ForegroundSync
@@ -418,7 +417,7 @@ class LocalSafetyRound1Test {
             // start / foreground
             ForegroundSync(repo).onForeground()
             // the lists and the Add sheet
-            val home = HomeViewModel(repo, TotalEngine(kotlinx.coroutines.flow.flowOf(0L)))
+            val home = walletVm(FakeWalletSource(), repo, clock)
             val tx = TransactionsViewModel(repo)
             backgroundScope.launch { home.state.collect {} }
             backgroundScope.launch { tx.state.collect {} }

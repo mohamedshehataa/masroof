@@ -34,6 +34,8 @@ data class WalletFigures(
     val categories: List<CategoryLine>,
     /** The last months ending with [period], oldest first, for the mini trend. */
     val trend: List<TrendBar> = emptyList(),
+    /** What the period before it came to. */
+    val previousMinor: Long = 0L,
 )
 
 /** The Balance line: [minor] is the sum of counted accounts, null when none has a confirmed balance. */
@@ -117,6 +119,7 @@ object WalletMath {
             deltaBps = summary.summary.deltaBps,
             pendingReview = summary.summary.pendingReviewCount,
             categories = summary.categories,
+            previousMinor = summary.summary.previousTotal,
             trend =
                 points.map {
                     TrendBar(it.period.from, Money(it.total), it.period.label == period.label, Money(it.income), it.savingsRateBps)

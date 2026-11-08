@@ -11,25 +11,25 @@ import eg.masroof.core.analytics.BusinessCalendar
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.db.AccountEntity
-import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.CategoryEntity
-import eg.masroof.data.goals.GoalRepository
 import eg.masroof.data.goals.GoalSummary
 import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
 import eg.masroof.data.wallet.ComingUpSource
+import eg.masroof.data.wallet.WalletSource
 import eg.masroof.data.wealth.AccountView
-import eg.masroof.data.wealth.WealthRepository
 import eg.masroof.data.wealth.saturatingAdd
 import eg.masroof.ui.viewmodel.ExpenseRow
 import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.toRows
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -61,6 +61,8 @@ data class WalletUi(
     val status: LoadStatus = LoadStatus.READY,
     val today: LocalDate = LocalDate.of(1970, 1, 1),
     val figures: WalletFigures? = null,
+    /** The period shown, also while its figures failed. */
+    val period: AnalyticsPeriod? = null,
     val choices: List<AnalyticsPeriod> = emptyList(),
     /** The chosen period's label (`YYYY-MM`); null = the current one. */
     val selectedPeriod: String? = null,
@@ -109,11 +111,9 @@ private data class Query(
 class WalletViewModel
     @Inject
     constructor(
-        private val db: AppDatabase,
+        private val source: WalletSource,
         expenses: ExpenseRepository,
         settings: SettingsRepository,
-        wealth: WealthRepository,
-        goals: GoalRepository,
         sources: Set<@JvmSuppressWildcards ComingUpSource>,
         private val clock: Clock,
         savedState: SavedStateHandle,
@@ -145,7 +145,7 @@ class WalletViewModel
                         emptyList(),
                     )
                 },
-                db.lookups().observeAccounts(),
+                source.accounts(),
                 reload,
             ) { q, accounts, _ ->
                 // An account that was archived (or is not in pounds) cannot stay selected: figures and the picker agree on "All".
@@ -157,7 +157,7 @@ class WalletViewModel
         private val figures: Flow<Pair<Query, WalletFigures?>> =
             query.flatMapLatest { q ->
                 val (from, to) = WalletMath.range(q.period)
-                combine(db.expenses().observeWalletRows(from, to), db.lookups().observeEveryCategory()) { rows, cats ->
+                combine(source.rows(from, to), source.categories()) { rows, cats ->
                     q to
                         WalletMath.figuresOrNull(
                             q.period,
@@ -168,6 +168,10 @@ class WalletViewModel
                             q.includeCash,
                             q.accountId,
                         )
+                }.catch { e ->
+                    // The figures could not be read: Wallet shows its error state with Retry and keeps everything else.
+                    if (e is CancellationException) throw e
+                    emit(q to null)
                 }
             }
 
@@ -184,7 +188,7 @@ class WalletViewModel
             }
 
         private val money: Flow<Triple<List<AccountView>, Long, GoalSummary?>> =
-            combine(wealth.observeAccountViews(), wealth.observeNetWorth(), goals.observeGoals()) { views, worth, list ->
+            combine(source.accountViews(), source.netWorth(), source.goals()) { views, worth, list ->
                 Triple(views, WalletMath.owed(worth), list.firstOrNull { it.goal.completedAtMillis == null })
             }
 
@@ -211,6 +215,7 @@ class WalletViewModel
                     status = if (figs == null) LoadStatus.ERROR else LoadStatus.READY,
                     today = q.today,
                     figures = figs,
+                    period = q.period,
                     choices = q.choices,
                     selectedPeriod = q.label,
                     accounts = active,
