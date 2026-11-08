@@ -49,10 +49,20 @@ data class EditFormState(
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
     val done: Boolean = false,
+    /** Set with [done] when the category of an entry with a merchant changed: the screen stays for "Always file ...?". */
+    val ruleOffer: RuleOffer? = null,
 ) {
     /** Buttons and fields stay disabled while a write runs and after it succeeded, until the screen pops. */
     val locked: Boolean get() = busy || done
 }
+
+/** "Always file [merchant] under [categoryId]?" after a saved category change. */
+data class RuleOffer(
+    val merchant: String,
+    val categoryId: String,
+    /** The saved entry: the rule is only offered for an EXPENSE whose merchant is not its institution's name. */
+    val expenseId: String,
+)
 
 data class EditUiState(
     val form: EditFormState = EditFormState(),
@@ -176,13 +186,15 @@ class EditExpenseViewModel
                 form.update { it.copy(done = true) }
                 return
             }
-            submit { editor.update(id, changes) }
+            val changedTo = changes.categoryId
+            val offer = if (changedTo != null && f.merchant.trim().isNotEmpty()) RuleOffer(f.merchant.trim(), changedTo, id) else null
+            submit(offer) { editor.update(id, changes) }
         }
 
         fun delete() {
             if (original == null || inFlight || form.value.done) return
             form.update { it.copy(confirmDelete = false) }
-            submit { editor.delete(id) }
+            submit(null) { editor.delete(id) }
         }
 
         private fun changesOf(
@@ -213,13 +225,16 @@ class EditExpenseViewModel
         }
 
         /** One write at a time: [inFlight] is checked and set on the main thread before anything is launched. */
-        private fun submit(call: suspend () -> EditOutcome) {
+        private fun submit(
+            offer: RuleOffer?,
+            call: suspend () -> EditOutcome,
+        ) {
             if (inFlight) return
             inFlight = true
             form.update { it.copy(busy = true, error = null) }
             viewModelScope.launch {
                 try {
-                    apply(call())
+                    apply(call(), offer)
                 } finally {
                     inFlight = false
                     form.update { it.copy(busy = false) }
@@ -227,9 +242,13 @@ class EditExpenseViewModel
             }
         }
 
-        private fun apply(outcome: EditOutcome) {
+        private fun apply(
+            outcome: EditOutcome,
+            offer: RuleOffer?,
+        ) {
             when (outcome) {
-                is EditOutcome.Saved, EditOutcome.Deleted -> form.update { it.copy(done = true) }
+                is EditOutcome.Saved -> form.update { it.copy(done = true, ruleOffer = offer) }
+                EditOutcome.Deleted -> form.update { it.copy(done = true) }
                 EditOutcome.NotFound -> form.update { it.copy(done = true, gone = true) }
                 EditOutcome.Failed -> form.update { it.copy(error = EditError.FAILED) }
             }

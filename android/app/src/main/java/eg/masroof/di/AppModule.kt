@@ -142,6 +142,14 @@ abstract class BindingsModule {
 
     @Binds abstract fun membersRemote(impl: ApiMembersRemote): MembersRemote
 
+    @Binds abstract fun categoryRepository(
+        impl: eg.masroof.data.categories.DefaultCategoryRepository,
+    ): eg.masroof.data.categories.CategoryRepository
+
+    @Binds abstract fun merchantRules(
+        impl: eg.masroof.data.categories.DefaultMerchantRuleRepository,
+    ): eg.masroof.data.categories.MerchantRuleRepository
+
     @Binds abstract fun budgets(impl: DefaultBudgetsRepository): BudgetsRepository
 
     @Binds abstract fun budgetsRemote(impl: ApiBudgetsRemote): BudgetsRemote
