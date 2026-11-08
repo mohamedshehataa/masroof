@@ -3,7 +3,7 @@ id: STORY-200
 epic: EPIC-18
 title: Say it - add an entry by voice or one line of text, with income and currency on the Add form
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -70,7 +70,7 @@ Unhappy path: **Given** a filled draft **When** the user presses Back **Then** n
 
 ### REQ-EXP-052 - The Add form can record income and other currencies
 **Given** the Add form **When** it opens **Then** an Expense / Income switch (default Expense) and a currency chip (default
-EGP; EGP, USD, EUR, SAR, AED, GBP, KWD, QAR) are shown; saving writes `type` INCOME or EXPENSE and the chosen currency.
+EGP; EGP, USD, EUR, SAR, AED, GBP, QAR - KWD dropped, see DECISIONS) are shown; saving writes `type` INCOME or EXPENSE and the chosen currency.
 A non-EGP entry shows the existing "not included in EGP totals" hint under the amount.
 Unhappy path: **Given** Income is chosen **Then** the category picker shows no spending budget hint and the entry never
 counts as spending (existing D2 rule).
@@ -116,3 +116,6 @@ None.
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 (Say teardown), speed mode |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 30cae43; fix rounds 04997c1, d84ae28, 6e1e5ae, 57235e8, 9bcf7eb |
+| 2026-11-08 | 6 verify | qa-verifier, security-reviewer | FAIL loops 1-5 (each fixed), PASS loop 6 (796 tests) - past the 3-loop limit by owner rule; security APPROVE |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

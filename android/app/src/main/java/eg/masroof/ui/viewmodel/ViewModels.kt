@@ -21,14 +21,19 @@ import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.MemberEntity
+import eg.masroof.data.db.seededCategoryId
 import eg.masroof.data.normalizeServerUrl
+import eg.masroof.ingest.quick.QuickEntryParser
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -62,6 +67,9 @@ data class ExpenseRow(
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val RECENT_LIMIT = 5
 private const val MAX_NOTES = 500
+private const val MAX_MERCHANT = QuickEntryParser.MAX_MERCHANT_LENGTH
+private const val MAX_QUICK_LINE = 400
+private const val HIGHLIGHT_MS = 2_000L
 
 internal fun toRows(
     expenses: List<ExpenseEntity>,
@@ -167,7 +175,20 @@ data class AddFormState(
     /** The write threw: the sheet stays open with the input kept and "Couldn't save, try again". */
     val saveFailed: Boolean = false,
     val saved: Boolean = false,
+    /** The Expense / Income switch (REQ-EXP-052): true saves `type` INCOME. */
+    val income: Boolean = false,
+    val currency: String = Money.EGP,
+    val merchant: String = "",
+    /** The one-line "Type it: 150 fuel" field; parsed on Done. */
+    val quickText: String = "",
+    /** "Say or type an amount": the last line had no usable number and the amount is still empty. */
+    val amountMissing: Boolean = false,
+    /** Fields the last line filled, highlighted for two seconds. */
+    val highlight: Set<AddField> = emptySet(),
+    val voice: VoiceUi = VoiceUi.Idle,
 )
+
+private fun AddFormState.listeningOrWorking() = voice is VoiceUi.Listening || voice == VoiceUi.Processing
 
 data class AddUiState(
     val form: AddFormState = AddFormState(),
@@ -194,7 +215,137 @@ class AddExpenseViewModel
             ) { f, c, a, m -> AddUiState(f, c, a, m) }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AddUiState(form.value))
 
-        fun onAmount(text: String) = form.update { it.copy(amountText = text, amountInvalid = false, amountTooLarge = false) }
+        private var highlightJob: Job? = null
+
+        fun onAmount(text: String) =
+            form.update { it.copy(amountText = text, amountInvalid = false, amountTooLarge = false, amountMissing = false) }
+
+        /** Expense / Income switch. Income has no category (it never counts as spending). */
+        fun onType(income: Boolean) = form.update { it.copy(income = income, categoryId = if (income) null else it.categoryId) }
+
+        fun onCurrency(code: String) = form.update { if (code in ADD_CURRENCIES) it.copy(currency = code) else it }
+
+        fun onMerchant(text: String) = form.update { it.copy(merchant = text.take(MAX_MERCHANT)) }
+
+        // While the mic is listening the line is the recognizer's: typing then would be lost or overwritten.
+        fun onQuickText(text: String) = form.update { if (it.listeningOrWorking()) it else it.copy(quickText = text.take(MAX_QUICK_LINE)) }
+
+        /** Done on the quick-text field: the same parser as the mic. Only fills the form; nothing is saved. */
+        fun applyQuickText() {
+            val line = form.value.quickText
+            if (line.isNotBlank() && !form.value.listeningOrWorking()) fill(line)
+        }
+
+        // ---- the mic flow (REQ-AND-144): the screen runs the recognizer and the permission dialog, this keeps the state ----
+
+        /** The mic was tapped. Ignored while listening or working. */
+        fun onMicTapped(
+            permission: MicPermission,
+            needsOnlineNotice: Boolean = false,
+        ) {
+            if (form.value.listeningOrWorking()) return
+            if (needsOnlineNotice) {
+                form.update { it.copy(voice = VoiceUi.OnlineNotice(permission)) }
+                return
+            }
+            proceed(permission)
+        }
+
+        private fun proceed(permission: MicPermission) {
+            val next =
+                when (permission) {
+                    MicPermission.GRANTED -> VoiceUi.Listening()
+                    MicPermission.SHOW_RATIONALE -> VoiceUi.Rationale
+                    MicPermission.ASK -> VoiceUi.Requesting
+                }
+            form.update { it.copy(voice = next) }
+        }
+
+        /** The on-device recognizer has no model for the language: the default one may be online, so the notice comes first. */
+        fun onFallbackNotice() =
+            form.update {
+                if (it.listeningOrWorking()) it.copy(voice = VoiceUi.OnlineNotice(MicPermission.GRANTED)) else it
+            }
+
+        /** "Continue" on the one-time online notice: on to the permission step the tap would have taken. */
+        fun onNoticeContinue() {
+            val v = form.value.voice
+            if (v is VoiceUi.OnlineNotice) proceed(v.then)
+        }
+
+        /** "Continue" under the reason text: now the system dialog. */
+        fun onRationaleContinue() = form.update { if (it.voice == VoiceUi.Rationale) it.copy(voice = VoiceUi.Requesting) else it }
+
+        /** The system dialog answered. [canAskAgain] is false after "don't ask again": only Settings can help then. */
+        fun onPermissionResult(
+            granted: Boolean,
+            canAskAgain: Boolean,
+        ) = form.update {
+            when {
+                it.voice != VoiceUi.Requesting -> it
+                granted -> it.copy(voice = VoiceUi.Listening())
+                canAskAgain -> it.copy(voice = VoiceUi.Denied)
+                else -> it.copy(voice = VoiceUi.DeniedForever)
+            }
+        }
+
+        fun onVoiceLevel(percent: Int) =
+            form.update {
+                if (it.voice is VoiceUi.Listening) {
+                    it.copy(
+                        voice = VoiceUi.Listening(percent),
+                    )
+                } else {
+                    it
+                }
+            }
+
+        /** Stop was tapped: the recognizer delivers what it heard, or an error. */
+        fun onStopTapped() = form.update { if (it.voice is VoiceUi.Listening) it.copy(voice = VoiceUi.Processing) else it }
+
+        /** The recognizer's final text: fills the quick-text line's fields like Done would. A blank text is "didn't catch that". */
+        fun onVoiceText(text: String) {
+            val voice = form.value.voice
+            if (voice !is VoiceUi.Listening && voice != VoiceUi.Processing) return
+            if (text.isBlank()) {
+                onVoiceError()
+                return
+            }
+            form.update { it.copy(voice = VoiceUi.Idle) }
+            fill(text)
+        }
+
+        /** Silence, no match or a recognizer failure: nothing is filled. */
+        fun onVoiceError() =
+            form.update {
+                if (it.voice is VoiceUi.Listening ||
+                    it.voice == VoiceUi.Processing
+                ) {
+                    it.copy(voice = VoiceUi.Error)
+                } else {
+                    it
+                }
+            }
+
+        /** Close, Back or leaving while the panel is up. */
+        fun dismissVoice() = form.update { it.copy(voice = VoiceUi.Idle) }
+
+        private fun fill(line: String) {
+            val today = CairoTime.today(clock.instant())
+            val draft = QuickEntryParser.parse(line, today)
+            viewModelScope.launch {
+                val rows = repository.observePickerCategories().first()
+                // The seeded id for the reference key, only when that category is on this phone (never a hard-coded row).
+                val categoryId = draft.categoryKey?.let(::seededCategoryId)?.takeIf { id -> rows.any { it.id == id } }
+                form.update { QuickFill.apply(it, line, draft, categoryId, today) }
+                highlightJob?.cancel()
+                highlightJob =
+                    launch {
+                        delay(HIGHLIGHT_MS)
+                        form.update { it.copy(highlight = emptySet()) }
+                    }
+            }
+        }
 
         fun onCategory(id: String?) = form.update { it.copy(categoryId = id) }
 
@@ -244,13 +395,16 @@ class AddExpenseViewModel
                     runCatching {
                         repository.add(
                             NewExpense(
-                                amount = Money(amount.minor, Money.EGP),
+                                amount = Money(amount.minor, f.currency),
                                 date = date,
-                                categoryId = f.categoryId,
+                                // Income never counts as spending, so it carries no category (REQ-EXP-052).
+                                categoryId = if (f.income) null else f.categoryId,
                                 accountId = f.accountId,
                                 paidByMemberId = f.paidByMemberId,
                                 receiptId = f.receiptId,
                                 notes = f.notes.trim().ifEmpty { null },
+                                type = if (f.income) TYPE_INCOME else TYPE_EXPENSE,
+                                merchant = f.merchant.trim().ifEmpty { null },
                             ),
                         )
                     }
