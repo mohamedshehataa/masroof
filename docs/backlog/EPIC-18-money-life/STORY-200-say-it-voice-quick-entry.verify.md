@@ -59,3 +59,14 @@ FINDINGS:
   (should be 150,000); `ميتين ونص ألف` -> 200,500; `نص مية` -> 100 (should be 50)
 - [MINOR] fallback notice while Processing leaves the panel stuck; [NIT] future/impossible ISO date marked as stated
 STATUS: FAIL -> fix round 3 (whitelist grammar + generated combination test), past the 3-loop limit by owner rule
+
+## Loop 4 - head `6e1e5ae`
+Gate GREEN in 40s; `--rerun` 752 tests, 0 failures; TEST_INTEGRITY: OK (0 -> 299). 208 parser lines (176 old) + 16 VM steps.
+- Loop-3 rows exact (مية ونص ألف 150,000; ميتين ونص ألف 250,000; نص مية 50); 24 of 32 new attack lines exact, 10 no amount
+- Generated test (57,800 phrases) independent of the parser's code but limited to 17 word tokens (no digits, currency
+  words, glued ونص or k)
+FINDINGS:
+- [MAJOR] `50 جنيه ونص` -> 50 EGP (currency word splits the run, the half is dropped)
+- [MINOR] regression: lone `k` -> 1,000 EGP; `نص ٥٠٠` -> 500; ألفين إلا ربع / تلات تلاف إلا ربع / ربع مليون وخمسين
+  ألف now no amount (allowed, a loss)
+STATUS: FAIL -> fix round 4 (currency-word halves, k only after digits, wider generated space)
