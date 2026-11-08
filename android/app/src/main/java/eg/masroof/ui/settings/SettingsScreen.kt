@@ -44,6 +44,7 @@ fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
     onOpenReview: () -> Unit = {},
     onOpenReceipts: () -> Unit = {},
+    onOpenBills: () -> Unit = {},
     onOpenGoals: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -61,7 +62,7 @@ fun SettingsRoute(
             onToggleLanguage,
         ),
         extra = {
-            YourMoneySection(onOpenGoals = onOpenGoals)
+            YourMoneySection(onOpenGoals = onOpenGoals, onOpenBills = onOpenBills)
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
