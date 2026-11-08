@@ -3,7 +3,7 @@ id: STORY-180
 epic: EPIC-17
 title: Budget progress, rollover and on-track status are computed on the phone
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -91,3 +91,6 @@ STORY-178 (engine filter and period helpers)
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot, ports STORY-092 status rules |
+| 2026-11-08 | 5 build | android-engineer | Kotlin port of BudgetProgress and the BudgetService status rules; remainingBudget via AnalyticsCalculator.compute(budgets) |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 PASS on 5b64a19 (2 MINOR handed to STORY-181: remainingBudget wiring, weekly rows outside the month window) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
