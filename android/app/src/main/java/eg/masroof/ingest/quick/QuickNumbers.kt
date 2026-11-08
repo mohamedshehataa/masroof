@@ -37,6 +37,9 @@ internal sealed interface Piece {
     /** A word that looks like a scale ("تلافات", "ملايين"...) but is not understood: the number is then not an amount. */
     data object Unknown : Piece
 
+    /** A currency word. It is part of a run only between a number and a fraction ("خمسين جنيه ونص"). */
+    data object Cur : Piece
+
     /** The Arabic "و" that joins number words. */
     data object Conn : Piece
 }
@@ -85,6 +88,7 @@ internal object QuickNumbers {
         }
         return when {
             tok.key == "و" -> Piece.Conn
+            tok.key in QuickLexicon.CURRENCIES -> Piece.Cur
             SCALE_LOOKALIKE.matches(tok.key.removePrefix("و")) -> Piece.Unknown
             else -> null
         }
@@ -138,7 +142,14 @@ internal object QuickNumbers {
             var m = j
             while (pieces.getOrNull(m) is Piece.Conn) m++
             val next = pieces.getOrNull(m)
-            if (q is Piece.Conn && next != null && continues(next, list.last(), true)) {
+            val bridgeTo = if (q is Piece.Cur && list.last() !is Piece.Cur) fractionAfter(pieces, j + 1) else null
+            if (bridgeTo != null) {
+                // "خمسين جنيه ونص": the currency word sits between the number and its half.
+                list += Piece.Cur
+                repeat(bridgeTo - j - 1) { list += Piece.Conn }
+                list += pieces[bridgeTo] as Piece
+                j = bridgeTo + 1
+            } else if (q is Piece.Conn && next != null && continues(next, list.last(), true)) {
                 repeat(m - j) { list += Piece.Conn }
                 list += next
                 j = m + 1
@@ -152,11 +163,22 @@ internal object QuickNumbers {
         return j
     }
 
+    /** Index of the fraction word at or after [from], skipping "و", or null when something else comes first. */
+    private fun fractionAfter(
+        pieces: List<Piece?>,
+        from: Int,
+    ): Int? {
+        var f = from
+        while (pieces.getOrNull(f) is Piece.Conn) f++
+        return f.takeIf { pieces.getOrNull(f) is Piece.Fraction }
+    }
+
     // A fraction word or "إلا" always belongs to a run, so a number next to one is judged as a whole (never read without it).
     private fun starts(p: Piece): Boolean =
         when (p) {
             is Piece.Digits, is Piece.Word, is Piece.Fraction, is Piece.Except -> true
-            is Piece.Scale -> true
+            // "k" and "ك" never open a number; a plural ("تلاف") does, so it is judged with what follows and never dropped.
+            is Piece.Scale -> p.starter || p.scale.times == 0
             else -> false
         }
 
@@ -166,9 +188,10 @@ internal object QuickNumbers {
         afterConn: Boolean,
     ): Boolean =
         when (q) {
-            is Piece.Digits -> afterConn
+            // Digits straight after a fraction word join it, so "نص 500" is judged as a whole (and is not an amount).
+            is Piece.Digits -> afterConn || last is Piece.Fraction || last is Piece.Except
             is Piece.Word -> afterConn || last !is Piece.Digits
-            is Piece.Conn -> false
+            is Piece.Conn, is Piece.Cur -> false
             else -> true
         }
 
@@ -178,6 +201,9 @@ internal object QuickNumbers {
         var slots = 0
         var lastUnit = 0L
         var lastFactor = Long.MAX_VALUE
+
+        /** The piece just before was typed digits (the only thing a "k" may follow). */
+        var afterDigits = false
     }
 
     /** A number with no fraction words: its value and the size of the last unit spoken (a scale, a hundred, or 1). */
@@ -186,7 +212,8 @@ internal object QuickNumbers {
         val lastUnit: Long,
     )
 
-    private fun compute(pieces: List<Piece>): RunValue {
+    private fun compute(run: List<Piece>): RunValue {
+        val pieces = run.filter { it !is Piece.Cur }
         val fractional = pieces.any { it is Piece.Fraction || it is Piece.Except || (it is Piece.Word && it.third) }
         val value = (if (fractional) fractionValue(pieces) else plain(pieces)?.value) ?: return RunValue.Bad
         return if (value <= 0 || value > MoneyFormat.MAX_ENTRY_MINOR) RunValue.OutOfRange else RunValue.Ok(value)
@@ -200,10 +227,11 @@ internal object QuickNumbers {
                     is Piece.Conn -> true
                     is Piece.Digits -> addDigits(s, p)
                     is Piece.Word -> addWord(s, p.word)
-                    is Piece.Scale -> addScale(s, p.scale)
-                    is Piece.Unknown, is Piece.Fraction, is Piece.Except -> false
+                    is Piece.Scale -> (!p.scale.abbreviation || s.afterDigits) && addScale(s, p.scale)
+                    is Piece.Unknown, is Piece.Fraction, is Piece.Except, is Piece.Cur -> false
                 }
             if (!ok) return null
+            if (p !is Piece.Conn) s.afterDigits = p is Piece.Digits
         }
         return Plain(Math.addExact(s.total, s.current), s.lastUnit)
     }
@@ -238,7 +266,7 @@ internal object QuickNumbers {
     /** Whole units of a scale word ("ألف", "مليون") or of "مية"; nothing else. */
     private fun unitOf(p: Piece): Long? =
         when {
-            p is Piece.Scale && p.scale.times == 1 -> p.scale.factor
+            p is Piece.Scale && p.scale.times == 1 && !p.scale.abbreviation -> p.scale.factor
             p is Piece.Word && !p.third && p.word.cls == HUNDRED && p.word.major == HUNDRED_MAJOR -> HUNDRED_MAJOR
             else -> null
         }
@@ -254,6 +282,8 @@ internal object QuickNumbers {
 
     private fun exceptUnit(p: List<Piece>): Long? {
         if (p[1] !is Piece.Except) return null
+        // "ألف إلا ونص": a "و" after "إلا" is not the grammar.
+        if ((p[2] as? Piece.Fraction)?.joined == true) return null
         val divisor = divisorOf(p[2]) ?: return null
         val base = unitOf(p[0])?.let { Math.multiplyExact(it, MINOR_PER_MAJOR) } ?: return null
         return if (base % divisor == 0L) base - base / divisor else null
@@ -272,7 +302,7 @@ internal object QuickNumbers {
         val part = number.lastUnit / fraction.divisor
         val after = pieces.subList(at + 1, pieces.size)
         if (after.isEmpty()) return Math.addExact(number.value, part)
-        val scale = (after.singleOrNull() as? Piece.Scale)?.scale ?: return null
+        val scale = (after.singleOrNull() as? Piece.Scale)?.scale?.takeUnless { it.abbreviation } ?: return null
         val fits =
             scale.times <= 1 &&
                 number.lastUnit <= HUNDRED_MINOR &&

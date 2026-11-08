@@ -82,6 +82,8 @@ internal object QuickLexicon {
     class ScaleWord(
         val factor: Long,
         val times: Int,
+        /** "k" / "ك": only ever follows digits ("5k"), never opens or follows a number word. */
+        val abbreviation: Boolean = false,
     )
 
     private const val THOUSAND = 1_000L
@@ -94,7 +96,8 @@ internal object QuickLexicon {
             "الاف" to ScaleWord(THOUSAND, 0),
             "تلاف" to ScaleWord(THOUSAND, 0),
             "تلافات" to ScaleWord(THOUSAND, 0),
-            "k" to ScaleWord(THOUSAND, 1),
+            "k" to ScaleWord(THOUSAND, 1, abbreviation = true),
+            "ك" to ScaleWord(THOUSAND, 1, abbreviation = true),
             "thousand" to ScaleWord(THOUSAND, 1),
             "مليون" to ScaleWord(MILLION, 1),
             "مليونين" to ScaleWord(MILLION, 2),

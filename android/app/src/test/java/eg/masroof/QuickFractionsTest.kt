@@ -179,26 +179,181 @@ class QuickFractionsTest {
         println("QUICK-FRACTIONS combinations checked=$checked withAmount=$withAmount")
     }
 
+    private val wideTokens =
+        tokens + listOf("ونص", "وربع", "5", "50", "500", "1.5", "k", "جنيه", "pounds", "EGP")
+
+    @Test
+    fun `REQ-PARSE-099 wide token space with digits k currency and glued half is exact or no amount`() {
+        var checked = 0
+        var withAmount = 0
+        val bad = mutableListOf<String>()
+
+        fun check(phrase: List<String>) {
+            if (phrase.none { it in fractionWords || it == "ونص" || it == "وربع" }) return
+            checked++
+            val line = phrase.joinToString(" ")
+            val got = amount(line)
+            val want = Wide.amount(phrase)
+            if (got != null) withAmount++
+            if (got != want && bad.size < 20) bad += "[$line] parser=$got reference=$want"
+        }
+
+        fun visit(phrase: List<String>) {
+            check(phrase)
+            if (phrase.size < 4) for (t in wideTokens) visit(phrase + t)
+        }
+        for (t in wideTokens) visit(listOf(t))
+        val exhaustive = checked
+        val random = java.util.Random(20_261_108L)
+        repeat(300_000) { check(List(5) { wideTokens[random.nextInt(wideTokens.size)] }) }
+        assertTrue("disagreements: $bad", bad.isEmpty())
+        assertTrue("exhaustive checked $exhaustive", exhaustive > 200_000)
+        assertTrue("some phrases must give an amount: $withAmount", withAmount > 1_000)
+        println("QUICK-FRACTIONS-WIDE checked=$checked (exhaustive up to 4 tokens: $exhaustive) withAmount=$withAmount")
+    }
+
+    @Test
+    fun `REQ-PARSE-099 a currency word between a number and its half`() {
+        assertEquals(5_050L, amount("50 جنيه ونص"))
+        assertEquals(5_050L, amount("خمسين جنيه ونص"))
+        assertEquals(150_000L, amount("ألف جنيه ونص"))
+        // A quarter of the last unit spoken (a hundred), like "مية وربع" = 125.
+        assertEquals(12_500L, amount("مية جنيه وربع"))
+        assertEquals(5_050L, amount("50 pounds و نص"))
+        assertNull(amount("50 جنيه نص"))
+        assertNull(amount("نص جنيه"))
+        assertNull(amount("جنيه ونص"))
+        val d = QuickEntryParser.parse("خمسين جنيه ونص", today)
+        assertEquals("EGP", d.currency)
+        assertEquals(true, d.currencyStated)
+    }
+
+    @Test
+    fun `REQ-PARSE-099 k only follows digits and a fraction word right before digits is no amount`() {
+        for (line in listOf("k", "K", "50 fuel k", "ك", "خمسة k", "خمسة ك", "5 k k")) {
+            assertEquals("amount of [$line]", if (line == "50 fuel k") 5_000L else null, amount(line))
+        }
+        assertEquals(500_000L, amount("5k"))
+        assertEquals(150_000L, amount("1.5k"))
+        assertEquals(500_000L, amount("5ك"))
+        for (line in listOf("نص ٥٠٠", "نص 500", "ربع 50", "50 نص 500")) assertNull("amount of [$line]", amount(line))
+    }
+
+    /** Segments a phrase into number runs like the parser's rules say, then reads the chosen run with [Reference]. */
+    private object Wide {
+        private val numberWords = setOf("واحد", "اتنين", "خمسة", "عشرة", "عشرين", "مية", "ميتين", "خمسمية", "تلت")
+        private val scales = setOf("ألف", "ألفين", "تلاف", "مليون")
+        private val currencies = setOf("جنيه", "pounds", "EGP")
+        private val digits = Reference.digitMinor.keys
+        private const val AND = "و"
+
+        private fun isFraction(t: String) = t == "نص" || t == "ربع"
+
+        private fun starts(t: String) = t in numberWords || t in digits || isFraction(t) || t == "إلا" || t in scales
+
+        private fun continues(
+            q: String,
+            last: String,
+            afterAnd: Boolean,
+        ): Boolean =
+            when {
+                q in digits -> afterAnd || isFraction(last) || last == "إلا"
+                q in numberWords -> afterAnd || last !in digits
+                q == AND || q in currencies -> false
+                else -> true
+            }
+
+        @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LoopWithTooManyJumpStatements")
+        fun amount(raw: List<String>): Long? {
+            val glue = mutableSetOf<Int>()
+            val t = mutableListOf<String>()
+            for (w in raw) {
+                if (w == "ونص" || w == "وربع") {
+                    glue += t.size
+                    t += listOf(AND, w.drop(1))
+                } else {
+                    t += w
+                }
+            }
+
+            // The token before a run, skipping the "و" that was only the front of a glued "ونص".
+            fun before(i: Int) = t.getOrNull(if (i - 1 in glue) i - 2 else i - 1)
+            val runs = mutableListOf<IntRange>()
+            var i = 0
+            while (i < t.size) {
+                if (!starts(t[i])) {
+                    i++
+                    continue
+                }
+                var last = t[i]
+                var j = i + 1
+                while (j < t.size) {
+                    var m = j
+                    while (m < t.size && t[m] == AND) m++
+                    val next = t.getOrNull(m)
+                    if (t[j] in currencies && last !in currencies) {
+                        var f = j + 1
+                        while (f < t.size && t[f] == AND) f++
+                        if (f < t.size && isFraction(t[f])) {
+                            last = t[f]
+                            j = f + 1
+                        } else {
+                            break
+                        }
+                    } else if (t[j] == AND && next != null && continues(next, last, true)) {
+                        last = next
+                        j = m + 1
+                    } else if (t[j] != AND && continues(t[j], last, false)) {
+                        last = t[j]
+                        j++
+                    } else {
+                        break
+                    }
+                }
+                runs += i until j
+                i = j
+            }
+            val chosen =
+                runs.firstOrNull { r -> before(r.first) in currencies || t.getOrNull(r.last + 1) in currencies }
+                    ?: runs.lastOrNull() ?: return null
+            val words = t.slice(chosen).filter { it !in currencies }
+            val fractional = words.any { isFraction(it) || it == "تلت" || it == "إلا" }
+            val value = if (fractional) Reference.value(words) else Reference.number(words.filter { it != AND })?.first
+            // The Add form accepts at most 10 billion pounds.
+            return value?.takeIf { it in 1..1_000_000_000_000L }
+        }
+    }
+
     /** A small independent reader of the intended grammar, working on the words (not on the parser's pieces). */
     private object Reference {
         private val ones = mapOf("واحد" to 1L, "اتنين" to 2L, "خمسة" to 5L, "تلت" to 3L)
         private val tens = mapOf("عشرة" to 10L, "عشرين" to 20L)
         private val hundreds = mapOf("مية" to 100L, "ميتين" to 200L, "خمسمية" to 500L)
-        private val scaleFactor = mapOf("ألف" to 1_000L, "تلاف" to 1_000L, "مليون" to 1_000_000L)
+        private val scaleFactor = mapOf("ألف" to 1_000L, "تلاف" to 1_000L, "مليون" to 1_000_000L, "k" to 1_000L)
+        val digitMinor = mapOf("5" to 500L, "50" to 5_000L, "500" to 50_000L, "1.5" to 150L)
         private val divisor = mapOf("نص" to 2L, "ربع" to 4L, "تلت" to 3L)
         private const val AND = "و"
         private const val EXCEPT = "إلا"
         private const val PER = 100L
 
         /** (value, size of the last unit) in piasters for a fraction-free number made of [words] (no "و"), or null. */
-        @Suppress("CyclomaticComplexMethod")
+        @Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
         fun number(words: List<String>): Pair<Long, Long>? {
             var total = 0L
             var cur = 0L
             var seen = 0
+            var prevDigit = false
             var lastUnit = 0L
             var lastScale = Long.MAX_VALUE
             for (w in words) {
+                val afterDigit = prevDigit
+                prevDigit = w in digitMinor
+                digitMinor[w]?.let {
+                    cur += it
+                    seen = 7
+                    lastUnit = PER
+                    continue
+                }
                 val bit =
                     when (w) {
                         in hundreds -> 1
@@ -218,6 +373,7 @@ class QuickFractionsTest {
                 lastScale = factor
                 val base =
                     when (w) {
+                        "k" -> if (!afterDigit || seen == 0) return null else cur
                         "تلاف" -> if (seen == 0) return null else cur
                         "ألفين" -> if (seen == 0) 2 * PER else return null
                         else -> if (seen == 0) PER else cur
@@ -270,7 +426,7 @@ class QuickFractionsTest {
             val part = lastUnit / d
             val after = t.subList(k + 1, t.size)
             if (after.isEmpty()) return value + part
-            val factor = after.singleOrNull()?.let { scaleFactor[it] } ?: return null
+            val factor = after.singleOrNull()?.takeIf { it != "k" }?.let { scaleFactor[it] } ?: return null
             return if (lastUnit <= 100 * PER && value < factor * PER) (value + part) * factor else null
         }
     }

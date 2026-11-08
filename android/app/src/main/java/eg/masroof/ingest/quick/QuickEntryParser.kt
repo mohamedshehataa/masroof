@@ -147,10 +147,7 @@ object QuickEntryParser {
             i in tokens.indices && i !in used && !inRun[i] && tokens[i].key in QuickLexicon.UNSUPPORTED_CURRENCIES
 
         fun currencyAt(i: Int): String? =
-            if (i in tokens.indices &&
-                i !in used &&
-                !inRun[i]
-            ) {
+            if (i in tokens.indices && i !in used) {
                 QuickLexicon.CURRENCIES[tokens[i].key]
             } else {
                 null
