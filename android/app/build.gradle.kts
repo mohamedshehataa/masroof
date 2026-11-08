@@ -156,6 +156,8 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.tink.android)
+    // Argon2id for the backup file (ADR-0009 D5); pure Java, so the RFC 9106 vector runs in JVM unit tests.
+    implementation(libs.bouncycastle.bcprov)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

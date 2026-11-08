@@ -56,7 +56,7 @@ fun legacyTokenMigration(): DataMigration<Preferences> =
         override suspend fun cleanUp() = Unit
     }
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "settings",
     produceMigrations = { listOf(legacyTokenMigration()) },
 )

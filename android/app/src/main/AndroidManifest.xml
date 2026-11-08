@@ -18,6 +18,12 @@
     <!-- Runtime permission, requested only when the user taps the mic on the Add form (STORY-200, REQ-AND-144). The phone's
          speech recognizer turns speech into text; the app never records or stores audio. The app works fully without it. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- STORY-183 (REQ-OPS-177): "Back up now" runs as a WorkManager foreground task so a large backup survives leaving the app. Both are
+         normal (install-time) permissions, no prompt. FOREGROUND_SERVICE_DATA_SYNC is the type Android 14+ requires for a task that moves
+         data to a place the user chose. This adds no network permission use: the file is written through the system file picker and the
+         provider (for example Google Drive) uploads by itself. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Package visibility (API 30+): only to find out whether a camera app exists, so "Camera" is hidden when none does. Masroof
          declares no camera permission (the system camera app takes the photo). -->
@@ -124,6 +130,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/camera_paths" />
         </provider>
+
+        <!-- STORY-183: WorkManager's own foreground service (already declared by the library, not exported); this only gives it the
+             dataSync type that the foreground backup task declares. No new component and nothing exported. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- WorkManager is initialised by MasroofApp (Hilt worker factory), not by the default startup provider. -->
         <provider

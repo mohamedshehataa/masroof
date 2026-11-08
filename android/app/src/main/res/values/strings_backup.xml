@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="backup_title">Backup</string>
+    <string name="backup_never">No backup yet - if this phone is lost your data is gone</string>
+    <string name="backup_now">Back up now</string>
+    <string name="backup_last">Last backup: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="backup_when_today">today %1$s</string>
+    <string name="backup_when_date">%1$s %2$s</string>
+    <plurals name="backup_entries">
+        <item quantity="one">%1$s entry</item>
+        <item quantity="other">%1$s entries</item>
+    </plurals>
+    <plurals name="backup_receipts">
+        <item quantity="one">%1$s receipt</item>
+        <item quantity="other">%1$s receipts</item>
+    </plurals>
+    <string name="backup_size_mb">%1$s MB</string>
+    <string name="backup_preparing">Preparing the backup…</string>
+    <string name="backup_running">Backing up… %1$s%%</string>
+    <string name="backup_progress_desc">Backup progress</string>
+    <string name="backup_cancel">Cancel</string>
+    <string name="backup_ok">OK</string>
+    <string name="backup_done">Backup saved</string>
+    <plurals name="backup_missing">
+        <item quantity="one">%1$s receipt file was missing and is not in the backup</item>
+        <item quantity="other">%1$s receipt files were missing and are not in the backup</item>
+    </plurals>
+    <string name="backup_failed">Backup failed - the file may be incomplete, please delete it</string>
+    <string name="backup_cancelled">Backup cancelled - the file may be incomplete, please delete it</string>
+    <string name="backup_reason_storage_full">Reason: there is not enough storage space.</string>
+    <string name="backup_reason_cannot_open">Reason: the chosen location could not be opened.</string>
+    <string name="backup_reason_receipt_changed">Reason: a receipt changed while the backup was running. Try again.</string>
+    <string name="backup_reason_key_lost">Reason: the backup was interrupted before it started. Try again.</string>
+    <string name="backup_reason_other">Reason: the file could not be written.</string>
+
+    <string name="backup_explain_title">Before your first backup</string>
+    <string name="backup_explain_body">Your backup is one file that only your passphrase can open. You choose where it is saved, for example Google Drive.</string>
+    <string name="backup_explain_warning">If you forget this passphrase, nobody can open this backup - not even us</string>
+    <string name="backup_explain_check">I understand</string>
+    <string name="backup_continue">Continue</string>
+
+    <string name="backup_pass_title">Choose a passphrase</string>
+    <string name="backup_pass_field">Passphrase</string>
+    <string name="backup_pass_again">Type it again</string>
+    <string name="backup_pass_empty">Enter a passphrase of at least 12 characters</string>
+    <string name="backup_pass_too_short">Use at least 12 characters (now %1$s)</string>
+    <string name="backup_pass_mismatch">The two entries are different</string>
+    <string name="backup_pass_not_saved">The passphrase is not saved on this phone. You type it again to restore.</string>
+    <string name="backup_pass_not_covered">The passphrase protects the file only. It does not help if someone can unlock your phone or the phone has malware, and the file\'s size and date are not hidden.</string>
+
+    <string name="backup_channel">Backups</string>
+    <string name="backup_notif_title">Backing up Masroof</string>
+    <string name="backup_notif_progress">%1$d%%</string>
+
+</resources>

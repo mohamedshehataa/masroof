@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="backup_title">النسخة الاحتياطية</string>
+    <string name="backup_never">لسه مفيش نسخة احتياطية - لو التليفون ضاع، بياناتك بتضيع</string>
+    <string name="backup_now">خد نسخة احتياطية دلوقتي</string>
+    <string name="backup_last">آخر نسخة احتياطية: %1$s، %2$s، %3$s، %4$s</string>
+    <string name="backup_when_today">النهارده %1$s</string>
+    <string name="backup_when_date">%1$s %2$s</string>
+    <plurals name="backup_entries">
+        <item quantity="zero">%1$s مصروف</item>
+        <item quantity="one">مصروف واحد</item>
+        <item quantity="two">مصروفين</item>
+        <item quantity="few">%1$s مصاريف</item>
+        <item quantity="many">%1$s مصروف</item>
+        <item quantity="other">%1$s مصروف</item>
+    </plurals>
+    <plurals name="backup_receipts">
+        <item quantity="zero">%1$s إيصال</item>
+        <item quantity="one">إيصال واحد</item>
+        <item quantity="two">إيصالين</item>
+        <item quantity="few">%1$s إيصالات</item>
+        <item quantity="many">%1$s إيصال</item>
+        <item quantity="other">%1$s إيصال</item>
+    </plurals>
+    <string name="backup_size_mb">%1$s ميجا</string>
+    <string name="backup_preparing">بنجهّز النسخة الاحتياطية…</string>
+    <string name="backup_running">بناخد النسخة الاحتياطية… %1$s%%</string>
+    <string name="backup_progress_desc">تقدّم النسخة الاحتياطية</string>
+    <string name="backup_cancel">إلغاء</string>
+    <string name="backup_ok">تمام</string>
+    <string name="backup_done">النسخة الاحتياطية اتحفظت</string>
+    <plurals name="backup_missing">
+        <item quantity="zero">%1$s ملف إيصال كان ناقص ومش موجود في النسخة الاحتياطية</item>
+        <item quantity="one">ملف إيصال واحد كان ناقص ومش موجود في النسخة الاحتياطية</item>
+        <item quantity="two">ملفين إيصال كانوا ناقصين ومش موجودين في النسخة الاحتياطية</item>
+        <item quantity="few">%1$s ملفات إيصالات كانت ناقصة ومش موجودة في النسخة الاحتياطية</item>
+        <item quantity="many">%1$s ملف إيصال كانوا ناقصين ومش موجودين في النسخة الاحتياطية</item>
+        <item quantity="other">%1$s ملف إيصال كانوا ناقصين ومش موجودين في النسخة الاحتياطية</item>
+    </plurals>
+    <string name="backup_failed">النسخة الاحتياطية فشلت - الملف ممكن يكون ناقص، امسحه من فضلك</string>
+    <string name="backup_cancelled">النسخة الاحتياطية اتلغت - الملف ممكن يكون ناقص، امسحه من فضلك</string>
+    <string name="backup_reason_storage_full">السبب: مفيش مساحة تخزين كفاية.</string>
+    <string name="backup_reason_cannot_open">السبب: معرفناش نفتح المكان اللي اخترته.</string>
+    <string name="backup_reason_receipt_changed">السبب: إيصال اتغيّر وإحنا بناخد النسخة. جرّب تاني.</string>
+    <string name="backup_reason_key_lost">السبب: النسخة وقفت قبل ما تبدأ. جرّب تاني.</string>
+    <string name="backup_reason_other">السبب: معرفناش نكتب الملف.</string>
+
+    <string name="backup_explain_title">قبل أول نسخة احتياطية</string>
+    <string name="backup_explain_body">النسخة الاحتياطية ملف واحد مفيش حد يفتحه غير بكلمة السر بتاعتك. إنت اللي بتختار هيتحفظ فين، مثلاً Google Drive.</string>
+    <string name="backup_explain_warning">لو نسيت كلمة السر دي، مفيش حد يقدر يفتح النسخة دي - ولا حتى إحنا</string>
+    <string name="backup_explain_check">فاهم</string>
+    <string name="backup_continue">كمّل</string>
+
+    <string name="backup_pass_title">اختار كلمة سر</string>
+    <string name="backup_pass_field">كلمة السر</string>
+    <string name="backup_pass_again">اكتبها تاني</string>
+    <string name="backup_pass_empty">اكتب كلمة سر من 12 حرف على الأقل</string>
+    <string name="backup_pass_too_short">استخدم 12 حرف على الأقل (دلوقتي %1$s)</string>
+    <string name="backup_pass_mismatch">الاتنين مش زي بعض</string>
+    <string name="backup_pass_not_saved">كلمة السر مش بتتحفظ على التليفون. هتكتبها تاني وقت الاسترجاع.</string>
+    <string name="backup_pass_not_covered">كلمة السر بتحمي الملف بس. مش هتفيدك لو حد قدر يفتح تليفونك أو لو فيه فيروس على التليفون، وحجم الملف وتاريخه مش مخفيين.</string>
+
+    <string name="backup_channel">النسخ الاحتياطية</string>
+    <string name="backup_notif_title">بناخد نسخة احتياطية من مصروف</string>
+    <string name="backup_notif_progress">%1$d%%</string>
+
+</resources>

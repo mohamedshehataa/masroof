@@ -161,7 +161,7 @@ object NoSubscriptionPrefs : SubscriptionPrefs {
     override suspend fun clear() = Unit
 }
 
-private val Context.subscriptionStore: DataStore<Preferences> by preferencesDataStore(name = "subscriptions")
+internal val Context.subscriptionStore: DataStore<Preferences> by preferencesDataStore(name = "subscriptions")
 
 @Singleton
 class DataStoreSubscriptionPrefs
