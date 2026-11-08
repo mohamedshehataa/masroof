@@ -30,6 +30,7 @@ internal object AskPeriods {
             AskPeriodKind.YEAR -> yearPeriod(requireNotNull(p.year))
             AskPeriodKind.MONTHS_AGO -> monthsAgo(p.days, today, monthStartDay)
             AskPeriodKind.DAY_RANGE -> dayRange(p, today)
+            AskPeriodKind.SINCE_YEAR -> AnalyticsPeriod("since-${p.year}", LocalDate.of(requireNotNull(p.year), 1, 1), today, false)
             AskPeriodKind.LAST_DAYS -> AnalyticsPeriod("last-${p.days}", today.minusDays(p.days - 1L), today, false)
             AskPeriodKind.MONTH_OF_YEAR -> AnalyticsPeriod.month(monthOf(p, today, monthStartDay), monthStartDay)
         }
@@ -53,11 +54,12 @@ internal object AskPeriods {
         p: AskPeriod,
         today: LocalDate,
     ): AnalyticsPeriod {
-        val now = YearMonth.from(today)
+        fun fromOf(ym: YearMonth) = ym.atDay(minOf(p.days, ym.lengthOfMonth()))
+        val thisYear = YearMonth.of(today.year, p.month)
         val named =
             p.year?.let { YearMonth.of(it, p.month) }
-                ?: YearMonth.of(now.year, p.month).let { if (it.isAfter(now)) it.minusYears(1) else it }
-        val from = named.atDay(p.days)
+                ?: thisYear.let { if (fromOf(it).isAfter(today)) it.minusYears(1) else it }
+        val from = fromOf(named)
         return AnalyticsPeriod("range-$from", from, named.atDay(minOf(p.toDay, named.lengthOfMonth())), false)
     }
 
@@ -87,7 +89,7 @@ internal object AskPeriods {
             AskPeriodKind.MONTHS_AGO -> a.previous()
             AskPeriodKind.THIS_YEAR, AskPeriodKind.LAST_YEAR, AskPeriodKind.YEAR ->
                 AnalyticsPeriod((a.from.year - 1).toString(), a.from.minusYears(1), a.to.minusYears(1), false)
-            AskPeriodKind.TODAY, AskPeriodKind.YESTERDAY, AskPeriodKind.LAST_DAYS, AskPeriodKind.DAY_RANGE -> {
+            AskPeriodKind.TODAY, AskPeriodKind.YESTERDAY, AskPeriodKind.LAST_DAYS, AskPeriodKind.DAY_RANGE, AskPeriodKind.SINCE_YEAR -> {
                 val len = a.lengthDays().toLong()
                 AnalyticsPeriod("before-${a.from}", a.from.minusDays(len), a.from.minusDays(1), false)
             }

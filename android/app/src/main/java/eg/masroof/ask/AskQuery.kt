@@ -15,6 +15,7 @@ enum class AskPeriodKind {
     MONTHS_AGO,
     YEAR,
     DAY_RANGE,
+    SINCE_YEAR,
 }
 
 data class AskPeriod(
@@ -39,6 +40,8 @@ data class AskPeriod(
         val LAST_YEAR = AskPeriod(AskPeriodKind.LAST_YEAR)
 
         fun year(y: Int) = AskPeriod(AskPeriodKind.YEAR, year = y)
+
+        fun sinceYear(y: Int) = AskPeriod(AskPeriodKind.SINCE_YEAR, year = y)
 
         fun monthsAgo(n: Int) = AskPeriod(AskPeriodKind.MONTHS_AGO, days = n)
 

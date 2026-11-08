@@ -402,4 +402,42 @@ class AskSpendTest : AskEngineFixture() {
             assertTrue(spend("april may june") is AskAnswer.PeriodUnreadable)
             assertTrue(spend("groceries october 2030") is AskAnswer.PeriodUnreadable)
         }
+
+    @Test
+    fun `REQ-AN-162 a named period against a year, since a year, and the same period on both sides`() =
+        runTest {
+            seedCategories()
+            now = Instant.parse("2026-10-20T09:00:00Z")
+            put("a", 5_000, "2025-03-10T10:00:00Z", category = GROCERIES)
+            put("b", 2_000, "2024-03-10T10:00:00Z", category = GROCERIES)
+            put("c", 1_000, "2026-10-05T10:00:00Z", category = GROCERIES)
+            val vsYear = spend("groceries this month vs 2025") as AskAnswer.Compare
+            assertEquals(1_000L, vsYear.currentMinor)
+            assertEquals(5_000L, vsYear.previousMinor)
+            val arabic = spend("البقالة مقارنة 2025 و 2024") as AskAnswer.Compare
+            assertEquals(5_000L, arabic.currentMinor)
+            assertEquals(2_000L, arabic.previousMinor)
+            assertTrue(spend("groceries 2025 vs last year") is AskAnswer.SamePeriod)
+            val since = spend("groceries since 2024") as AskAnswer.SpendTotal
+            assertEquals(8_000L, since.totalMinor)
+            assertEquals(LocalDate.of(2024, 1, 1), since.period.from)
+            assertEquals(LocalDate.of(2026, 10, 20), since.period.to)
+            assertEquals("80 EGP on Groceries since 2024", en().text(since).headline)
+        }
+
+    @Test
+    fun `REQ-AN-160 a day without a year is the most recent such day not after today, and a one-day label says on`() =
+        runTest {
+            seedCategories()
+            now = Instant.parse("2026-10-20T09:00:00Z")
+            put("d", 4_000, "2026-05-31T10:00:00Z", category = GROCERIES)
+            put("e", 6_000, "2025-05-31T10:00:00Z", category = GROCERIES)
+            val may = spend("groceries may 31") as AskAnswer.SpendTotal
+            assertEquals(4_000L, may.totalMinor)
+            assertEquals("40 EGP on Groceries on 31 May", en().text(may).headline)
+            // a day that has not come yet this year is last year's
+            now = Instant.parse("2026-05-10T09:00:00Z")
+            val earlier = spend("groceries 31 may") as AskAnswer.SpendTotal
+            assertEquals(6_000L, earlier.totalMinor)
+        }
 }

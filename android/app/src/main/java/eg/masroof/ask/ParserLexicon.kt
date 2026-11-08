@@ -29,6 +29,13 @@ internal object ParserLexicon {
         words("vs versus against قصاد compare compared comparison مقارنه قارن قارنلي قارنها moqarna mo2arna mqarna")
     val COMPARE_PHRASES: List<String> = phrases("compared to|compared with|difference between|الفرق بين")
 
+    /** True when the question has an explicit compare word or phrase. */
+    fun mentionsCompare(text: String): Boolean {
+        val tokens = ArabicText.tokens(text)
+        val padded = " ${tokens.joinToString(" ")} "
+        return tokens.any { it in COMPARE_WORDS } || COMPARE_PHRASES.any { padded.contains(" $it ") }
+    }
+
     /** "more than last month": a comparison only when a "last ..." period is also named. */
     val COMPARE_NEEDS_PERIOD: List<String> = phrases("more than|less than|اكتر من|اقل من")
 

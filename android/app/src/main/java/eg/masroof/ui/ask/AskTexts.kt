@@ -78,17 +78,29 @@ class AskTexts(
             AskPeriodKind.LAST_YEAR -> res.getString(R.string.ask_p_last_year)
             AskPeriodKind.YEAR -> res.getString(R.string.ask_p_month, DateFormat.digitsAs(info.from.year.toString(), style.digits))
             AskPeriodKind.MONTHS_AGO -> res.getString(R.string.ask_p_month, monthName(info))
-            AskPeriodKind.DAY_RANGE -> range(info)
+            AskPeriodKind.DAY_RANGE -> dayRangePhrase(info)
+            AskPeriodKind.SINCE_YEAR -> res.getString(R.string.ask_p_since, DateFormat.digitsAs(info.from.year.toString(), style.digits))
             AskPeriodKind.MONTH_OF_YEAR -> res.getString(R.string.ask_p_month, monthName(info))
         }
     }
+
+    private fun dayRangePhrase(info: PeriodInfo): String =
+        if (info.from == info.to) {
+            res.getString(R.string.ask_p_on, DateFormat.shortDate(info.from, style.arabic, style.digits))
+        } else {
+            range(info)
+        }
 
     /** A short label for a chart bar. */
     fun barLabel(info: PeriodInfo): String {
         val p = info.period ?: return DateFormat.shortDate(info.from, style.arabic, style.digits)
         return when (p.kind) {
             AskPeriodKind.MONTH_OF_YEAR, AskPeriodKind.MONTHS_AGO -> monthName(info)
-            AskPeriodKind.YEAR, AskPeriodKind.LAST_YEAR -> DateFormat.digitsAs(info.from.year.toString(), style.digits)
+            AskPeriodKind.YEAR, AskPeriodKind.LAST_YEAR, AskPeriodKind.SINCE_YEAR ->
+                DateFormat.digitsAs(
+                    info.from.year.toString(),
+                    style.digits,
+                )
             AskPeriodKind.LAST_DAYS, AskPeriodKind.DAY_RANGE -> DateFormat.shortDate(info.from, style.arabic, style.digits)
             else -> periodPhrase(info).replaceFirstChar { it.titlecase(locale) }
         }

@@ -119,4 +119,6 @@
     </plurals>
     <string name="ask_ignored">Answered for %1$s only. I didn’t use: %2$s</string>
     <string name="ask_same_period">Those are the same period, so there is nothing to compare. Try two different periods.</string>
+    <string name="ask_p_on">on %1$s</string>
+    <string name="ask_p_since">since %1$s</string>
 </resources>

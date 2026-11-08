@@ -52,11 +52,22 @@ class YearQuestionsTest {
             expect("$y جنيه على البقالة الشهر ده", AskQuery.Spend(tm, AskSubject.Text("البقاله")))
             // cue: a year, or unreadable
             expect("groceries in $y", year(y) { AskQuery.Spend(it, groceries) })
-            expect("groceries since $y", year(y) { AskQuery.Spend(it, groceries) })
+            expect("groceries since $y", year(y) { AskQuery.Spend(AskPeriod.sinceYear(y), groceries) })
+            expect("صرفت كام من $y", year(y) { AskQuery.Spend(AskPeriod.sinceYear(y)) })
+            expect("groceries fe $y", year(y) { AskQuery.Spend(it, groceries) })
+            expect("groceries sanat $y", year(y) { AskQuery.Spend(it, groceries) })
+            expect("groceries 3am $y", year(y) { AskQuery.Spend(it, groceries) })
+            expect("groceries for $y", amountImplicit)
+            expect("how much did I spend for $y", AskQuery.Spend(tm))
+            expect("I paid 300 of $y", AskQuery.Spend(tm))
             expect("groceries سنة $y", year(y) { AskQuery.Spend(it, groceries) })
             expect("groceries لسنة $y", year(y) { AskQuery.Spend(it, groceries) })
             expect("how much did I spend in $y", year(y) { AskQuery.Spend(it) })
             expect("صرفت كام سنة $y", year(y) { AskQuery.Spend(it) })
+            // a named period against a year, with an explicit compare word
+            expect("this year vs $y", year(y) { AskQuery.Compare(AskPeriod.THIS_YEAR, it) })
+            expect("groceries this month vs $y", year(y) { AskQuery.Compare(tm, it, groceries) })
+            expect("groceries $y vs last year", year(y) { AskQuery.Compare(it, AskPeriod.LAST_YEAR, groceries) })
             // next to a month name or a day
             expect("groceries may $y", year(y) { AskQuery.Spend(AskPeriod.monthOfYear(5, y), groceries) })
             expect("سبتمبر $y", year(y) { AskQuery.Spend(AskPeriod.monthOfYear(9, y)) })
@@ -80,8 +91,29 @@ class YearQuestionsTest {
                 )
                 // cued on both sides
                 expect("groceries in $y vs in $z", both)
-                // two numbers without a compare word: both amounts
-                expect("groceries $y and $z", amountImplicit)
+                // explicit compare with "and" / "و"
+                expect(
+                    "مقارنة $y و $z",
+                    if (readable(y) &&
+                        readable(z)
+                    ) {
+                        AskQuery.Compare(AskPeriod.year(y), AskPeriod.year(z))
+                    } else {
+                        unreadable
+                    },
+                )
+                expect(
+                    "compare $y and $z",
+                    if (readable(y) &&
+                        readable(z)
+                    ) {
+                        AskQuery.Compare(AskPeriod.year(y), AskPeriod.year(z))
+                    } else {
+                        unreadable
+                    },
+                )
+                // two bare numbers joined by "and" without a compare word cannot be read
+                expect("groceries $y and $z", unreadable)
                 expect("groceries in $y and in $z", unreadable)
             }
         }

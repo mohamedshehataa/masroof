@@ -143,4 +143,6 @@
     </plurals>
     <string name="ask_ignored">جاوبت على %1$s بس. ما استخدمتش: %2$s</string>
     <string name="ask_same_period">دي نفس الفترة، فمفيش حاجة تتقارن. جرب فترتين مختلفتين.</string>
+    <string name="ask_p_on">يوم %1$s</string>
+    <string name="ask_p_since">من %1$s</string>
 </resources>
