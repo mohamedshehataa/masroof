@@ -43,6 +43,8 @@ data class GoalDetailState(
     val history: List<GoalMovementEntity> = emptyList(),
     /** Running total after each movement, oldest first, for the step chart. */
     val steps: List<Long> = emptyList(),
+    /** Holdings backing the goal (STORY-209): shown as "including gold worth X". */
+    val backing: List<eg.masroof.data.goals.GoalBacking> = emptyList(),
 )
 
 /** What the detail screen asks of its host. */
@@ -101,7 +103,7 @@ internal fun cards(
     summaries: List<GoalSummary>,
     today: LocalDate,
     monthStartDay: Int,
-): List<GoalCardUi> = summaries.map { card(it, today, monthStartDay) }.sortedBy { it.completed }
+): List<GoalCardUi> = summaries.map { card(it, today, monthStartDay, it.backedMinor) }.sortedBy { it.completed }
 
 /** Null when there is no EGP goal; goals in other currencies are only counted, never added in. */
 internal fun totals(cards: List<GoalCardUi>): GoalsTotals? {
@@ -124,7 +126,8 @@ internal fun detailState(
     } else {
         GoalDetailState(
             loading = false,
-            card = cardOf(detail.goal, detail.savedMinor, today, monthStartDay, 0L),
+            card = cardOf(detail.goal, detail.savedMinor, today, monthStartDay, detail.backedMinor),
+            backing = detail.backing,
             targetAtMillis = detail.goal.targetAtMillis,
             history = detail.movements.sortedWith(compareByDescending<GoalMovementEntity> { it.atMillis }.thenBy { it.id }),
             steps = GoalMath.runningTotals(detail.movements.map { it.amountMinor }),

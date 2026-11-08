@@ -296,6 +296,17 @@ interface AssetDao {
 
     @Query("SELECT * FROM asset WHERE id = :id")
     fun observeById(id: String): Flow<AssetEntity?>
+
+    @Query("SELECT * FROM asset WHERE id = :id")
+    suspend fun find(id: String): AssetEntity?
+
+    /** Links the holding to a goal (or unlinks with null). */
+    @Query("UPDATE asset SET goalId = :goalId, updatedAtMillis = :nowMillis WHERE id = :id")
+    suspend fun setGoal(
+        id: String,
+        goalId: String?,
+        nowMillis: Long,
+    )
 }
 
 @Dao
@@ -314,6 +325,29 @@ interface AssetLotDao {
 
     @Query("SELECT * FROM asset_lot WHERE id = :id")
     fun observeById(id: String): Flow<AssetLotEntity?>
+
+    @Query("SELECT * FROM asset_lot WHERE id = :id")
+    suspend fun find(id: String): AssetLotEntity?
+
+    @Query("SELECT * FROM asset_lot WHERE assetId = :assetId ORDER BY atMillis, id")
+    suspend fun forAsset(assetId: String): List<AssetLotEntity>
+
+    @Query("SELECT * FROM asset_lot WHERE assetId = :assetId ORDER BY atMillis DESC, id")
+    fun observeForAsset(assetId: String): Flow<List<AssetLotEntity>>
+
+    /** Lots of other holdings pointing at this entry. */
+    @Query("SELECT COUNT(*) FROM asset_lot WHERE expenseId = :expenseId AND assetId <> :assetId")
+    suspend fun countOutsideAsset(
+        expenseId: String,
+        assetId: String,
+    ): Int
+
+    /** How many other lots point at this entry (it stays excluded from totals while any does). */
+    @Query("SELECT COUNT(*) FROM asset_lot WHERE expenseId = :expenseId AND id <> :exceptLotId")
+    suspend fun countForExpense(
+        expenseId: String,
+        exceptLotId: String,
+    ): Int
 }
 
 @Dao

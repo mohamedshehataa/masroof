@@ -53,6 +53,8 @@ import eg.masroof.data.wealth.AssetView
 import eg.masroof.data.wealth.ChartRange
 import eg.masroof.data.wealth.DebtLine
 import eg.masroof.data.wealth.DebtSource
+import eg.masroof.data.wealth.MetalMath
+import eg.masroof.data.wealth.MetalOutcome
 import eg.masroof.data.wealth.NetWorth
 import eg.masroof.data.wealth.NetWorthHistory
 import eg.masroof.ui.components.AmountText
@@ -64,11 +66,22 @@ import eg.masroof.ui.theme.LocalMoneyStyle
 fun WealthRoute(
     onOpenAccounts: () -> Unit,
     viewModel: WealthViewModel = hiltViewModel(),
+    metalViewModel: MetalViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // A gold or silver holding opens in place (no new route); system Back returns to the list.
+    var openMetal by rememberSaveable { mutableStateOf<String?>(null) }
+    val metalId = openMetal
+    if (metalId != null) {
+        androidx.activity.compose.BackHandler { openMetal = null }
+        MetalDetailRoute(metalId, onBack = { openMetal = null }, viewModel = metalViewModel)
+        return
+    }
     WealthContent(
         state,
         WealthActions(
+            onAddMetal = { holding, lot, done -> metalViewModel.create(holding, lot, done) },
+            onOpenMetal = { openMetal = it },
             onOpenAccounts = onOpenAccounts,
             onAddAsset = { viewModel.addAsset(it) },
             onAddDebt = { viewModel.addDebt(it) },
@@ -94,6 +107,15 @@ fun WealthContent(
             onAsset = {
                 actions.onAddAsset(it)
                 adding = false
+            },
+            today = state.today,
+            onMetal = { holding, lot ->
+                actions.onAddMetal(holding, lot) { out ->
+                    if (out is MetalOutcome.Saved) {
+                        adding = false
+                        actions.onOpenMetal(out.id)
+                    }
+                }
             },
             onDebt = {
                 actions.onAddDebt(it)
@@ -246,7 +268,15 @@ private fun NetWorthTab(state: WealthUiState) {
 }
 
 private val BUCKET_COLORS =
-    listOf(Color(0xFF0E7C66), Color(0xFF6366F1), Color(0xFF0EA5E9), Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFF64748B))
+    listOf(
+        Color(0xFF0E7C66),
+        Color(0xFF6366F1),
+        Color(0xFF0EA5E9),
+        Color(0xFFF59E0B),
+        Color(0xFFEC4899),
+        Color(0xFF64748B),
+        Color(0xFFD4A017),
+    )
 
 private fun bucketLabel(bucket: AssetBucket): Int =
     when (bucket) {
@@ -256,6 +286,7 @@ private fun bucketLabel(bucket: AssetBucket): Int =
         AssetBucket.PROPERTY -> R.string.wealth_bucket_property
         AssetBucket.VEHICLE -> R.string.wealth_bucket_vehicle
         AssetBucket.OTHER -> R.string.wealth_bucket_other
+        AssetBucket.METAL -> R.string.gold_bucket
     }
 
 private fun kindLabel(kind: String): Int =
@@ -347,6 +378,11 @@ private fun AssetRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+        if (MetalMath.isMetal(asset.kind)) {
+            OutlinedButton(onClick = { actions.onOpenMetal(asset.id) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.gold_open))
             }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {

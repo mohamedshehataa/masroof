@@ -36,6 +36,32 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ExpenseEntity>>
 
+    /** STORY-209: buying gold is saving, so a linked entry stops counting as spending (and counts again on Undo). */
+    @Query("UPDATE expense SET excludedFromTotals = :excluded, updatedAtMillis = :nowMillis WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun setExcluded(
+        id: String,
+        excluded: Boolean,
+        nowMillis: Long,
+    ): Int
+
+    /** Excludes the entry only if it counted until now, so Undo can safely restore it. */
+    @Query(
+        """UPDATE expense SET excludedFromTotals = 1, updatedAtMillis = :nowMillis
+            WHERE id = :id AND deletedAtMillis IS NULL AND excludedFromTotals = 0""",
+    )
+    suspend fun claimExcluded(
+        id: String,
+        nowMillis: Long,
+    ): Int
+
+    /** Recent purchases a gold lot could be: live, not failed, not already excluded, not linked to another lot. */
+    @Query(
+        """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND type = 'EXPENSE' AND excludedFromTotals = 0
+            AND id NOT IN (SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL)
+            ORDER BY occurredAtMillis DESC, id LIMIT :limit""",
+    )
+    suspend fun metalLinkCandidates(limit: Int): List<ExpenseEntity>
+
     /** Live entries on or after [since], newest first: the "Attach to entry" picker. */
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since ORDER BY occurredAtMillis DESC, id")
     fun observeSince(since: Long): Flow<List<ExpenseEntity>>
@@ -43,7 +69,7 @@ interface ExpenseDao {
     // The one spending rule (ADR-0009 D2, parity-v1.json): EGP, CONFIRMED or PENDING_REVIEW, refunds netted, no cash withdrawals here.
     @Query(
         """SELECT COALESCE(SUM(CASE type WHEN 'REFUND' THEN -amountMinor ELSE amountMinor END), 0) FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND type IN ('EXPENSE', 'REFUND')
             AND status IN ('CONFIRMED', 'PENDING_REVIEW') AND currency = 'EGP' AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeTotal(
@@ -54,7 +80,7 @@ interface ExpenseDao {
     /** Live entries of a range that can count in analytics: the indexed `occurredAtMillis` range only (REQ-AN-149). */
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     fun observeAnalyticsRows(
@@ -64,7 +90,7 @@ interface ExpenseDao {
 
     @Query(
         """SELECT type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun analyticsRows(
@@ -75,7 +101,7 @@ interface ExpenseDao {
     /** The same rows as [analyticsRows] plus the id and account, for Ask Masroof (STORY-199): read-only, the same filter. */
     @Query(
         """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId FROM expense
-            WHERE failed = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
             AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
     )
     suspend fun askRows(

@@ -3,7 +3,7 @@ id: STORY-209
 epic: EPIC-18
 title: Gold and silver by the gram - lots bought and sold, today's price, value and gain, goals backed by gold
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -85,3 +85,6 @@ STORY-205, STORY-204
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 3 |
+| 2026-11-08 | 5 implement | android-engineer | READY_FOR_VERIFY 270874c; fixes 203d553, 1b34599 |
+| 2026-11-08 | 6 verify | qa-verifier | FAIL loop 1 (excluded-from-totals not read), PASS loop 2 (974 tests) |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
