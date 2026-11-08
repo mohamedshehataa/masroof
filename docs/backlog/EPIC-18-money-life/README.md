@@ -21,9 +21,10 @@ nothing calls the network, nothing needs an account, no LLM.
 | 2 | STORY-200 Say it: voice and quick-text entry, income and currency on Add | high | M | - | Voice entry |
 | 3 | STORY-201 Room v10: tables for balances, budgets, bills, goals, assets and lots, debts, merchant rules | high | M | - | (foundation) |
 | 4 | STORY-202 Bills: installments (valU, Halan, ...) and gam3eya, schedule, record payment, reminders | high | M | 201 | Installments tab, Gam3eya |
-| 5 | STORY-203 Bills: subscriptions and recurring income (payday), totals, renewals, reminders | high | M | 201 | Subscriptions, recurring income |
+| 5 | STORY-203 Bills: subscriptions and recurring income (payday), totals, renewals, reminders | high | M | 202 | Subscriptions, recurring income |
 | 6 | STORY-204 Savings goals with emoji, add/take out, monthly need | high | M | 201 | Goals |
-| 7 | STORY-205 Wealth: honest account balances, credit-card bill, gold lots, certificates, debts, net worth chart | high | M | 201 | Wealth tab, accounts |
+| 7 | STORY-205 Wealth: honest account balances, credit cards, debts, certificates, funds, net worth chart | high | M | 201 | Wealth tab, accounts |
+| 7b | STORY-209 Gold and silver by the gram: lots, today's price, goals backed by gold | high | M | 205 | Gold holdings |
 | 8 | STORY-206 Wallet home, tabs (Wallet, Wealth, Bills, Ask), insight tiles, "don't count in totals" | low | M | 199, 200, 202..205 | Wallet tab, Analytics |
 | 9 | STORY-207 Categories with emoji and merchant rules (apply to past entries) | low | S | 201 | Categories, merchant rules |
 | 10 | STORY-208 Needs-an-answer cards: link a refund, sort a transfer, unknown card number, ATM cash | high | M | 205 | Refund, transfer check-in |
@@ -34,8 +35,9 @@ Not copied: household sync and sign-in (ADR-0009 drops them), the LLM chat, Appl
 and stocks (the user types today's gram price; see STORY-205), the newsletter, referrals, the World Cup game, paywall.
 STORY-192 (widget) should grow to Say's most useful widgets: quick add by voice, bills due, net worth, payday.
 
-Waves: 199, 200 and 201 run in parallel (no shared files except the nav host and string files). 202..205 and 207 run
-in parallel after 201 merges. 206 and 208 come last because they link every new screen. Specs for 202..208 are
+Waves: 199, 200 and 201 run in parallel (no shared files except the nav host and string files). 202, 204, 205 and 207
+run in parallel after 201 merges (each reachable from Settings -> "Your money" until 206). Then 203 (after 202), 209
+(after 205), and finally 206 and 208, which link every new screen. Specs for 202..208 are
 written when their wave starts, from the teardown (feature map items 14-24) and the defects list.
 
 ## Shared rules (in addition to EPIC-17's)
