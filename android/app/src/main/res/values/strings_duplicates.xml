@@ -2,7 +2,6 @@
 <resources>
 
     <string name="duplicates_title">Possible duplicate</string>
-    <string name="duplicates_intro">You typed this and the phone also captured it. Merge them to count the purchase once.</string>
     <string name="duplicates_manual">Manual entry</string>
     <string name="duplicates_source_from">%1$s from %2$s</string>
     <string name="duplicates_no_merchant">No merchant</string>

@@ -2,7 +2,6 @@
 <resources>
 
     <string name="duplicates_title">ممكن يكون مكرر</string>
-    <string name="duplicates_intro">انت كتبت المصروف ده والموبايل التقطه كمان. ادمجهم علشان يتحسب مرة واحدة.</string>
     <string name="duplicates_manual">إدخال يدوي</string>
     <string name="duplicates_source_from">%1$s من %2$s</string>
     <string name="duplicates_no_merchant">من غير اسم محل</string>
