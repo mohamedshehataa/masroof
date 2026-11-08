@@ -259,6 +259,19 @@ interface ExpenseDao {
         to: String,
     )
 
+    /** STORY-173: entries a gold lot or an installment payment points at: a merge never soft-deletes one of them. */
+    @Query(
+        """SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL
+            UNION SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL""",
+    )
+    fun observeReferencedIds(): Flow<List<String>>
+
+    @Query(
+        """SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL
+            UNION SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL""",
+    )
+    suspend fun referencedIds(): List<String>
+
     @Query("SELECT COUNT(*) FROM expense")
     suspend fun count(): Int
 
@@ -300,7 +313,32 @@ interface ExpenseSourceDao {
 
     @Query("SELECT * FROM expense_source")
     suspend fun all(): List<ExpenseSourceEntity>
+
+    @Query("SELECT * FROM expense_source WHERE expenseId = :expenseId ORDER BY id")
+    suspend fun forExpense(expenseId: String): List<ExpenseSourceEntity>
+
+    /** STORY-173: which channels (and which sender) the live entries since [since] came from; typed columns only, never text. */
+    @Query(
+        """SELECT id, expenseId, channel, senderId FROM expense_source
+            WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since) ORDER BY id""",
+    )
+    fun observeChannels(since: Long): Flow<List<SourceChannel>>
+
+    /** STORY-173: a merge re-points exactly these sources to the surviving entry; Undo points them back. */
+    @Query("UPDATE expense_source SET expenseId = :to WHERE id IN (:ids)")
+    suspend fun repoint(
+        ids: List<String>,
+        to: String,
+    )
 }
+
+/** One source of an entry without its message-derived fields: enough to tell a manual entry from a capture. */
+data class SourceChannel(
+    val id: String,
+    val expenseId: String,
+    val channel: String,
+    val senderId: String?,
+)
 
 /** How many receipt files are stored and their total size (Settings). */
 data class ReceiptTotals(
@@ -325,6 +363,9 @@ interface ReceiptDao {
 
     @Query("SELECT * FROM receipt WHERE id = :id")
     suspend fun find(id: String): ReceiptEntity?
+
+    @Query("SELECT id FROM receipt WHERE expenseId = :expenseId ORDER BY createdAtMillis, rowid")
+    suspend fun idsOf(expenseId: String): List<String>
 
     @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id")
     suspend fun moveTo(

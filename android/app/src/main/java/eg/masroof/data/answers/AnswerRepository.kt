@@ -82,6 +82,9 @@ interface AnswerRepository {
     suspend fun unlink(entryId: String): AnswerUndo?
 
     suspend fun undoUnlink(token: AnswerUndo)
+
+    /** STORY-173: a typed entry that a merge folded into a capture. */
+    suspend fun isMergedAway(entryId: String): Boolean = false
 }
 
 private const val CONFIRMED = "CONFIRMED"
@@ -494,6 +497,8 @@ class DefaultAnswerRepository
 
         override suspend fun linksOf(entryId: String): List<EntryLink> = prefs.current().linksOf(entryId)
 
+        override suspend fun isMergedAway(entryId: String): Boolean = entryId in prefs.current().mergedAway
+
         override suspend fun unlink(entryId: String): AnswerUndo? {
             val token =
                 eraseLock.mutex.withLock {
@@ -581,6 +586,8 @@ interface PairLookup {
     suspend fun unlink(entryId: String): AnswerUndo? = null
 
     suspend fun undoUnlink(token: AnswerUndo) = Unit
+
+    suspend fun isMergedAway(entryId: String): Boolean = false
 }
 
 object NoPairLookup : PairLookup {
@@ -598,4 +605,6 @@ class AnswerPairLookup
         override suspend fun unlink(entryId: String): AnswerUndo? = repository.unlink(entryId)
 
         override suspend fun undoUnlink(token: AnswerUndo) = repository.undoUnlink(token)
+
+        override suspend fun isMergedAway(entryId: String): Boolean = repository.isMergedAway(entryId)
     }

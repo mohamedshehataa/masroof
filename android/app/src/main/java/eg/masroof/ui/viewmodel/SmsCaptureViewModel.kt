@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.reviewCutoff
+import eg.masroof.data.edit.DuplicateRepository
+import eg.masroof.data.edit.NoDuplicates
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.CapturedAlertSettings
 import eg.masroof.ingest.NotificationPermission
@@ -14,6 +16,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,6 +35,7 @@ class SmsCaptureViewModel
         db: AppDatabase,
         clock: java.time.Clock,
         @IoDispatcher private val io: CoroutineDispatcher,
+        duplicates: DuplicateRepository = NoDuplicates,
     ) : ViewModel() {
         private val mutableSuggestions = MutableStateFlow(senders.suggestions())
         val suggestions: StateFlow<List<String>> = mutableSuggestions
@@ -70,7 +74,10 @@ class SmsCaptureViewModel
         val notificationsGranted: Boolean get() = notificationPermission.granted()
 
         val reviewCount: StateFlow<Int> =
-            db.reviews().observeCount(reviewCutoff(clock.millis())).stateIn(
+            // the count badge includes the "Possible duplicate" cards (STORY-173)
+            combine(db.reviews().observeCount(reviewCutoff(clock.millis())), duplicates.observeCards()) { messages, cards ->
+                messages + cards.size
+            }.stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(STOP_TIMEOUT),
                 0,
