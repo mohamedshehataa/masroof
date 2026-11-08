@@ -3,7 +3,7 @@ id: STORY-208
 epic: EPIC-18
 title: Needs-an-answer cards - link a refund, sort a transfer between own accounts, an unknown card, ATM cash
 phase: 7
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -93,3 +93,9 @@ STORY-205, STORY-206
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 4 |
+| 2026-11-08 | 5 build | android-engineer | answer cards: refund link, own-account transfers (TRANSFER_IN), unknown card, ATM cash |
+| 2026-11-08 | 6 verify | qa-verifier | loops 1-4 FAIL (transfer/ATM numbers, then undo/repeat, then linked-row edits and write paths) |
+| 2026-11-08 | 3 design | orchestrator | loop 4 and 5 allowed past the limit; reconcile from the stored link, locked money fields, one write path |
+| 2026-11-08 | 6 verify | qa-verifier | loop 5 PASS on 4177e71; MINOR follow-ups fixed (6abaaca), diff reviewed |
+| 2026-11-08 | 7 review | security-reviewer | round 1 APPROVE (d2c66c9), round 2 APPROVE (6abaaca); MINOR fixed in 1532496 |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
