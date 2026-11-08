@@ -111,7 +111,10 @@ object AnalyticsCalculator {
         val total = spend(cur, includeCash)
         val previousTotal = spend(before, includeCash)
         val lines = categoryLines(cur, before, byId, includeCash)
-        val income = cur.filter { it.currency == BASE_CURRENCY && it.type == INCOME }.sumOf { it.amountMinor }
+        val income =
+            cur.filter { it.currency == BASE_CURRENCY && it.type == INCOME }.fold(
+                0L,
+            ) { acc, r -> saturatingAdd(acc, r.amountMinor) }
         val summary =
             SummaryResult(
                 period = period,
@@ -167,7 +170,18 @@ object AnalyticsCalculator {
     private fun spend(
         rows: List<AnalyticsRow>,
         includeCash: Boolean,
-    ): Long = rows.filter { it.counts(includeCash) }.sumOf { it.signed() }
+    ): Long = rows.filter { it.counts(includeCash) }.fold(0L) { acc, r -> saturatingAdd(acc, r.signed()) }
+
+    /** Clamps at the Long limits instead of wrapping, so absurd stored amounts cannot flip a total's sign. */
+    internal fun saturatingAdd(
+        a: Long,
+        b: Long,
+    ): Long =
+        try {
+            Math.addExact(a, b)
+        } catch (_: ArithmeticException) {
+            if (a > 0 || b > 0) Long.MAX_VALUE else Long.MIN_VALUE
+        }
 
     private fun daily(
         rows: List<AnalyticsRow>,

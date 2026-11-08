@@ -3,7 +3,6 @@ package eg.masroof
 import eg.masroof.core.Money
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
-import eg.masroof.ui.viewmodel.HomeViewModel
 import eg.masroof.ui.viewmodel.LoadStatus
 import eg.masroof.ui.viewmodel.TransactionsViewModel
 import kotlinx.coroutines.Dispatchers
@@ -42,11 +41,13 @@ class ViewModelTest {
     fun `REQ-AND-130 Home shows total and recent from Room and is ready at once`() =
         runTest {
             repo.all.value = listOf(expense("a", 12_500), expense("b", 2_500))
-            val vm = HomeViewModel(repo, TotalEngine(repo.all.map { l -> l.sumOf { it.amountMinor } }))
+            val clock = fixedClock("2026-10-27T10:00:00Z")
+            val rows = repo.all.map { l -> l.map { walletRow(it.id, it.amountMinor, "2026-10-26T10:00:00Z") } }
+            val vm = walletVm(FakeWalletSource(rows), repo, clock)
             backgroundScope.launch { vm.state.collect {} }
             runCurrent()
             val state = vm.state.value
-            assertEquals(15_000L, state.total.amountMinor)
+            assertEquals(15_000L, state.figures?.spentMinor)
             assertEquals(2, state.recent.size)
             assertEquals(LoadStatus.READY, state.status)
         }

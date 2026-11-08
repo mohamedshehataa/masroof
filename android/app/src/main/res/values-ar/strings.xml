@@ -2,14 +2,8 @@
 <resources>
     <string name="app_name">مصروف</string>
 
-    <string name="nav_home">الرئيسية</string>
-    <string name="nav_transactions">المعاملات</string>
-    <string name="nav_settings">الإعدادات</string>
     <string name="nav_add">إضافة مصروف</string>
 
-    <string name="home_this_month">المصروف هذا الشهر</string>
-    <string name="home_recent">آخر المصروفات</string>
-    <string name="home_see_all">عرض الكل</string>
 
     <string name="transactions_title">المعاملات</string>
 
@@ -160,7 +154,6 @@
     <string name="review_amount_invalid">المبلغ لازم يكون أكبر من صفر ومايزيدش عن ١٠٬٠٠٠٬٠٠٠٬٠٠٠</string>
     <string name="review_reason_rejected">السيرفر مقدرش يقبل العملية دي. أضفها بإيدك لو حقيقية.</string>
 
-    <string name="nav_insights">التحليلات</string>
 
     <string name="insights_title">التحليلات</string>
     <string name="insights_period_current">هذا الشهر</string>

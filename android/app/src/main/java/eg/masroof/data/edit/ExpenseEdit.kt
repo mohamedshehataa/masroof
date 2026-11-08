@@ -33,6 +33,8 @@ data class ExpenseChanges(
     val status: String? = null,
     val paidByMemberId: String? = null,
     val paidByChanged: Boolean = false,
+    /** "Don't count in totals" (REQ-AN-175); null = unchanged. */
+    val excludedFromTotals: Boolean? = null,
 ) {
     val isEmpty: Boolean
         get() = this == ExpenseChanges()
@@ -191,6 +193,7 @@ internal fun ExpenseEntity.withChanges(
         notes = if (c.notes != null) c.notes.ifBlank { null } else notes,
         status = c.status ?: status,
         paidByMemberId = if (c.paidByChanged) c.paidByMemberId else paidByMemberId,
+        excludedFromTotals = c.excludedFromTotals ?: excludedFromTotals,
         updatedAtMillis = now,
     )
 }

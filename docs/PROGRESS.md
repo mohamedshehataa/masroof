@@ -128,3 +128,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 · P7 · STORY-200 · integrate · GREEN · Say it: on-device voice and one-line entry (EN/Egyptian Arabic/Franco number words, fractions, currencies, dates) pre-fills Add; Income + currency on Add; verify PASS loop 6, security APPROVE
 2026-11-08 · P7 · STORY-209 · integrate · GREEN · Gold and silver by the gram: lots, typed price, value and gain, goals backed by gold; linked purchases leave spending (Insights, Home, Ask); verify PASS loop 2
 2026-11-08 13:24 · P7 · STORY-203 · integrate · GREEN · subscriptions and recurring income: verify loop 4 PASS (5 MINOR follow-ups); PR to main
+2026-11-08 14:38 · P7 · STORY-206 · integrate · GREEN · Wallet home and bottom tabs: verify loop 3 PASS (retry test fixed at integration); PR to main

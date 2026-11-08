@@ -109,6 +109,17 @@ interface ExpenseDao {
         to: Long,
     ): List<AskRow>
 
+    /** The Ask rows as a live query with the card's last four: Wallet (STORY-206) attributes them to accounts like the balances do. */
+    @Query(
+        """SELECT id, type, status, currency, amountMinor, occurredAtMillis, categoryId, merchant, accountId, instrumentLast4 FROM expense
+            WHERE failed = 0 AND excludedFromTotals = 0 AND deletedAtMillis IS NULL AND status IN ('CONFIRMED', 'PENDING_REVIEW')
+            AND occurredAtMillis >= :from AND occurredAtMillis < :to""",
+    )
+    fun observeWalletRows(
+        from: Long,
+        to: Long,
+    ): Flow<List<WalletRow>>
+
     // No INSERT OR REPLACE on expense: a replace deletes the row, which would reset the v9 columns and cascade-delete
     // `expense_source` rows (foreign keys are on). A write is an insert for a new id and an UPDATE for an existing one.
     @Insert(onConflict = OnConflictStrategy.ABORT)

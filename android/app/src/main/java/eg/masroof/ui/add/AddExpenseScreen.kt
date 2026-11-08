@@ -40,6 +40,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -80,6 +82,7 @@ import eg.masroof.ui.viewmodel.VoiceUi
 fun AddExpenseRoute(
     onDone: () -> Unit,
     onOpenReceipts: () -> Unit = {},
+    startWithMic: Boolean = false,
     viewModel: AddExpenseViewModel = hiltViewModel(),
     pending: PendingReceiptViewModel = hiltViewModel(),
 ) {
@@ -90,6 +93,14 @@ fun AddExpenseRoute(
     LaunchedEffect(pending.receiptId) { viewModel.setReceipt(pending.receiptId) }
     LaunchedEffect(state.form.saved) { if (state.form.saved) onDone() }
     val quick = rememberQuickActions(viewModel, state.form.voice)
+    // "Say it" on Wallet opens this screen with the mic already tapped (the permission and online notice flows are the same).
+    var micStarted by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(startWithMic) {
+        if (startWithMic && !micStarted && quick.voice.micAvailable) {
+            micStarted = true
+            quick.voice.onMic()
+        }
+    }
     // Back while the listening panel is up closes it first; a second Back leaves the form and nothing was saved.
     BackHandler(enabled = state.form.voice != VoiceUi.Idle) { quick.voice.onClose() }
     AddExpenseContent(

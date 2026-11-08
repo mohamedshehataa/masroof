@@ -250,6 +250,13 @@ fun ExpenseListItem(
                         color = MaterialTheme.colorScheme.secondary,
                     )
                 }
+                if (row.excluded) {
+                    Text(
+                        stringResource(R.string.wallet_excluded_marker),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (row.paidBy != null) {
                     val paidByText = stringResource(R.string.paid_by_chip, row.paidBy)
                     Text(

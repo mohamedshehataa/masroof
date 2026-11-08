@@ -37,6 +37,8 @@ data class EditFormState(
     val paidByMemberId: String? = null,
     val source: String? = null,
     val reviewPending: Boolean = false,
+    /** "Don't count in totals" (REQ-AN-175). */
+    val excluded: Boolean = false,
     val amountInvalid: Boolean = false,
     val dateInvalid: Boolean = false,
     /** Notes over 500 characters: the field shows its error and nothing is written. */
@@ -107,6 +109,7 @@ private fun ExpenseEntity.toForm() =
         paidByMemberId = paidByMemberId,
         source = source,
         reviewPending = status == STATUS_PENDING_REVIEW,
+        excluded = excludedFromTotals,
     )
 
 @HiltViewModel
@@ -154,6 +157,8 @@ class EditExpenseViewModel
         fun onNotes(text: String) = edit { it.copy(notes = text, notesInvalid = false) }
 
         fun onPaidBy(id: String?) = edit { it.copy(paidByMemberId = id) }
+
+        fun onExcluded(excluded: Boolean) = edit { it.copy(excluded = excluded) }
 
         fun askDelete() = form.update { if (it.busy) it else it.copy(confirmDelete = true) }
 
@@ -221,6 +226,7 @@ class EditExpenseViewModel
                 status = STATUS_CONFIRMED.takeIf { o.status == STATUS_PENDING_REVIEW },
                 paidByMemberId = paidBy.takeIf { paidBy != o.paidByMemberId },
                 paidByChanged = paidBy != o.paidByMemberId,
+                excludedFromTotals = f.excluded.takeIf { it != o.excludedFromTotals },
             )
         }
 

@@ -3,13 +3,11 @@ package eg.masroof.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import eg.masroof.core.Money
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.RefreshOutcome
 import eg.masroof.data.insights.InsightsPeriod
 import eg.masroof.data.insights.InsightsRepository
 import eg.masroof.ui.insights.InsightsUi
-import eg.masroof.ui.insights.TrendBar
 import eg.masroof.ui.insights.toUi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -103,45 +101,5 @@ class InsightsViewModel
                 viewModelScope.launch {
                     status.value = repository.refresh(requested).toStatus()
                 }
-        }
-    }
-
-/** What Home shows from the cached analytics: change vs last month, a 6-month trend and the review count. */
-private const val HOME_TREND_MONTHS = 6
-
-data class HomeInsight(
-    val deltaBps: Int?,
-    val previousTotal: Money,
-    val trend: List<TrendBar>,
-    val pendingReview: Int,
-)
-
-@HiltViewModel
-class HomeInsightsViewModel
-    @Inject
-    constructor(
-        private val repository: InsightsRepository,
-    ) : ViewModel() {
-        val state: StateFlow<HomeInsight?> =
-            repository
-                .observe(InsightsPeriod.CURRENT)
-                .map { snapshot ->
-                    snapshot?.toUi()?.let {
-                        HomeInsight(
-                            it.deltaBps,
-                            it.previousTotal,
-                            it.trend.takeLast(HOME_TREND_MONTHS),
-                            it.pendingReview,
-                        )
-                    }
-                }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
-
-        init {
-            refresh()
-        }
-
-        /** Best effort: Home renders from the cache whatever happens here. */
-        fun refresh() {
-            viewModelScope.launch { repository.refresh(InsightsPeriod.CURRENT) }
         }
     }

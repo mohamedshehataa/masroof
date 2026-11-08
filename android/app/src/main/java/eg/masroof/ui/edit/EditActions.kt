@@ -15,4 +15,5 @@ class EditActions(
     val onDelete: () -> Unit = {},
     val onDismissDelete: () -> Unit = {},
     val onPaidBy: (String?) -> Unit = {},
+    val onExcluded: (Boolean) -> Unit = {},
 )

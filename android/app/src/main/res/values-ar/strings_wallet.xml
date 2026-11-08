@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_wallet">المحفظة</string>
+    <string name="nav_plan">الخطة</string>
+    <string name="nav_ask">اسأل</string>
+
+    <string name="wallet_title">المحفظة</string>
+    <string name="wallet_profile_desc">الإعدادات</string>
+    <string name="wallet_analytics">التحليلات</string>
+    <string name="wallet_spent">المصروف</string>
+    <string name="wallet_today">%1$s النهاردة</string>
+    <string name="wallet_period_range">%1$s - %2$s</string>
+    <string name="wallet_all_accounts">كل الحسابات</string>
+    <string name="wallet_balance">الرصيد</string>
+    <string name="wallet_set_balances">حدد أرصدتك</string>
+    <plurals name="wallet_uncounted">
+        <item quantity="zero">%1$s حساب من غير رصيد</item>
+        <item quantity="one">حساب واحد من غير رصيد</item>
+        <item quantity="two">حسابين من غير رصيد</item>
+        <item quantity="few">%1$s حسابات من غير رصيد</item>
+        <item quantity="many">%1$s حساب من غير رصيد</item>
+        <item quantity="other">%1$s حساب من غير رصيد</item>
+    </plurals>
+    <string name="wallet_owe">عليك %1$s</string>
+    <string name="wallet_action_add">إضافة</string>
+    <string name="wallet_action_say">قولها</string>
+    <string name="wallet_action_receipt">إيصال</string>
+    <string name="wallet_action_ask">اسأل</string>
+    <string name="wallet_accounts">الحسابات</string>
+    <string name="wallet_set_balance">حدد الرصيد</string>
+    <string name="wallet_coming_up">الجاي</string>
+    <string name="wallet_coming_up_empty">مفيش حاجة مستحقة في الـ٧ أيام الجاية</string>
+    <string name="wallet_coming_installment">قسط</string>
+    <string name="wallet_coming_subscription">تجديد</string>
+    <string name="wallet_coming_payout">قبض الجمعية</string>
+    <string name="wallet_coming_payday">يوم المرتب</string>
+    <string name="wallet_recent">آخر العمليات</string>
+    <string name="wallet_view_all">عرض الكل</string>
+
+    <string name="wallet_tiles_title">نظرة سريعة</string>
+    <string name="tile_top_spending">أكتر مصروف</string>
+    <string name="tile_top_spending_empty">مفيش مصروفات في الفترة دي</string>
+    <string name="tile_bills_due">فواتير مستحقة</string>
+    <string name="tile_bills_none">مفيش حاجة مستحقة</string>
+    <plurals name="tile_bills_count">
+        <item quantity="zero">%1$s مستحقة</item>
+        <item quantity="one">واحدة مستحقة</item>
+        <item quantity="two">اتنين مستحقين</item>
+        <item quantity="few">%1$s مستحقة</item>
+        <item quantity="many">%1$s مستحقة</item>
+        <item quantity="other">%1$s مستحقة</item>
+    </plurals>
+    <plurals name="tile_bills_other">
+        <item quantity="zero">+ %1$s بعملات تانية</item>
+        <item quantity="one">+ واحدة بعملة تانية</item>
+        <item quantity="two">+ اتنين بعملة تانية</item>
+        <item quantity="few">+ %1$s بعملات تانية</item>
+        <item quantity="many">+ %1$s بعملات تانية</item>
+        <item quantity="other">+ %1$s بعملات تانية</item>
+    </plurals>
+    <string name="tile_budget">الميزانية</string>
+    <string name="tile_in_out">داخل وخارج</string>
+    <string name="tile_in">داخل</string>
+    <string name="tile_out">خارج</string>
+    <string name="tile_kept">اللي فضل من الدخل</string>
+    <string name="tile_kept_none">ضيف دخلك عشان تشوف ده</string>
+    <string name="tile_kept_hint">من دخلك في الفترة دي</string>
+    <string name="tile_goal">الهدف الأول</string>
+    <string name="tile_goal_cta">ضيف هدف</string>
+
+    <string name="wallet_start_title">ابدأ من هنا</string>
+    <string name="wallet_start_capture">شغّل التسجيل التلقائي</string>
+    <string name="wallet_start_capture_body">سجّل رسايل البنك والمحافظ لوحدها</string>
+    <string name="wallet_start_balances_body">ضيف الفلوس اللي في كل حساب عشان تشوف رصيدك</string>
+    <string name="wallet_start_bill">ضيف فاتورة</string>
+    <string name="wallet_start_bill_body">أقساط واشتراكات مع تذكيرات</string>
+
+    <string name="plan_tab_budgets">الميزانيات</string>
+    <string name="plan_tab_goals">الأهداف</string>
+
+    <string name="wallet_exclude_title">متحسبهاش في الإجماليات</string>
+    <string name="wallet_exclude_hint">بتطلّع العملية دي من المصروف والدخل. بتفضل في القوايم وبتأثر على رصيد حسابها.</string>
+    <string name="wallet_excluded_marker">مش محسوبة في الإجماليات</string>
+</resources>

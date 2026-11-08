@@ -27,13 +27,14 @@ import eg.masroof.data.insights.InsightsPeriod
 import eg.masroof.ui.ask.AskContent
 import eg.masroof.ui.ask.AskMessage
 import eg.masroof.ui.ask.AskState
-import eg.masroof.ui.home.HomeContent
 import eg.masroof.ui.insights.InsightsContent
 import eg.masroof.ui.insights.toUi
 import eg.masroof.ui.theme.MasroofTheme
-import eg.masroof.ui.viewmodel.HomeUiState
 import eg.masroof.ui.viewmodel.InsightsState
 import eg.masroof.ui.viewmodel.LoadStatus
+import eg.masroof.ui.wallet.WalletActions
+import eg.masroof.ui.wallet.WalletContent
+import eg.masroof.walletUi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -294,7 +295,7 @@ class AskScreenTest {
         compose.setContent {
             MasroofTheme {
                 androidx.compose.foundation.layout.Column {
-                    HomeContent(HomeUiState(status = LoadStatus.READY), {}, {}, onOpenAsk = { asks++ })
+                    WalletContent(walletUi(), emptyList(), WalletActions(onAsk = { asks++ }))
                 }
             }
         }
@@ -321,7 +322,7 @@ class AskScreenTest {
 
     @Test
     fun `REQ-AN-165 without an Ask handler Home and Insights show no Ask button`() {
-        compose.setContent { MasroofTheme { HomeContent(HomeUiState(status = LoadStatus.READY), {}, {}) } }
+        compose.setContent { MasroofTheme { WalletContent(walletUi(), emptyList(), WalletActions()) } }
         compose.onAllNodesWithContentDescription("Ask Masroof").assertCountEquals(0)
     }
 }

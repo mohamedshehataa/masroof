@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="goals_settings_section">Your money</string>
-    <string name="goals_settings_row">Goals</string>
 
     <string name="goals_title">Goals</string>
     <string name="goals_new">New goal</string>
