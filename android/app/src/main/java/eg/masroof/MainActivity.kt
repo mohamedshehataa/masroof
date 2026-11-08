@@ -49,6 +49,7 @@ import eg.masroof.data.SettingsRepository
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
+import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
@@ -71,6 +72,7 @@ import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.ui.viewmodel.UndoDeleteViewModel
+import eg.masroof.ui.wealth.WealthRoute
 import eg.masroof.work.EXTRA_OPEN_ROUTE
 import eg.masroof.work.ForegroundSync
 import kotlinx.coroutines.launch
@@ -94,6 +96,8 @@ private enum class Tab(
 private const val ADD_ROUTE = "add?receipt={receipt}"
 private const val RECEIPTS_ROUTE = "receipts"
 private const val BUDGETS_ROUTE = "budgets"
+private const val WEALTH_ROUTE = "wealth"
+private const val ACCOUNTS_ROUTE = "accounts"
 private const val EDIT_ROUTE = "edit/{id}"
 private const val GOALS_ROUTE = "goals"
 private const val GOAL_NEW_ROUTE = "goals-new"
@@ -283,10 +287,13 @@ private fun MasroofRoot(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                    onOpenWealth = { nav.navigate(WEALTH_ROUTE) },
                     onOpenBills = { nav.navigate(BILLS_ROUTE) },
                     onOpenGoals = { nav.navigate(GOALS_ROUTE) },
                 )
             }
+            composable(WEALTH_ROUTE) { WealthRoute(onOpenAccounts = { nav.navigate(ACCOUNTS_ROUTE) }) }
+            composable(ACCOUNTS_ROUTE) { AccountsRoute() }
             composable(BILLS_ROUTE) {
                 BillsRoute(
                     onAdd = { nav.navigate(BILL_ADD_ROUTE) },
