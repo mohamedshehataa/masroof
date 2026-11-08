@@ -61,6 +61,11 @@ class BackupWorker
                 input?.key?.fill(0)
                 return failure(BackupFailure.KEY_LOST)
             }
+            // A restore swaps the receipts directory: a backup that ran across it would fail with "receipt changed" (STORY-184).
+            if (RestoreActivity.isActive()) {
+                input.key.fill(0)
+                return failure(BackupFailure.RESTORE_RUNNING)
+            }
             try {
                 // Leftovers of a backup that was killed: the unique work guarantees nothing else uses the folder.
                 BackupStage.sweep(BackupStage.dir(context.noBackupFilesDir))

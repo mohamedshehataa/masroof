@@ -121,6 +121,8 @@ class KeystoreLocalIdKey(
         aead: com.google.crypto.tink.Aead,
         key: ByteArray,
     ) {
+        // Exactly 32 bytes and not all zero: a short or zeroed key would make every local message id guessable.
+        require(key.size == KEY_BYTES && key.any { it.toInt() != 0 }) { "not a local-id key" }
         val sealed = aead.encrypt(key, AAD)
         val check = aead.decrypt(sealed, AAD)
         try {

@@ -42,8 +42,9 @@ object RestoreSettingKeys {
         )
 
     private const val MAX_SET = 200_000
+    private const val MAX_DEPTH = 8
     private const val MAX_STRING = 4_096
-    private const val MAX_DAY = 31
+    private const val MAX_DAY = 28
 
     /**
      * Only keys on the IN list of [TYPES] are kept; anything else in the file (a store or a key that is OUT, or one a newer app added)
@@ -52,6 +53,7 @@ object RestoreSettingKeys {
      */
     fun parse(text: String): RestoredSettings {
         try {
+            if (!RestoreRows.depthOk(text, MAX_DEPTH)) throw invalid()
             val root = JSONObject(text)
             val stores = root.getJSONObject("stores")
             val result = LinkedHashMap<String, Map<String, Any>>()
@@ -84,7 +86,10 @@ object RestoreSettingKeys {
                 (item.get("value") as? Int ?: throw invalid()).also {
                     if (key == "month_start_day" && it !in 1..MAX_DAY) throw invalid()
                 }
-            STRING -> (item.get("value") as? String ?: throw invalid()).also { if (it.length > MAX_STRING) throw invalid() }
+            STRING ->
+                (item.get("value") as? String ?: throw invalid()).also {
+                    if (it.length > MAX_STRING || (key == "language" && it != "ar" && it != "en")) throw invalid()
+                }
             else -> stringSet(item.get("value") as? JSONArray ?: throw invalid())
         }
 

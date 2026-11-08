@@ -110,6 +110,7 @@ enum class BackupFailure {
     CANNOT_OPEN,
     RECEIPT_CHANGED,
     KEY_LOST,
+    RESTORE_RUNNING,
     OTHER,
     ;
 

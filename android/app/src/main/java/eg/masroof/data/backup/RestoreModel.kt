@@ -75,6 +75,9 @@ data class RestoreLimits(
     val maxManifestBytes: Long = 8L shl 20,
     val maxSettingsBytes: Long = 4L shl 20,
     val maxRowChars: Int = 1 shl 20,
+    val maxRowsPerTable: Long = 2_000_000,
+    /** Nesting of `[` and `{` in one JSON text: real rows are flat, so a deep text is a stack bomb and is refused before it is parsed. */
+    val maxJsonDepth: Int = 8,
 )
 
 /** Test seams that stand in for a process kill. A hook throws [RestoreKilled]; the restore then leaves everything as a kill would. */
@@ -84,6 +87,9 @@ interface RestoreHooks {
 
     /** After the commit, before the receipts directory is swapped. */
     fun afterCommit() = Unit
+
+    /** Between the two renames of the receipts swap: the old directory is moved away, the new one is not in place yet. */
+    fun betweenRenames() = Unit
 
     object None : RestoreHooks
 }
@@ -118,6 +124,24 @@ class RestoreEnvironment(
     val openStageFile: (File) -> OutputStream = { FileOutputStream(it) },
     val hooks: RestoreHooks = RestoreHooks.None,
 )
+
+/**
+ * True while a restore is replacing data. A backup (and STORY-186's SMS scan) checks it before it reads or writes and refuses: a receipts
+ * swap in the middle of a backup would make it fail with "receipt changed". The restore sets it BEFORE it asks whether a backup runs, and a
+ * backup checks it AFTER WorkManager marked it running, so at least one of them sees the other.
+ */
+object RestoreActivity {
+    private val flag =
+        java.util.concurrent.atomic
+            .AtomicBoolean(false)
+
+    /** False when another restore already runs. */
+    fun begin(): Boolean = flag.compareAndSet(false, true)
+
+    fun end() = flag.set(false)
+
+    fun isActive(): Boolean = flag.get()
+}
 
 /** The staging folder is checked against the plain free space on purpose: cached data is not something a restore may count on. */
 @android.annotation.SuppressLint("UsableSpace")

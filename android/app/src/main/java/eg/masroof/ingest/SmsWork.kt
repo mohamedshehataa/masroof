@@ -131,7 +131,8 @@ class SmsPipeline
         suspend fun accept(message: IncomingMessage): Disposition {
             // Capture switched off (or an erase running): nothing is read, recorded or kept.
             if (!gate.isOpen() || !isAllowed(message)) return Disposition.DROPPED
-            val id = LocalIdHasher.id(idKey.get(), message)
+            // Makes sure the key exists (the wipe race below); the id that is stored is computed under the lock, so a restore cannot interleave.
+            LocalIdHasher.id(idKey.get(), message)
             if (!gate.isOpen()) {
                 // A wipe raced us and the key may have been recreated after it: forget it again.
                 idKey.wipe()
@@ -147,6 +148,8 @@ class SmsPipeline
             // erase began) writes nothing.
             val stored =
                 eraseLock.mutex.withLock {
+                    // After a restore the key is the backup's: the id is hashed with whatever key is current under the lock.
+                    val id = LocalIdHasher.id(idKey.get(), message)
                     db.withTransaction {
                         if (gate.isOpen() &&
                             isAllowed(message)

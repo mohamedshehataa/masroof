@@ -12,6 +12,30 @@ import java.time.Instant
 import java.util.Currency
 
 internal object RestoreRows {
+    /** True when `[` and `{` nest no deeper than [max] (strings and escapes are skipped): a stack bomb never reaches the JSON parser. */
+    fun depthOk(
+        text: String,
+        max: Int,
+    ): Boolean {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (c in text) {
+            when {
+                inString && escaped -> escaped = false
+                inString && c == '\\' -> escaped = true
+                c == '"' -> inString = !inString
+                inString -> Unit
+                c == '[' || c == '{' -> if (++depth > max) return false
+                c == ']' || c == '}' -> depth--
+            }
+        }
+        return true
+    }
+
+    /** A local-id key is exactly 32 bytes and not all zero (a zeroed key would make every message id guessable). */
+    fun keyOk(file: File): Boolean = file.length() == BackupFormat.KEY_BYTES.toLong() && file.readBytes().any { it.toInt() != 0 }
+
     /** Reads UTF-8 lines; a line longer than [maxChars] is refused (a file with no line breaks must not fill the memory). */
     fun forEachLine(
         file: File,
@@ -97,7 +121,7 @@ class RestoreValidator(
         val counts = checkTables(files, manifest, cancelled)
         val settings = files.settings.readText()
         RestoreSettingKeys.parse(settings)
-        if (files.key.length() != BackupFormat.KEY_BYTES.toLong()) throw fail(6)
+        if (!RestoreRows.keyOk(files.key)) throw fail(6)
         val receipts = checkReceipts(files, manifest)
         val info = RestoreInfo(manifest.createdAtMillis, counts.entries, receipts.size, counts.budgets, currentEntries)
         return ValidatedBackup(info, files.tables.map { it.key to it.value }, receipts, files.settings, files.key)
@@ -119,14 +143,16 @@ class RestoreValidator(
     @Suppress("ThrowsCount", "CyclomaticComplexMethod")
     private fun parseManifest(file: File): Manifest {
         try {
-            val root = JSONObject(file.readText())
+            val text = file.readText()
+            if (!RestoreRows.depthOk(text, limits.maxJsonDepth)) throw fail(6)
+            val root = JSONObject(text)
             if (root.getInt("formatVersion") != BackupFormat.FORMAT_VERSION) throw fail(6)
             val data = root.getInt("dataSchemaVersion")
             if (data > BackupFormat.DATA_SCHEMA_VERSION) throw RestoreException(RestoreFailure.NEWER_VERSION, 6)
             // No upgrade step exists yet (data schema 10 is the first): an older one is refused, never half-mapped.
             if (data < BackupFormat.DATA_SCHEMA_VERSION) throw RestoreException(RestoreFailure.TOO_OLD, 6)
             val created = root.get("createdAtMillis") as? Long ?: (root.get("createdAtMillis") as? Int)?.toLong() ?: throw fail(6)
-            if (created !in MIN_INSTANT..nowMillis + DAY) throw fail(6)
+            if (created !in MIN_INSTANT..MAX_INSTANT) throw fail(6)
             val rows = LinkedHashMap<String, Long>()
             val tables = root.getJSONArray("tables")
             for (i in 0 until tables.length()) {
@@ -142,15 +168,22 @@ class RestoreValidator(
         }
     }
 
-    private fun receipts(array: JSONArray): List<Receipt> =
-        (0 until array.length()).map { i ->
-            val r = array.getJSONObject(i)
-            val missing = r.getBoolean("missing")
-            val sha = if (r.isNull("sha256")) null else r.getString("sha256")
-            val fileName = r.getString("fileName")
-            if (!SAFE_FILE.matches(fileName) || (!missing && (sha == null || !SHA.matches(sha)))) throw fail(6)
-            Receipt(r.getString("id"), r.getString("entry"), fileName, missing, r.getLong("size"), sha)
-        }
+    private fun receipts(array: JSONArray): List<Receipt> {
+        if (array.length() > MAX_RECEIPTS) throw fail(6)
+        val list =
+            (0 until array.length()).map { i ->
+                val r = array.getJSONObject(i)
+                val missing = r.getBoolean("missing")
+                val sha = if (r.isNull("sha256")) null else r.getString("sha256")
+                val fileName = r.getString("fileName")
+                val entry = r.getString("entry")
+                if (!SAFE_FILE.matches(fileName) || !ENTRY.matches(entry) || (!missing && (sha == null || !SHA.matches(sha)))) throw fail(6)
+                Receipt(r.getString("id"), entry, fileName, missing, r.getLong("size"), sha)
+            }
+        // One ZIP entry per receipt and one file name per receipt: two manifest lines on one entry would move one file twice.
+        if (list.map { it.entry }.toSet().size != list.size || list.map { it.id }.toSet().size != list.size) throw fail(6)
+        return list
+    }
 
     @Suppress("CyclomaticComplexMethod", "LongMethod", "NestedBlockDepth")
     private fun checkTables(
@@ -166,7 +199,7 @@ class RestoreValidator(
         val refs = HashMap<String, HashSet<String>>()
         var entries = 0L
         var budgets = 0L
-        val receiptRows = HashSet<String>()
+        val receiptRows = HashMap<String, String>()
         val receiptNames = HashSet<String>()
         for (table in BackupTables.INCLUDED) {
             val t = schema.tables.getValue(table.name)
@@ -175,7 +208,7 @@ class RestoreValidator(
             var rows = 0L
             RestoreRows.forEachLine(file, limits.maxRowChars) { line ->
                 if (rows % CANCEL_EVERY == 0L) cancelled()
-                rows++
+                if (++rows > limits.maxRowsPerTable) throw fail(6)
                 val row = row(t, line)
                 val id = row["id"] as? String ?: throw fail(6)
                 if (id.isEmpty() || id.length > MAX_ID || !pk.add(id)) throw fail(6)
@@ -183,8 +216,9 @@ class RestoreValidator(
                 if (table.name == "expense" && row["deletedAtMillis"] == null) entries++
                 if (table.name == "budget") budgets++
                 if (table.name == "receipt") {
-                    receiptRows += id
-                    if (!receiptNames.add(row["fileName"] as? String ?: throw fail(6))) throw fail(6)
+                    val name = row["fileName"] as? String ?: throw fail(6)
+                    receiptRows[id] = name
+                    if (!receiptNames.add(name)) throw fail(6)
                 }
             }
             if (rows != manifest.rows.getValue(table.name)) throw fail(6)
@@ -192,8 +226,8 @@ class RestoreValidator(
         }
         // Every foreign key must resolve: a budget whose category is missing is refused, never repaired by dropping the category.
         for ((parent, wanted) in refs) if (!ids.getValue(parent).containsAll(wanted)) throw fail(6)
-        if (manifest.receipts.map { it.id }.toSet() != receiptRows || manifest.receipts.size != receiptRows.size) throw fail(6)
-        if (manifest.receipts.map { it.fileName }.toSet() != receiptNames) throw fail(6)
+        // Exactly the same (id, file name) pairs in the manifest and in the receipt rows.
+        if (manifest.receipts.associate { it.id to it.fileName } != receiptRows) throw fail(6)
         return Counts(entries, budgets)
     }
 
@@ -202,6 +236,7 @@ class RestoreValidator(
         t: TableSchema,
         line: String,
     ): Map<String, Any?> {
+        if (!RestoreRows.depthOk(line, limits.maxJsonDepth)) throw fail(6)
         val obj =
             try {
                 JSONObject(line)
@@ -247,16 +282,14 @@ class RestoreValidator(
         if (!ok) throw fail(6).also { it.addSuppressed(IllegalStateException(table)) }
     }
 
-    /** Past events may not be later than tomorrow; scheduled dates (renewals, due dates, maturities) may lie ahead, up to 2100. */
+    /**
+     * Wide sanity bounds, 1900-01-01..2100-12-31, for EVERY instant: the app lets the user save any date (the date picker, a future bill,
+     * an old entry), so plausibility is not a reason to refuse a genuine backup. The checks are for type and format.
+     */
     private fun instantOk(
         column: String,
         n: Long,
-    ): Boolean =
-        when {
-            n == 0L && column in UNSET_OK -> true
-            column in SCHEDULED -> n in MIN_INSTANT..MAX_SCHEDULED
-            else -> n in MIN_INSTANT..nowMillis + DAY
-        }
+    ): Boolean = (n == 0L && column in UNSET_OK) || n in MIN_INSTANT..MAX_INSTANT
 
     private fun checkText(
         table: String,
@@ -288,27 +321,20 @@ class RestoreValidator(
     }
 
     companion object {
-        val MIN_INSTANT: Long = Instant.parse("2000-01-01T00:00:00Z").toEpochMilli()
-        private val MAX_SCHEDULED: Long = Instant.parse("2100-01-01T00:00:00Z").toEpochMilli()
-        private const val DAY = 24L * 60 * 60 * 1000
+        val MIN_INSTANT: Long = Instant.parse("1900-01-01T00:00:00Z").toEpochMilli()
+        private val MAX_INSTANT: Long = Instant.parse("2100-12-31T23:59:59Z").toEpochMilli()
         private const val MAX_MINOR = 1_000_000_000_000_000L
         private const val MAX_ID = 200
         private const val MAX_TEXT = 100_000
         private const val CANCEL_EVERY = 256L
-        val SAFE_FILE = Regex("[A-Za-z0-9._-]{1,120}")
+        val SAFE_FILE = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,119}")
+        private val ENTRY = Regex("receipts/[A-Za-z0-9_-]{1,100}\\.[a-z0-9]{1,5}")
+        private const val MAX_RECEIPTS = 100_000
         private val SHA = Regex("[0-9a-f]{64}")
         private val UNSET_OK = setOf("createdAtMillis", "updatedAtMillis")
-        private val SCHEDULED =
-            setOf(
-                "nextRenewalAtMillis",
-                "firstDueAtMillis",
-                "dueAtMillis",
-                "targetAtMillis",
-                "maturityAtMillis",
-                "payoutAtMillis",
-                "startAtMillis",
-            )
-        private val CURRENCIES: Set<String> by lazy { Currency.getAvailableCurrencies().map { it.currencyCode }.toSet() }
+
+        // XXX is "no currency": never a real amount.
+        private val CURRENCIES: Set<String> by lazy { Currency.getAvailableCurrencies().map { it.currencyCode }.toSet() - "XXX" }
 
         /** Known enum columns; a value outside refuses the file. Budget periods stay open to the unsupported ones STORY-181 shows. */
         val ENUMS: Map<String, Set<String>> =

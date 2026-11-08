@@ -128,10 +128,18 @@ class RestoreCoordinator
                 scope.launch(io) {
                     mutableState.value =
                         try {
+                            // A restore that committed and did not finish is finished first: its staging must not be replaced.
+                            if (restorer.hasMarker()) {
+                                lock.mutex.withLock { restorer.recover() }
+                                if (restorer.hasMarker()) throw RestoreException(RestoreFailure.INCOMPLETE)
+                            }
                             header = sources.open(picked).use { restorer.checkHeader(it) }
                             RestoreState.NeedsPassphrase
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: RestoreException) {
-                            reset()
+                            val keep = e.failure == RestoreFailure.INCOMPLETE
+                            if (!keep) reset() else uri = null
                             RestoreState.Failed(e.failure, e.neededMb)
                         } catch (_: IOException) {
                             reset()
@@ -163,6 +171,11 @@ class RestoreCoordinator
                             throw e
                         } catch (e: RestoreException) {
                             failed(e)
+                        } catch (
+                            @Suppress("TooGenericExceptionCaught") e: Throwable,
+                        ) {
+                            // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
+                            failed(RestoreException(RestoreFailure.INVALID_CONTENT).also { it.addSuppressed(e) })
                         }
                 }
         }
@@ -173,6 +186,8 @@ class RestoreCoordinator
             mutableState.value = RestoreState.Restoring
             job =
                 scope.launch(io) {
+                    // Set BEFORE asking whether a backup runs: a backup checks it AFTER it is marked running, so one sees the other.
+                    RestoreActivity.begin()
                     mutableState.value =
                         try {
                             withContext(NonCancellable) {
@@ -185,6 +200,18 @@ class RestoreCoordinator
                             RestoreState.Done
                         } catch (e: RestoreException) {
                             failed(e)
+                        } catch (
+                            @Suppress("TooGenericExceptionCaught") e: Throwable,
+                        ) {
+                            // After the data commit the staging must stay (the next start finishes it); before it nothing changed.
+                            val committed = restorer.hasMarker()
+                            failed(
+                                RestoreException(
+                                    if (committed) RestoreFailure.INCOMPLETE else RestoreFailure.FAILED,
+                                ).also { it.addSuppressed(e) },
+                            )
+                        } finally {
+                            RestoreActivity.end()
                         }
                 }
         }
@@ -205,7 +232,8 @@ class RestoreCoordinator
         }
 
         private fun failed(e: RestoreException): RestoreState {
-            restorer.discard(staged)
+            // An unfinished restore (INCOMPLETE) keeps its staging: the settings, the key and the receipts are still in it.
+            if (e.failure != RestoreFailure.INCOMPLETE) restorer.discard(staged)
             staged = null
             return RestoreState.Failed(e.failure, e.neededMb)
         }
