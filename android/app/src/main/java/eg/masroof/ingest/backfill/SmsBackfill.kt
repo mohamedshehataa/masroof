@@ -1,5 +1,6 @@
 package eg.masroof.ingest.backfill
 
+import eg.masroof.core.CairoTime
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.capturedCutoff
@@ -164,7 +165,9 @@ class SmsBackfill
             val moved = s.copy(lastDateMillis = sms.dateMillis, lastId = sms.id)
             // the rows asked for are of allowed senders only; a row that is not (a policy changed meanwhile) is skipped unread
             if (!settings.policy().isAllowed(sms.address)) return moved
-            val read = moved.copy(read = s.read + 1)
+            // the file keeps only the day of the last message, so count how many of that day were read
+            val sameDay = s.lastDateMillis >= 0 && CairoTime.dateOf(s.lastDateMillis) == CairoTime.dateOf(sms.dateMillis)
+            val read = moved.copy(read = s.read + 1, dayRead = if (sameDay) s.dayRead + 1 else 1)
             // the same cheap drop as the live receiver: a plain OTP never reaches the pipeline
             if (MessageHygiene.isPlainSecret(sms.body)) return read
             val message = IncomingMessage(CaptureSource.SMS, sms.address, sms.body, sms.stampMillis).capped()

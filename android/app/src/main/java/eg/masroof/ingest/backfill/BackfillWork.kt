@@ -67,6 +67,15 @@ sealed interface BackfillRange {
     }
 }
 
+/** The start of tomorrow in Africa/Cairo: the exclusive end of a run (the run state keeps whole days). */
+internal fun endOfToday(nowMillis: Long): Long =
+    CairoTime
+        .dateOf(nowMillis)
+        .plusDays(1)
+        .atStartOfDay(CairoTime.zone)
+        .toInstant()
+        .toEpochMilli()
+
 /** Start of the first day of [range], in Africa/Cairo, as epoch millis. */
 internal fun BackfillRange.fromMillis(nowMillis: Long): Long {
     val first =
@@ -98,7 +107,7 @@ class BackfillController
                 if (current.rangeKey == range.key && current.resumable) {
                     current.copy(phase = BackfillPhase.RUNNING)
                 } else {
-                    BackfillState(BackfillPhase.RUNNING, range.key, range.fromMillis(now), now + 1)
+                    BackfillState(BackfillPhase.RUNNING, range.key, range.fromMillis(now), endOfToday(now))
                 }
             store.save(next)
             val request =

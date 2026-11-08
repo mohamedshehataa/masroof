@@ -35,7 +35,7 @@ private const val R5_PUSH = "InstaPay\nYou have received  1.00 EGP from mohamed.
 private const val CODE_TRANSFER = "تم تحويل 500 جنيه الى AHMED ALI، احذر من مشاركة الرمز 889900 مع اي شخص"
 
 /** An AEAD that fails its next [failures] calls, then works again (a Keystore error that passes). */
-private class Flaky5(
+internal class Flaky5(
     private val inner: Aead,
     var failures: Int = 0,
 ) : Aead {
@@ -144,33 +144,6 @@ class BackfillRound5Test {
                         it.startsWith("sig")
                 }.toSet(),
         )
-    }
-
-    @Test
-    fun `REQ-SMS-102 the times of a run are sealed in the file, and the run still resumes`() {
-        val store = BackfillStore(prefs("r5-run"), inMemoryAead())
-        val state =
-            BackfillState(
-                BackfillPhase.RUNNING,
-                "D90",
-                at(90),
-                BACKFILL_NOW + 1,
-                total = 50,
-                read = 20,
-                entries = 10,
-                review = 2,
-                lastDateMillis = at(40),
-                lastId = 7,
-            )
-        store.save(state)
-        val clear = Regex("\\d{10,}")
-        prefs("r5-run").all.forEach { (k, v) -> assertFalse("a time in the clear under $k", clear.containsMatchIn(v.toString())) }
-        val reloaded = BackfillStore(prefs("r5-run"), inMemoryAead())
-        // another key cannot read the times: the run starts from its beginning, not from a wrong position
-        assertEquals(0L, reloaded.state.value.fromMillis)
-        val same = prefs("r5-run").all
-        assertTrue(same.isNotEmpty())
-        assertEquals(state, store.state.value)
     }
 
     @Test

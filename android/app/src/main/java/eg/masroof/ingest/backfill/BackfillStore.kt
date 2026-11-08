@@ -4,10 +4,12 @@ import android.content.SharedPreferences
 import android.util.Base64
 import androidx.core.content.edit
 import com.google.crypto.tink.Aead
+import eg.masroof.core.CairoTime
 import eg.masroof.ingest.HandledMemory
 import eg.masroof.ingest.SignatureClaim
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.LocalDate
 import kotlin.math.abs
 
 /** Where a "Read past SMS" run stands. */
@@ -30,6 +32,8 @@ data class BackfillState(
     val review: Int = 0,
     val lastDateMillis: Long = -1L,
     val lastId: Long = -1L,
+    /** Messages read from the day of [lastDateMillis] (Africa/Cairo): the file keeps only that day, so a restart reads the day again. */
+    val dayRead: Int = 0,
 ) {
     val position: InboxPosition? get() = if (lastDateMillis < 0) null else InboxPosition(lastDateMillis, lastId)
 
@@ -58,21 +62,22 @@ class BackfillStore(
         mutable.value = read()
     }
 
+    /**
+     * The run state is stored in the clear but coarse: the range as Cairo days, the last message read as its day plus how many of that
+     * day were read (so a restart reads that one day again and the counts stay exact). No time of day, no sender, no text.
+     */
     fun save(state: BackfillState) {
-        // the times of the run (range, last message read) are sealed like the memory; a value that cannot be sealed is not written
-        val from = seal(state.fromMillis.toString())
-        val to = seal(state.toMillis.toString())
-        val last = seal(state.lastDateMillis.toString())
         prefs.edit {
             putString(PHASE, state.phase.name)
             putString(KEY, state.rangeKey)
-            from?.let { putString(FROM, it) }
-            to?.let { putString(TO, it) }
+            putInt(FROM_DAY, startDay(state.fromMillis))
+            putInt(TO_DAY, endDay(state.toMillis))
             putInt(TOTAL, state.total)
             putInt(READ, state.read)
             putInt(ENTRIES, state.entries)
             putInt(REVIEW, state.review)
-            last?.let { putString(LAST_DATE, it) }
+            putInt(LAST_DAY, startDay(state.lastDateMillis))
+            putInt(DAY_READ, state.dayRead)
             putLong(LAST_ID, state.lastId)
         }
         mutable.value = state
@@ -113,13 +118,25 @@ class BackfillStore(
         val live = { l: List<Seen> -> l.filter { it.marked >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1) }
         val main = slot(SIG + signature)
         val aux = slot(AUX + signature)
-        if (main != null) {
-            val saved = write(SIG + signature, live(main + aux.orEmpty()) + fresh)
-            if (saved && aux != null) prefs.edit { remove(AUX + signature) }
-        } else if (aux != null) {
-            write(AUX + signature, live(aux) + fresh)
-        }
+        val recorded =
+            if (main != null) {
+                val saved = write(SIG + signature, live(main + aux.orEmpty()) + fresh)
+                if (saved && aux != null) prefs.edit { remove(AUX + signature) }
+                saved
+            } else if (aux != null) {
+                write(AUX + signature, live(aux) + fresh)
+            } else {
+                false
+            }
+        // the memory can neither confirm nor record this time: say only THAT it happened (a keyed hash, no time, no amount)
+        if (!recorded) prefs.edit { putString(MARK + signature, (nowMillis / MEMORY_MILLIS).toString()) }
     }
+
+    /** A marker (month bucket only) says a time of this signature could not be recorded: it was seen, when unknown. */
+    private fun unknownTime(
+        signature: String,
+        nowMillis: Long,
+    ): Boolean = prefs.getString(MARK + signature, null)?.toLongOrNull()?.let { it >= nowMillis / MEMORY_MILLIS - 1 } == true
 
     override fun seenSignature(
         signature: String,
@@ -128,7 +145,8 @@ class BackfillStore(
         nowMillis: Long,
     ): Boolean =
         (slot(SIG + signature).orEmpty() + slot(AUX + signature).orEmpty())
-            .any { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
+            .any { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS } ||
+            unknownTime(signature, nowMillis)
 
     override fun claimSignature(
         signature: String,
@@ -142,7 +160,8 @@ class BackfillStore(
             parts
                 .flatMap { (k, l) -> l.map { k to it } }
                 .filter { (_, t) -> t.at in fromMillis..toMillis && t.marked >= nowMillis - MEMORY_MILLIS }
-        if (inWindow.isEmpty()) return SignatureClaim.NONE
+        // a time that could not be recorded may be this message: it cannot be told apart, so it is not a twin (review)
+        if (inWindow.isEmpty()) return if (unknownTime(signature, nowMillis)) SignatureClaim.ALREADY_CLAIMED else SignatureClaim.NONE
         val closest =
             inWindow.filter { !it.second.used }.minByOrNull { abs(it.second.at - atMillis) } ?: return SignatureClaim.ALREADY_CLAIMED
         val list = parts.first { it.first == closest.first }.second
@@ -203,10 +222,7 @@ class BackfillStore(
     }
 
     /** The key was provably lost and recreated: nothing in the memory can ever be opened again, so all of it goes at once (bounded). */
-    fun clearMemory() {
-        val keys = prefs.all.keys.filter { it.startsWith(SEEN) || it.startsWith(SIG) || it.startsWith(AUX) }
-        if (keys.isNotEmpty()) prefs.edit { keys.forEach { remove(it) } }
-    }
+    fun clearMemory() = clearMemoryIn(prefs)
 
     private var prunedAt: Long? = null
 
@@ -237,6 +253,10 @@ class BackfillStore(
         drop: MutableList<String>,
         rewrite: MutableMap<String, List<Seen>>,
     ) {
+        if (key.startsWith(MARK)) {
+            if ((raw.toLongOrNull() ?: 0L) < cutoffMillis / MEMORY_MILLIS) drop += key
+            return
+        }
         if (key.startsWith(SEEN)) {
             if ((open(raw)?.toLongOrNull() ?: Long.MAX_VALUE) < cutoffMillis) drop += key
             return
@@ -251,27 +271,62 @@ class BackfillStore(
         }
     }
 
-    private fun read(): BackfillState =
-        BackfillState(
+    private fun read(): BackfillState {
+        val lastDay = prefs.getInt(LAST_DAY, NO_DAY)
+        val dayRead = prefs.getInt(DAY_READ, 0)
+        return BackfillState(
             phase = prefs.getString(PHASE, null)?.let { n -> BackfillPhase.entries.firstOrNull { it.name == n } } ?: BackfillPhase.IDLE,
             rangeKey = prefs.getString(KEY, "").orEmpty(),
-            fromMillis = sealedLong(FROM, 0L),
-            toMillis = sealedLong(TO, 0L),
+            fromMillis = dayStartMillis(prefs.getInt(FROM_DAY, NO_DAY), 0L),
+            toMillis = dayStartMillis(prefs.getInt(TO_DAY, NO_DAY), 0L),
             total = prefs.getInt(TOTAL, -1),
-            read = prefs.getInt(READ, 0),
+            // the last day is read again from its first message: its messages are taken off the count and counted again
+            read = (prefs.getInt(READ, 0) - if (lastDay == NO_DAY) 0 else dayRead).coerceAtLeast(0),
             entries = prefs.getInt(ENTRIES, 0),
             review = prefs.getInt(REVIEW, 0),
-            lastDateMillis = sealedLong(LAST_DATE, -1L),
-            lastId = prefs.getLong(LAST_ID, -1L),
+            lastDateMillis = dayStartMillis(lastDay, -1L),
+            lastId = if (lastDay == NO_DAY) -1L else -1L,
+            dayRead = 0,
         )
+    }
 
-    private fun sealedLong(
-        key: String,
+    private fun startDay(millis: Long): Int = if (millis <= 0) NO_DAY else CairoTime.dateOf(millis).toEpochDay().toInt()
+
+    /** An exclusive end is stored as the first day after it, so a restart never reads less than the run was asked for. */
+    private fun endDay(millis: Long): Int =
+        if (millis <= 0) {
+            NO_DAY
+        } else {
+            CairoTime
+                .dateOf(millis - 1)
+                .plusDays(1)
+                .toEpochDay()
+                .toInt()
+        }
+
+    private fun dayStartMillis(
+        day: Int,
         default: Long,
-    ): Long = prefs.getString(key, null)?.let(::open)?.toLongOrNull() ?: default
+    ): Long =
+        if (day == NO_DAY) {
+            default
+        } else {
+            LocalDate
+                .ofEpochDay(day.toLong())
+                .atStartOfDay(CairoTime.zone)
+                .toInstant()
+                .toEpochMilli()
+        }
 
     companion object {
         const val PREFS_NAME = "masroof_backfill"
+
+        /** Empties the memory keys of the backfill file, leaving the run state: independent of any store instance (no provider cycle). */
+        fun clearMemoryIn(prefs: SharedPreferences) {
+            val keys = prefs.all.keys.filter { it.startsWith(SEEN) || it.startsWith(SIG) || it.startsWith(AUX) || it.startsWith(MARK) }
+            if (keys.isNotEmpty()) prefs.edit { keys.forEach { remove(it) } }
+        }
+
         private const val SEEN = "seen:"
         private const val SIG = "sig:"
         private const val AUX = "sig2:"
@@ -281,13 +336,16 @@ class BackfillStore(
         private const val MEMORY_MILLIS = 30L * 24 * 60 * 60 * 1000
         private const val PHASE = "phase"
         private const val KEY = "range_key"
-        private const val FROM = "from"
-        private const val TO = "to"
+        private const val FROM_DAY = "from_day"
+        private const val TO_DAY = "to_day"
+        private const val NO_DAY = Int.MIN_VALUE
         private const val TOTAL = "total"
         private const val READ = "read"
         private const val ENTRIES = "entries"
         private const val REVIEW = "review"
-        private const val LAST_DATE = "last_date"
+        private const val LAST_DAY = "last_day"
+        private const val DAY_READ = "day_read"
+        private const val MARK = "sigx:"
         private const val LAST_ID = "last_id"
     }
 }

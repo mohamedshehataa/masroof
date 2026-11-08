@@ -47,7 +47,7 @@ internal const val BACKFILL_DAY = 24L * 60 * BACKFILL_MINUTE
 internal val BACKFILL_NOW = ANSWER_NOW.toEpochMilli()
 
 /** A power cut: not a cancellation and not a permission problem, so the run just stops where it is. */
-private class Killed : Error()
+internal class Killed : Error()
 
 /** The inbox in memory: sorted like the system one, with hooks to fail or cancel at a page. */
 internal class FakeInbox(
@@ -58,6 +58,9 @@ internal class FakeInbox(
     var largestPage = 0
     var beforePage: (Int) -> Unit = {}
     var denied = false
+
+    /** At most this many rows per page, whatever the limit asked (a slow provider): lets a test stop a run after a few messages. */
+    var cap = Int.MAX_VALUE
     val pageStarts = mutableListOf<InboxPosition?>()
 
     private fun inRange(
@@ -93,7 +96,7 @@ internal class FakeInbox(
             rows
                 .filter { inRange(it, fromMillis, toMillis) && it.address in addresses }
                 .filter { after == null || it.dateMillis > after.dateMillis || (it.dateMillis == after.dateMillis && it.id > after.id) }
-                .take(limit)
+                .take(minOf(limit, cap))
         largestPage = maxOf(largestPage, out.size)
         return out
     }

@@ -95,13 +95,14 @@ object BackupPrefsInventory {
                 mapOf(
                     "phase" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "range_key" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
-                    "from" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
-                    "to" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "from_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "to_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "total" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "read" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "entries" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "review" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
-                    "last_date" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "last_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "day_read" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                     "last_id" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
                 ),
             "shared:masroof_backup" to

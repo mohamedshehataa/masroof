@@ -82,9 +82,11 @@ class BackfillRound4Test {
         store.mark("id", BACKFILL_NOW)
         store.markSignature("sig", BACKFILL_NOW, BACKFILL_NOW)
         assertFalse(store.handled("id", BACKFILL_NOW))
-        assertFalse(store.seenSignature("sig", 0L, Long.MAX_VALUE, BACKFILL_NOW))
-        assertEquals(SignatureClaim.NONE, store.claimSignature("sig", 0L, Long.MAX_VALUE, BACKFILL_NOW, BACKFILL_NOW))
-        assertTrue("nothing readable was written", prefs("r4-broken").all.isEmpty())
+        assertFalse(store.handled("other", BACKFILL_NOW))
+        // a time that could not be recorded leaves only a keyed marker (no time): it was seen, when unknown
+        assertEquals(setOf("sigx:sig"), prefs("r4-broken").all.keys)
+        assertTrue(store.seenSignature("sig", 0L, Long.MAX_VALUE, BACKFILL_NOW))
+        assertEquals(SignatureClaim.ALREADY_CLAIMED, store.claimSignature("sig", 0L, Long.MAX_VALUE, BACKFILL_NOW, BACKFILL_NOW))
     }
 
     /** An AEAD that fails its next [failures] calls, then works (a transient Keystore error). */

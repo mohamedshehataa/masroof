@@ -43,8 +43,11 @@ object BackfillProvidesModule {
     @Provides @Singleton
     fun localAead(
         @ApplicationContext context: Context,
-        store: dagger.Lazy<BackfillStore>,
-    ): RecoveringAead = LocalKeystore.aead(context) { store.get().clearMemory() }
+    ): RecoveringAead =
+        // clears the memory keys of the file itself: it must not ask for the store, which is built from this very AEAD
+        LocalKeystore.aead(context) {
+            BackfillStore.clearMemoryIn(context.getSharedPreferences(BackfillStore.PREFS_NAME, Context.MODE_PRIVATE))
+        }
 
     /** "Erase all data": the memory is emptied and its key destroyed (a new one is made at the next use). */
     @Provides @Singleton
