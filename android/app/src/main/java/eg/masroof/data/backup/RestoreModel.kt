@@ -40,6 +40,12 @@ enum class RestoreFailure {
 
     /** The data was replaced but a last step (receipts swap, settings, key) failed: the next start finishes it. */
     INCOMPLETE,
+
+    /** The data was replaced but what must follow (receipts, settings, key) could not be applied: restore the same file again. */
+    PARTIAL,
+
+    /** The device ran out of memory while checking the file; nothing changed. */
+    LOW_MEMORY,
 }
 
 /** [step] is the number of the check of REQ-SEC-068 that failed (1..7), 0 when it is not a check. Carries no content of the file. */
@@ -78,6 +84,8 @@ data class RestoreLimits(
     val maxRowsPerTable: Long = 2_000_000,
     /** Nesting of `[` and `{` in one JSON text: real rows are flat, so a deep text is a stack bomb and is refused before it is parsed. */
     val maxJsonDepth: Int = 8,
+    /** Bytes the checker may keep in memory for ids and references (a bomb of ids must not exhaust the heap). */
+    val maxTrackedBytes: Long = 64L shl 20,
 )
 
 /** Test seams that stand in for a process kill. A hook throws [RestoreKilled]; the restore then leaves everything as a kill would. */
@@ -142,6 +150,24 @@ object RestoreActivity {
 
     fun isActive(): Boolean = flag.get()
 }
+
+/** True while a restore is running or has committed and not finished (its marker is on disk): other writers must not run across it. */
+fun interface RestorePending {
+    fun active(): Boolean
+}
+
+object NoRestorePending : RestorePending {
+    override fun active() = false
+}
+
+/** The marker file lives beside the receipts directory, which is `filesDir/receipts`. */
+class FileRestorePending
+    @javax.inject.Inject
+    constructor(
+        @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    ) : RestorePending {
+        override fun active() = RestoreActivity.isActive() || RestoreStage.marker(File(context.filesDir, "receipts")).exists()
+    }
 
 /** The staging folder is checked against the plain free space on purpose: cached data is not something a restore may count on. */
 @android.annotation.SuppressLint("UsableSpace")

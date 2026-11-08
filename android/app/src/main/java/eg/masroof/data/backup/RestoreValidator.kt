@@ -8,11 +8,16 @@ import org.json.JSONObject
 import java.io.File
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
-import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Currency
 
 internal object RestoreRows {
-    /** True when `[` and `{` nest no deeper than [max] (strings and escapes are skipped): a stack bomb never reaches the JSON parser. */
+    /**
+     * True when the text is strict-looking JSON that nests no deeper than [max]: a stack bomb never reaches the parser. Outside a
+     * double-quoted string only letters, digits, whitespace and `{}[]:,+-.` may appear, so everything Android's lenient `org.json`
+     * would read differently (single-quoted strings, comments, `;` and `=` separators) is refused here, and the depth can never go negative.
+     */
     fun depthOk(
         text: String,
         max: Int,
@@ -21,16 +26,23 @@ internal object RestoreRows {
         var inString = false
         var escaped = false
         for (c in text) {
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    c == '\\' -> escaped = true
+                    c == '"' -> inString = false
+                }
+                continue
+            }
             when {
-                inString && escaped -> escaped = false
-                inString && c == '\\' -> escaped = true
-                c == '"' -> inString = !inString
-                inString -> Unit
+                c == '"' -> inString = true
                 c == '[' || c == '{' -> if (++depth > max) return false
-                c == ']' || c == '}' -> depth--
+                c == ']' || c == '}' -> if (--depth < 0) return false
+                c.isLetterOrDigit() || c in " \t\r\n:,+-." -> Unit
+                else -> return false
             }
         }
-        return true
+        return !inString
     }
 
     /** A local-id key is exactly 32 bytes and not all zero (a zeroed key would make every message id guessable). */
@@ -198,6 +210,7 @@ class RestoreValidator(
         val refs = HashMap<String, HashSet<String>>()
         var entries = 0L
         var budgets = 0L
+        var tracked = 0L
         val receiptRows = HashMap<String, String>()
         val receiptNames = HashSet<String>()
         for (table in BackupTables.INCLUDED) {
@@ -211,7 +224,14 @@ class RestoreValidator(
                 val row = row(t, line)
                 val id = row["id"] as? String ?: throw fail(6)
                 if (id.isEmpty() || id.length > MAX_ID || !pk.add(id)) throw fail(6)
-                for (fk in t.foreignKeys) (row[fk.column] as? String)?.let { refs.getOrPut(fk.parentTable) { HashSet() }.add(it) }
+                tracked += id.length * 2L + ENTRY_OVERHEAD
+                for (fk in t.foreignKeys) {
+                    (row[fk.column] as? String)?.let {
+                        if (refs.getOrPut(fk.parentTable) { HashSet() }.add(it)) tracked += it.length * 2L + ENTRY_OVERHEAD
+                    }
+                }
+                // The ids and references the checker keeps in memory have a budget: a file of many long ids must not exhaust the heap.
+                if (tracked > limits.maxTrackedBytes) throw RestoreException(RestoreFailure.LOW_MEMORY, 6)
                 if (table.name == "expense" && row["deletedAtMillis"] == null) entries++
                 if (table.name == "budget") budgets++
                 if (table.name == "receipt") {
@@ -320,10 +340,26 @@ class RestoreValidator(
     }
 
     companion object {
-        val MIN_INSTANT: Long = Instant.parse("1900-01-01T00:00:00Z").toEpochMilli()
-        private val MAX_INSTANT: Long = Instant.parse("2100-12-31T23:59:59Z").toEpochMilli()
+        /**
+         * The widest values the app's own date parsers can produce: `LocalDate` years 0000..9999 (GoalInput, the plan, subscription, debt
+         * and asset forms), with days of margin so Cairo-local times on the first and last day fit. Whatever the app can store restores.
+         */
+        val MIN_INSTANT: Long =
+            LocalDate
+                .of(0, 1, 1)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli() - 2 * DAY_MS
+        private val MAX_INSTANT: Long =
+            LocalDate
+                .of(9999, 12, 31)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli() + 3 * DAY_MS
+        private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val MAX_MINOR = 1_000_000_000_000_000L
         private const val MAX_ID = 200
+        private const val ENTRY_OVERHEAD = 64L
         private const val MAX_TEXT = 100_000
         private const val CANCEL_EVERY = 256L
         val SAFE_FILE = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,119}")
@@ -332,8 +368,10 @@ class RestoreValidator(
         private val SHA = Regex("[0-9a-f]{64}")
         private val UNSET_OK = setOf("createdAtMillis", "updatedAtMillis")
 
-        // XXX is "no currency": never a real amount.
-        private val CURRENCIES: Set<String> by lazy { Currency.getAvailableCurrencies().map { it.currencyCode }.toSet() - "XXX" }
+        // XXX (no currency), XTS (testing) and the metals are never a real amount here (gold is grams priced in EGP, not XAU).
+        private val CURRENCIES: Set<String> by lazy {
+            Currency.getAvailableCurrencies().map { it.currencyCode }.toSet() - setOf("XXX", "XTS", "XAU", "XAG", "XPT", "XPD")
+        }
 
         /** Known enum columns; a value outside refuses the file. Budget periods stay open to the unsupported ones STORY-181 shows. */
         val ENUMS: Map<String, Set<String>> =

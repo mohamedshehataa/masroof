@@ -159,6 +159,8 @@ private fun failureText(run: RestoreState.Failed): String =
         RestoreFailure.BUSY -> stringResource(R.string.restore_err_busy)
         RestoreFailure.FAILED -> stringResource(R.string.restore_err_failed)
         RestoreFailure.INCOMPLETE -> stringResource(R.string.restore_err_incomplete)
+        RestoreFailure.PARTIAL -> stringResource(R.string.restore_err_partial)
+        RestoreFailure.LOW_MEMORY -> stringResource(R.string.restore_err_memory)
     }
 
 @Composable

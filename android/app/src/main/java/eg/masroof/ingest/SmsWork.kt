@@ -125,6 +125,7 @@ class SmsPipeline
         private val answers: AnswerPrefs = NoAnswerPrefs,
         private val cashLabel: CashAccountLabel = CashAccountLabel { "Cash" },
         private val appSettings: SettingsRepository? = null,
+        private val restorePending: eg.masroof.data.backup.RestorePending = eg.masroof.data.backup.NoRestorePending,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -150,6 +151,9 @@ class SmsPipeline
                 eraseLock.mutex.withLock {
                     // After a restore the key is the backup's: the id is hashed with whatever key is current under the lock.
                     val id = LocalIdHasher.id(idKey.get(), message)
+                    // A restore that committed and did not finish (or is running) has not installed its key yet: an id hashed now would
+                    // be wrong. The message is dropped (a later SMS scan finds it again); nothing is stored under a stale key.
+                    if (restorePending.active()) return@withLock Stored(Disposition.DROPPED)
                     db.withTransaction {
                         if (gate.isOpen() &&
                             isAllowed(message)

@@ -34,5 +34,7 @@
     <string name="restore_err_read">معرفناش نقرا الملف. مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_busy">فيه نسخة احتياطية أو فحص رسائل شغّال. جرّب تاني لما يخلص.</string>
     <string name="restore_err_incomplete">الاسترجاع ماخلصش. اقفل مصروف وافتحه تاني وهيكمّل.</string>
+    <string name="restore_err_partial">بياناتك اتبدلت بس الاسترجاع ماخلصش. استرجع نفس الملف تاني.</string>
+    <string name="restore_err_memory">الذاكرة مش كفاية عشان نفحص النسخة دي. اقفل التطبيقات التانية وجرّب تاني. مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
 </resources>

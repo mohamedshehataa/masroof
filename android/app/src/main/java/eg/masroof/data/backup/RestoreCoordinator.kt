@@ -122,24 +122,26 @@ class RestoreCoordinator
         /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read here. */
         fun onPicked(picked: Uri?) {
             if (picked == null || mutableState.value is RestoreState.Checking || mutableState.value is RestoreState.Restoring) return
+            // Picking again at the confirmation: the staged files (and the raw key among them) go first.
+            restorer.discard(staged)
             reset()
             uri = picked
             job =
                 scope.launch(io) {
                     mutableState.value =
                         try {
-                            // A restore that committed and did not finish is finished first: its staging must not be replaced.
-                            if (restorer.hasMarker()) {
-                                lock.mutex.withLock { restorer.recover() }
-                                if (restorer.hasMarker()) throw RestoreException(RestoreFailure.INCOMPLETE)
+                            // A restore that committed and did not finish is finished first: its staging must not be replaced. A marker
+                            // that is "broken" is repaired by restoring the same file again, which is what this pick starts.
+                            if (restorer.hasMarker() && !restorer.markerBroken()) {
+                                recoverGuarded()?.let { throw it }
+                                if (restorer.hasMarker() && !restorer.markerBroken()) throw RestoreException(RestoreFailure.INCOMPLETE)
                             }
                             header = sources.open(picked).use { restorer.checkHeader(it) }
                             RestoreState.NeedsPassphrase
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: RestoreException) {
-                            val keep = e.failure == RestoreFailure.INCOMPLETE
-                            if (!keep) reset() else uri = null
+                            reset()
                             RestoreState.Failed(e.failure, e.neededMb)
                         } catch (_: IOException) {
                             reset()
@@ -175,7 +177,12 @@ class RestoreCoordinator
                             @Suppress("TooGenericExceptionCaught") e: Throwable,
                         ) {
                             // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
-                            failed(RestoreException(RestoreFailure.INVALID_CONTENT).also { it.addSuppressed(e) })
+                            val low = e is OutOfMemoryError
+                            failed(
+                                RestoreException(
+                                    if (low) RestoreFailure.LOW_MEMORY else RestoreFailure.INVALID_CONTENT,
+                                ).also { it.addSuppressed(e) },
+                            )
                         }
                 }
         }
@@ -186,14 +193,19 @@ class RestoreCoordinator
             mutableState.value = RestoreState.Restoring
             job =
                 scope.launch(io) {
-                    // Set BEFORE asking whether a backup runs: a backup checks it AFTER it is marked running, so one sees the other.
-                    RestoreActivity.begin()
                     mutableState.value =
                         try {
                             withContext(NonCancellable) {
                                 lock.mutex.withLock {
-                                    if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
-                                    restorer.apply(pending)
+                                    // Set BEFORE asking whether a backup runs (a backup checks it AFTER it is marked running, so one sees
+                                    // the other) and cleared inside the lock, so a message that gets the lock next is not turned away.
+                                    if (!RestoreActivity.begin()) throw RestoreException(RestoreFailure.BUSY)
+                                    try {
+                                        if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
+                                        restorer.apply(pending)
+                                    } finally {
+                                        RestoreActivity.end()
+                                    }
                                 }
                             }
                             reset()
@@ -210,8 +222,6 @@ class RestoreCoordinator
                                     if (committed) RestoreFailure.INCOMPLETE else RestoreFailure.FAILED,
                                 ).also { it.addSuppressed(e) },
                             )
-                        } finally {
-                            RestoreActivity.end()
                         }
                 }
         }
@@ -233,7 +243,7 @@ class RestoreCoordinator
 
         private fun failed(e: RestoreException): RestoreState {
             // An unfinished restore (INCOMPLETE) keeps its staging: the settings, the key and the receipts are still in it.
-            if (e.failure != RestoreFailure.INCOMPLETE) restorer.discard(staged)
+            if (e.failure != RestoreFailure.INCOMPLETE && e.failure != RestoreFailure.PARTIAL) restorer.discard(staged)
             staged = null
             return RestoreState.Failed(e.failure, e.neededMb)
         }
@@ -252,6 +262,30 @@ class RestoreCoordinator
         }
 
         /**
+         * Every recovery (app start and a new pick) runs here: under the restore flag (so a backup and the SMS pipeline stand aside), shielded
+         * from cancellation, and never lets an exception out: the result is a [RestoreException] to show, or null when nothing is left to do.
+         * The caller holds the erase lock.
+         */
+        private suspend fun recoverCore(): RestoreException? =
+            withContext(NonCancellable) {
+                if (!RestoreActivity.begin()) return@withContext RestoreException(RestoreFailure.BUSY)
+                try {
+                    restorer.recover()
+                    null
+                } catch (e: RestoreException) {
+                    e
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") e: Throwable,
+                ) {
+                    RestoreException(RestoreFailure.INCOMPLETE).also { it.addSuppressed(e) }
+                } finally {
+                    RestoreActivity.end()
+                }
+            }
+
+        private suspend fun recoverGuarded(): RestoreException? = lock.mutex.withLock { recoverCore() }
+
+        /**
          * At app start (REQ-OPS-179): finishes a restore that committed, or removes the staging of one that did not. Takes the erase lock
          * before the UI can save anything.
          */
@@ -262,7 +296,8 @@ class RestoreCoordinator
             return scope.launch(io) {
                 if (!taken) lock.mutex.lock()
                 try {
-                    runCatching { restorer.recover() }
+                    // Never crashes the app: a failure becomes a message the Settings section shows.
+                    recoverCore()?.let { mutableState.value = RestoreState.Failed(it.failure, it.neededMb) }
                 } finally {
                     lock.mutex.unlock()
                 }

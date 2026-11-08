@@ -245,16 +245,16 @@ class RestoreTest {
     }
 
     @Test
-    fun `REQ-SEC-068 check 6 an instant before 1900 or after 2100 is refused`() {
+    fun `REQ-SEC-068 check 6 an instant before year 0 or after year 9999 is refused`() {
         expectRefused(
             target,
-            mutated("data/expenses.jsonl", "\"occurredAtMillis\":1793000000000", "\"occurredAtMillis\":-2300000000000"),
+            mutated("data/expenses.jsonl", "\"occurredAtMillis\":1793000000000", "\"occurredAtMillis\":-70000000000000"),
             RestoreFailure.INVALID_CONTENT,
             6,
         )
         expectRefused(
             target,
-            mutated("data/expenses.jsonl", "\"occurredAtMillis\":1793000000000", "\"occurredAtMillis\":4200000000000"),
+            mutated("data/expenses.jsonl", "\"occurredAtMillis\":1793000000000", "\"occurredAtMillis\":300000000000000"),
             RestoreFailure.INVALID_CONTENT,
             6,
         )

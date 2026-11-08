@@ -30,6 +30,8 @@ class StagedRestore(
     val dir: File,
     val info: RestoreInfo,
     internal val validated: ValidatedBackup,
+    /** SHA-256 of `validated.json`, computed when check 7 passed and kept in memory: the marker is written from THIS value, never from disk. */
+    internal val validatedSha: String,
 )
 
 /**
@@ -105,7 +107,7 @@ class BackupRestorer(
         progress: (Int?) -> Unit = {},
     ): StagedRestore {
         // A restore that committed and did not finish owns the staging folder: nothing may replace it (the coordinator finishes it first).
-        if (hasMarker()) throw RestoreException(RestoreFailure.FAILED)
+        if (hasMarker() && !markerBroken()) throw RestoreException(RestoreFailure.FAILED)
         val key = deriveKey(passphrase, header)
         try {
             val total = if (sizeHint > 0) sizeHint * 2 else 0L
@@ -125,9 +127,12 @@ class BackupRestorer(
                         context.ensureActive()
                     }
                 arrangeReceipts(extracted, validated)
-                writeValidated()
+                val validatedSha = writeValidated()
                 progress(PERCENT.toInt())
-                return StagedRestore(env.stageRoot, validated.info, validated)
+                return StagedRestore(env.stageRoot, validated.info, validated, validatedSha)
+            } catch (e: OutOfMemoryError) {
+                wipeStage()
+                throw RestoreException(RestoreFailure.LOW_MEMORY, 6).also { it.addSuppressed(e) }
             } catch (e: Throwable) {
                 wipeStage()
                 throw e
@@ -316,7 +321,10 @@ class BackupRestorer(
     private fun checkSpace(manifestFile: File): Long {
         val bytes =
             try {
-                val receipts = JSONObject(manifestFile.readText()).getJSONArray("receipts")
+                val text = manifestFile.readText()
+                // The same nesting guard as the validator: this parse happens before the checks of check 6.
+                if (!RestoreRows.depthOk(text, limits.maxJsonDepth)) throw RestoreException(RestoreFailure.INVALID_CONTENT, 6)
+                val receipts = JSONObject(text).getJSONArray("receipts")
                 // Saturating: sizes from a file are not trusted not to overflow.
                 (0 until receipts.length()).fold(0L) { sum, i ->
                     val size = receipts.getJSONObject(i).optLong("size", 0L).coerceAtLeast(0L)
@@ -383,13 +391,29 @@ class BackupRestorer(
      * What was checked, written once check 7 passed: the SHA-256 of the settings, of the key and of the receipts (names and hashes).
      * The marker carries this file's own hash, so a restart applies only staging that is exactly what the user confirmed.
      */
-    private fun writeValidated() {
+    private fun writeValidated(): String {
         val json =
             JSONObject()
                 .put("settings", sha256File(File(env.stageRoot, SETTINGS_FILE)))
                 .put("key", sha256File(File(env.stageRoot, KEY_FILE)))
                 .put("receipts", receiptsDigest(File(env.stageRoot, NEW_RECEIPTS)))
-        File(env.stageRoot, VALIDATED_FILE).writeText(json.toString())
+                .put("tables", tablesDigest())
+        val text = json.toString()
+        File(env.stageRoot, VALIDATED_FILE).writeText(text)
+        return hex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray()))
+    }
+
+    /** Names and hashes of the staged table files: what the Room transaction will insert is what was checked. */
+    private fun tablesDigest(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        for (f in env.stageRoot
+            .listFiles()
+            .orEmpty()
+            .filter { it.name.startsWith("table-") }
+            .sortedBy { it.name }) {
+            digest.update((f.name + ":" + sha256File(f) + "\n").toByteArray())
+        }
+        return hex(digest.digest())
     }
 
     private fun receiptsDigest(dir: File): String {
@@ -412,17 +436,21 @@ class BackupRestorer(
     }
 
     /** True when the staging folder is exactly what [writeValidated] described and the marker names that description. */
-    private fun stagingMatches(): Boolean =
+    private fun stagingMatches(
+        validatedSha: String,
+        swapped: Boolean,
+        includeTables: Boolean,
+    ): Boolean =
         try {
-            val marker = JSONObject(markerFile().readText())
             val validated = File(env.stageRoot, VALIDATED_FILE)
             val info = JSONObject(validated.readText())
             val fresh = File(env.stageRoot, NEW_RECEIPTS)
-            sha256File(validated) == marker.getString("validated") &&
+            sha256File(validated) == validatedSha &&
                 sha256File(File(env.stageRoot, SETTINGS_FILE)) == info.getString("settings") &&
                 sha256File(File(env.stageRoot, KEY_FILE)) == info.getString("key") &&
-                // after the swap the folder is gone: it was verified before it was moved
-                (!fresh.exists() || receiptsDigest(fresh) == info.getString("receipts"))
+                // a missing receipts folder is accepted only once the marker says the swap began (the folder was verified before it moved)
+                (if (fresh.exists()) receiptsDigest(fresh) == info.getString("receipts") else swapped) &&
+                (!includeTables || tablesDigest() == info.getString("tables"))
         } catch (_: IOException) {
             false
         } catch (_: org.json.JSONException) {
@@ -430,6 +458,26 @@ class BackupRestorer(
         }
 
     fun hasMarker(): Boolean = markerFile().exists()
+
+    /** True when a finished-or-not restore found its staging changed AFTER the commit: only restoring the same file again repairs it. */
+    fun markerBroken(): Boolean = readMarker()?.broken == true
+
+    private class Marker(
+        val nonce: Int,
+        val validated: String,
+        val swapped: Boolean,
+        val broken: Boolean,
+    )
+
+    private fun readMarker(): Marker? =
+        try {
+            val j = JSONObject(markerFile().readText())
+            Marker(j.getInt("nonce"), j.getString("validated"), j.optBoolean("swapped", false), j.optBoolean("broken", false))
+        } catch (_: IOException) {
+            null
+        } catch (_: org.json.JSONException) {
+            null
+        }
 
     /** Removes the staging folder; the key file is overwritten first, so the restored key does not linger in a freed block. */
     private fun wipeStage() {
@@ -451,20 +499,32 @@ class BackupRestorer(
      */
     @Suppress("TooGenericExceptionCaught")
     suspend fun apply(staged: StagedRestore) {
+        // BEFORE anything changes: the staging (settings, key, receipts and the table files) must still be exactly what check 7 passed.
+        // The digest is the one computed in memory when the checks passed, so editing the files AND validated.json is caught too.
+        if (!stagingMatches(staged.validatedSha, swapped = false, includeTables = true)) {
+            wipeStage()
+            throw RestoreException(RestoreFailure.FAILED)
+        }
+        val previous = readMarker()
         val nonce = pickNonce()
-        writeMarker(nonce, sha256File(File(env.stageRoot, VALIDATED_FILE)))
+        writeMarker(Marker(nonce, staged.validatedSha, swapped = false, broken = false))
         try {
             val tables = staged.validated.tables
             env.db.replaceAll(nonce, tables) { env.hooks.beforeCommit() }
         } catch (e: RestoreKilled) {
             throw e
         } catch (e: Throwable) {
-            // Rolled back: nothing changed. The previous data and receipts are intact.
-            discardMarker()
-            wipeStage()
+            // Rolled back: nothing changed. The previous data and receipts are intact (and an earlier unfinished restore stays marked).
+            if (previous != null) writeMarker(previous) else discardMarker()
+            if (previous == null) wipeStage()
             throw RestoreException(RestoreFailure.FAILED).also { it.addSuppressed(e) }
         }
         env.hooks.afterCommit()
+        finishGuarded()
+    }
+
+    /** After the commit there is no going back: any failure keeps the marker and the staging and says what the user can do. */
+    private suspend fun finishGuarded() {
         try {
             finish()
         } catch (e: RestoreKilled) {
@@ -481,13 +541,15 @@ class BackupRestorer(
 
     /** Finishes a restore whose transaction committed. Safe to run again after a kill at any point. */
     private suspend fun finish() {
-        // Only staging that is exactly what was validated and confirmed is applied; anything else is dropped and nothing is applied.
-        if (!stagingMatches()) {
+        val marker = readMarker() ?: throw RestoreException(RestoreFailure.PARTIAL)
+        // The commit is done: staging that is not what was confirmed (or cannot be read) is never applied and never dropped. The marker
+        // is marked broken and the user restores the same file again, which replaces everything and completes the restore.
+        if (!stagingMatches(marker.validated, marker.swapped, includeTables = false)) {
             returnOldReceipts()
-            discardMarker()
-            wipeStage()
-            throw RestoreException(RestoreFailure.FAILED)
+            writeMarker(Marker(marker.nonce, marker.validated, marker.swapped, broken = true))
+            throw RestoreException(RestoreFailure.PARTIAL)
         }
+        if (!marker.swapped) writeMarker(Marker(marker.nonce, marker.validated, swapped = true, broken = false))
         swapReceipts()
         env.settings.apply(RestoreSettingKeys.parse(File(env.stageRoot, SETTINGS_FILE).readText()))
         val key = File(env.stageRoot, KEY_FILE).readBytes()
@@ -525,19 +587,16 @@ class BackupRestorer(
 
     /** At app start (REQ-OPS-179): a restore that committed is finished, one that did not is removed; staging with no marker is removed. */
     suspend fun recover() {
-        val marker = markerFile()
-        if (!marker.exists()) {
+        if (!markerFile().exists()) {
             wipeStage()
             oldReceipts().deleteRecursively()
             return
         }
-        val nonce = runCatching { JSONObject(marker.readText()).getInt("nonce") }.getOrNull()
-        if (nonce != null && env.db.applicationId() == nonce) {
-            try {
-                finish()
-            } catch (_: RestoreException) {
-                // staging did not match what was confirmed: it was dropped, nothing from it was applied
-            }
+        val marker = readMarker()
+        if (marker != null && env.db.applicationId() == marker.nonce) {
+            // Committed. A broken marker stays broken until the same file is restored again; anything else is finished now.
+            if (marker.broken) throw RestoreException(RestoreFailure.PARTIAL)
+            finishGuarded()
         } else {
             discardMarker()
             wipeStage()
@@ -559,18 +618,17 @@ class BackupRestorer(
     }
 
     /** Written (and synced) BEFORE the transaction, by rename, so a restart never sees half a marker. */
-    private fun writeMarker(
-        nonce: Int,
-        validatedSha: String,
-    ) {
+    private fun writeMarker(m: Marker) {
         val marker = markerFile()
         val tmp = File(marker.absoluteFile.parentFile, marker.name + ".tmp")
         java.io.FileOutputStream(tmp).use {
             it.write(
                 JSONObject()
                     .put("v", 1)
-                    .put("nonce", nonce)
-                    .put("validated", validatedSha)
+                    .put("nonce", m.nonce)
+                    .put("validated", m.validated)
+                    .put("swapped", m.swapped)
+                    .put("broken", m.broken)
                     .toString()
                     .toByteArray(),
             )

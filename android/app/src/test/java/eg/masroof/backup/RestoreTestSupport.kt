@@ -84,10 +84,12 @@ class Phone(
     val applied = mutableListOf<RestoredSettings>()
     var installedKey: ByteArray? = null
     var keyFailures = 0
+    var onInstall: () -> Unit = {}
 
     val settings = RestoreSettingsApplier { applied += it }
     val keys =
         LocalIdKeyInstaller {
+            onInstall()
             if (keyFailures > 0) {
                 keyFailures--
                 error("Keystore unavailable")

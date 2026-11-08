@@ -37,6 +37,9 @@ abstract class BackupModule {
     @Binds
     abstract fun blockers(impl: WorkRestoreBlockers): RestoreBlockers
 
+    @Binds
+    abstract fun pending(impl: eg.masroof.data.backup.FileRestorePending): eg.masroof.data.backup.RestorePending
+
     companion object {
         @Provides @Singleton
         fun restorer(
