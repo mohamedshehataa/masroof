@@ -149,6 +149,15 @@ abstract class BindingsModule {
     ): eg.masroof.data.categories.MerchantRuleRepository
 
     @Binds abstract fun budgets(impl: RoomBudgetsRepository): BudgetsRepository
+
+    // STORY-182: the one-time import from the v0.1.x server (ADR-0009 D6). Deleted with the server-era code.
+    @Binds abstract fun serverImportSource(
+        impl: eg.masroof.data.serverimport.ApiServerImportSource,
+    ): eg.masroof.data.serverimport.ServerImportSource
+
+    @Binds abstract fun serverForgetter(
+        impl: eg.masroof.data.serverimport.DefaultServerForgetter,
+    ): eg.masroof.data.serverimport.ServerForgetter
 }
 
 @Module
@@ -199,6 +208,14 @@ object ProvidersModule {
         kotlinx.coroutines.CoroutineScope(
             kotlinx.coroutines.SupervisorJob() + Dispatchers.Default,
         )
+
+    @Provides @Singleton
+    fun sessionKeystore(
+        @ApplicationContext context: Context,
+        key: LocalIdKey,
+    ): eg.masroof.data.serverimport.SessionKeystore =
+        eg.masroof.data.serverimport
+            .TinkSessionKeystore(context, key)
 
     @Provides @Singleton
     fun localIdKey(

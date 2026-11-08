@@ -55,6 +55,12 @@ object TinkKeystore {
         return handle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
     }
 
+    /**
+     * Deletes the keyset and its Keystore master key (REQ-SEC-065: the one-time import forgets the server). The next [aead] call
+     * generates both afresh, so a caller that still needs something sealed under the old key re-seals it around this call.
+     */
+    fun destroy(context: Context) = reset(context)
+
     /** Deletes the undecryptable keyset entry and the master key so [build] generates both afresh. */
     private fun reset(context: Context) {
         context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).edit(commit = true) { remove(KEYSET_NAME) }

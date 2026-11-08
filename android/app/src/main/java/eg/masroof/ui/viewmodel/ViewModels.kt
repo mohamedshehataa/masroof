@@ -469,7 +469,8 @@ class SettingsViewModel
 
         fun save() {
             val s = state.value
-            val url = normalizeServerUrl(s.serverUrl)
+            // blank = no server (after the one-time import the URL is deleted): saving digits must still work
+            val url = if (s.serverUrl.isBlank()) "" else normalizeServerUrl(s.serverUrl)
             if (url == null) {
                 draft.value = s.copy(urlInvalid = true, saved = false)
                 return

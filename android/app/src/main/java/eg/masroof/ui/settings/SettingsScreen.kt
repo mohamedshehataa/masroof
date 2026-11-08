@@ -62,6 +62,7 @@ fun SettingsRoute(
             onToggleLanguage,
         ),
         extra = {
+            ImportSection(onToggleLanguage)
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)

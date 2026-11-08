@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="import_title">استيراد من السيرفر</string>
+    <string name="import_explainer">بينزّل تاريخ مصاريفك من السيرفر مرة واحدة. بعد كده الموبايل ده مبيكلمش السيرفر تاني.</string>
+    <string name="import_action">استيراد</string>
+    <string name="import_cancel">إلغاء</string>
+    <string name="import_dismiss">تمام</string>
+    <string name="import_offline">اتصل بالإنترنت علشان تستورد</string>
+    <string name="import_downloading">بنزّل من السيرفر: %1$s</string>
+    <string name="import_saving">اتستورد %1$s من %2$s</string>
+    <plurals name="import_done">
+        <item quantity="zero">اتستورد %1$s عملية. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+        <item quantity="one">اتستوردت عملية واحدة. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+        <item quantity="two">اتستوردت عمليتين. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+        <item quantity="few">اتستوردت %1$s عمليات. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+        <item quantity="many">اتستورد %1$s عملية. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+        <item quantity="other">اتستورد %1$s عملية. الموبايل ده مبقاش بيستخدم السيرفر.</item>
+    </plurals>
+    <plurals name="import_skipped">
+        <item quantity="zero">%1$s عملية معرفناش نستوردها</item>
+        <item quantity="one">عملية واحدة معرفناش نستوردها</item>
+        <item quantity="two">عمليتين معرفناش نستوردهم</item>
+        <item quantity="few">%1$s عمليات معرفناش نستوردها</item>
+        <item quantity="many">%1$s عملية معرفناش نستوردها</item>
+        <item quantity="other">%1$s عملية معرفناش نستوردها</item>
+    </plurals>
+    <string name="import_error_network">معرفناش نوصل للسيرفر، جرب تاني</string>
+    <string name="import_error_server">السيرفر فيه مشكلة، جرب تاني</string>
+    <string name="import_error_data">السيرفر بعت بيانات مش متوقعة</string>
+    <string name="import_error_storage">معرفناش نحفظ العمليات على الموبايل، جرب تاني</string>
+    <string name="import_sign_in_again">سجّل دخولك تاني علشان تستورد</string>
+    <string name="import_sign_in">تسجيل الدخول</string>
+    <string name="import_source_server">مستورد من السيرفر</string>
+</resources>

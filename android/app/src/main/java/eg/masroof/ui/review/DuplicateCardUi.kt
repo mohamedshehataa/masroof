@@ -104,7 +104,7 @@ private fun DuplicateCardBody(
                 )
                 // the two columns swap sides in a right-to-left language on their own
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Side(card.manual, categoryNames, stringResource(R.string.duplicates_manual), manual = true, Modifier.weight(1f))
+                    Side(card.manual, categoryNames, localLabel(card), manual = card.manual.source == "MANUAL", Modifier.weight(1f))
                     Side(card.capture, categoryNames, captureLabel, manual = false, Modifier.weight(1f))
                 }
             }
@@ -172,7 +172,17 @@ private fun sourceIcon(
 /** "SMS from CIB" / "Notification": where the captured entry came from (a sender label, never message text). */
 @Composable
 private fun captureLabel(card: DuplicateCard): String {
+    if (card.capture.source == "SERVER_IMPORT") return stringResource(R.string.import_source_server)
     val base = stringResource(if (card.capture.source == "PUSH") R.string.source_notification else R.string.source_sms)
     val sender = card.captureSources.senderId?.takeIf { it.isNotBlank() }
     return if (sender == null) base else stringResource(R.string.duplicates_source_from, base, sender)
 }
+
+/** The local side of a card: a typed entry, or (next to an imported server row, STORY-182) a capture. */
+@Composable
+private fun localLabel(card: DuplicateCard): String =
+    when (card.manual.source) {
+        "MANUAL" -> stringResource(R.string.duplicates_manual)
+        "PUSH" -> stringResource(R.string.source_notification)
+        else -> stringResource(R.string.source_sms)
+    }

@@ -28,6 +28,9 @@ class ExpenseWritePathTest {
             "data/answers/AnswerWrites.kt" to 13,
             // STORY-173: the one merge write (update the capture, soft-delete the typed entry) and its Undo; only on a tap, links refused
             "data/edit/DuplicateMerge.kt" to 4,
+            // STORY-182: the one-time server import. It INSERTs a row for a new server id, or UPDATEs the row that server id made earlier,
+            // and only while nothing changed on the phone and no link owns it (linked and changed rows are KEPT, never written)
+            "data/serverimport/ImportWriter.kt" to 2,
             // capture Undo: soft delete, then reconcile in the same transaction
             "ingest/Captured.kt" to 1,
             // new rows only (nothing can be linked to a row that does not exist yet) and the twin enrichment of fresh captures

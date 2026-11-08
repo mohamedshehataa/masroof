@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="import_title">Import from server</string>
+    <string name="import_explainer">Downloads your history from the server once. After that, this phone stops talking to the server.</string>
+    <string name="import_action">Import</string>
+    <string name="import_cancel">Cancel</string>
+    <string name="import_dismiss">OK</string>
+    <string name="import_offline">Connect to the internet to import</string>
+    <string name="import_downloading">Downloading from the server: %1$s</string>
+    <string name="import_saving">Imported %1$s of %2$s</string>
+    <plurals name="import_done">
+        <item quantity="one">Imported %1$s entry. This phone no longer uses the server.</item>
+        <item quantity="other">Imported %1$s entries. This phone no longer uses the server.</item>
+    </plurals>
+    <plurals name="import_skipped">
+        <item quantity="one">%1$s entry could not be imported</item>
+        <item quantity="other">%1$s entries could not be imported</item>
+    </plurals>
+    <string name="import_error_network">Couldn\'t reach the server, try again</string>
+    <string name="import_error_server">The server had a problem, try again</string>
+    <string name="import_error_data">The server sent unexpected data</string>
+    <string name="import_error_storage">Couldn\'t save the entries on this phone, try again</string>
+    <string name="import_sign_in_again">Sign in again to import</string>
+    <string name="import_sign_in">Sign in</string>
+    <string name="import_source_server">Imported from server</string>
+</resources>

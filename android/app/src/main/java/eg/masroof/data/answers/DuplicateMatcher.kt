@@ -77,6 +77,52 @@ object DuplicateMatcher {
             isCaptureOnly(capture, captureSources) &&
             closeInTime(manual, capture)
 
+    /** STORY-182: the channel and `source` of a row the one-time server import made. */
+    const val SERVER_IMPORT = "SERVER_IMPORT"
+
+    /** REQ-DEDUP-066: a server row and a local row are a pair when their times are at most two minutes apart (2:00 yes, 2:01 no). */
+    const val SERVER_MAX_GAP_MS = 2L * 60 * 1000
+    private const val PENDING_REVIEW = "PENDING_REVIEW"
+
+    /** An imported row still waiting on the household's decision: only server sources, and the status the import set. */
+    fun isServerPending(
+        e: ExpenseEntity,
+        s: EntrySources,
+    ) = e.serverId != null && e.source == SERVER_IMPORT && e.status == PENDING_REVIEW && s.channels == setOf(SERVER_IMPORT)
+
+    /** A row the phone made itself that the server never saw: no server id, and no server source (a merged survivor has one). */
+    fun isLocalUnsynced(
+        e: ExpenseEntity,
+        s: EntrySources,
+    ) = e.serverId == null && e.source != SERVER_IMPORT && SERVER_IMPORT !in s.channels
+
+    /**
+     * REQ-DEDUP-066: [local] (no server id: a converted capture or a typed entry) and [server] (an imported row stored as
+     * PENDING_REVIEW) are one purchase when amount, currency and type are equal and the times are at most two minutes apart. The
+     * same [blocked] ids as [matches] (a linked or referenced entry is never offered). This reuses the STORY-173 card; its own rule
+     * [matches] is unchanged.
+     */
+    fun matchesServer(
+        local: ExpenseEntity,
+        localSources: EntrySources,
+        server: ExpenseEntity,
+        serverSources: EntrySources,
+        blocked: Set<String>,
+    ): Boolean =
+        local.id != server.id &&
+            usable(local) &&
+            usable(server) &&
+            local.id !in blocked &&
+            server.id !in blocked &&
+            local.amountMinor > 0 &&
+            local.currency == server.currency &&
+            local.amountMinor == server.amountMinor &&
+            local.type == server.type &&
+            local.type in mergeableTypes &&
+            isLocalUnsynced(local, localSources) &&
+            isServerPending(server, serverSources) &&
+            kotlin.math.abs(local.occurredAtMillis - server.occurredAtMillis) <= SERVER_MAX_GAP_MS
+
     private fun closeInTime(
         manual: ExpenseEntity,
         capture: ExpenseEntity,
@@ -86,6 +132,28 @@ object DuplicateMatcher {
         } else {
             capture.timeKnown && kotlin.math.abs(manual.occurredAtMillis - capture.occurredAtMillis) <= MAX_GAP_MS
         }
+
+    /** REQ-DEDUP-066: an imported row waiting on a decision, paired with a local row of the same purchase (local side = `manual`). */
+    private fun serverPairs(
+        entries: List<ExpenseEntity>,
+        sources: Map<String, EntrySources>,
+        blocked: Set<String>,
+        keptApart: Set<String>,
+    ): List<DuplicatePair> {
+        val none = EntrySources(emptySet())
+        val servers = entries.filter { isServerPending(it, sources[it.id] ?: none) }.groupBy { it.currency to it.amountMinor }
+        if (servers.isEmpty()) return emptyList()
+        return entries
+            .filter { isLocalUnsynced(it, sources[it.id] ?: none) }
+            .flatMap { l ->
+                servers[l.currency to l.amountMinor]
+                    .orEmpty()
+                    .filter { s ->
+                        pairKey(l.id, s.id) !in keptApart &&
+                            matchesServer(l, sources[l.id] ?: none, s, sources[s.id] ?: none, blocked)
+                    }.map { s -> DuplicatePair(l, s, sources[s.id] ?: none) }
+            }
+    }
 
     /** Every pair among [entries] that has no card yet answered ("Keep both"), newest capture first. One card per pair. */
     fun pairs(
@@ -105,6 +173,7 @@ object DuplicateMatcher {
                 if (matches(m, sources[m.id] ?: none, c, cs, blocked)) found += DuplicatePair(m, c, cs)
             }
         }
+        found += serverPairs(entries, sources, blocked, keptApart)
         return found.sortedWith(compareByDescending<DuplicatePair> { it.capture.occurredAtMillis }.thenBy { it.key })
     }
 }

@@ -87,6 +87,12 @@ interface LocalIdKey {
     fun get(): ByteArray
 
     fun wipe()
+
+    /**
+     * Runs [reset], which deletes the shared Keystore keyset, without losing this key: implementations that seal it under that
+     * keyset read it first and seal it again afterwards (REQ-SEC-065), so the local message ids stay stable.
+     */
+    fun surviving(reset: () -> Unit) = reset()
 }
 
 /** 32 random bytes, sealed with a Tink AEAD whose key lives in the Android Keystore. */
@@ -108,6 +114,16 @@ class KeystoreLocalIdKey(
 
     @Synchronized
     override fun wipe() = prefs.edit(commit = true) { clear() }
+
+    @Synchronized
+    override fun surviving(reset: () -> Unit) {
+        val plain = get()
+        reset()
+        // the keyset is generated afresh by the next TinkKeystore.aead call
+        prefs.edit(commit = true) {
+            putString(KEY, Base64.encodeToString(TinkKeystore.aead(context).encrypt(plain, AAD), Base64.NO_WRAP))
+        }
+    }
 
     private companion object {
         const val KEY = "k"

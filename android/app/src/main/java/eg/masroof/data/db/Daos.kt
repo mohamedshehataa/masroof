@@ -177,6 +177,27 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense WHERE id = :id")
     suspend fun find(id: String): ExpenseEntity?
 
+    /** STORY-182: the row the one-time import already made for a server expense (the id is unique). */
+    @Query("SELECT * FROM expense WHERE serverId = :serverId")
+    suspend fun findByServerId(serverId: String): ExpenseEntity?
+
+    /**
+     * STORY-182 (REQ-DEDUP-066): local rows with no server id that a server row of [amountMinor] / [currency] / [type] at [from]..[to]
+     * (inclusive) may duplicate. Typed columns only; the matcher applies the whole rule.
+     */
+    @Query(
+        """SELECT * FROM expense WHERE serverId IS NULL AND deletedAtMillis IS NULL AND failed = 0 AND excludedFromTotals = 0
+            AND amountMinor = :amountMinor AND currency = :currency AND type = :type
+            AND occurredAtMillis BETWEEN :from AND :to ORDER BY occurredAtMillis, id""",
+    )
+    suspend fun serverTwinCandidates(
+        amountMinor: Long,
+        currency: String,
+        type: String,
+        from: Long,
+        to: Long,
+    ): List<ExpenseEntity>
+
     /** STORY-208: the live entries since [since] that the "Needs an answer" cards and their matching read (typed columns only). */
     @Query(
         """SELECT * FROM expense WHERE deletedAtMillis IS NULL AND failed = 0 AND occurredAtMillis >= :since
@@ -478,6 +499,27 @@ abstract class LookupDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertCategoryIgnore(item: CategoryEntity): Long
+
+    // STORY-182: the one-time import only ADDS rows (an existing id is never rewritten, so a name or emoji the user changed stays).
+    @Query("SELECT * FROM category")
+    abstract suspend fun allCategories(): List<CategoryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertCategoryIfAbsent(item: CategoryEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertAccountIfAbsent(item: AccountEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertMemberIfAbsent(item: MemberEntity): Long
+
+    /** Renames a member only while it still has the name [expected] (the default "Me"): a name the user chose stays. */
+    @Query("UPDATE member SET displayName = :name WHERE id = :id AND displayName = :expected")
+    abstract suspend fun renameMemberIf(
+        id: String,
+        expected: String,
+        name: String,
+    ): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertAccountIgnore(item: AccountEntity): Long

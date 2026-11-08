@@ -96,7 +96,7 @@ object NoDuplicates : DuplicateRepository {
 private const val DAY_MS = 24L * 60 * 60 * 1000
 
 /** A manual entry may be back-dated, and the SMS backfill reads 90 days: both are looked at. */
-private const val LOOKBACK_DAYS = 100L
+internal const val DUPLICATE_LOOKBACK_DAYS = 100L
 
 @Singleton
 class DefaultDuplicateRepository
@@ -109,7 +109,7 @@ class DefaultDuplicateRepository
         private val signal: LocalDataSignal,
     ) : DuplicateRepository {
         override fun observeCards(): Flow<List<DuplicateCard>> {
-            val since = clock.millis() - LOOKBACK_DAYS * DAY_MS
+            val since = clock.millis() - DUPLICATE_LOOKBACK_DAYS * DAY_MS
             return combine(
                 db.expenses().observeLiveSince(since),
                 db.sources().observeChannels(since),
@@ -183,9 +183,13 @@ class DefaultDuplicateRepository
             val manualSources = db.sources().forExpense(manualId)
             val captureSources = db.sources().forExpense(captureId)
             val blocked = linked + db.expenses().referencedIds()
+            val ms = sourcesOf(manualSources)
+            val cs = sourcesOf(captureSources)
+            // the STORY-173 pair rule, or the STORY-182 server-row rule (the local entry is `manual`, the imported row `capture`)
+            val serverPair = DuplicateMatcher.matchesServer(manual, ms, capture, cs, blocked)
             val current =
                 DuplicateMatcher.pairKey(manualId, captureId) !in keptApart &&
-                    DuplicateMatcher.matches(manual, sourcesOf(manualSources), capture, sourcesOf(captureSources), blocked)
+                    (serverPair || DuplicateMatcher.matches(manual, ms, capture, cs, blocked))
             if (!current) return MergeResult.OutOfDate
             val now = clock.millis()
             // the capture's amount, time, last four and method stay; the typed category, notes and paid-by fill what it has not
@@ -195,6 +199,8 @@ class DefaultDuplicateRepository
                     merchant = capture.merchant ?: manual.merchant,
                     notes = capture.notes ?: manual.notes,
                     paidByMemberId = capture.paidByMemberId ?: manual.paidByMemberId,
+                    // an imported row held for this decision is settled by it (a plain capture keeps the status it had)
+                    status = if (serverPair) "CONFIRMED" else capture.status,
                     updatedAtMillis = now,
                 )
             val receiptIds = db.receipts().idsOf(manualId)

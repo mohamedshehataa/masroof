@@ -202,7 +202,8 @@ class ApiRemoteSource
                 .callTimeout(CALL_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
 
-        private suspend fun retrofit(): Retrofit {
+        /** The authenticated Retrofit; the one-time import (`data/serverimport`) builds its read-only calls on it. */
+        internal suspend fun retrofit(): Retrofit {
             val s = settings.current()
             val base = normalizeServerUrl(s.serverUrl) ?: throw IOException("Invalid server URL")
             val key = base
