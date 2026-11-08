@@ -62,6 +62,9 @@ interface InstallmentPlanDao {
 
     @Query("SELECT * FROM installment_plan WHERE id = :id")
     fun observeById(id: String): Flow<InstallmentPlanEntity?>
+
+    @Query("SELECT * FROM installment_plan WHERE id = :id")
+    suspend fun find(id: String): InstallmentPlanEntity?
 }
 
 @Dao
@@ -80,6 +83,55 @@ interface InstallmentPaymentDao {
 
     @Query("SELECT * FROM installment_payment WHERE id = :id")
     fun observeById(id: String): Flow<InstallmentPaymentEntity?>
+
+    @Query("SELECT * FROM installment_payment WHERE id = :id")
+    suspend fun find(id: String): InstallmentPaymentEntity?
+
+    @Query("SELECT * FROM installment_payment WHERE planId = :planId ORDER BY seq")
+    fun observeByPlan(planId: String): Flow<List<InstallmentPaymentEntity>>
+
+    @Query("SELECT * FROM installment_payment WHERE planId = :planId ORDER BY seq")
+    suspend fun byPlan(planId: String): List<InstallmentPaymentEntity>
+
+    /** Payments nobody has paid yet that fall due in [fromMillis, toMillis). */
+    @Query(
+        """
+        SELECT * FROM installment_payment
+        WHERE paidAtMillis IS NULL AND dueAtMillis >= :fromMillis AND dueAtMillis < :toMillis
+        ORDER BY dueAtMillis, id
+        """,
+    )
+    suspend fun unpaidDueBetween(
+        fromMillis: Long,
+        toMillis: Long,
+    ): List<InstallmentPaymentEntity>
+
+    /** Closes every payment of the plan that is still open (Mark as complete): paid, with no entry. */
+    @Query("UPDATE installment_payment SET paidAtMillis = :nowMillis WHERE planId = :planId AND paidAtMillis IS NULL")
+    suspend fun closeOpen(
+        planId: String,
+        nowMillis: Long,
+    )
+
+    /**
+     * Entries that could be this payment: not deleted, an EXPENSE of exactly this amount in this currency, dated in
+     * [fromMillis, toMillis), and not already linked to a payment.
+     */
+    @Query(
+        """
+        SELECT * FROM expense
+        WHERE deletedAtMillis IS NULL AND type = 'EXPENSE' AND amountMinor = :amountMinor AND currency = :currency
+          AND occurredAtMillis >= :fromMillis AND occurredAtMillis < :toMillis
+          AND id NOT IN (SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL)
+        ORDER BY occurredAtMillis, id
+        """,
+    )
+    suspend fun linkCandidates(
+        amountMinor: Long,
+        currency: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): List<ExpenseEntity>
 }
 
 @Dao

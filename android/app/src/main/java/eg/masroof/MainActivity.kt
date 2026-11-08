@@ -49,6 +49,9 @@ import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.add.AddExpenseRoute
+import eg.masroof.ui.bills.AddPlanRoute
+import eg.masroof.ui.bills.BillsRoute
+import eg.masroof.ui.bills.PlanDetailRoute
 import eg.masroof.ui.budgets.BudgetsRoute
 import eg.masroof.ui.edit.EditExpenseRoute
 import eg.masroof.ui.home.HomeRoute
@@ -62,6 +65,7 @@ import eg.masroof.ui.startup.StartupBlockedScreen
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.ui.viewmodel.UndoDeleteViewModel
+import eg.masroof.work.EXTRA_OPEN_ROUTE
 import eg.masroof.work.ForegroundSync
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -87,6 +91,15 @@ private const val BUDGETS_ROUTE = "budgets"
 private const val EDIT_ROUTE = "edit/{id}"
 private const val REVIEW_ROUTE = "review"
 private const val REVIEW_ADD_ROUTE = "review/{id}/add"
+private const val BILLS_ROUTE = "bills"
+private const val BILL_ADD_ROUTE = "bills/add"
+private const val BILL_DETAIL_ROUTE = "bills/{id}"
+
+/** Forms that have their own Save: the global add button is hidden there. */
+private val FORM_ROUTES = setOf(ADD_ROUTE, EDIT_ROUTE, REVIEW_ADD_ROUTE, BILL_ADD_ROUTE)
+
+/** The only routes a notification may open: a bills plan by id. Anything else in the extra is ignored. */
+private val OPENABLE_ROUTE = Regex("""bills/[A-Za-z0-9-]{1,64}""")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -102,9 +115,19 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 false
             }
+
+        /** The in-app route a reminder asks for, only when it is on the allow-list; hostile extras count as none. */
+        @Suppress("TooGenericExceptionCaught")
+        internal fun routeFrom(intent: Intent?): String? =
+            try {
+                intent?.getStringExtra(EXTRA_OPEN_ROUTE)?.takeIf { OPENABLE_ROUTE.matches(it) }
+            } catch (_: Exception) {
+                null
+            }
     }
 
     private var openReceipts by mutableStateOf(false)
+    private var openRoute by mutableStateOf<String?>(null)
 
     /**
      * The launch intent is replaced by a bare one before any navigation sees it: the navigation library reads deep-link extras
@@ -112,8 +135,10 @@ class MainActivity : ComponentActivity() {
      */
     private fun takeIntent(intent: Intent?, fresh: Boolean) {
         val wants = fresh && wantsReceipts(intent)
+        val route = if (fresh) routeFrom(intent) else null
         setIntent(Intent(this, MainActivity::class.java))
         if (wants) openReceipts = true
+        if (route != null) openRoute = route
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +178,8 @@ class MainActivity : ComponentActivity() {
                 MasroofRoot(
                     openReceipts = openReceipts,
                     onReceiptsOpened = { openReceipts = false },
+                    openRoute = openRoute,
+                    onRouteOpened = { openRoute = null },
                     onToggleLanguage = {
                         AppLanguage.toggle(this@MainActivity)
                         recreate()
@@ -167,6 +194,8 @@ class MainActivity : ComponentActivity() {
 private fun MasroofRoot(
     openReceipts: Boolean,
     onReceiptsOpened: () -> Unit,
+    openRoute: String?,
+    onRouteOpened: () -> Unit,
     onToggleLanguage: () -> Unit,
 ) {
     val nav = rememberNavController()
@@ -178,6 +207,12 @@ private fun MasroofRoot(
         if (openReceipts) {
             nav.navigate(RECEIPTS_ROUTE)
             onReceiptsOpened()
+        }
+    }
+    LaunchedEffect(openRoute) {
+        if (openRoute != null) {
+            nav.navigate(openRoute)
+            onRouteOpened()
         }
     }
     val deletedText = stringResource(R.string.edit_deleted)
@@ -210,7 +245,7 @@ private fun MasroofRoot(
             }
         },
         floatingActionButton = {
-            if (destination?.route != ADD_ROUTE && destination?.route != EDIT_ROUTE && destination?.route != REVIEW_ADD_ROUTE) {
+            if (destination?.route !in FORM_ROUTES) {
                 FloatingActionButton(onClick = { nav.navigate("add") }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
                 }
@@ -235,8 +270,16 @@ private fun MasroofRoot(
                     onToggleLanguage = onToggleLanguage,
                     onOpenReview = { nav.navigate(REVIEW_ROUTE) },
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                    onOpenBills = { nav.navigate(BILLS_ROUTE) },
                 )
             }
+            composable(BILLS_ROUTE) {
+                BillsRoute(onAdd = { nav.navigate(BILL_ADD_ROUTE) }, onOpenPlan = { id -> nav.navigate("bills/$id") })
+            }
+            composable(BILL_ADD_ROUTE) {
+                AddPlanRoute(onSaved = { id -> nav.navigate("bills/$id") { popUpTo(BILL_ADD_ROUTE) { inclusive = true } } })
+            }
+            composable(BILL_DETAIL_ROUTE) { PlanDetailRoute(onClose = { nav.popBackStack() }) }
             composable(REVIEW_ROUTE) { ReviewRoute(onCreate = { id -> nav.navigate("review/$id/add") }) }
             composable(REVIEW_ADD_ROUTE) { entry ->
                 ReviewAddRoute(id = entry.arguments?.getString("id").orEmpty(), onDone = { nav.popBackStack(REVIEW_ROUTE, false) })
