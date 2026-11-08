@@ -3,7 +3,7 @@ id: STORY-185
 epic: EPIC-17
 title: Export entries to a CSV file that opens correctly in Excel and Sheets
 phase: 9
-status: READY
+status: DONE
 risk_tier: high
 size: S
 modules: [android]
@@ -84,3 +84,7 @@ STORY-170
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D5), replaces STORY-125 |
+| 2026-11-08 | 5 build | android-engineer | Settings -> Export CSV (UTF-8 BOM, CRLF, RFC 4180, exact minor-unit amounts, Cairo dates) |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 PASS on 713f94b (real CSV bytes; 10,000 rows) |
+| 2026-11-08 | 7 review | security-reviewer | APPROVE; MINORs (guard after separators/invisible chars, cancel cleanup) fixed in 3e46c37 |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

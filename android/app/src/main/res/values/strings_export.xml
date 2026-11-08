@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="export_title">Export CSV</string>
+    <string name="export_hint">Save your entries to a file that opens in Excel or Google Sheets. It stays on your phone until you share it.</string>
+    <string name="export_range_this_month">This month</string>
+    <string name="export_range_last_month">Last month</string>
+    <string name="export_range_this_year">This year</string>
+    <string name="export_range_custom">Custom</string>
+    <string name="export_from">From: %1$s</string>
+    <string name="export_to">To: %1$s</string>
+    <string name="export_end_before_start">End date is before start</string>
+    <string name="export_action">Export</string>
+    <string name="export_working">Exporting…</string>
+    <string name="export_failed">Export failed</string>
+    <string name="export_dismiss">Dismiss</string>
+    <string name="export_date_ok">OK</string>
+    <string name="export_date_cancel">Cancel</string>
+    <plurals name="export_done">
+        <item quantity="one">%1$,d entry exported</item>
+        <item quantity="other">%1$,d entries exported</item>
+    </plurals>
+</resources>
