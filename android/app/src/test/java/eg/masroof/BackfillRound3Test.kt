@@ -138,12 +138,13 @@ class BackfillRound3Test {
     @Test
     fun `REQ-SMS-102 a time remembered 35 days ago no longer matches, and old times inside a key are pruned`() {
         val now = BACKFILL_NOW
-        store.markSignature("sig", at(35), at(35))
-        store.markSignature("sig", at(1), at(1))
+        val prefs = context.getSharedPreferences("round3", Context.MODE_PRIVATE)
+        // a key that was alive through a newer time (as an old build or a long gap would leave it): the old time is still in the file
+        prefs.edit().putString("sig:sig", "${at(35)}:${at(35)}:0,${at(1)}:${at(1)}:0").commit()
         assertFalse("the old time is out of the 30 days", store.seenSignature("sig", at(35) - 1_000, at(35) + 1_000, now))
         assertTrue(store.seenSignature("sig", at(1) - 1_000, at(1) + 1_000, now))
         store.forgetBefore(now - 30 * BACKFILL_DAY)
-        val raw = context.getSharedPreferences("round3", Context.MODE_PRIVATE).getString("sig:sig", "").orEmpty()
+        val raw = prefs.getString("sig:sig", "").orEmpty()
         assertEquals("one time left in the key: $raw", 1, raw.split(',').size)
     }
 
