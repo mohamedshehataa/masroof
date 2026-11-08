@@ -120,6 +120,7 @@ class RestoreCoordinator
         private var job: Job? = null
 
         /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read here. */
+        @Suppress("ThrowsCount") // one named failure per refusal
         fun onPicked(picked: Uri?) {
             if (picked == null || mutableState.value is RestoreState.Checking || mutableState.value is RestoreState.Restoring) return
             // Picking again at the confirmation: the staged files (and the raw key among them) go first.
@@ -173,14 +174,16 @@ class RestoreCoordinator
                             throw e
                         } catch (e: RestoreException) {
                             failed(e)
+                        } catch (e: OutOfMemoryError) {
+                            failed(RestoreException(RestoreFailure.LOW_MEMORY).also { it.addSuppressed(e) })
                         } catch (
                             @Suppress("TooGenericExceptionCaught") e: Throwable,
                         ) {
                             // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
-                            val low = e is OutOfMemoryError
+
                             failed(
                                 RestoreException(
-                                    if (low) RestoreFailure.LOW_MEMORY else RestoreFailure.INVALID_CONTENT,
+                                    RestoreFailure.INVALID_CONTENT,
                                 ).also { it.addSuppressed(e) },
                             )
                         }
@@ -262,8 +265,8 @@ class RestoreCoordinator
         }
 
         /**
-         * Every recovery (app start and a new pick) runs here: under the restore flag (so a backup and the SMS pipeline stand aside), shielded
-         * from cancellation, and never lets an exception out: the result is a [RestoreException] to show, or null when nothing is left to do.
+         * Every recovery (app start and a new pick) runs here: under the restore flag (so a backup and the SMS pipeline stand aside),
+         * shielded from cancellation, and never lets an exception out: the result is a [RestoreException] to show, or null.
          * The caller holds the erase lock.
          */
         private suspend fun recoverCore(): RestoreException? =

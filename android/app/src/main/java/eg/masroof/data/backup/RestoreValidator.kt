@@ -16,7 +16,7 @@ internal object RestoreRows {
     /**
      * True when the text is strict-looking JSON that nests no deeper than [max]: a stack bomb never reaches the parser. Outside a
      * double-quoted string only letters, digits, whitespace and `{}[]:,+-.` may appear, so everything Android's lenient `org.json`
-     * would read differently (single-quoted strings, comments, `;` and `=` separators) is refused here, and the depth can never go negative.
+     * would read differently (single-quoted strings, comments, `;` and `=` separators) is refused here; the depth never goes negative.
      */
     fun depthOk(
         text: String,

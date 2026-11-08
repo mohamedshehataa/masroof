@@ -30,7 +30,7 @@ class StagedRestore(
     val dir: File,
     val info: RestoreInfo,
     internal val validated: ValidatedBackup,
-    /** SHA-256 of `validated.json`, computed when check 7 passed and kept in memory: the marker is written from THIS value, never from disk. */
+    /** SHA-256 of `validated.json`, computed when check 7 passed and kept in memory: the marker is written from it, never from disk. */
     internal val validatedSha: String,
 )
 
@@ -524,6 +524,7 @@ class BackupRestorer(
     }
 
     /** After the commit there is no going back: any failure keeps the marker and the staging and says what the user can do. */
+    @Suppress("TooGenericExceptionCaught") // anything after the commit is INCOMPLETE and retried, never lost
     private suspend fun finishGuarded() {
         try {
             finish()
