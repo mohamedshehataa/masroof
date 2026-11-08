@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,11 +33,15 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.Money
+import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ReviewItemEntity
+import eg.masroof.data.edit.DuplicateCard
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.SecureWindow
+import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
+import eg.masroof.ui.viewmodel.MergeEvent
 import eg.masroof.ui.viewmodel.ReviewSaveResult
 import eg.masroof.ui.viewmodel.ReviewViewModel
 
@@ -47,11 +52,32 @@ fun ReviewRoute(
     viewModel: ReviewViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
+    val duplicates by viewModel.duplicateCards.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val categoryNames = categoryNames(categories)
     SecureWindow()
     val snackbar = remember { SnackbarHostState() }
     val already = stringResource(R.string.review_already_recorded)
     val failed = stringResource(R.string.review_save_failed)
     val invalid = stringResource(R.string.review_amount_invalid)
+    val merged = stringResource(R.string.duplicates_merged)
+    val undoLabel = stringResource(R.string.duplicates_undo)
+    val outOfDate = stringResource(R.string.duplicates_out_of_date)
+    val mergeFailed = stringResource(R.string.duplicates_failed)
+    val undoFailed = stringResource(R.string.duplicates_undo_failed)
+    LaunchedEffect(viewModel) {
+        viewModel.merges.collect { event ->
+            when (event) {
+                is MergeEvent.Merged ->
+                    if (snackbar.showSnackbar(merged, actionLabel = undoLabel) == SnackbarResult.ActionPerformed) {
+                        viewModel.undoMerge(event.undo)
+                    }
+                MergeEvent.OutOfDate -> snackbar.showSnackbar(outOfDate)
+                MergeEvent.Failed -> snackbar.showSnackbar(mergeFailed)
+                MergeEvent.UndoFailed -> snackbar.showSnackbar(undoFailed)
+            }
+        }
+    }
     LaunchedEffect(viewModel) {
         viewModel.results.collect { result ->
             val message =
@@ -64,7 +90,43 @@ fun ReviewRoute(
             message?.let { snackbar.showSnackbar(it) }
         }
     }
-    ReviewContent(items, onCreate = onCreate, onDismiss = viewModel::dismiss, onSave = viewModel::save, snackbar = snackbar)
+    ReviewContent(
+        items,
+        onCreate = onCreate,
+        onDismiss = viewModel::dismiss,
+        onSave = viewModel::save,
+        snackbar = snackbar,
+        duplicates = duplicates,
+        categoryNames = categoryNames,
+        onMerge = viewModel::merge,
+        onKeepBoth = viewModel::keepBoth,
+    )
+}
+
+@Composable
+private fun categoryNames(categories: List<CategoryEntity>): Map<String, String> {
+    val arabic = LocalMoneyStyle.current.arabic
+    return categories.associate { it.id to if (arabic) it.nameAr else it.nameEn }
+}
+
+/** One row of the list: a message to review or a "Possible duplicate" card. */
+private sealed interface ReviewRow {
+    val key: String
+    val atMillis: Long
+
+    data class Message(
+        val item: ReviewItemEntity,
+    ) : ReviewRow {
+        override val key get() = "m-${item.id}"
+        override val atMillis get() = item.receivedAtMillis
+    }
+
+    data class Duplicate(
+        val card: DuplicateCard,
+    ) : ReviewRow {
+        override val key get() = "d-${card.key}"
+        override val atMillis get() = card.capture.occurredAtMillis
+    }
 }
 
 @Composable
@@ -75,6 +137,10 @@ fun ReviewContent(
     modifier: Modifier = Modifier,
     onSave: (String) -> Unit = {},
     snackbar: SnackbarHostState? = null,
+    duplicates: List<DuplicateCard> = emptyList(),
+    categoryNames: Map<String, String> = emptyMap(),
+    onMerge: (DuplicateCard) -> Unit = {},
+    onKeepBoth: (DuplicateCard) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -85,11 +151,27 @@ fun ReviewContent(
         Text(stringResource(R.string.review_intro), style = MaterialTheme.typography.bodySmall)
         when {
             items == null -> CircularProgressIndicator()
-            items.isEmpty() -> Text(stringResource(R.string.review_empty), style = MaterialTheme.typography.bodyMedium)
-            else ->
+            items.isEmpty() && duplicates.isEmpty() ->
+                Text(stringResource(R.string.review_empty), style = MaterialTheme.typography.bodyMedium)
+            else -> {
+                // messages and duplicate cards together, newest first
+                val rows =
+                    (
+                        items.map {
+                            ReviewRow.Message(
+                                it,
+                            )
+                        } + duplicates.map { ReviewRow.Duplicate(it) }
+                    ).sortedByDescending { it.atMillis }
                 LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(items, key = { it.id }) { item -> ReviewCard(item, onCreate, onDismiss, onSave) }
+                    items(rows, key = { it.key }) { row ->
+                        when (row) {
+                            is ReviewRow.Message -> ReviewCard(row.item, onCreate, onDismiss, onSave)
+                            is ReviewRow.Duplicate -> DuplicateCardItem(row.card, categoryNames, onMerge, onKeepBoth)
+                        }
+                    }
                 }
+            }
         }
         snackbar?.let { SnackbarHost(it) }
     }

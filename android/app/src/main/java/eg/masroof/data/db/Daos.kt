@@ -2,6 +2,7 @@ package eg.masroof.data.db
 
 import androidx.room.Dao
 import androidx.room.Database
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -28,8 +29,35 @@ internal fun ExpenseEntity.keepLocalFrom(old: ExpenseEntity): ExpenseEntity =
         paidByMemberId = paidByMemberId ?: old.paidByMemberId,
     )
 
+/** One entry of the CSV export with its receipt count and channels (STORY-185). No message text is read. */
+data class ExportRow(
+    @Embedded val expense: ExpenseEntity,
+    val receiptCount: Int,
+    /** Comma-joined source channels, first received first (SMS,PUSH); null for an entry without sources. */
+    val channels: String?,
+)
+
 @Dao
 interface ExpenseDao {
+    /** A page of the export in (occurredAt, id) order after the given key, so memory stays bounded; deleted rows never appear. */
+    @Query(
+        """SELECT e.*,
+            (SELECT COUNT(*) FROM receipt r WHERE r.expenseId = e.id) AS receiptCount,
+            (SELECT group_concat(channel) FROM (SELECT channel FROM expense_source s WHERE s.expenseId = e.id
+                GROUP BY channel ORDER BY MIN(receivedAtMillis), channel)) AS channels
+            FROM expense e
+            WHERE e.deletedAtMillis IS NULL AND e.occurredAtMillis >= :fromMillis AND e.occurredAtMillis < :toMillis
+              AND (e.occurredAtMillis > :afterMillis OR (e.occurredAtMillis = :afterMillis AND e.id > :afterId))
+            ORDER BY e.occurredAtMillis, e.id LIMIT :limit""",
+    )
+    suspend fun exportPage(
+        fromMillis: Long,
+        toMillis: Long,
+        afterMillis: Long,
+        afterId: String,
+        limit: Int,
+    ): List<ExportRow>
+
     @Query("SELECT * FROM expense WHERE deletedAtMillis IS NULL ORDER BY occurredAtMillis DESC, id")
     fun observeAll(): Flow<List<ExpenseEntity>>
 
@@ -231,6 +259,19 @@ interface ExpenseDao {
         to: String,
     )
 
+    /** STORY-173: entries a gold lot or an installment payment points at: a merge never soft-deletes one of them. */
+    @Query(
+        """SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL
+            UNION SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL""",
+    )
+    fun observeReferencedIds(): Flow<List<String>>
+
+    @Query(
+        """SELECT expenseId FROM asset_lot WHERE expenseId IS NOT NULL
+            UNION SELECT expenseId FROM installment_payment WHERE expenseId IS NOT NULL""",
+    )
+    suspend fun referencedIds(): List<String>
+
     @Query("SELECT COUNT(*) FROM expense")
     suspend fun count(): Int
 
@@ -307,7 +348,32 @@ interface ExpenseSourceDao {
 
     @Query("SELECT * FROM expense_source")
     suspend fun all(): List<ExpenseSourceEntity>
+
+    @Query("SELECT * FROM expense_source WHERE expenseId = :expenseId ORDER BY id")
+    suspend fun forExpense(expenseId: String): List<ExpenseSourceEntity>
+
+    /** STORY-173: which channels (and which sender) the live entries since [since] came from; typed columns only, never text. */
+    @Query(
+        """SELECT id, expenseId, channel, senderId FROM expense_source
+            WHERE expenseId IN (SELECT id FROM expense WHERE deletedAtMillis IS NULL AND occurredAtMillis >= :since) ORDER BY id""",
+    )
+    fun observeChannels(since: Long): Flow<List<SourceChannel>>
+
+    /** STORY-173: a merge re-points exactly these sources to the surviving entry; Undo points them back. */
+    @Query("UPDATE expense_source SET expenseId = :to WHERE id IN (:ids)")
+    suspend fun repoint(
+        ids: List<String>,
+        to: String,
+    )
 }
+
+/** One source of an entry without its message-derived fields: enough to tell a manual entry from a capture. */
+data class SourceChannel(
+    val id: String,
+    val expenseId: String,
+    val channel: String,
+    val senderId: String?,
+)
 
 /** How many receipt files are stored and their total size (Settings). */
 data class ReceiptTotals(
@@ -332,6 +398,9 @@ interface ReceiptDao {
 
     @Query("SELECT * FROM receipt WHERE id = :id")
     suspend fun find(id: String): ReceiptEntity?
+
+    @Query("SELECT id FROM receipt WHERE expenseId = :expenseId ORDER BY createdAtMillis, rowid")
+    suspend fun idsOf(expenseId: String): List<String>
 
     @Query("UPDATE receipt SET expenseId = :expenseId WHERE id = :id")
     suspend fun moveTo(
