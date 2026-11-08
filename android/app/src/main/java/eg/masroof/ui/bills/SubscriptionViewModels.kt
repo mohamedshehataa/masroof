@@ -72,11 +72,11 @@ fun subscriptionsState(
         data.rows
             .map { row ->
                 val date = CairoTime.dateOf(row.nextRenewalAtMillis)
-                val key = row.merchantKey ?: SubscriptionMatcher.keyOf(row.name).orEmpty()
+                val key = SubscriptionMatcher.keyOfRow(row.merchantKey, row.name).orEmpty()
                 val paid = SubscriptionMatcher.lastPaid(key, row.amountMinor, row.currency, row.kind == KIND_INCOME, data.entries, today)
                 SubItem(row, date, RenewalMath.daysUntil(today, date), paid)
             }.sortedWith(compareBy({ !it.row.active }, { it.date }, { it.row.id }))
-    val existingKeys = data.rows.mapNotNull { it.merchantKey ?: SubscriptionMatcher.keyOf(it.name) }.toSet()
+    val existingKeys = data.rows.mapNotNull { SubscriptionMatcher.keyOfRow(it.merchantKey, it.name) }.toSet()
     val active = data.rows.filter { it.active }
     return SubscriptionsUiState(
         loaded = true,
@@ -86,14 +86,18 @@ fun subscriptionsState(
         income = items.filter { it.row.kind == KIND_INCOME },
         suggestions = SubscriptionMatcher.suggest(data.entries, existingKeys, data.dismissed, today),
         notices = data.notices,
-        payday = PaydayMath.next(today, data.rows, monthStartDay, CairoTime::dateOf),
+        payday = PaydayMath.next(today, data.rows, monthStartDay, CairoTime::dateOf, data.anchors),
         calendarMonth = month,
         calendar =
             active
                 .flatMap { row ->
                     RenewalMath
-                        .occurrencesIn(CairoTime.dateOf(row.nextRenewalAtMillis), Cadence.of(row.cadence), month)
-                        .map { CalendarItem(it, row.id, row.name, "NONE", row.amountMinor, row.currency, false, row.kind == KIND_INCOME) }
+                        .occurrencesIn(
+                            CairoTime.dateOf(row.nextRenewalAtMillis),
+                            Cadence.of(row.cadence),
+                            month,
+                            data.anchors[row.id] ?: RenewalMath.anchorOf(CairoTime.dateOf(row.nextRenewalAtMillis)),
+                        ).map { CalendarItem(it, row.id, row.name, "NONE", row.amountMinor, row.currency, false, row.kind == KIND_INCOME) }
                 }.sortedWith(compareBy({ it.date }, { it.planId })),
     )
 }

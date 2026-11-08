@@ -72,21 +72,23 @@ object RenewalMath {
         date: LocalDate,
         cadence: Cadence,
         today: LocalDate,
-    ): LocalDate = roll(date, cadence) { it.isBefore(today) }
+        anchor: Int = anchorOf(date),
+    ): LocalDate = roll(date, cadence, anchor) { it.isBefore(today) }
 
     /** Like [rollTo] but a renewal stays until its grace days have passed (a late payment can still match it). */
     fun rollPastGrace(
         date: LocalDate,
         cadence: Cadence,
         today: LocalDate,
-    ): LocalDate = roll(date, cadence) { it.plusDays(GRACE_DAYS).isBefore(today) }
+        anchor: Int = anchorOf(date),
+    ): LocalDate = roll(date, cadence, anchor) { it.plusDays(GRACE_DAYS).isBefore(today) }
 
     private fun roll(
         date: LocalDate,
         cadence: Cadence,
+        anchor: Int,
         stale: (LocalDate) -> Boolean,
     ): LocalDate {
-        val anchor = anchorOf(date)
         var d = date
         var guard = 0
         while (stale(d) && guard++ < MAX_ROLL) d = nextAfter(d, cadence, anchor)
@@ -98,8 +100,8 @@ object RenewalMath {
         date: LocalDate,
         cadence: Cadence,
         month: YearMonth,
+        anchor: Int = anchorOf(date),
     ): List<LocalDate> {
-        val anchor = anchorOf(date)
         val out = mutableListOf<LocalDate>()
         var d = date
         var guard = 0
@@ -113,15 +115,34 @@ object RenewalMath {
     fun perYearMinor(
         amountMinor: Long,
         cadence: Cadence,
-    ): Long = Math.multiplyExact(amountMinor, cadence.perYear.toLong())
+    ): Long =
+        try {
+            Math.multiplyExact(amountMinor, cadence.perYear.toLong())
+        } catch (_: ArithmeticException) {
+            if (amountMinor > 0) Long.MAX_VALUE else Long.MIN_VALUE
+        }
+
+    private fun saturatingSum(values: List<Long>): Long =
+        values.fold(0L) { acc, v ->
+            try {
+                Math.addExact(acc, v)
+            } catch (_: ArithmeticException) {
+                if (v > 0) Long.MAX_VALUE else Long.MIN_VALUE
+            }
+        }
 
     /** Per-year divided by 12, half away from zero. */
-    fun perMonthMinor(perYearMinor: Long): Long = Projections.divideRounded(perYearMinor, MONTHS_PER_YEAR)
+    fun perMonthMinor(perYearMinor: Long): Long =
+        if (Math.abs(perYearMinor) > Long.MAX_VALUE / 4) {
+            perYearMinor / MONTHS_PER_YEAR
+        } else {
+            Projections.divideRounded(perYearMinor, MONTHS_PER_YEAR)
+        }
 
     fun totals(rows: List<SubscriptionEntity>): SubscriptionTotals {
         val costs = rows.filter { it.active && it.kind != KIND_INCOME }
         val egp = costs.filter { it.currency == Money.EGP }
-        val year = egp.sumOf { perYearMinor(it.amountMinor, Cadence.of(it.cadence)) }
+        val year = saturatingSum(egp.map { perYearMinor(it.amountMinor, Cadence.of(it.cadence)) })
         return SubscriptionTotals(
             perYearMinor = year,
             perMonthMinor = perMonthMinor(year),
@@ -157,12 +178,15 @@ object PaydayMath {
         rows: List<SubscriptionEntity>,
         monthStartDay: Int,
         dateOf: (Long) -> LocalDate,
+        anchors: Map<String, Int> = emptyMap(),
     ): Payday {
         val best =
             rows
                 .filter { it.active && it.kind == KIND_INCOME }
-                .map { it to RenewalMath.rollTo(dateOf(it.nextRenewalAtMillis), Cadence.of(it.cadence), today) }
-                .minWithOrNull(compareBy({ it.second }, { it.first.id }))
+                .map {
+                    val date = dateOf(it.nextRenewalAtMillis)
+                    it to RenewalMath.rollTo(date, Cadence.of(it.cadence), today, anchors[it.id] ?: RenewalMath.anchorOf(date))
+                }.minWithOrNull(compareBy({ it.second }, { it.first.id }))
         if (best != null) {
             return Payday(RenewalMath.daysUntil(today, best.second), best.second, PaydaySource.INCOME, best.first.name)
         }

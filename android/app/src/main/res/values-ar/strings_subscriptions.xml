@@ -59,8 +59,8 @@
     <string name="subs_name">الاسم</string>
     <string name="subs_amount">المبلغ</string>
     <string name="subs_cadence">كل قد إيه</string>
-    <string name="subs_next_date" tools:ignore="TypographyDashes">تاريخ التجديد الجاي، مثلا 2026-11-25</string>
-    <string name="subs_next_payday" tools:ignore="TypographyDashes">القبض الجاي، مثلا 2026-11-25</string>
+    <string name="subs_next_date" tools:ignore="TypographyDashes">تاريخ التجديد الجاي، مثلا ٢٠٢٦-١١-٢٥</string>
+    <string name="subs_next_payday" tools:ignore="TypographyDashes">القبض الجاي، مثلا ٢٠٢٦-١١-٢٥</string>
     <string name="subs_merchant">اسم التاجر اللي بنطابق عليه الدفع (اختياري)</string>
     <string name="subs_save">حفظ</string>
     <string name="subs_error_name">اكتب اسم</string>

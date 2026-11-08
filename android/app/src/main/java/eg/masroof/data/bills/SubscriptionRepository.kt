@@ -17,6 +17,7 @@ import eg.masroof.data.db.SubscriptionEntity
 import eg.masroof.data.db.seededCategoryId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Clock
 import java.time.LocalDate
@@ -96,6 +97,8 @@ data class SubscriptionsData(
     val entries: List<EntryFact>,
     val dismissed: Set<String>,
     val notices: List<PriceNotice>,
+    /** The real day of month each row renews on (a row without one falls back to [RenewalMath.anchorOf]). */
+    val anchors: Map<String, Int> = emptyMap(),
 )
 
 /** Dismissed suggestion keys and price-change notices; DataStore in the app. */
@@ -103,11 +106,46 @@ interface SubscriptionPrefs {
     val dismissedKeys: Flow<Set<String>>
     val notices: Flow<List<PriceNotice>>
 
+    /** Subscription id to its anchor day of month; the schema has no column for it, so it lives here (include in the backup). */
+    val anchors: Flow<Map<String, Int>>
+
     suspend fun dismissKey(key: String)
+
+    suspend fun setAnchor(
+        id: String,
+        day: Int,
+    )
+
+    suspend fun removeAnchor(id: String)
+
+    /** "Erase all data": forgets dismissed keys, notices and anchors. */
+    suspend fun clear()
 
     suspend fun addNotice(notice: PriceNotice)
 
     suspend fun clearNotice(subscriptionId: String)
+}
+
+/** For code paths that have no subscription prefs. */
+object NoSubscriptionPrefs : SubscriptionPrefs {
+    override val dismissedKeys: Flow<Set<String>> = kotlinx.coroutines.flow.flowOf(emptySet())
+    override val notices: Flow<List<PriceNotice>> = kotlinx.coroutines.flow.flowOf(emptyList())
+    override val anchors: Flow<Map<String, Int>> = kotlinx.coroutines.flow.flowOf(emptyMap())
+
+    override suspend fun dismissKey(key: String) = Unit
+
+    override suspend fun addNotice(notice: PriceNotice) = Unit
+
+    override suspend fun clearNotice(subscriptionId: String) = Unit
+
+    override suspend fun setAnchor(
+        id: String,
+        day: Int,
+    ) = Unit
+
+    override suspend fun removeAnchor(id: String) = Unit
+
+    override suspend fun clear() = Unit
 }
 
 private val Context.subscriptionStore: DataStore<Preferences> by preferencesDataStore(name = "subscriptions")
@@ -125,6 +163,36 @@ class DataStoreSubscriptionPrefs
 
         override val notices: Flow<List<PriceNotice>> =
             context.subscriptionStore.data.map { p -> p[noticesKey].orEmpty().mapNotNull(::decode).sortedBy { it.subscriptionId } }
+
+        private val anchorsKey = stringSetPreferencesKey("anchor_days")
+
+        override val anchors: Flow<Map<String, Int>> =
+            context.subscriptionStore.data.map { p ->
+                p[anchorsKey]
+                    .orEmpty()
+                    .mapNotNull { e ->
+                        e.substringAfterLast(':').toIntOrNull()?.let { e.substringBeforeLast(':') to it }
+                    }.toMap()
+            }
+
+        override suspend fun setAnchor(
+            id: String,
+            day: Int,
+        ) {
+            context.subscriptionStore.edit { p ->
+                p[anchorsKey] = p[anchorsKey].orEmpty().filterNot { it.substringBeforeLast(':') == id }.toSet() + "$id:$day"
+            }
+        }
+
+        override suspend fun removeAnchor(id: String) {
+            context.subscriptionStore.edit { p ->
+                p[anchorsKey] = p[anchorsKey].orEmpty().filterNot { it.substringBeforeLast(':') == id }.toSet()
+            }
+        }
+
+        override suspend fun clear() {
+            context.subscriptionStore.edit { it.clear() }
+        }
 
         override suspend fun dismissKey(key: String) {
             context.subscriptionStore.edit { it[dismissedKey] = it[dismissedKey].orEmpty() + key }
@@ -209,19 +277,25 @@ class DefaultSubscriptionRepository
 
         override fun observeData(): Flow<SubscriptionsData> {
             val since = sinceMillis(CairoTime.today(clock.instant()))
-            return combine(
-                dao.observeAll(),
-                dao.observeEntriesSince(since),
-                prefs.dismissedKeys,
-                prefs.notices,
-            ) { rows, entries, dismissed, notices ->
-                SubscriptionsData(rows, entries.mapNotNull(::factOf), dismissed, notices)
+            return combine(dao.observeAll(), dao.observeEntriesSince(since), prefs.dismissedKeys, prefs.notices, prefs.anchors) {
+                rows,
+                entries,
+                dismissed,
+                notices,
+                anchors,
+                ->
+                val live = rows.map { it.id }.toSet()
+                SubscriptionsData(rows, entries.mapNotNull(::factOf), dismissed, notices.filter { it.subscriptionId in live }, anchors)
             }
         }
+
+        private fun todayCairo() = CairoTime.today(clock.instant())
 
         override suspend fun create(new: NewSubscription): String {
             val id = ids.next()
             dao.insert(new.toEntity(id, clock.instant().toEpochMilli()))
+            prefs.setAnchor(id, new.nextRenewal.dayOfMonth)
+            settle(todayCairo())
             return id
         }
 
@@ -231,6 +305,9 @@ class DefaultSubscriptionRepository
         ): Boolean {
             val old = dao.find(id) ?: return false
             dao.update(new.toEntity(id, old.createdAtMillis).copy(active = old.active, notes = old.notes))
+            // The anchor changes only when the date was edited: an untouched, clamped date (28 Feb) must not replace the real day (30).
+            if (CairoTime.dateOf(old.nextRenewalAtMillis) != new.nextRenewal) prefs.setAnchor(id, new.nextRenewal.dayOfMonth)
+            settle(todayCairo())
             return true
         }
 
@@ -238,23 +315,46 @@ class DefaultSubscriptionRepository
             id: String,
             active: Boolean,
         ) {
-            dao.find(id)?.let { dao.update(it.copy(active = active)) }
+            val row = dao.find(id) ?: return
+            if (!active) {
+                dao.update(row.copy(active = false))
+                return
+            }
+            // Resumed: skip the renewals missed while paused, and match only entries from now on.
+            val today = todayCairo()
+            val date = CairoTime.dateOf(row.nextRenewalAtMillis)
+            val anchor = prefs.anchors.first()[id] ?: RenewalMath.anchorOf(date)
+            val next = RenewalMath.rollTo(date, Cadence.of(row.cadence), today, anchor)
+            dao.update(row.copy(active = true, nextRenewalAtMillis = CairoTime.noonOf(next).toEpochMilli()))
+            // Entries from before the resume never pay it, also not in a later pass (kept in the anchors store as "since:<id>").
+            prefs.setAnchor("$SINCE_PREFIX$id", Math.toIntExact(today.toEpochDay()))
+            settleRows(today, id)
         }
 
         override suspend fun delete(id: String) {
             dao.find(id)?.let { dao.delete(it) }
             prefs.clearNotice(id)
+            prefs.removeAnchor(id)
+            prefs.removeAnchor("$SINCE_PREFIX$id")
         }
 
-        override suspend fun settle(today: LocalDate) {
+        override suspend fun settle(today: LocalDate) = settleRows(today, null)
+
+        private suspend fun settleRows(
+            today: LocalDate,
+            onlyId: String?,
+        ) {
             val changes = mutableListOf<PriceNotice>()
+            val anchors = prefs.anchors.first()
             db.withTransaction {
-                val rows = dao.all().filter { it.active }
+                val rows = dao.all().filter { it.active && (onlyId == null || it.id == onlyId) }
                 val earliest = rows.minOfOrNull { CairoTime.dateOf(it.nextRenewalAtMillis) } ?: return@withTransaction
                 val entries = dao.entriesSince(sinceMillis(minOf(earliest, today))).mapNotNull(::factOf)
                 val used = mutableSetOf<String>()
                 for (row in rows) {
-                    val settled = settleOne(row, entries, used, today, changes)
+                    val cutoff = anchors["$SINCE_PREFIX${row.id}"]?.let { LocalDate.ofEpochDay(it.toLong()) }
+                    val visible = if (cutoff == null) entries else entries.filter { !it.date.isBefore(cutoff) }
+                    val settled = settleOne(row, visible, used, today, changes, anchors[row.id])
                     if (settled != row) dao.update(settled)
                 }
             }
@@ -267,13 +367,14 @@ class DefaultSubscriptionRepository
             used: MutableSet<String>,
             today: LocalDate,
             notices: MutableList<PriceNotice>,
+            storedAnchor: Int?,
         ): SubscriptionEntity {
             val cadence = Cadence.of(row.cadence)
             val income = row.kind == KIND_INCOME
             val pool = entries.filter { it.income == income }
             var cur = row
             var date = CairoTime.dateOf(row.nextRenewalAtMillis)
-            val anchor = RenewalMath.anchorOf(date)
+            val anchor = storedAnchor ?: RenewalMath.anchorOf(date)
             var guard = 0
             var hit = findHit(cur, date, pool, used)
             while (hit != null && guard++ < MAX_MATCHES) {
@@ -285,7 +386,7 @@ class DefaultSubscriptionRepository
                 cur = cur.copy(amountMinor = hit.amountMinor, merchantKey = cur.merchantKey ?: hit.merchantKey)
                 hit = findHit(cur, date, pool, used)
             }
-            date = RenewalMath.rollPastGrace(date, cadence, today)
+            date = RenewalMath.rollPastGrace(date, cadence, today, anchor)
             return cur.copy(nextRenewalAtMillis = CairoTime.noonOf(date).toEpochMilli())
         }
 
@@ -295,7 +396,7 @@ class DefaultSubscriptionRepository
             pool: List<EntryFact>,
             used: Set<String>,
         ): EntryFact? {
-            val key = row.merchantKey ?: SubscriptionMatcher.keyOf(row.name) ?: return null
+            val key = SubscriptionMatcher.keyOfRow(row.merchantKey, row.name) ?: return null
             return SubscriptionMatcher.match(key, row.amountMinor, row.currency, renewal, pool, used)
         }
 
@@ -304,7 +405,7 @@ class DefaultSubscriptionRepository
         override suspend fun dismissNotice(subscriptionId: String) = prefs.clearNotice(subscriptionId)
 
         override suspend fun daysToPayday(today: LocalDate): Payday =
-            PaydayMath.next(today, dao.all(), settings.current().monthStartDay, CairoTime::dateOf)
+            PaydayMath.next(today, dao.all(), settings.current().monthStartDay, CairoTime::dateOf, prefs.anchors.first())
 
         private fun sinceMillis(today: LocalDate): Long =
             today
@@ -347,6 +448,7 @@ class DefaultSubscriptionRepository
         )
 
         private companion object {
+            const val SINCE_PREFIX = "since:"
             const val HISTORY_DAYS = 150L
             const val MAX_MATCHES = 60
         }

@@ -20,6 +20,7 @@ import eg.masroof.data.bills.SubscriptionPrefs
 import eg.masroof.data.bills.SubscriptionReminderSource
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.SubscriptionEntity
 import eg.masroof.data.db.seededCategoryId
 import eg.masroof.ui.bills.SubField
 import eg.masroof.ui.bills.SubFormResult
@@ -45,11 +46,30 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-private class MemorySubscriptionPrefs : SubscriptionPrefs {
+internal class MemorySubscriptionPrefs : SubscriptionPrefs {
     val dismissed = MutableStateFlow<Set<String>>(emptySet())
     val noticeList = MutableStateFlow<List<PriceNotice>>(emptyList())
     override val dismissedKeys: Flow<Set<String>> = dismissed
     override val notices: Flow<List<PriceNotice>> = noticeList
+    val anchorMap = MutableStateFlow<Map<String, Int>>(emptyMap())
+    override val anchors: Flow<Map<String, Int>> = anchorMap
+
+    override suspend fun setAnchor(
+        id: String,
+        day: Int,
+    ) {
+        anchorMap.value += id to day
+    }
+
+    override suspend fun removeAnchor(id: String) {
+        anchorMap.value -= id
+    }
+
+    override suspend fun clear() {
+        dismissed.value = emptySet()
+        noticeList.value = emptyList()
+        anchorMap.value = emptyMap()
+    }
 
     override suspend fun dismissKey(key: String) {
         dismissed.value += key
@@ -64,7 +84,7 @@ private class MemorySubscriptionPrefs : SubscriptionPrefs {
     }
 }
 
-private class FixedSettings(
+internal class FixedSettings(
     monthStart: Int = 1,
 ) : SettingsRepository {
     private val flow = MutableStateFlow(AppSettings(monthStartDay = monthStart))
@@ -131,6 +151,29 @@ class SubscriptionRepositoryTest {
         ),
     )
 
+    private suspend fun raw(new: NewSubscription): String {
+        val id = ids.next()
+        db.subscriptions().insert(
+            SubscriptionEntity(
+                id,
+                new.kind,
+                new.name,
+                new.amountMinor,
+                new.currency,
+                new.cadence.key,
+                CairoTime.noonOf(new.nextRenewal).toEpochMilli(),
+                new.categoryId,
+                new.accountId,
+                new.merchantKey,
+                new.reminderDaysBefore,
+                true,
+                null,
+                0L,
+            ),
+        )
+        return id
+    }
+
     private suspend fun nextOf(id: String): LocalDate = CairoTime.dateOf(db.subscriptions().find(id)!!.nextRenewalAtMillis)
 
     // --- REQ-EXP-062 ---------------------------------------------------------------------------------------
@@ -138,7 +181,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 create stores a subscription row with its cadence, renewal, category and reminder`() =
         runTest {
-            val id = repo.create(netflix("2026-11-20").copy(categoryId = seededCategoryId("subscriptions"), reminderDaysBefore = 3))
+            val id = raw(netflix("2026-11-20").copy(categoryId = seededCategoryId("subscriptions"), reminderDaysBefore = 3))
             val row = db.subscriptions().find(id)!!
             assertEquals(KIND_SUBSCRIPTION, row.kind)
             assertEquals(19_900L, row.amountMinor)
@@ -152,14 +195,14 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 recurring income is stored as a kind INCOME row`() =
         runTest {
-            val id = repo.create(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
+            val id = raw(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
             assertEquals(KIND_INCOME, db.subscriptions().find(id)!!.kind)
         }
 
     @Test
     fun `REQ-EXP-062 edit changes every field and keeps pause state`() =
         runTest {
-            val id = repo.create(netflix("2026-11-20"))
+            val id = raw(netflix("2026-11-20"))
             repo.setActive(id, false)
             val edited =
                 NewSubscription("WE internet", KIND_BILL, 40_000, "USD", Cadence.QUARTERLY, day("2027-01-05"), "cat", "acc", "we", 7)
@@ -182,8 +225,8 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 pause takes a row out of totals and reminders, resume puts it back`() =
         runTest {
-            val id = repo.create(netflix("2026-11-09"))
-            val source = SubscriptionReminderSource(db)
+            val id = raw(netflix("2026-11-09"))
+            val source = SubscriptionReminderSource(db, repo)
             assertEquals(1, source.dueOn(today).size)
             repo.setActive(id, false)
             assertTrue(source.dueOn(today).isEmpty())
@@ -195,7 +238,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-EXP-062 delete removes the row and its price notice`() =
         runTest {
-            val id = repo.create(netflix())
+            val id = raw(netflix())
             prefs.addNotice(PriceNotice(id, "Netflix", 19_900, 22_900, "EGP"))
             repo.delete(id)
             assertNull(db.subscriptions().find(id))
@@ -248,7 +291,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 an unpaid renewal rolls forward after its grace days, keeping the month end`() =
         runTest {
-            val id = repo.create(netflix("2026-10-31"))
+            val id = raw(netflix("2026-10-31"))
             repo.settle(today)
             assertEquals(day("2026-11-30"), nextOf(id))
             repo.settle(day("2026-12-05"))
@@ -258,7 +301,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 a renewal is not rolled while a late payment can still match it`() =
         runTest {
-            val id = repo.create(netflix("2026-11-06"))
+            val id = raw(netflix("2026-11-06"))
             repo.settle(today)
             assertEquals(day("2026-11-06"), nextOf(id))
         }
@@ -266,7 +309,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 a matching entry marks the renewal paid and advances the date`() =
         runTest {
-            val id = repo.create(netflix("2026-10-31"))
+            val id = raw(netflix("2026-10-31"))
             entry("e1", "Netflix", 19_900, "2026-11-01")
             repo.settle(today)
             assertEquals(day("2026-11-30"), nextOf(id))
@@ -278,7 +321,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 the merchant key is learned from the first matched entry`() =
         runTest {
-            val id = repo.create(netflix("2026-10-31").copy(merchantKey = null, name = "Netflix"))
+            val id = raw(netflix("2026-10-31").copy(merchantKey = null, name = "Netflix"))
             entry("e1", "NETFLIX", 19_900, "2026-10-31")
             repo.settle(today)
             assertEquals("netflix", db.subscriptions().find(id)!!.merchantKey)
@@ -288,7 +331,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 a different amount within 10 percent updates the price and shows the notice once`() =
         runTest {
-            val id = repo.create(netflix("2026-10-31"))
+            val id = raw(netflix("2026-10-31"))
             entry("e1", "Netflix", 21_000, "2026-10-30")
             repo.settle(today)
             assertEquals(21_000L, db.subscriptions().find(id)!!.amountMinor)
@@ -303,8 +346,8 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 an amount beyond 10 percent or a date beyond 3 days does not match`() =
         runTest {
-            val id = repo.create(netflix("2026-11-02"))
-            entry("far-amount", "Netflix", 25_000, "2026-11-02")
+            val id = raw(netflix("2026-11-02"))
+            entry("far-amount", "Netflix", 50_000, "2026-11-02")
             entry("far-date", "Netflix", 19_900, "2026-11-07")
             repo.settle(today)
             assertEquals(day("2026-12-02"), nextOf(id))
@@ -314,8 +357,8 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 two candidate entries the closer date wins and an entry never pays two renewals`() =
         runTest {
-            val first = repo.create(netflix("2026-11-05"))
-            val second = repo.create(netflix("2026-11-06").copy(name = "Netflix 2"))
+            val first = raw(netflix("2026-11-05"))
+            val second = raw(netflix("2026-11-06").copy(name = "Netflix 2"))
             entry("near", "Netflix", 19_900, "2026-11-05")
             entry("far", "Netflix", 19_900, "2026-11-08")
             repo.settle(today)
@@ -327,7 +370,7 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 recurring income matches INCOME entries and an expense of the same name does not count`() =
         runTest {
-            val id = repo.create(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-10-25")))
+            val id = raw(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-10-25")))
             entry("out", "Salary", 2_000_000, "2026-10-26", type = "EXPENSE")
             repo.settle(day("2026-10-27"))
             assertEquals(day("2026-10-25"), nextOf(id))
@@ -341,9 +384,9 @@ class SubscriptionRepositoryTest {
     @Test
     fun `REQ-AN-171 the reminder source reminds the day before with name and amount only`() =
         runTest {
-            val id = repo.create(netflix("2026-11-09"))
-            repo.create(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-09")))
-            val source = SubscriptionReminderSource(db)
+            val id = raw(netflix("2026-11-09"))
+            raw(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-09")))
+            val source = SubscriptionReminderSource(db, repo)
             assertTrue(source.dueOn(day("2026-11-07")).isEmpty())
             val due = source.dueOn(today)
             assertEquals(1, due.size)
@@ -363,7 +406,7 @@ class SubscriptionRepositoryTest {
             val p0 = repo.daysToPayday(today)
             assertEquals(PaydaySource.MONTH_START, p0.source)
             assertEquals(23, p0.days)
-            repo.create(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
+            raw(NewSubscription("Salary", KIND_INCOME, 2_000_000, "EGP", Cadence.MONTHLY, day("2026-11-25")))
             val p = repo.daysToPayday(today)
             assertEquals(17, p.days)
             assertEquals("Salary", p.name)

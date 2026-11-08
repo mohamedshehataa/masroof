@@ -21,9 +21,12 @@ class SubscriptionReminderSource
     @Inject
     constructor(
         private val db: AppDatabase,
+        private val repository: SubscriptionRepository,
     ) : ReminderSource {
-        override suspend fun dueOn(today: LocalDate): List<DueReminder> =
-            db
+        override suspend fun dueOn(today: LocalDate): List<DueReminder> {
+            // Dates roll forward and payments match here too, so reminders keep coming without the Bills screen ever opening.
+            repository.settle(today)
+            return db
                 .subscriptions()
                 .all()
                 .filter { it.active && it.kind != KIND_INCOME }
@@ -38,4 +41,5 @@ class SubscriptionReminderSource
                         route = subscriptionRoute(row.id),
                     )
                 }
+        }
     }
