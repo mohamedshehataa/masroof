@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import eg.masroof.R
 import eg.masroof.core.CairoTime
@@ -66,7 +65,11 @@ fun DuplicateCardItem(
         modifier = modifier,
         backgroundContent = {
             Box(
-                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp),
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(16.dp)
+                    .clearAndSetSemantics {},
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(stringResource(R.string.duplicates_keep_both), style = MaterialTheme.typography.labelLarge)
@@ -92,16 +95,15 @@ private fun DuplicateCardBody(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(
-                Modifier.semantics(mergeDescendants = true) { contentDescription = description },
+                Modifier.clearAndSetSemantics { contentDescription = description },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
                     stringResource(R.string.duplicates_title),
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.clearAndSetSemantics {},
                 )
                 // the two columns swap sides in a right-to-left language on their own
-                Row(Modifier.fillMaxWidth().clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Side(card.manual, categoryNames, stringResource(R.string.duplicates_manual), manual = true, Modifier.weight(1f))
                     Side(card.capture, categoryNames, captureLabel, manual = false, Modifier.weight(1f))
                 }
