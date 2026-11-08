@@ -1,10 +1,14 @@
 package eg.masroof.ingest.backfill
 
 import android.content.SharedPreferences
+import android.util.Base64
 import androidx.core.content.edit
+import com.google.crypto.tink.Aead
 import eg.masroof.ingest.HandledMemory
+import eg.masroof.ingest.SignatureClaim
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.abs
 
 /** Where a "Read past SMS" run stands. */
 enum class BackfillPhase { IDLE, RUNNING, DONE, STOPPED, PERMISSION_LOST }
@@ -43,6 +47,8 @@ data class BackfillState(
  */
 class BackfillStore(
     private val prefs: SharedPreferences,
+    /** Seals the remembered times (production: the Tink AEAD of the Android Keystore); null only in tests that read the file. */
+    private val aead: Aead? = null,
 ) : HandledMemory {
     private val mutable = MutableStateFlow(read())
     val state: StateFlow<BackfillState> = mutable
@@ -68,15 +74,24 @@ class BackfillStore(
         mutable.value = state
     }
 
-    fun handled(id: String): Boolean = prefs.contains(SEEN + id)
+    /** Was this message handled in the last 30 days? (A deleted entry or a dismissed review item must not come back.) */
+    fun handled(
+        id: String,
+        nowMillis: Long,
+    ): Boolean =
+        prefs
+            .getString(SEEN + id, null)
+            ?.let(::open)
+            ?.toLongOrNull()
+            ?.let { it >= nowMillis - MEMORY_MILLIS } == true
 
-    /** Every mark also prunes what is older than 30 days, so the file only ever holds a month of keys (bounded work). */
+    /** Every mark also prunes what is older than 30 days, at most once a day (the scan reads every key). */
     override fun mark(
         id: String,
         nowMillis: Long,
     ) {
-        forgetBefore(nowMillis - MEMORY_MILLIS)
-        prefs.edit { putLong(SEEN + id, nowMillis) }
+        pruneDaily(nowMillis)
+        prefs.edit { putString(SEEN + id, seal(nowMillis.toString())) }
     }
 
     /** A signature with the times (of the message, of the mark) it was seen at; at most [MAX_TIMES] are kept per signature. */
@@ -85,46 +100,105 @@ class BackfillStore(
         atMillis: Long,
         nowMillis: Long,
     ) {
-        val kept = times(signature).filter { it.second >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1)
-        val all = kept + (atMillis to nowMillis)
-        prefs.edit { putString(SIG + signature, all.joinToString(",") { "${it.first}:${it.second}" }) }
+        pruneDaily(nowMillis)
+        val kept = times(signature).filter { it.marked >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1)
+        save(signature, kept + Seen(atMillis, nowMillis, false))
     }
 
     override fun seenSignature(
         signature: String,
         fromMillis: Long,
         toMillis: Long,
-    ): Boolean = times(signature).any { it.first in fromMillis..toMillis }
+        nowMillis: Long,
+    ): Boolean = times(signature).any { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
 
-    private fun times(signature: String): List<Pair<Long, Long>> =
+    override fun claimSignature(
+        signature: String,
+        fromMillis: Long,
+        toMillis: Long,
+        atMillis: Long,
+        nowMillis: Long,
+    ): SignatureClaim {
+        val all = times(signature)
+        val inWindow = all.filter { it.at in fromMillis..toMillis && it.marked >= nowMillis - MEMORY_MILLIS }
+        if (inWindow.isEmpty()) return SignatureClaim.NONE
+        val closest = inWindow.filter { !it.used }.minByOrNull { abs(it.at - atMillis) } ?: return SignatureClaim.ALREADY_CLAIMED
+        save(signature, all.map { if (it === closest) it.copy(used = true) else it })
+        return SignatureClaim.CLAIMED
+    }
+
+    /** What is remembered of one signature: when the message was, when it was marked, and whether a message already claimed it. */
+    private data class Seen(
+        val at: Long,
+        val marked: Long,
+        val used: Boolean,
+    )
+
+    private fun times(signature: String): List<Seen> =
         prefs
             .getString(SIG + signature, null)
+            ?.let(::open)
             ?.split(',')
             ?.mapNotNull { part ->
-                val (at, marked) = part.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
-                val a = at.toLongOrNull() ?: return@mapNotNull null
-                val m = marked.toLongOrNull() ?: return@mapNotNull null
-                a to m
+                val f = part.split(':')
+                val at = f.getOrNull(0)?.toLongOrNull()
+                val marked = f.getOrNull(1)?.toLongOrNull()
+                if (at == null || marked == null) null else Seen(at, marked, f.getOrNull(2) == "1")
             }.orEmpty()
+
+    private fun save(
+        signature: String,
+        all: List<Seen>,
+    ) {
+        val text = all.joinToString(",") { "${it.at}:${it.marked}:${if (it.used) 1 else 0}" }
+        prefs.edit { putString(SIG + signature, seal(text)) }
+    }
+
+    /** The values (times) are sealed with the keystore-backed AEAD when there is one: the file alone says nothing about when. */
+    private fun seal(text: String): String =
+        aead?.let { Base64.encodeToString(it.encrypt(text.toByteArray(Charsets.UTF_8), AAD), Base64.NO_WRAP) } ?: text
+
+    private fun open(raw: String): String? {
+        val cipher = aead ?: return raw
+        return runCatching { String(cipher.decrypt(Base64.decode(raw, Base64.NO_WRAP), AAD), Charsets.UTF_8) }.getOrNull()
+    }
 
     /** After "Erase all data": the file is empty, so the screen goes back to the start instead of showing the erased run. */
     fun reset() {
         prefs.edit { clear() }
         mutable.value = BackfillState()
+        prunedAt = null
     }
 
-    /** Forgets handled ids older than [cutoffMillis] (30 days): after that a deleted message may be read in again. */
+    private var prunedAt: Long? = null
+
+    private fun pruneDaily(nowMillis: Long) {
+        if (prunedAt?.let { nowMillis - it < PRUNE_EVERY_MILLIS } == true) return
+        prunedAt = nowMillis
+        forgetBefore(nowMillis - MEMORY_MILLIS)
+    }
+
+    /** Forgets what is older than [cutoffMillis] (30 days), inside a signature too: after that a deleted message may be read in again. */
     fun forgetBefore(cutoffMillis: Long) {
-        val old =
-            prefs.all
-                .filter { (k, v) ->
-                    when {
-                        k.startsWith(SEEN) -> v is Long && v < cutoffMillis
-                        k.startsWith(SIG) -> v is String && times(k.removePrefix(SIG)).all { it.second < cutoffMillis }
-                        else -> false
+        val drop = mutableListOf<String>()
+        val rewrite = mutableMapOf<String, List<Seen>>()
+        for ((k, v) in prefs.all) {
+            if (v !is String) continue
+            when {
+                k.startsWith(SEEN) -> if ((open(v)?.toLongOrNull() ?: Long.MIN_VALUE) < cutoffMillis) drop += k
+                k.startsWith(SIG) -> {
+                    val all = times(k.removePrefix(SIG))
+                    val fresh = all.filter { it.marked >= cutoffMillis }
+                    if (fresh.isEmpty()) {
+                        drop += k
+                    } else if (fresh.size < all.size) {
+                        rewrite[k.removePrefix(SIG)] = fresh
                     }
-                }.keys
-        if (old.isNotEmpty()) prefs.edit { old.forEach { remove(it) } }
+                }
+            }
+        }
+        if (drop.isNotEmpty()) prefs.edit { drop.forEach { remove(it) } }
+        rewrite.forEach { (signature, fresh) -> save(signature, fresh) }
     }
 
     private fun read(): BackfillState =
@@ -146,6 +220,8 @@ class BackfillStore(
         private const val SEEN = "seen:"
         private const val SIG = "sig:"
         private const val MAX_TIMES = 8
+        private const val PRUNE_EVERY_MILLIS = 24L * 60 * 60 * 1000
+        private val AAD = "masroof-backfill-memory".toByteArray()
         private const val MEMORY_MILLIS = 30L * 24 * 60 * 60 * 1000
         private const val PHASE = "phase"
         private const val KEY = "range_key"

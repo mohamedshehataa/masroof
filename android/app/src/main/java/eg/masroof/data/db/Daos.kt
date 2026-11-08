@@ -350,13 +350,40 @@ interface ExpenseSourceDao {
         to: Long,
     ): Int
 
-    /** Live-captured SMS sources (deleted entries included) from one sender with the same amount and card tail in a time window. */
+    /**
+     * A notification entry (deleted ones too) that nobody paired with an SMS and that the user edited, close in time: its original
+     * amount is not kept, so it cannot be told whether an SMS of another amount is the same transfer.
+     */
     @Query(
         """SELECT COUNT(*) FROM expense_source s JOIN expense e ON e.id = s.expenseId
-            WHERE s.channel = 'SMS' AND s.senderId = :sender AND e.currency = :currency AND e.amountMinor = :amountMinor
+            WHERE s.channel = 'PUSH' AND e.type = :type AND e.currency = :currency AND e.updatedAtMillis <> e.createdAtMillis
+            AND s.receivedAtMillis BETWEEN :from AND :to
+            AND NOT EXISTS (SELECT 1 FROM expense_source o WHERE o.expenseId = e.id AND o.channel IN ('SMS', 'BACKFILL'))""",
+    )
+    suspend fun editedPushNearCount(
+        type: String,
+        currency: String,
+        from: Long,
+        to: Long,
+    ): Int
+
+    /** The sources of the entries a trash purge with this cutoff will remove: what the 30-day memory must keep of them. */
+    @Query(
+        """SELECT e.type AS type, e.currency AS currency, e.amountMinor AS amountMinor, s.channel AS channel, s.senderId AS senderId,
+            s.instrumentLast4 AS instrumentLast4, s.receivedAtMillis AS receivedAtMillis
+            FROM expense_source s JOIN expense e ON e.id = s.expenseId
+            WHERE e.deletedAtMillis < :cutoffMillis AND s.channel IN ('PUSH', 'SMS', 'BACKFILL')""",
+    )
+    suspend fun sourcesOfPurgeable(cutoffMillis: Long): List<eg.masroof.ingest.PurgedSource>
+
+    /** SMS sources of one channel (deleted entries included) from one sender with the same amount and card tail in a time window. */
+    @Query(
+        """SELECT COUNT(*) FROM expense_source s JOIN expense e ON e.id = s.expenseId
+            WHERE s.channel = :channel AND s.senderId = :sender AND e.currency = :currency AND e.amountMinor = :amountMinor
             AND s.instrumentLast4 IS :last4 AND s.receivedAtMillis BETWEEN :from AND :to""",
     )
-    suspend fun liveSmsCount(
+    suspend fun smsCount(
+        channel: String,
         sender: String,
         currency: String,
         amountMinor: Long,

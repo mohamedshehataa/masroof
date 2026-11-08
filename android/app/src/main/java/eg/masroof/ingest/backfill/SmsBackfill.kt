@@ -9,6 +9,7 @@ import eg.masroof.ingest.Disposition
 import eg.masroof.ingest.LocalIdHasher
 import eg.masroof.ingest.LocalIdKey
 import eg.masroof.ingest.MessageHygiene
+import eg.masroof.ingest.SAME_SMS_SLACK_MILLIS
 import eg.masroof.ingest.SenderSettings
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.capped
@@ -20,7 +21,6 @@ import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.abs
 
 /** How a run of the engine ended. A kill or a system stop ends it with no outcome at all: the state stays RUNNING and it resumes. */
 enum class BackfillOutcome { DONE, STOPPED, PERMISSION_LOST }
@@ -39,9 +39,6 @@ internal const val BACKFILL_BATCH = 200
 
 /** How long a handled message is remembered, so a deleted entry is not recorded again (the same as the review list's retention). */
 internal const val BACKFILL_MEMORY_DAYS = 30L
-
-/** The most the provider's receipt time and the live PDU's sent time are taken to differ for one SMS. */
-private const val SAME_SMS_SLACK_MILLIS = 2L * 60 * 1000
 
 /**
  * "Read past SMS" (REQ-SMS-101..103): reads the allowlisted senders of the chosen range from the inbox, oldest first, in pages, and
@@ -173,7 +170,7 @@ class SmsBackfill
             val message = IncomingMessage(CaptureSource.SMS, sms.address, sms.body, sms.stampMillis).capped()
             val id = LocalIdHasher.id(idKey.get(), message)
             // recorded by live capture, by an earlier run, or handled and since deleted/dismissed: nothing new
-            if (store.handled(id) || known(id)) return read
+            if (store.handled(id, clock.millis()) || known(id)) return read
             return when (pipeline.accept(message, CaptureChannel.BACKFILL, epoch, slackOf(sms))) {
                 Disposition.RECORDED -> read.copy(entries = read.entries + 1)
                 Disposition.REVIEW -> read.copy(review = read.review + 1)
@@ -181,11 +178,8 @@ class SmsBackfill
             }
         }
 
-        /** Without a sent time (or a different one) the provider's stamp may be seconds off the live PDU's: look around it. */
-        private fun slackOf(sms: InboxSms): Long {
-            if (sms.dateSentMillis <= 0) return SAME_SMS_SLACK_MILLIS
-            return minOf(abs(sms.dateMillis - sms.dateSentMillis), SAME_SMS_SLACK_MILLIS)
-        }
+        /** Only without a sent time is the provider's stamp possibly seconds off the live PDU's (with one, the ids match exactly). */
+        private fun slackOf(sms: InboxSms): Long = if (sms.dateSentMillis <= 0) SAME_SMS_SLACK_MILLIS else 0L
 
         private suspend fun known(id: String): Boolean =
             db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0 || db.reviews().find(id) != null

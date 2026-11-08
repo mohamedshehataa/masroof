@@ -9,6 +9,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import eg.masroof.data.auth.BackfillReset
+import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.ingest.HandledMemory
 import eg.masroof.ingest.backfill.AndroidBackfillNotifier
 import eg.masroof.ingest.backfill.BackfillNotifier
@@ -44,5 +45,6 @@ object BackfillProvidesModule {
     @Provides @Singleton
     fun backfillStore(
         @ApplicationContext context: Context,
-    ): BackfillStore = BackfillStore(context.getSharedPreferences(BackfillStore.PREFS_NAME, Context.MODE_PRIVATE))
+    ): BackfillStore =
+        BackfillStore(context.getSharedPreferences(BackfillStore.PREFS_NAME, Context.MODE_PRIVATE), TinkKeystore.aead(context))
 }

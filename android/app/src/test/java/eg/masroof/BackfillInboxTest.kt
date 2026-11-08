@@ -261,10 +261,10 @@ class BackfillInboxTest {
         store.mark("old", 1_000L)
         store.mark("recent", 9_000L)
         store.forgetBefore(5_000L)
-        assertFalse(store.handled("old"))
-        assertTrue(store.handled("recent"))
+        assertFalse(store.handled("old", 9_000L))
+        assertTrue(store.handled("recent", 9_000L))
         val reloaded = BackfillStore(context.getSharedPreferences("memory-test", Context.MODE_PRIVATE))
-        assertTrue(reloaded.handled("recent"))
+        assertTrue(reloaded.handled("recent", 9_000L))
         store.save(BackfillState(BackfillPhase.DONE, "D90", 1L, 2L, total = 3, read = 3, entries = 2, review = 1))
         assertEquals(2, BackfillStore(context.getSharedPreferences("memory-test", Context.MODE_PRIVATE)).state.value.entries)
     }
