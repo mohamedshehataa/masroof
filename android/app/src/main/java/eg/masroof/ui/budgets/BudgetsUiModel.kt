@@ -43,6 +43,8 @@ data class BudgetRowUi(
     val deletedCategory: Boolean = false,
     /** False while the engine has not answered or failed: only the name and the limit are shown then. */
     val hasProgress: Boolean = true,
+    /** A second budget for the same category and period (a restored backup can hold one): shown, marked, deletable. */
+    val duplicate: Boolean = false,
 ) {
     /** Bar fill in basis points, clamped to a full bar. */
     val barBps: Int get() = progressBps.coerceIn(0, FULL_BPS)
@@ -82,6 +84,7 @@ fun buildBudgetRows(
                 period = kind,
                 deletedCategory = deleted,
                 hasProgress = status != null,
+                duplicate = status?.duplicate == true,
             )
         }.sortedWith(compareByDescending<BudgetRowUi> { it.progressBps }.thenBy { it.id })
 }

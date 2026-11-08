@@ -291,6 +291,13 @@ private fun BudgetCard(
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(label, style = MaterialTheme.typography.labelMedium, color = levelColor(row.level))
+                    if (row.duplicate) {
+                        Text(
+                            stringResource(R.string.budgets_duplicate),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     row.daysLeft?.let {
                         Text(
                             pluralStringResource(R.plurals.budgets_days_left, it, DateFormat.number(it, style.digits)),

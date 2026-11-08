@@ -244,6 +244,17 @@ class BudgetsScreenTest {
     }
 
     @Test
+    fun `REQ-AN-155 a duplicate budget is listed with the Duplicate budget marker and can be deleted`() {
+        val dup = BudgetsFixtures.row("dup", BudgetsFixtures.GROCERIES, "Groceries", "بقالة", 100_000, 0, 0).copy(duplicate = true)
+        show(ready(listOf(dup)))
+        compose.onNodeWithText("Duplicate budget").assertIsDisplayed()
+        compose.onNodeWithText("0 EGP of 1,000 EGP").performClick()
+        compose.onNode(hasText("Delete") and hasClickAction()).performClick()
+        compose.onAllNodes(hasText("Delete") and hasClickAction()).onLast().performClick()
+        assertEquals("dup", deleted)
+    }
+
+    @Test
     fun `REQ-AND-137 a Deleted category budget is listed and can be deleted`() {
         val list = listOf(BudgetsFixtures.row("old", "gone", null, null, 100_000, 20_000, 2_000, deletedCategory = true))
         show(ready(list))

@@ -8,6 +8,7 @@
     <string name="budgets_empty_body">أضف واحدة عشان تتابع تقدمك.</string>
     <string name="budgets_all_taken">كل فئة ليها ميزانية بالفعل</string>
     <string name="budgets_all_spending">كل المصروفات</string>
+    <string name="budgets_duplicate">ميزانية مكررة</string>
     <string name="budgets_deleted_category">فئة محذوفة</string>
     <string name="budgets_category">الفئة</string>
     <string name="budgets_amount">المبلغ (ج.م)</string>

@@ -95,7 +95,7 @@ internal fun budgetRows(
     return combine(repository.observe(), repository.observeCategories(), progress) { budgets, categories, p ->
         if (p is Progress.Pending) return@combine BudgetRows(emptyList(), progressFailed = false, loading = true)
         val statuses = (p as? Progress.Ready)?.byBudget.orEmpty()
-        // a budget the engine marked as a duplicate scope is not shown: the older one of the scope is
+        // a budget saved a moment ago has no status until the engine catches up: it appears with its progress, never without
         val hidden = if (p is Progress.Ready) budgets.filter { it.id !in statuses }.map { it.id }.toSet() else emptySet()
         BudgetRows(buildBudgetRows(budgets.filter { it.id !in hidden }, categories, statuses), p is Progress.Failed)
     }

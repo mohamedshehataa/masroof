@@ -95,7 +95,7 @@ class RoomAnalyticsEngine
                                 rows,
                                 cats.map { it.toAnalytics() },
                                 o.includeCash,
-                            ).filterNot { it.duplicate }
+                            )
                     }
                 }.flowOn(io)
 

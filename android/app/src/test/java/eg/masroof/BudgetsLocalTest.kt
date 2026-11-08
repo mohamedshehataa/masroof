@@ -1,23 +1,17 @@
 package eg.masroof
 
-import android.content.Context
-import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
 import eg.masroof.core.Money
 import eg.masroof.core.analytics.AnalyticsEngine
 import eg.masroof.core.analytics.BudgetPeriodKind
 import eg.masroof.core.analytics.BudgetStatus
 import eg.masroof.core.analytics.PeriodAnalytics
 import eg.masroof.core.analytics.RoomAnalyticsEngine
-import eg.masroof.data.IdFactory
 import eg.masroof.data.budgets.BudgetDraft
 import eg.masroof.data.budgets.MAX_BUDGET_MINOR
 import eg.masroof.data.budgets.MutationOutcome
-import eg.masroof.data.budgets.RoomBudgetsRepository
 import eg.masroof.data.budgets.toSpec
-import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.BudgetEntity
 import eg.masroof.data.db.CategoryEntity
-import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.ui.budgets.BudgetLevel
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.buildBudgetRows
@@ -33,122 +27,28 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val AWAIT_MS = 10_000L
-
-/** Waits (in real time, off the test scheduler) until a combined StateFlow holds a value that satisfies [done]. */
-private suspend fun <T> StateFlow<T>.await(done: (T) -> Boolean): T =
-    withContext(Dispatchers.Default) { withTimeout(AWAIT_MS) { first(done) } }
-
-private suspend fun CompletableDeferred<Unit>.awaitReal() = withContext(Dispatchers.Default) { withTimeout(AWAIT_MS) { await() } }
-
 /**
- * STORY-181: budgets stored in Room, progress from the on-device engine, no server. Real in-memory database, real
- * repository and engine; only the clock and settings are fakes. State is awaited, never read right after an action.
+ * STORY-181: budgets stored in Room, progress from the on-device engine, no server. State is awaited, never read right
+ * after an action.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
-class BudgetsLocalTest {
-    private lateinit var db: AppDatabase
-    private val settings = FakeSettings()
-    private val now: Instant = Instant.parse("2026-10-27T10:00:00Z")
-    private val clock: Clock = Clock.fixed(now, ZoneOffset.UTC)
-    private val counter = AtomicInteger()
-    private val ids =
-        object : IdFactory {
-            override fun next() = "budget-${counter.incrementAndGet()}"
-        }
-    private val expenses = FakeRepository()
-
-    private val groceries = CategoryEntity("cat-groceries", "Groceries", "بقالة", 1)
-    private val car = CategoryEntity("cat-car", "Car", "سيارة", 2)
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-        db =
-            Room
-                .inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), AppDatabase::class.java)
-                .allowMainThreadQueries()
-                .build()
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-        db.close()
-    }
-
-    private suspend fun seedCategories(vararg extra: CategoryEntity) {
-        val all = listOf(groceries, car) + extra
-        db.lookups().upsertCategories(all)
-        expenses.categories.value = all.filterNot { it.archived }
-    }
-
-    private fun repo() = RoomBudgetsRepository(db, clock, ids, Dispatchers.Unconfined)
-
-    private fun engine() = RoomAnalyticsEngine(db, settings, clock, Dispatchers.Unconfined)
-
-    private fun vm(engine: AnalyticsEngine = engine()) = BudgetsViewModel(repo(), engine, expenses)
-
-    private fun kotlinx.coroutines.test.TestScope.watch(vm: BudgetsViewModel) {
-        backgroundScope.launch { vm.state.collect {} }
-    }
-
-    @Suppress("LongParameterList")
-    private fun entry(
-        id: String,
-        amount: Long,
-        category: String? = groceries.id,
-        type: String = "EXPENSE",
-        status: String = "CONFIRMED",
-        currency: String = "EGP",
-        at: String = "2026-10-26T08:00:00Z",
-        excluded: Boolean = false,
-        deleted: Boolean = false,
-    ) = ExpenseEntity(
-        id = id,
-        amountMinor = amount,
-        currency = currency,
-        occurredAtMillis = Instant.parse(at).toEpochMilli(),
-        merchant = null,
-        categoryId = category,
-        accountId = null,
-        notes = null,
-        pending = false,
-        type = type,
-        status = status,
-        deletedAtMillis = if (deleted) 1L else null,
-        excludedFromTotals = excluded,
-    )
-
+class BudgetsLocalTest : BudgetsRoomTestBase() {
     // ---------------------------------------------------------------- REQ-AND-136
 
     @Test
@@ -679,6 +579,29 @@ class BudgetsLocalTest {
         assertEquals(listOf(50, 80, 100, 200), stored.toSpec()!!.alertThresholds)
         assertEquals(listOf(50, 80, 100), stored.copy(alertThresholds = "x,0").toSpec()!!.alertThresholds)
     }
+
+    @Test
+    fun `REQ-AN-155 a restored duplicate budget is shown marked, the oldest feeds the remaining budget and the duplicate can be deleted`() =
+        runTest {
+            seedCategories()
+            val older = BudgetEntity("old", null, "MONTHLY", 1_000_000, "EGP", createdAtMillis = 10, updatedAtMillis = 10)
+            db.budgets().insert(older)
+            db.budgets().insert(older.copy(id = "new", amountMinor = 2_000_000, createdAtMillis = 20, updatedAtMillis = 20))
+            db.expenses().insert(entry("e", 100_000))
+            val engine = engine()
+            assertEquals(900_000L, engine.compute("current").summary.remainingBudget)
+            val vm = vm(engine)
+            watch(vm)
+            val state = vm.state.await { s -> s.rows.size == 2 && s.rows.all { it.hasProgress } }
+            assertEquals(listOf("new"), state.rows.filter { it.duplicate }.map { it.id })
+            assertFalse(state.rows.first { it.id == "old" }.duplicate)
+            val done = CompletableDeferred<Unit>()
+            vm.delete("new") { done.complete(Unit) }
+            done.awaitReal()
+            val after = vm.state.await { it.rows.size == 1 }
+            assertFalse(after.rows.single().duplicate)
+            assertEquals(900_000L, engine.compute("current").summary.remainingBudget)
+        }
 
     @Test
     fun `REQ-AND-138 the screen state shows nothing about a server, last update or offline`() =
