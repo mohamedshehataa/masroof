@@ -28,6 +28,8 @@ class MasroofApp :
 
     @Inject lateinit var purgeScheduler: PurgeScheduler
 
+    @Inject lateinit var netWorthScheduler: eg.masroof.work.NetWorthSnapshotScheduler
+
     @Inject lateinit var workManager: WorkManager
 
     @Inject lateinit var receipts: ReceiptStore
@@ -54,6 +56,8 @@ class MasroofApp :
         eraser.recoverInterrupted()
         // Entries deleted more than 30 days ago are removed now and then once a day (REQ-EXP-046).
         purgeScheduler.schedule()
+        // One net worth point per Cairo day: at app start and once a day (REQ-AN-169).
+        netWorthScheduler.schedule()
         // Camera temp photos a killed session left in the cache (older than an hour, so one being copied stays).
         appScope.launch(Dispatchers.IO) {
             runCatching {

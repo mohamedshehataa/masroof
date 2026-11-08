@@ -44,6 +44,7 @@ fun SettingsRoute(
     onToggleLanguage: () -> Unit = {},
     onOpenReview: () -> Unit = {},
     onOpenReceipts: () -> Unit = {},
+    onOpenWealth: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -60,6 +61,7 @@ fun SettingsRoute(
             onToggleLanguage,
         ),
         extra = {
+            YourMoneySection(onOpenWealth = onOpenWealth)
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
