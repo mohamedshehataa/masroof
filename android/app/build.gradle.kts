@@ -104,6 +104,9 @@ androidComponents {
     beforeVariants(selector().withBuildType("release")) { it.enableUnitTest = false }
 }
 
+// BackupManifestTest reads the merged manifest (what the APK really declares, libraries included).
+tasks.matching { it.name == "testDebugUnitTest" }.configureEach { dependsOn("processDebugMainManifest") }
+
 kotlin {
     jvmToolchain(21)
     compilerOptions {
@@ -158,6 +161,8 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.tink.android)
+    // Argon2id for the backup file (ADR-0009 D5); pure Java, so the RFC 9106 vector runs in JVM unit tests.
+    implementation(libs.bouncycastle.bcprov)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

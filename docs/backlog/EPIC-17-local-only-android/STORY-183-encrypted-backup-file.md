@@ -3,7 +3,7 @@ id: STORY-183
 epic: EPIC-17
 title: Save an encrypted backup of everything to a file the user chooses
 phase: 9
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -121,3 +121,8 @@ STORY-174 (receipts), STORY-181 (budgets table)
 
 ## Note from STORY-203 (backup scope)
 The "subscriptions" DataStore (`subscriptions.preferences_pb`) holds data that is not in Room and must be part of the backup file and its restore: per-subscription anchor day (`anchor_days`, entries `id:day`, plus `since:<id>` resume cutoffs), dismissed suggestion keys (`dismissed_suggestions`) and pending price notices (`price_notices`). Without the anchor days a restored 30th-of-month subscription falls back to the month-end rule.
+| 2026-11-08 | 5 build | android-engineer | Settings -> Back up now: Argon2id + Tink streaming AEAD file via SAF, foreground task, pref and table guards |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 FAIL (pref keys on neither list silently left out); loop 2 PASS on e5114a6 |
+| 2026-11-08 | 7 review | security-reviewer | round 1 CHANGES_REQUESTED (template SQL); round 2 APPROVE |
+| 2026-11-08 | 7 fix | android-engineer | MINORs (empty-only discard, per-store guard, staging tests and sweep) in ee74d60, diff reviewed |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

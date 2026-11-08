@@ -66,6 +66,7 @@ fun SettingsRoute(
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             ReceiptsStorageSection(onOpenReceipts = onOpenReceipts)
+            BackupSection()
             CategoriesSettingsSection(onOpenCategories, onOpenRules)
             AnswersSettingsSection()
             ExportCsvSection()
