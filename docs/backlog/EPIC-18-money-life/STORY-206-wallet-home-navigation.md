@@ -3,7 +3,7 @@ id: STORY-206
 epic: EPIC-18
 title: Wallet home and new tabs - spent, balance and what you owe at a glance, quick actions, insight tiles
 phase: 7
-status: READY
+status: DONE
 risk_tier: low
 size: M
 modules: [android]
@@ -86,3 +86,8 @@ STORY-199, STORY-200, STORY-202, STORY-204, STORY-205
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-11-08 | 1 spec | orchestrator | READY - EPIC-18 wave 4 |
+| 2026-11-08 | 5 build | android-engineer | Wallet home, bottom tabs Wallet/Bills/Plan/Wealth/Ask, "don't count" flag |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 FAIL (account picker missed SMS spending; old Home tests on dead code) |
+| 2026-11-08 | 6 verify | qa-verifier | loop 2 FAIL (Home view models dead but carrying REQ tests) |
+| 2026-11-08 | 6 verify | qa-verifier | loop 3 PASS on 66fee5a - 1 MINOR fixed at integration, 4 NIT |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |
