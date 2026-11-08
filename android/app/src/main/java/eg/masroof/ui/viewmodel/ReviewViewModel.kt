@@ -12,8 +12,14 @@ import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.categories.filedByRule
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.CategoryEntity
 import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.db.reviewCutoff
+import eg.masroof.data.edit.DuplicateCard
+import eg.masroof.data.edit.DuplicateRepository
+import eg.masroof.data.edit.MergeResult
+import eg.masroof.data.edit.MergeUndo
+import eg.masroof.data.edit.NoDuplicates
 import eg.masroof.di.IoDispatcher
 import eg.masroof.ingest.CaptureRows
 import eg.masroof.ingest.ChannelPairing
@@ -42,6 +48,20 @@ private const val STOP_TIMEOUT = 5_000L
 
 /** What one tap on Save did. */
 enum class ReviewSaveResult { SAVED, ALREADY_RECORDED, AMOUNT_INVALID, FAILED, NOTHING }
+
+/** What a tap on Merge (or on its Undo) did. */
+sealed interface MergeEvent {
+    data class Merged(
+        val undo: MergeUndo,
+    ) : MergeEvent
+
+    data object OutOfDate : MergeEvent
+
+    data object Failed : MergeEvent
+
+    /** An entry changed since the merge: Undo can no longer put both back. */
+    data object UndoFailed : MergeEvent
+}
 
 /** The engine's suggestion as a typed record; null when it is not complete enough to save with one tap. */
 private fun ReviewItemEntity.toRecord(): ParsedRecord? {
@@ -81,6 +101,7 @@ class ReviewViewModel
         private val ids: IdFactory = UuidIdFactory(),
         private val signal: LocalDataSignal = LocalDataSignal(),
         private val eraseLock: EraseLock = EraseLock(),
+        private val duplicates: DuplicateRepository = NoDuplicates,
     ) : ViewModel() {
         private val pairing = ChannelPairing(db, clock, NoCapturedNotifier)
         private val _results = MutableSharedFlow<ReviewSaveResult>(extraBufferCapacity = 4)
@@ -94,6 +115,51 @@ class ReviewViewModel
                 .observeAll(reviewCutoff(clock.millis()))
                 .map<List<ReviewItemEntity>, List<ReviewItemEntity>?> { it }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), null)
+
+        /** STORY-173: the "Possible duplicate" cards (a manual entry and a capture that look alike), newest first. */
+        val duplicateCards: StateFlow<List<DuplicateCard>> =
+            duplicates.observeCards().stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), emptyList())
+
+        val categories: StateFlow<List<CategoryEntity>> =
+            db.lookups().observeLabelCategories().stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), emptyList())
+
+        private val _merges = MutableSharedFlow<MergeEvent>(extraBufferCapacity = 4)
+
+        /** What a Merge or an Undo did, for the snackbar. */
+        val merges: SharedFlow<MergeEvent> = _merges
+
+        /** Main thread only: a second tap while a merge runs is ignored (it would find the first one done and say "out of date"). */
+        private var merging = false
+
+        /** Merge on a tap, never on its own (REQ-DEDUP-065). */
+        fun merge(card: DuplicateCard) {
+            if (merging) return
+            merging = true
+            viewModelScope.launch {
+                try {
+                    val event =
+                        when (val r = withContext(io) { duplicates.merge(card.manual.id, card.capture.id) }) {
+                            is MergeResult.Merged -> MergeEvent.Merged(r.undo)
+                            MergeResult.OutOfDate -> MergeEvent.OutOfDate
+                            MergeResult.Failed -> MergeEvent.Failed
+                        }
+                    _merges.tryEmit(event)
+                } finally {
+                    merging = false
+                }
+            }
+        }
+
+        /** "Keep both", and a swipe-dismiss of the card: the pair never asks again. */
+        fun keepBoth(card: DuplicateCard) {
+            viewModelScope.launch { withContext(io) { duplicates.keepBoth(card.manual.id, card.capture.id) } }
+        }
+
+        fun undoMerge(token: MergeUndo) {
+            viewModelScope.launch {
+                if (!withContext(io) { duplicates.undo(token) }) _merges.tryEmit(MergeEvent.UndoFailed)
+            }
+        }
 
         /**
          * One tap: the engine's suggestion becomes a local entry with its source (the same rows as an auto-recorded message), the

@@ -19,6 +19,20 @@ object DateFormat {
         digits: DigitStyle,
     ): String = digitsAs(DateTimeFormatter.ofPattern("d MMM", locale(arabic)).format(date), digits)
 
+    /** `14:05` in Cairo time, in the chosen digits (an entry's time of day, STORY-173). */
+    fun timeOfDay(
+        epochMillis: Long,
+        digits: DigitStyle,
+    ): String =
+        digitsAs(
+            DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).format(
+                java.time.Instant
+                    .ofEpochMilli(epochMillis)
+                    .atZone(CairoTime.zone),
+            ),
+            digits,
+        )
+
     /** Month name only: `Oct` / `أكتوبر`. */
     fun monthShort(
         date: LocalDate,

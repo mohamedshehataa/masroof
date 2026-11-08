@@ -77,6 +77,8 @@ sealed interface EditOutcome {
     data object LinkedRefund : EditOutcome
 }
 
+enum class RestoreOutcome { Restored, NothingToRestore, MergedAway }
+
 interface ExpenseEditor {
     /** The entry, unless it is missing or soft-deleted. */
     suspend fun find(id: String): ExpenseEntity?
@@ -101,6 +103,9 @@ interface ExpenseEditor {
 
     /** Undo of [delete]. Returns false when there was nothing to restore. */
     suspend fun restore(id: String): Boolean
+
+    /** [restore] with the reason when nothing came back: a typed entry that a merge folded into a capture is never restored. */
+    suspend fun restoreOutcome(id: String): RestoreOutcome = if (restore(id)) RestoreOutcome.Restored else RestoreOutcome.NothingToRestore
 }
 
 private const val DELETION_BUFFER = 16
@@ -232,7 +237,17 @@ class DefaultExpenseEditor
                 }
             }
 
-        override suspend fun restore(id: String): Boolean {
+        override suspend fun restore(id: String): Boolean = restoreOutcome(id) == RestoreOutcome.Restored
+
+        override suspend fun restoreOutcome(id: String): RestoreOutcome =
+            when {
+                // its sources and receipts live on the survivor now: restoring it would count the purchase twice (STORY-173)
+                pairs.isMergedAway(id) -> RestoreOutcome.MergedAway
+                restoreRows(id) -> RestoreOutcome.Restored
+                else -> RestoreOutcome.NothingToRestore
+            }
+
+        private suspend fun restoreRows(id: String): Boolean {
             val links = pairs.linksOf(id)
             val partners = links.mapNotNull { it.deletablePartnerOf(id) }
             val changed =
