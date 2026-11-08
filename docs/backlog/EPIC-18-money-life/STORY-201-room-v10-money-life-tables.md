@@ -107,7 +107,7 @@ None.
 - [x] Data / migration impact
 - [x] Security / privacy / LLM-safety impact
 - [x] Eval impact
-- [x] Size: M+ (14 tables and 3 altered ones, mechanical: entities/DAOs ~400, migration ~160, tests ~300)
+- [x] Size: M+ (13 tables and 3 altered ones, mechanical: entities/DAOs ~400, migration ~160, tests ~300)
 - [x] Dependencies listed
 
 ## Status log
