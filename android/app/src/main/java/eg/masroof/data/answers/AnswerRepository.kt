@@ -28,7 +28,12 @@ interface AnswerRepository {
     fun observeCards(): Flow<List<AnswerCard>>
 
     val ignoredCards: Flow<List<String>>
+
+    /** The effective ATM choice: the "Count ATM withdrawals as spending" switch on always reads as COUNT. */
     val atmChoice: Flow<AtmChoice?>
+
+    /** Linked card tails and the account each files under (an archived account's link is not listed). */
+    val cardLinks: Flow<Map<String, String>>
 
     /** "Pick another": the purchases a refund may reverse. */
     suspend fun pickList(refundId: String): List<PurchaseOption>
@@ -37,6 +42,9 @@ interface AnswerRepository {
         refundId: String,
         purchaseId: String,
     ): AnswerUndo?
+
+    /** "Yes, a refund" for a purchase that is not in Masroof: the entry stays a refund and the card closes. */
+    suspend fun confirmRefund(entryId: String): AnswerUndo?
 
     suspend fun notRefund(entryId: String): AnswerUndo?
 
@@ -58,19 +66,18 @@ interface AnswerRepository {
 
     suspend fun countCash(entryId: String): AnswerUndo?
 
-    /** Settings: Track as cash / Count as spending / Ask me. */
+    /** Settings: Track as cash / Count as spending / Ask me. One source of truth with the spending switch. */
     suspend fun setAtmChoice(choice: AtmChoice?)
 
     suspend fun restoreIgnored(last4: String)
 
+    suspend fun removeCardLink(last4: String)
+
     /** Puts back exactly what the answer changed. */
     suspend fun undo(token: AnswerUndo): Boolean
 
-    /** The other side of a linked transfer pair, deleted or not (Undo of a delete restores it with the entry). */
-    suspend fun pairPartnerId(entryId: String): String?
-
-    /** The other side of a linked transfer pair that is still there, for "Delete both?". */
-    suspend fun livePartnerOf(entryId: String): String?
+    /** The links of an entry, for "Delete both?" and for releasing a converted entry. */
+    suspend fun linksOf(entryId: String): List<EntryLink>
 }
 
 private const val CONFIRMED = "CONFIRMED"
@@ -100,10 +107,24 @@ class DefaultAnswerRepository
             }
 
         override val ignoredCards: Flow<List<String>> = prefs.state.map { it.ignoredCards.sorted() }
-        override val atmChoice: Flow<AtmChoice?> = prefs.state.map { it.atmChoice }
+
+        override val atmChoice: Flow<AtmChoice?> =
+            combine(prefs.state, settings.settings.map { it.includeCashWithdrawals }.distinctUntilChanged()) { s, include ->
+                when {
+                    include -> AtmChoice.COUNT
+                    s.atmChoice == AtmChoice.TRACK -> AtmChoice.TRACK
+                    else -> null
+                }
+            }
+
+        override val cardLinks: Flow<Map<String, String>> =
+            combine(prefs.state, db.lookups().observeAccounts()) { s, accounts ->
+                val active = accounts.filter { !it.archived }.mapTo(HashSet()) { it.id }
+                s.aliases.filterValues { it in active }
+            }
 
         override suspend fun pickList(refundId: String): List<PurchaseOption> {
-            val refund = db.expenses().find(refundId)?.takeIf { it.deletedAtMillis == null } ?: return emptyList()
+            val refund = live(refundId) ?: return emptyList()
             return AnswerCards.pickList(refund, db.expenses().liveSince(AnswerCards.lookbackStart(clock.millis())))
         }
 
@@ -116,6 +137,7 @@ class DefaultAnswerRepository
                 val purchase = live(purchaseId)
                 if (refund == null || purchase == null) return@answer null
                 if (refund.type !in refundable || refund.currency != purchase.currency) return@answer null
+                if (purchase.type != ExpenseTypes.EXPENSE || purchase.amountMinor < refund.amountMinor) return@answer null
                 db.expenses().update(
                     refund.copy(
                         type = ExpenseTypes.REFUND,
@@ -124,10 +146,15 @@ class DefaultAnswerRepository
                         updatedAtMillis = clock.millis(),
                     ),
                 )
-                AnswerUndo(
-                    restore = listOf(refund),
-                    added = AnswerState(answered = setOf(refundId), links = setOf(EntryLink(LinkKind.REFUND, refundId, purchaseId))),
-                )
+                val link = EntryLink(LinkKind.REFUND, refundId, purchaseId, converted = refundId, origType = refund.type)
+                AnswerUndo(restore = listOf(refund), added = AnswerState(answered = setOf(refundId), links = setOf(link)))
+            }
+
+        override suspend fun confirmRefund(entryId: String): AnswerUndo? =
+            answer {
+                val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.REFUND } ?: return@answer null
+                db.expenses().update(entry.copy(status = CONFIRMED, updatedAtMillis = clock.millis()))
+                AnswerUndo(restore = listOf(entry), added = AnswerState(answered = setOf(entryId)))
             }
 
         override suspend fun notRefund(entryId: String): AnswerUndo? =
@@ -156,31 +183,36 @@ class DefaultAnswerRepository
                 val target = accounts.firstOrNull { it.id == accountId && !it.archived && it.currency == entry.currency }
                 val outgoing = entry.type == ExpenseTypes.TRANSFER
                 if (target == null || (!outgoing && entry.type != ExpenseTypes.INCOME)) return@answer null
+                // Both sides must be known, or one balance moves alone and net worth changes.
+                val own = AnswerCards.ownerOf(accounts, entry, state.aliases)
+                if (own == null || own == accountId) return@answer null
                 val now = clock.millis()
                 val live = db.expenses().liveSince(AnswerCards.lookbackStart(now))
-                val own = AnswerCards.ownerOf(accounts, entry)
                 val ownLabel = accounts.firstOrNull { it.id == own }?.label
                 val partner = AnswerCards.counterpart(entry, accountId, live, accounts, state, outgoing)
+                val confirmed = entry.copy(status = CONFIRMED)
                 val restore = mutableListOf<ExpenseEntity>()
                 val inserted = mutableListOf<String>()
+                var converted: ExpenseEntity? = null
                 val partnerId: String
                 if (partner != null) {
-                    restore += partner
                     partnerId = partner.id
-                    val next =
-                        if (outgoing) {
-                            partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId)
-                        } else {
-                            partner.copy(accountId = accountId)
-                        }
-                    db.expenses().update(next.copy(status = CONFIRMED, updatedAtMillis = now))
+                    if (outgoing) {
+                        // the other bank's own entry, attributed to the chosen account and arriving after the send
+                        restore += partner
+                        converted = partner
+                        db.expenses().update(
+                            partner.copy(type = ExpenseTypes.TRANSFER_IN, accountId = accountId, status = CONFIRMED, updatedAtMillis = now),
+                        )
+                    }
                 } else {
                     val type = if (outgoing) ExpenseTypes.TRANSFER_IN else ExpenseTypes.TRANSFER
-                    partnerId = AnswerWrites.insertPairSide(db, ids, entry, type, accountId, ownLabel, now)
+                    partnerId = AnswerWrites.insertPairSide(db, confirmed, type, accountId, ownLabel, now)
                     inserted += partnerId
                 }
                 if (!outgoing) {
                     restore += entry
+                    converted = entry
                     db.expenses().update(
                         entry.copy(
                             type = ExpenseTypes.TRANSFER_IN,
@@ -190,8 +222,17 @@ class DefaultAnswerRepository
                         ),
                     )
                 }
+                val (out, inn) = if (outgoing) entryId to partnerId else partnerId to entryId
                 val link =
-                    if (outgoing) EntryLink(LinkKind.TRANSFER, entryId, partnerId) else EntryLink(LinkKind.TRANSFER, partnerId, entryId)
+                    EntryLink(
+                        LinkKind.TRANSFER,
+                        out,
+                        inn,
+                        inserted = inserted.firstOrNull().orEmpty(),
+                        converted = converted?.id.orEmpty(),
+                        origType = converted?.type.orEmpty(),
+                        origAccountId = converted?.accountId.orEmpty(),
+                    )
                 AnswerUndo(
                     restore = restore,
                     deleteExpenses = inserted,
@@ -226,20 +267,19 @@ class DefaultAnswerRepository
                 }
             }
 
-        override suspend fun trackCash(entryId: String): AnswerUndo? =
-            answer {
-                val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
-                val tracked =
-                    AnswerWrites.trackWithdrawal(
-                        db,
-                        ids,
-                        entry,
-                        db.accountBalances().accounts(),
-                        cashLabel.label(),
-                        clock.millis(),
-                    )
-                tracked.copy(added = tracked.added.copy(atmChoice = AtmChoice.TRACK))
-            }
+        override suspend fun trackCash(entryId: String): AnswerUndo? {
+            val before = settings.current().includeCashWithdrawals
+            val undo =
+                answer {
+                    val entry = live(entryId)?.takeIf { it.type == ExpenseTypes.CASH_WITHDRAWAL } ?: return@answer null
+                    val tracked =
+                        AnswerWrites.trackWithdrawal(db, ids, entry, db.accountBalances().accounts(), cashLabel.label(), clock.millis())
+                    tracked.copy(added = tracked.added.copy(atmChoice = AtmChoice.TRACK), includeCashBefore = before)
+                } ?: return null
+            // one source of truth: Track it turns the "Count ATM withdrawals as spending" switch off
+            settings.update { it.copy(includeCashWithdrawals = false) }
+            return undo
+        }
 
         override suspend fun countCash(entryId: String): AnswerUndo? {
             val before = settings.current().includeCashWithdrawals
@@ -253,72 +293,80 @@ class DefaultAnswerRepository
         }
 
         override suspend fun setAtmChoice(choice: AtmChoice?) {
-            prefs.edit { it.copy(atmChoice = choice) }
-            when (choice) {
-                AtmChoice.TRACK -> settings.update { it.copy(includeCashWithdrawals = false) }
-                AtmChoice.COUNT -> settings.update { it.copy(includeCashWithdrawals = true) }
-                null -> Unit
+            eraseLock.mutex.withLock {
+                prefs.edit { it.copy(atmChoice = choice) }
+                settings.update { it.copy(includeCashWithdrawals = choice == AtmChoice.COUNT) }
             }
             signal.changed()
         }
 
         override suspend fun restoreIgnored(last4: String) {
-            prefs.edit { it.copy(ignoredCards = it.ignoredCards - last4) }
+            eraseLock.mutex.withLock { prefs.edit { it.copy(ignoredCards = it.ignoredCards - last4) } }
+            signal.changed()
+        }
+
+        override suspend fun removeCardLink(last4: String) {
+            eraseLock.mutex.withLock { prefs.edit { it.copy(aliases = it.aliases - last4) } }
             signal.changed()
         }
 
         override suspend fun undo(token: AnswerUndo): Boolean {
             val ok =
                 eraseLock.mutex.withLock {
-                    db.withTransaction {
-                        token.restore.forEach { original ->
-                            if (db.expenses().find(original.id) != null) db.expenses().update(original)
+                    val done =
+                        db.withTransaction {
+                            token.restore.forEach { original ->
+                                if (db.expenses().find(original.id) != null) db.expenses().update(original)
+                            }
+                            token.deleteExpenses.forEach { db.expenses().delete(it) }
+                            token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
+                            true
                         }
-                        token.deleteExpenses.forEach { db.expenses().delete(it) }
-                        token.deleteAccounts.forEach { db.accountBalances().deleteAccount(it) }
-                        true
+                    val a = token.added
+                    prefs.edit { s ->
+                        s.copy(
+                            answered = s.answered - a.answered,
+                            links = s.links - a.links,
+                            ignoredCards = s.ignoredCards - a.ignoredCards,
+                            aliases = s.aliases.filterNot { (k, v) -> a.aliases[k] == v },
+                            atmChoice = if (a.atmChoice != null && s.atmChoice == a.atmChoice) token.atmBefore else s.atmChoice,
+                        )
                     }
+                    done
                 }
-            val a = token.added
-            prefs.edit { s ->
-                s.copy(
-                    answered = s.answered - a.answered,
-                    links = s.links - a.links,
-                    ignoredCards = s.ignoredCards - a.ignoredCards,
-                    aliases = s.aliases.filterNot { (k, v) -> a.aliases[k] == v },
-                    atmChoice = if (a.atmChoice != null && s.atmChoice == a.atmChoice) token.atmBefore else s.atmChoice,
-                )
-            }
             token.includeCashBefore?.let { before -> settings.update { it.copy(includeCashWithdrawals = before) } }
             signal.changed()
             return ok
         }
 
-        override suspend fun pairPartnerId(entryId: String): String? = prefs.current().pairPartner(entryId)
-
-        override suspend fun livePartnerOf(entryId: String): String? {
-            val partner = prefs.current().pairPartner(entryId) ?: return null
-            return partner.takeIf { live(it) != null }
-        }
+        override suspend fun linksOf(entryId: String): List<EntryLink> = prefs.current().linksOf(entryId)
 
         private suspend fun live(id: String): ExpenseEntity? = db.expenses().find(id)?.takeIf { it.deletedAtMillis == null }
 
-        /** One Room transaction (after a running erase), then the remembered state, then the lists are told. Null = nothing to answer. */
+        /**
+         * One Room transaction, then the remembered state, both while the erase lock is held (an "Erase all data" cannot interleave
+         * and leave links of rows that no longer exist). Inserted rows have deterministic ids, so repeating an answer that was cut
+         * short between the two writes is a no-op. Null = nothing to answer.
+         */
         private suspend fun answer(block: suspend () -> AnswerUndo?): AnswerUndo? {
-            val undo = eraseLock.mutex.withLock { db.withTransaction { block() } } ?: return null
-            val a = undo.added
-            val atmBefore = prefs.current().atmChoice
-            prefs.edit { s ->
-                s.copy(
-                    answered = s.answered + a.answered,
-                    links = s.links + a.links,
-                    ignoredCards = s.ignoredCards + a.ignoredCards,
-                    aliases = s.aliases + a.aliases,
-                    atmChoice = a.atmChoice ?: s.atmChoice,
-                )
-            }
+            val undo =
+                eraseLock.mutex.withLock {
+                    val done = db.withTransaction { block() } ?: return@withLock null
+                    val a = done.added
+                    val atmBefore = prefs.current().atmChoice
+                    prefs.edit { s ->
+                        s.copy(
+                            answered = s.answered + a.answered,
+                            links = s.links + a.links,
+                            ignoredCards = s.ignoredCards + a.ignoredCards,
+                            aliases = s.aliases + a.aliases,
+                            atmChoice = a.atmChoice ?: s.atmChoice,
+                        )
+                    }
+                    if (a.atmChoice != null) done.copy(atmBefore = atmBefore) else done
+                } ?: return null
             signal.changed()
-            return if (a.atmChoice != null) undo.copy(atmBefore = atmBefore) else undo
+            return undo
         }
 
         private companion object {
@@ -335,13 +383,13 @@ class ResourceCashAccountLabel
         override fun label(): String = context.getString(R.string.answers_cash_account)
     }
 
-/** Looks up the other side of a linked transfer pair (live or deleted). The editor deletes and restores the pair together. */
+/** The links of an entry (live or deleted). The editor deletes, releases and restores pairs with them. */
 interface PairLookup {
-    suspend fun partnerOf(entryId: String): String?
+    suspend fun linksOf(entryId: String): List<EntryLink>
 }
 
 object NoPairLookup : PairLookup {
-    override suspend fun partnerOf(entryId: String): String? = null
+    override suspend fun linksOf(entryId: String): List<EntryLink> = emptyList()
 }
 
 @Singleton
@@ -350,5 +398,5 @@ class AnswerPairLookup
     constructor(
         private val repository: AnswerRepository,
     ) : PairLookup {
-        override suspend fun partnerOf(entryId: String): String? = repository.pairPartnerId(entryId)
+        override suspend fun linksOf(entryId: String): List<EntryLink> = repository.linksOf(entryId)
     }

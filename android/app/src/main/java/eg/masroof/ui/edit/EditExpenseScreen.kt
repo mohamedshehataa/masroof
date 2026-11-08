@@ -143,8 +143,8 @@ fun EditExpenseContent(
     if (form.confirmDelete) {
         AlertDialog(
             onDismissRequest = actions.onDismissDelete,
-            title = { Text(stringResource(if (form.hasPartner) R.string.answers_delete_pair_title else R.string.edit_delete_title)) },
-            text = { Text(stringResource(if (form.hasPartner) R.string.answers_delete_pair_body else R.string.edit_delete_body)) },
+            title = { Text(stringResource(deleteTitle(form))) },
+            text = { Text(stringResource(deleteBody(form))) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
                     if (form.hasPartner) {
@@ -154,7 +154,13 @@ fun EditExpenseContent(
                     }
                     TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(
-                            stringResource(if (form.hasPartner) R.string.answers_delete_this_only else R.string.edit_delete),
+                            stringResource(
+                                when {
+                                    form.partnerIsRefund -> R.string.answers_delete_keep_refund
+                                    form.hasPartner -> R.string.answers_delete_this_only
+                                    else -> R.string.edit_delete
+                                },
+                            ),
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -168,6 +174,20 @@ fun EditExpenseContent(
         )
     }
 }
+
+private fun deleteTitle(form: eg.masroof.ui.viewmodel.EditFormState) =
+    when {
+        form.partnerIsRefund -> R.string.answers_delete_refund_title
+        form.hasPartner -> R.string.answers_delete_pair_title
+        else -> R.string.edit_delete_title
+    }
+
+private fun deleteBody(form: eg.masroof.ui.viewmodel.EditFormState) =
+    when {
+        form.partnerIsRefund -> R.string.answers_delete_refund_body
+        form.hasPartner -> R.string.answers_delete_pair_body
+        else -> R.string.edit_delete_body
+    }
 
 @Composable
 private fun EditFields(

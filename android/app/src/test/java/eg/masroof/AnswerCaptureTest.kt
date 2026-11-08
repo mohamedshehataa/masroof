@@ -92,6 +92,7 @@ class AnswerCaptureTest {
     @Test
     fun `REQ-EXP-066 a linked card files its captures under the account`() =
         runTest {
+            db.lookups().upsertAccounts(listOf(answerAccount("cib", "CIB", last4 = "1111")))
             prefs.edit { it.copy(aliases = mapOf("4512" to "cib")) }
             pipeline().accept(sms(purchase))
             assertEquals(
@@ -114,7 +115,11 @@ class AnswerCaptureTest {
             assertEquals(setOf("TRANSFER", "TRANSFER_IN"), all.map { it.type }.toSet())
             assertEquals(1, db.accountBalances().accounts().count { it.kind == "CASH" })
             val out = all.single { it.type == "TRANSFER" }
-            assertNotNull(prefs.flow.value.pairPartner(out.id))
+            assertNotNull(
+                prefs.flow.value
+                    .linksOf(out.id)
+                    .singleOrNull(),
+            )
             val localId =
                 db
                     .captured()

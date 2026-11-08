@@ -15,7 +15,15 @@
     <string name="answers_candidate">%1$s %2$s on %3$s</string>
     <string name="answers_candidate_no_merchant">%1$s on %2$s</string>
     <string name="answers_refund_link">Yes, link it</string>
+    <string name="answers_refund_yes">Yes, a refund</string>
     <string name="answers_pick_another">Pick another</string>
+    <string name="answers_delete_refund_title">A refund is linked to this</string>
+    <string name="answers_delete_refund_body">Delete the refund too, or keep it as income?</string>
+    <string name="answers_delete_keep_refund">Keep the refund as income</string>
+    <string name="answers_links_title">Linked cards</string>
+    <string name="answers_link_item">•••• %1$s → %2$s</string>
+    <string name="answers_remove">Remove</string>
+    <string name="answers_remove_desc">Remove the link of the card ending %1$s</string>
     <string name="answers_not_refund">Not a refund</string>
     <string name="answers_pick_title">Which purchase?</string>
     <string name="answers_pick_empty">No purchases in the last 60 days</string>

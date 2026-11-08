@@ -106,12 +106,12 @@ class AnswerCardsTest {
     }
 
     @Test
-    fun `REQ-EXP-065 a transfer whose card is unknown can go to any of the accounts, and a linked pair never asks`() {
+    fun `REQ-EXP-065 a transfer from an unknown card asks nothing (both sides must be known), and a linked pair never asks`() {
         val out = answerEntry("t", type = "TRANSFER", amount = 500_000, last4 = "9999", method = "BANK_TRANSFER")
-        val card = cards(listOf(out)).filterIsInstance<AnswerCard.Transfer>().single()
-        assertEquals(setOf("cib", "nbe"), card.options.map { it.id }.toSet())
+        assertTrue(cards(listOf(out)).filterIsInstance<AnswerCard.Transfer>().isEmpty())
         val state = AnswerState(links = setOf(EntryLink(LinkKind.TRANSFER, "t", "x")))
-        assertTrue(cards(listOf(out), state = state).filterIsInstance<AnswerCard.Transfer>().isEmpty())
+        val known = out.copy(instrumentLast4 = "1111")
+        assertTrue(cards(listOf(known), state = state).filterIsInstance<AnswerCard.Transfer>().isEmpty())
     }
 
     // ---- REQ-EXP-066

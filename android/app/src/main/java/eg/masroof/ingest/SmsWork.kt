@@ -14,6 +14,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import eg.masroof.data.IdFactory
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.SettingsRepository
 import eg.masroof.data.UuidIdFactory
 import eg.masroof.data.answers.AnswerPrefs
 import eg.masroof.data.answers.AnswerState
@@ -123,6 +124,7 @@ class SmsPipeline
         private val eraseLock: EraseLock = EraseLock(),
         private val answers: AnswerPrefs = NoAnswerPrefs,
         private val cashLabel: CashAccountLabel = CashAccountLabel { "Cash" },
+        private val appSettings: SettingsRepository? = null,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
 
@@ -139,7 +141,7 @@ class SmsPipeline
             val applied = TemplateLearning.apply(db, message, MessageParser.parse(message))
             val outcome = applied.outcome
             // Ignored cards, card aliases and the ATM choice (STORY-208): read before the transaction, applied inside it.
-            val answerState = answers.current()
+            val answerState = effectiveAnswers()
             // Waits for a running erase or recovery, like a manual save. The gate and the setting are checked once more inside the
             // transaction, right before anything is written, so an intake that was in flight when capture was switched off (or an
             // erase began) writes nothing.
@@ -156,12 +158,23 @@ class SmsPipeline
                     }
                 }
             if (stored.links.isNotEmpty()) {
-                answers.edit { s -> s.copy(links = s.links + stored.links, answered = s.answered + stored.links.map { it.first }) }
+                // under the erase lock: an "Erase all data" that ran in between must not be followed by links of rows that are gone
+                eraseLock.mutex.withLock {
+                    if (gate.isOpen()) {
+                        answers.edit { s -> s.copy(links = s.links + stored.links, answered = s.answered + stored.links.map { it.first }) }
+                    }
+                }
             }
             stored.withdraw?.let(notifier::cancel)
             stored.notice?.let(notifier::captured)
             if (stored.changed) signal.changed()
             return stored.disposition
+        }
+
+        /** The remembered answers; with "Count ATM withdrawals as spending" on, the ATM choice is COUNT whatever was stored. */
+        private suspend fun effectiveAnswers(): AnswerState {
+            val stored = answers.current()
+            return if (appSettings?.current()?.includeCashWithdrawals == true) stored.copy(atmChoice = AtmChoice.COUNT) else stored
         }
 
         private suspend fun store(
@@ -213,13 +226,13 @@ class SmsPipeline
             val now = clock.millis()
             db.captured().purgeBefore(capturedCutoff(now))
             db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
+            // The same message again (a re-run job, a double delivery) is the same record: no second entry, row or notice. The source
+            // row outlives an Undo, and a paired twin has its own source row, so this also holds for an undone entry (30 days).
+            if (db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0) return Stored(Disposition.RECORDED)
             // REQ-EXP-066: a card the user chose to ignore never becomes an entry. It got here through the OTP/promo/secret filters
             // already (a record exists only after them); it waits in the review list, described from its typed fields only.
             val last4 = r.instrumentLast4
             if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
-            // The same message again (a re-run job, a double delivery) is the same record: no second entry, row or notice. The source
-            // row outlives an Undo, and a paired twin has its own source row, so this also holds for an undone entry (30 days).
-            if (db.sources().countByLocalSourceId(id) > 0 || db.captured().knows(id) > 0) return Stored(Disposition.RECORDED)
             // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now)
@@ -228,7 +241,9 @@ class SmsPipeline
             val entry =
                 CaptureRows.expense(expenseId, r, now).filedByRule(db, r.merchant).let { e ->
                     val linked = last4?.let { answerState.aliases[it] }
-                    if (linked != null) e.copy(accountId = linked) else e
+                    // a link to an account that was archived since is dropped: the card asks again
+                    val usable = linked != null && db.accountBalances().accounts().any { it.id == linked && !it.archived }
+                    if (usable) e.copy(accountId = linked) else e
                 }
             db.expenses().insert(entry)
             db.sources().insert(CaptureRows.source(ids.next(), expenseId, r, id, receivedAt))
@@ -250,6 +265,12 @@ class SmsPipeline
             receivedAt: Long,
             now: Long,
         ): Stored {
+            // the same purchase announced by the other channel (SMS + notification) is one review item, not two
+            val last4 = r.instrumentLast4.orEmpty()
+            val window = TWIN_WINDOW_MILLIS
+            if (db.reviews().countIgnoredTwins(last4, r.amountMinor, receivedAt - window, receivedAt + window) > 0) {
+                return Stored(Disposition.REVIEW)
+            }
             db.reviews().insert(
                 ReviewItemEntity(
                     id = id,
@@ -364,6 +385,9 @@ class SmsPipeline
             const val NOT_INSERTED = -1L
             const val MAX_SENDER = 60
             const val MINOR_PER_MAJOR = 100L
+
+            /** The same window the channel pairing uses for an SMS and its notification. */
+            const val TWIN_WINDOW_MILLIS = 5L * 60 * 1000
             const val MAX_REVIEW_TEXT = 1000
             const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
         }

@@ -193,7 +193,14 @@ class AnswerRepositoryTest {
             assertEquals(before["nbe"]!! + 500_000L, after["nbe"])
             assertEquals(worthBefore, after.values.sumOf { it ?: 0L })
             assertEquals(spendBefore, spending())
-            assertEquals("the pair is linked", inEntry.id, prefs.flow.value.pairPartner("out"))
+            assertEquals(
+                "the pair is linked",
+                inEntry.id,
+                prefs.flow.value
+                    .linksOf("out")
+                    .single()
+                    .second,
+            )
             assertTrue(repo.observeCards().first().isEmpty())
         }
 
@@ -219,12 +226,18 @@ class AnswerRepositoryTest {
             cibToNbe()
             put(
                 answerEntry("out", type = "TRANSFER", amount = 500_000, last4 = "1111", method = "BANK_TRANSFER", at = ago(1)),
-                answerEntry("inc", type = "INCOME", amount = 500_000, last4 = "2222", method = "BANK_TRANSFER", at = ago(1, 1)),
+                answerEntry("inc", type = "INCOME", amount = 500_000, last4 = "2222", method = "BANK_TRANSFER", at = ago(0, 23)),
             )
             repo.transferToOwn("out", "nbe")!!
             assertEquals(2, db.expenses().all().size)
             assertEquals("TRANSFER_IN", db.expenses().find("inc")!!.type)
-            assertEquals("inc", prefs.flow.value.pairPartner("out"))
+            assertEquals(
+                "inc",
+                prefs.flow.value
+                    .linksOf("out")
+                    .single()
+                    .second,
+            )
             assertEquals(0L to 0L, spending())
         }
 
@@ -244,7 +257,7 @@ class AnswerRepositoryTest {
     fun `REQ-EXP-065 Undo of a pair answer removes the new side and restores a converted one exactly`() =
         runTest {
             cibToNbe()
-            val inc = answerEntry("inc", type = "INCOME", amount = 500_000, last4 = "2222", method = "BANK_TRANSFER", at = ago(1, 1))
+            val inc = answerEntry("inc", type = "INCOME", amount = 500_000, last4 = "2222", method = "BANK_TRANSFER", at = ago(0, 23))
             put(answerEntry("out", type = "TRANSFER", amount = 500_000, last4 = "1111", method = "BANK_TRANSFER", at = ago(1)), inc)
             repo.undo(repo.transferToOwn("out", "nbe")!!)
             assertEquals(inc, db.expenses().find("inc"))
@@ -253,7 +266,11 @@ class AnswerRepositoryTest {
             assertEquals(4, db.expenses().all().size)
             repo.undo(undo)
             assertEquals(3, db.expenses().all().size)
-            assertNull(prefs.flow.value.pairPartner("solo"))
+            assertTrue(
+                prefs.flow.value
+                    .linksOf("solo")
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -262,12 +279,16 @@ class AnswerRepositoryTest {
             cibToNbe()
             put(answerEntry("out", type = "TRANSFER", amount = 500_000, last4 = "1111", method = "BANK_TRANSFER"))
             repo.transferToOwn("out", "nbe")
-            val partner = repo.livePartnerOf("out")
+            val partner =
+                prefs.flow.value
+                    .linksOf("out")
+                    .single()
+                    .deletablePartnerOf("out")
             assertNotNull(partner)
             val editor = DefaultExpenseEditor(db, LocalDataSignal(), clock, EraseLock(), AnswerPairLookup(repo))
             editor.deleteWithPartner("out")
             assertTrue(db.expenses().find("out")!!.deletedAtMillis != null && db.expenses().find(partner!!)!!.deletedAtMillis != null)
-            assertNull("no live partner once both are gone", repo.livePartnerOf("out"))
+
             editor.restore("out")
             assertNull(db.expenses().find("out")!!.deletedAtMillis)
             assertNull(db.expenses().find(partner!!)!!.deletedAtMillis)

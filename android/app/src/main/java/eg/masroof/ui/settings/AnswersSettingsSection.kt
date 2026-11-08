@@ -33,7 +33,8 @@ private const val TARGET_DP = 48
 fun AnswersSettingsSection(viewModel: AnswersSettingsViewModel = hiltViewModel()) {
     val atm by viewModel.atmChoice.collectAsStateWithLifecycle()
     val ignored by viewModel.ignored.collectAsStateWithLifecycle()
-    AnswersSettingsContent(atm, ignored, viewModel::setAtmChoice, viewModel::restore)
+    val links by viewModel.links.collectAsStateWithLifecycle()
+    AnswersSettingsContent(atm, ignored, viewModel::setAtmChoice, viewModel::restore, links, viewModel::removeLink)
 }
 
 @Composable
@@ -42,6 +43,8 @@ fun AnswersSettingsContent(
     ignored: List<String>,
     onAtm: (AtmChoice?) -> Unit,
     onRestore: (String) -> Unit,
+    links: List<Pair<String, String>> = emptyList(),
+    onRemoveLink: (String) -> Unit = {},
 ) {
     SectionCard(stringResource(R.string.answers_settings_title)) {
         Text(stringResource(R.string.answers_atm_setting), style = MaterialTheme.typography.titleSmall)
@@ -79,6 +82,27 @@ fun AnswersSettingsContent(
                         onClick = { onRestore(last4) },
                         modifier = Modifier.heightIn(min = TARGET_DP.dp).semantics { contentDescription = description },
                     ) { Text(stringResource(R.string.answers_restore)) }
+                }
+            }
+        }
+        if (links.isNotEmpty()) {
+            Text(
+                stringResource(R.string.answers_links_title),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            links.forEach { (last4, account) ->
+                val description = stringResource(R.string.answers_remove_desc, last4)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.answers_link_item, last4, account),
+                        style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = { onRemoveLink(last4) },
+                        modifier = Modifier.heightIn(min = TARGET_DP.dp).semantics { contentDescription = description },
+                    ) { Text(stringResource(R.string.answers_remove)) }
                 }
             }
         }

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.core.CairoTime
 import eg.masroof.core.MoneyFormat
+import eg.masroof.data.answers.LinkKind
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.db.CategoryEntity
@@ -51,6 +52,8 @@ data class EditFormState(
     val confirmDelete: Boolean = false,
     /** The entry is one side of a linked transfer between own accounts: Delete asks whether to delete both. */
     val hasPartner: Boolean = false,
+    /** The partner is the refund linked to this purchase: Delete asks to delete both or to keep the refund as income. */
+    val partnerIsRefund: Boolean = false,
     /** The entry was deleted while the screen was open: "This entry no longer exists", then the screen closes. */
     val gone: Boolean = false,
     /** Saved, confirmed, deleted or gone: the screen closes. */
@@ -144,8 +147,9 @@ class EditExpenseViewModel
                 } else {
                     original = found
                     // REQ-EXP-065: one side of a linked transfer pair asks whether to delete both
-                    val partner = pairs.partnerOf(id)?.takeIf { editor.find(it) != null }
-                    form.value = found.toForm().copy(hasPartner = partner != null)
+                    val partner =
+                        pairs.linksOf(id).firstOrNull { l -> l.deletablePartnerOf(id)?.let { editor.find(it) } != null }
+                    form.value = found.toForm().copy(hasPartner = partner != null, partnerIsRefund = partner?.kind == LinkKind.REFUND)
                 }
             }
         }

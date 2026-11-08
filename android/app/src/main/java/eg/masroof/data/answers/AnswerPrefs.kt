@@ -29,11 +29,29 @@ enum class LinkKind(
     TRANSFER("T"),
 }
 
+/**
+ * One answered pair. [inserted] is the id of the row the app itself added (a TRANSFER_IN made by an answer): only such a row is ever
+ * deleted together with its partner. [converted] is a real captured entry that an answer changed; [origType] and [origAccountId]
+ * are what it was before, so releasing the pair puts it back exactly (a real entry is never deleted because of a pair).
+ */
 data class EntryLink(
     val kind: LinkKind,
     val first: String,
     val second: String,
-)
+    val inserted: String = "",
+    val converted: String = "",
+    val origType: String = "",
+    val origAccountId: String = "",
+) {
+    /** The row that goes away together with [id]: an inserted transfer side, or the refund of a purchase. Null for a real entry. */
+    fun deletablePartnerOf(id: String): String? =
+        when (kind) {
+            LinkKind.TRANSFER -> inserted.takeIf { it.isNotEmpty() && it != id && involves(id) }
+            LinkKind.REFUND -> first.takeIf { id == second }
+        }
+
+    fun involves(id: String) = id == first || id == second
+}
 
 /**
  * Everything STORY-208 remembers outside Room (no schema change; see DECISIONS). Only ids and four-digit card tails are kept;
@@ -51,11 +69,7 @@ data class AnswerState(
 ) {
     fun linkedIds(): Set<String> = links.flatMapTo(HashSet()) { listOf(it.first, it.second) }
 
-    /** The other side of a linked transfer pair, or null. */
-    fun pairPartner(id: String): String? =
-        links
-            .firstOrNull { it.kind == LinkKind.TRANSFER && (it.first == id || it.second == id) }
-            ?.let { if (it.first == id) it.second else it.first }
+    fun linksOf(id: String): List<EntryLink> = links.filter { it.involves(id) }
 }
 
 private const val LAST4_LENGTH = 4
@@ -92,10 +106,15 @@ private val ignoredKey = stringSetPreferencesKey("ignored_cards")
 private val aliasKey = stringSetPreferencesKey("card_aliases")
 private val atmKey = stringPreferencesKey("atm_choice")
 
+private const val LINK_FIELDS = 7
+
+private fun EntryLink.encode() = listOf(kind.code, first, second, inserted, converted, origType, origAccountId).joinToString("|")
+
 private fun decodeLink(raw: String): EntryLink? {
     val parts = raw.split('|')
     val kind = LinkKind.entries.firstOrNull { it.code == parts.getOrNull(0) } ?: return null
-    return if (parts.size == 3) EntryLink(kind, parts[1], parts[2]) else null
+    if (parts.size != LINK_FIELDS) return null
+    return EntryLink(kind, parts[1], parts[2], parts[3], parts[4], parts[5], parts[6])
 }
 
 private fun decode(p: Preferences) =
@@ -116,7 +135,7 @@ private fun encode(
     s: AnswerState,
 ) {
     p[answeredKey] = s.answered
-    p[linksKey] = s.links.map { "${it.kind.code}|${it.first}|${it.second}" }.toSet()
+    p[linksKey] = s.links.map { it.encode() }.toSet()
     p[ignoredKey] = s.ignoredCards.filter(::isLast4).toSet()
     p[aliasKey] =
         s.aliases

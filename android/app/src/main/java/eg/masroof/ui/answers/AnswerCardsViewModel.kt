@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -75,6 +76,8 @@ class AnswerCardsViewModel
 
         fun notRefund(entryId: String) = run { repository.notRefund(entryId) }
 
+        fun confirmRefund(entryId: String) = run { repository.confirmRefund(entryId) }
+
         fun transferToOwn(
             entryId: String,
             accountId: String,
@@ -114,7 +117,18 @@ class AnswersSettingsViewModel
     @Inject
     constructor(
         private val repository: AnswerRepository,
+        db: AppDatabase,
     ) : ViewModel() {
+        /** Linked cards as (last four, account name), for the Remove list. */
+        val links: StateFlow<List<Pair<String, String>>> =
+            combine(repository.cardLinks, db.lookups().observeAccounts()) { links, accounts ->
+                links.entries.sortedBy { it.key }.map { (last4, id) -> last4 to (accounts.firstOrNull { it.id == id }?.label.orEmpty()) }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+        fun removeLink(last4: String) {
+            viewModelScope.launch { repository.removeCardLink(last4) }
+        }
+
         val atmChoice: StateFlow<AtmChoice?> =
             repository.atmChoice.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 

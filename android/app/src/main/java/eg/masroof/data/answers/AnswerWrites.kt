@@ -9,7 +9,6 @@ import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.ExpenseSourceEntity
 
 private const val CASH_KIND = "CASH"
-private const val CONFIRMED = "CONFIRMED"
 
 /**
  * What one answer changed, so Undo can put back exactly what was there before. Row snapshots are the entries as they were;
@@ -35,15 +34,16 @@ internal object AnswerWrites {
     @Suppress("LongParameterList") // typed fields of one row
     suspend fun insertPairSide(
         db: AppDatabase,
-        ids: IdFactory,
         like: ExpenseEntity,
         type: String,
         accountId: String,
         merchant: String?,
         now: Long,
     ): String {
-        val id = ids.next()
-        db.expenses().insert(
+        // Deterministic: an answer repeated after a crash between the Room commit and the remembered state finds its row again
+        // instead of inserting a second one.
+        val id = pairSideId(like.id)
+        val row =
             ExpenseEntity(
                 id = id,
                 amountMinor = like.amountMinor,
@@ -56,25 +56,75 @@ internal object AnswerWrites {
                 pending = false,
                 source = CHANNEL_MANUAL,
                 type = type,
-                status = CONFIRMED,
+                // a pending (over-ceiling or incoming) entry never gets a confirmed twin
+                status = like.status,
                 createdAtMillis = now,
                 updatedAtMillis = now,
                 timeKnown = like.timeKnown,
                 paymentMethod = like.paymentMethod,
-            ),
-        )
-        db.sources().insert(
-            ExpenseSourceEntity(
-                id = ids.next(),
-                expenseId = id,
-                channel = CHANNEL_MANUAL,
-                localSourceId = id,
-                receivedAtMillis = now,
-                senderId = null,
-                instrumentLast4 = null,
-            ),
-        )
+            )
+        if (db.expenses().find(id) == null) {
+            db.expenses().insert(row)
+            db.sources().insert(
+                ExpenseSourceEntity(
+                    id = "$id:src",
+                    expenseId = id,
+                    channel = CHANNEL_MANUAL,
+                    localSourceId = id,
+                    receivedAtMillis = now,
+                    senderId = null,
+                    instrumentLast4 = null,
+                ),
+            )
+        } else {
+            db.expenses().update(row.copy(createdAtMillis = db.expenses().find(id)!!.createdAtMillis, deletedAtMillis = null))
+        }
         return id
+    }
+
+    fun pairSideId(entryId: String) = "$entryId:pair"
+
+    /** An answer or a delete released a pair: [deletedId] was just soft-deleted; see [EntryLink] for what goes with it. */
+    suspend fun release(
+        db: AppDatabase,
+        links: List<EntryLink>,
+        deletedId: String,
+        deleteWithPartner: Boolean,
+        now: Long,
+        deleteRefund: Boolean = deleteWithPartner,
+    ) {
+        for (link in links) {
+            val partner = link.deletablePartnerOf(deletedId)
+            when (link.kind) {
+                LinkKind.TRANSFER -> {
+                    if (deleteWithPartner && partner != null) db.expenses().softDelete(partner, now)
+                    if (link.converted.isNotEmpty() && link.converted != deletedId) revertConverted(db, link, now)
+                }
+                LinkKind.REFUND ->
+                    if (partner != null) {
+                        if (deleteRefund) {
+                            db.expenses().softDelete(partner, now)
+                        } else {
+                            // a refund without its purchase would net spending below zero: it is received money again
+                            val refund = db.expenses().find(partner)
+                            if (refund != null && refund.deletedAtMillis == null && refund.type == ExpenseTypes.REFUND) {
+                                db.expenses().update(refund.copy(type = ExpenseTypes.INCOME, updatedAtMillis = now))
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    private suspend fun revertConverted(
+        db: AppDatabase,
+        link: EntryLink,
+        now: Long,
+    ) {
+        val row = db.expenses().find(link.converted)?.takeIf { it.deletedAtMillis == null } ?: return
+        val converted = row.type == ExpenseTypes.TRANSFER || row.type == ExpenseTypes.TRANSFER_IN
+        if (!converted || row.type == link.origType || link.origType.isEmpty()) return
+        db.expenses().update(row.copy(type = link.origType, accountId = link.origAccountId.ifEmpty { null }, updatedAtMillis = now))
     }
 
     /**
@@ -98,7 +148,7 @@ internal object AnswerWrites {
             )
         }
         db.expenses().update(entry.copy(type = ExpenseTypes.TRANSFER, updatedAtMillis = now))
-        val inId = insertPairSide(db, ids, entry, ExpenseTypes.TRANSFER_IN, cashId, null, now)
+        val inId = insertPairSide(db, entry, ExpenseTypes.TRANSFER_IN, cashId, null, now)
         return AnswerUndo(
             restore = listOf(entry),
             deleteExpenses = listOf(inId),
@@ -106,7 +156,18 @@ internal object AnswerWrites {
             added =
                 AnswerState(
                     answered = setOf(entry.id),
-                    links = setOf(EntryLink(LinkKind.TRANSFER, entry.id, inId)),
+                    links =
+                        setOf(
+                            EntryLink(
+                                LinkKind.TRANSFER,
+                                entry.id,
+                                inId,
+                                inserted = inId,
+                                converted = entry.id,
+                                origType = entry.type,
+                                origAccountId = entry.accountId.orEmpty(),
+                            ),
+                        ),
                 ),
         )
     }

@@ -3,6 +3,7 @@ package eg.masroof.data.edit
 import android.database.sqlite.SQLiteException
 import androidx.room.withTransaction
 import eg.masroof.data.LocalDataSignal
+import eg.masroof.data.answers.AnswerWrites
 import eg.masroof.data.answers.NoPairLookup
 import eg.masroof.data.answers.PairLookup
 import eg.masroof.data.auth.EraseLock
@@ -127,6 +128,7 @@ class DefaultExpenseEditor
         ): EditOutcome =
             guarded {
                 val now = clock.millis()
+                val links = if (changes.status != null) pairs.linksOf(id) else emptyList()
                 val outcome =
                     eraseLock.mutex.withLock {
                         db.withTransaction {
@@ -137,6 +139,15 @@ class DefaultExpenseEditor
                                 else -> {
                                     val updated = old.withChanges(changes, now)
                                     db.expenses().update(updated)
+                                    // confirming a pending withdrawal confirms the cash side the app added for it
+                                    if (old.status != updated.status) {
+                                        links.mapNotNull { it.deletablePartnerOf(id) }.forEach { partner ->
+                                            val row = db.expenses().find(partner)
+                                            if (row != null && row.status == old.status) {
+                                                db.expenses().update(row.copy(status = updated.status, updatedAtMillis = now))
+                                            }
+                                        }
+                                    }
                                     EditOutcome.Saved(updated)
                                 }
                             }
@@ -146,28 +157,24 @@ class DefaultExpenseEditor
                 outcome
             }
 
-        override suspend fun delete(id: String): EditOutcome =
-            guarded {
-                val changed = eraseLock.mutex.withLock { db.expenses().softDelete(id, clock.millis()) }
-                if (changed == 0) {
-                    EditOutcome.NotFound
-                } else {
-                    signal.changed()
-                    deletions.tryEmit(id)
-                    EditOutcome.Deleted
-                }
-            }
+        /** Deletes this entry only. A real entry that a pair had converted is put back as it was; a refund of this purchase becomes income. */
+        override suspend fun delete(id: String): EditOutcome = remove(id, withPartner = false)
 
-        override suspend fun deleteWithPartner(id: String): EditOutcome =
+        override suspend fun deleteWithPartner(id: String): EditOutcome = remove(id, withPartner = true)
+
+        private suspend fun remove(
+            id: String,
+            withPartner: Boolean,
+        ): EditOutcome =
             guarded {
-                val partner = pairs.partnerOf(id)
+                val links = pairs.linksOf(id)
                 val changed =
                     eraseLock.mutex.withLock {
                         db.withTransaction {
                             // one timestamp for both: Undo restores the partner only if it went away in the same moment
                             val now = clock.millis()
                             val first = db.expenses().softDelete(id, now)
-                            if (first > 0 && partner != null) db.expenses().softDelete(partner, now)
+                            if (first > 0) AnswerWrites.release(db, links, id, withPartner, now)
                             first
                         }
                     }
@@ -181,15 +188,17 @@ class DefaultExpenseEditor
             }
 
         override suspend fun restore(id: String): Boolean {
-            val partner = pairs.partnerOf(id)
+            val partners = pairs.linksOf(id).mapNotNull { it.deletablePartnerOf(id) }
             val changed =
                 try {
                     eraseLock.mutex.withLock {
                         db.withTransaction {
                             val deletedAt = db.expenses().find(id)?.deletedAtMillis
                             val first = db.expenses().restore(id, clock.millis())
-                            if (first > 0 && partner != null && db.expenses().find(partner)?.deletedAtMillis == deletedAt) {
-                                db.expenses().restore(partner, clock.millis())
+                            if (first > 0) {
+                                partners.filter { db.expenses().find(it)?.deletedAtMillis == deletedAt }.forEach {
+                                    db.expenses().restore(it, clock.millis())
+                                }
                             }
                             first
                         }

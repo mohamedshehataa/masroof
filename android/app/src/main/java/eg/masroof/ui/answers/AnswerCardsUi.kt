@@ -51,11 +51,12 @@ private const val CARD_WIDTH_DP = 300
 private const val UNDO_VISIBLE_MS = 10_000L
 
 /** Every answer a card can give. The Wallet route fills it from [AnswerCardsViewModel]; each field has a harmless default. */
-@Suppress("LongParameterList")
+@Suppress("LongParameterList") // one callback per answer a card can give
 class AnswerActions(
     val onLinkRefund: (entryId: String, purchaseId: String) -> Unit = { _, _ -> },
     val onPickAnother: (entryId: String) -> Unit = {},
     val onNotRefund: (entryId: String) -> Unit = {},
+    val onConfirmRefund: (entryId: String) -> Unit = {},
     val onTransferOwn: (entryId: String, accountId: String) -> Unit = { _, _ -> },
     val onTransferChoose: (AnswerCard.Transfer) -> Unit = {},
     val onTransferOther: (entryId: String) -> Unit = {},
@@ -180,6 +181,12 @@ private fun RefundBody(
         AnswerButton(stringResource(R.string.answers_refund_link), { actions.onLinkRefund(card.entryId, single.id) }, primary = true)
     } else {
         card.candidates.forEach { c -> AnswerButton(candidateText(c), { actions.onLinkRefund(card.entryId, c.id) }, primary = true) }
+    }
+    // a real refund for a purchase that is not in Masroof: keep it a refund and close the card
+    if (card.candidates.isEmpty()) {
+        AnswerButton(stringResource(R.string.answers_refund_yes), {
+            actions.onConfirmRefund(card.entryId)
+        }, primary = true)
     }
     AnswerButton(stringResource(R.string.answers_pick_another), { actions.onPickAnother(card.entryId) })
     AnswerButton(stringResource(R.string.answers_not_refund), { actions.onNotRefund(card.entryId) })
@@ -338,6 +345,7 @@ fun AnswerCardsSection(
                 onLinkRefund = viewModel::linkRefund,
                 onPickAnother = viewModel::pickAnother,
                 onNotRefund = viewModel::notRefund,
+                onConfirmRefund = viewModel::confirmRefund,
                 onTransferOwn = viewModel::transferToOwn,
                 onTransferChoose = { dialog = AnswerDialog.OwnAccount(it) },
                 onTransferOther = viewModel::transferToOther,

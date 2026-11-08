@@ -1,5 +1,6 @@
 package eg.masroof.data.answers
 
+import eg.masroof.core.CairoTime
 import eg.masroof.data.categories.MerchantKey
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AccountFlowRow
@@ -97,7 +98,8 @@ object AnswerCards {
     private const val GAM3EYA_PREFIX = "GAM3EYA"
     private val transferMethods = setOf("BANK_TRANSFER", "INSTAPAY")
 
-    fun lookbackStart(nowMillis: Long): Long = nowMillis - LOOKBACK_DAYS * DAY_MS
+    /** Two spare days: the windows are Cairo calendar days, the query is in instants. */
+    fun lookbackStart(nowMillis: Long): Long = nowMillis - (LOOKBACK_DAYS + 2) * DAY_MS
 
     private fun ExpenseEntity.captured() = source == CHANNEL_SMS || source == CHANNEL_PUSH
 
@@ -110,7 +112,13 @@ object AnswerCards {
     fun ownerOf(
         accounts: List<AccountEntity>,
         e: ExpenseEntity,
-    ): String? = BalanceMath.accountOf(accounts, e.flowRow())
+        aliases: Map<String, String> = emptyMap(),
+    ): String? {
+        BalanceMath.accountOf(accounts, e.flowRow())?.let { return it }
+        // a card tail linked to an account by the user ("Link to an existing account")
+        val linked = e.instrumentLast4?.let { aliases[it] }
+        return linked?.takeIf { id -> e.accountId == null && accounts.any { it.id == id && !it.archived } }
+    }
 
     /**
      * The open cards, newest first, at most [MAX_CARDS]. Only captured entries of the last [CARD_WINDOW_DAYS] days ask anything;
@@ -123,18 +131,18 @@ object AnswerCards {
         includeCash: Boolean,
         nowMillis: Long,
     ): List<AnswerCard> {
-        val since = nowMillis - CARD_WINDOW_DAYS * DAY_MS
+        val since = CairoTime.dateOf(nowMillis).minusDays(CARD_WINDOW_DAYS)
         val done = state.answered + state.linkedIds()
         val live = entries.filter { it.live() }
-        val fresh = live.filter { it.captured() && it.occurredAtMillis >= since && it.id !in done }
+        val fresh = live.filter { it.captured() && !CairoTime.dateOf(it.occurredAtMillis).isBefore(since) && it.id !in done }
         val active = accounts.filter { !it.archived }
         val cards = mutableListOf<AnswerCard>()
         for (e in fresh) {
             val card =
                 when (e.type) {
                     ExpenseTypes.REFUND -> refundCard(e, live, always = true)
-                    ExpenseTypes.INCOME -> transferCard(e, active, outgoing = false) ?: refundCard(e, live, always = false)
-                    ExpenseTypes.TRANSFER -> transferCard(e, active, outgoing = true)
+                    ExpenseTypes.INCOME -> transferCard(e, active, state.aliases, outgoing = false) ?: refundCard(e, live, always = false)
+                    ExpenseTypes.TRANSFER -> transferCard(e, active, state.aliases, outgoing = true)
                     else -> null
                 }
             if (card != null) cards += card
@@ -175,20 +183,25 @@ object AnswerCards {
     fun pickList(
         refund: ExpenseEntity,
         live: List<ExpenseEntity>,
-    ): List<PurchaseOption> = purchasesBefore(refund, live).take(MAX_PICK).map { it.toOption() }
+    ): List<PurchaseOption> =
+        purchasesBefore(refund, live)
+            .filter { it.amountMinor >= refund.amountMinor }
+            .take(MAX_PICK)
+            .map { it.toOption() }
 
     private fun purchasesBefore(
         refund: ExpenseEntity,
         live: List<ExpenseEntity>,
     ): List<ExpenseEntity> {
-        val from = refund.occurredAtMillis - REFUND_WINDOW_DAYS * DAY_MS
+        val from = CairoTime.dateOf(refund.occurredAtMillis).minusDays(REFUND_WINDOW_DAYS)
         return live
             .filter {
                 it.live() &&
                     it.type == ExpenseTypes.EXPENSE &&
                     it.id != refund.id &&
                     it.currency == refund.currency &&
-                    it.occurredAtMillis in from..refund.occurredAtMillis
+                    !CairoTime.dateOf(it.occurredAtMillis).isBefore(from) &&
+                    it.occurredAtMillis <= refund.occurredAtMillis
             }.sortedWith(compareByDescending<ExpenseEntity> { it.occurredAtMillis }.thenBy { it.id })
     }
 
@@ -197,18 +210,19 @@ object AnswerCards {
     private fun transferCard(
         e: ExpenseEntity,
         active: List<AccountEntity>,
+        aliases: Map<String, String>,
         outgoing: Boolean,
     ): AnswerCard.Transfer? {
         val method = e.paymentMethod
         if (method != null && method.startsWith(GAM3EYA_PREFIX)) return null
         if (!outgoing && method !in transferMethods) return null
-        val own = ownerOf(active, e)
+        // Both sides must be known: a pair with one unknown side would move one balance and change net worth.
+        val own = ownerOf(active, e, aliases) ?: return null
         val options =
             active
                 .filter { it.currency == e.currency && it.id != own }
                 .map { AccountOption(it.id, it.label) }
-        // "One of your accounts" needs another account to be the other side.
-        if (options.isEmpty() || (own == null && active.count { it.currency == e.currency } < 2)) return null
+        if (options.isEmpty()) return null
         return AnswerCard.Transfer(e.id, e.merchant, e.amountMinor, e.currency, e.occurredAtMillis, outgoing, options)
     }
 
@@ -218,6 +232,7 @@ object AnswerCards {
         state: AnswerState,
     ): List<AnswerCard> {
         val known = accounts.mapNotNullTo(HashSet()) { it.last4 }
+        val activeIds = accounts.filter { !it.archived }.mapTo(HashSet()) { it.id }
         return fresh
             .filter {
                 val last4 = it.instrumentLast4
@@ -225,7 +240,7 @@ object AnswerCards {
                     isLast4(last4) &&
                     last4 !in known &&
                     last4 !in state.ignoredCards &&
-                    last4 !in state.aliases &&
+                    state.aliases[last4]?.let { it in activeIds } != true &&
                     it.accountId == null
             }.groupBy { it.instrumentLast4.orEmpty() }
             .map { (last4, list) ->
@@ -235,8 +250,11 @@ object AnswerCards {
     }
 
     /**
-     * The entry on the other side of a transfer that the other bank already announced: same amount and currency within a day,
-     * not answered or linked, and on [accountId] (or naming no account at all). Linking it avoids a second, invented entry.
+     * The entry on the other side of a transfer that the other bank already announced. It is converted (not duplicated) only when
+     * it is certainly the user's own: attributed to [accountId] by its account or a card tail of that account (a linked tail
+     * included), the same amount and currency, and on the right side of the send in time (an incoming entry arrives after the
+     * send, an outgoing one is sent before the arrival), within a day. An unattributed entry is never converted: the answer adds
+     * its own TRANSFER_IN and leaves the real income alone.
      */
     fun counterpart(
         entry: ExpenseEntity,
@@ -249,27 +267,20 @@ object AnswerCards {
         val wanted = if (outgoing) ExpenseTypes.INCOME else ExpenseTypes.TRANSFER
         val taken = state.answered + state.linkedIds()
         return live
-            .filter {
-                it.live() &&
-                    it.captured() &&
-                    it.type == wanted &&
-                    it.id != entry.id &&
-                    it.id !in taken &&
-                    it.currency == entry.currency &&
-                    it.amountMinor == entry.amountMinor &&
-                    kotlin.math.abs(it.occurredAtMillis - entry.occurredAtMillis) <= PAIR_WINDOW_MS &&
-                    (!outgoing || it.paymentMethod in transferMethods) &&
-                    (it.paymentMethod?.startsWith(GAM3EYA_PREFIX) != true) &&
-                    belongsTo(it, accountId, accounts)
-            }.minWithOrNull(compareBy<ExpenseEntity> { kotlin.math.abs(it.occurredAtMillis - entry.occurredAtMillis) }.thenBy { it.id })
+            .filter { c -> c.type == wanted && c.id != entry.id && c.id !in taken && isMirror(entry, c, outgoing) }
+            .filter { c -> ownerOf(accounts, c, state.aliases) == accountId }
+            .minWithOrNull(compareBy<ExpenseEntity> { kotlin.math.abs(it.occurredAtMillis - entry.occurredAtMillis) }.thenBy { it.id })
     }
 
-    private fun belongsTo(
-        e: ExpenseEntity,
-        accountId: String,
-        accounts: List<AccountEntity>,
+    private fun isMirror(
+        entry: ExpenseEntity,
+        c: ExpenseEntity,
+        outgoing: Boolean,
     ): Boolean {
-        val owner = ownerOf(accounts, e)
-        return owner == accountId || (owner == null && e.accountId == null && e.instrumentLast4 == null)
+        if (!c.live() || !c.captured() || c.currency != entry.currency || c.amountMinor != entry.amountMinor) return false
+        if (c.paymentMethod?.startsWith(GAM3EYA_PREFIX) == true) return false
+        if (outgoing && c.paymentMethod !in transferMethods) return false
+        val delta = c.occurredAtMillis - entry.occurredAtMillis
+        return if (outgoing) delta in 0..PAIR_WINDOW_MS else delta in -PAIR_WINDOW_MS..0
     }
 }

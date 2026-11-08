@@ -19,7 +19,15 @@
     <string name="answers_candidate">%1$s %2$s في %3$s</string>
     <string name="answers_candidate_no_merchant">%1$s في %2$s</string>
     <string name="answers_refund_link">أيوه، اربطه</string>
+    <string name="answers_refund_yes">أيوه، استرداد</string>
     <string name="answers_pick_another">اختار حاجة تانية</string>
+    <string name="answers_delete_refund_title">فيه استرداد مربوط بالعملية دي</string>
+    <string name="answers_delete_refund_body">تمسح الاسترداد كمان ولا تسيبه كدخل؟</string>
+    <string name="answers_delete_keep_refund">سيب الاسترداد كدخل</string>
+    <string name="answers_links_title">الكروت المربوطة</string>
+    <string name="answers_link_item">•••• %1$s ← %2$s</string>
+    <string name="answers_remove">شيل الربط</string>
+    <string name="answers_remove_desc">شيل ربط الكارت اللي بينتهي بـ %1$s</string>
     <string name="answers_not_refund">مش استرداد</string>
     <string name="answers_pick_title">أنهي عملية شراء؟</string>
     <string name="answers_pick_empty">مفيش مشتريات في آخر ٦٠ يوم</string>

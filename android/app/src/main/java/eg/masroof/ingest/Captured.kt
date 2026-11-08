@@ -25,6 +25,7 @@ import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.data.LocalDataSignal
 import eg.masroof.data.answers.AnswerPrefs
+import eg.masroof.data.answers.AnswerWrites
 import eg.masroof.data.answers.NoAnswerPrefs
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
@@ -306,8 +307,10 @@ class CapturedActions
                         val found = db.captured().find(localId)
                         if (found != null) {
                             found.expenseId?.let { id ->
-                                db.expenses().softDelete(id, clock.millis())
-                                pairs.pairPartner(id)?.let { db.expenses().softDelete(it, clock.millis()) }
+                                val now = clock.millis()
+                                db.expenses().softDelete(id, now)
+                                // rows the app inserted go with it; a real entry that a pair converted is put back as it was
+                                AnswerWrites.release(db, pairs.linksOf(id), id, deleteWithPartner = true, now = now, deleteRefund = false)
                             }
                             db.captured().requestUndo(localId)
                         }
