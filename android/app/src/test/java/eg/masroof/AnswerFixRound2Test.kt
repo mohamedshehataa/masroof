@@ -29,8 +29,6 @@ import eg.masroof.ingest.CapturedActions
 import eg.masroof.ingest.SmsPipeline
 import eg.masroof.ingest.parse.CaptureSource
 import eg.masroof.ingest.parse.IncomingMessage
-import eg.masroof.ui.answers.AnswerActions
-import eg.masroof.ui.answers.AnswerCardsRow
 import eg.masroof.ui.answers.AnswerCardsViewModel
 import eg.masroof.ui.settings.AnswersSettingsContent
 import eg.masroof.ui.theme.MasroofTheme
@@ -296,53 +294,28 @@ class AnswerFixRound2Test {
     @Test
     fun `REQ-EXP-065 a second tap while an answer runs is ignored by the view model`() =
         runTest {
-            bothBanksAnnounced()
-            val vm = AnswerCardsViewModel(repo, WealthRepository(db, clock), db)
+            // a repository that never finishes: only the view model's own guard can keep the second tap out
+            val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+            var calls = 0
+            val slow =
+                object : eg.masroof.data.answers.AnswerRepository by repo {
+                    override suspend fun transferToOwn(
+                        entryId: String,
+                        accountId: String,
+                    ): eg.masroof.data.answers.AnswerUndo? {
+                        calls++
+                        gate.await()
+                        return null
+                    }
+                }
+            val vm = AnswerCardsViewModel(slow, WealthRepository(db, clock), db)
             vm.transferToOwn("out", "nbe")
             vm.transferToOwn("out", "nbe")
-            while (db.expenses().all().none { it.type == "TRANSFER_IN" }) kotlinx.coroutines.yield()
-            kotlinx.coroutines.delay(50)
-            assertEquals(1, db.expenses().all().count { it.type == "TRANSFER_IN" })
+            assertEquals(1, calls)
+            gate.complete(Unit)
+            vm.transferToOwn("out", "nbe")
+            assertEquals("after the first answer ended a new tap is taken", 2, calls)
         }
-}
-
-@RunWith(RobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34])
-class AnswerDoubleTapTest {
-    @get:Rule val compose = createComposeRule()
-
-    @Test
-    fun `REQ-EXP-065 two quick taps on the account button answer once`() {
-        val taps = mutableListOf<String>()
-        val busy =
-            java.util.concurrent.atomic
-                .AtomicBoolean(false)
-        val card =
-            AnswerCard.Transfer(
-                "t",
-                "CIB",
-                500_000,
-                "EGP",
-                ago(1),
-                true,
-                listOf(
-                    eg.masroof.data.answers
-                        .AccountOption("nbe", "NBE"),
-                ),
-            )
-        compose.setContent {
-            MasroofTheme {
-                AnswerCardsRow(
-                    listOf(card),
-                    AnswerActions(onTransferOwn = { id, acc -> if (busy.compareAndSet(false, true)) taps += "$id>$acc" }),
-                )
-            }
-        }
-        compose.onNodeWithText("To NBE").performClick()
-        compose.onNodeWithText("To NBE").performClick()
-        assertEquals(listOf("t>nbe"), taps)
-    }
 }
 
 @RunWith(RobolectricTestRunner::class)
