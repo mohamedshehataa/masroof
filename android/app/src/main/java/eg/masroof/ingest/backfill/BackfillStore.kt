@@ -70,10 +70,42 @@ class BackfillStore(
 
     fun handled(id: String): Boolean = prefs.contains(SEEN + id)
 
+    /** Every mark also prunes what is older than 30 days, so the file only ever holds a month of keys (bounded work). */
     override fun mark(
         id: String,
         nowMillis: Long,
-    ) = prefs.edit { putLong(SEEN + id, nowMillis) }
+    ) {
+        forgetBefore(nowMillis - MEMORY_MILLIS)
+        prefs.edit { putLong(SEEN + id, nowMillis) }
+    }
+
+    /** A signature with the times (of the message, of the mark) it was seen at; at most [MAX_TIMES] are kept per signature. */
+    override fun markSignature(
+        signature: String,
+        atMillis: Long,
+        nowMillis: Long,
+    ) {
+        val kept = times(signature).filter { it.second >= nowMillis - MEMORY_MILLIS }.takeLast(MAX_TIMES - 1)
+        val all = kept + (atMillis to nowMillis)
+        prefs.edit { putString(SIG + signature, all.joinToString(",") { "${it.first}:${it.second}" }) }
+    }
+
+    override fun seenSignature(
+        signature: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Boolean = times(signature).any { it.first in fromMillis..toMillis }
+
+    private fun times(signature: String): List<Pair<Long, Long>> =
+        prefs
+            .getString(SIG + signature, null)
+            ?.split(',')
+            ?.mapNotNull { part ->
+                val (at, marked) = part.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+                val a = at.toLongOrNull() ?: return@mapNotNull null
+                val m = marked.toLongOrNull() ?: return@mapNotNull null
+                a to m
+            }.orEmpty()
 
     /** After "Erase all data": the file is empty, so the screen goes back to the start instead of showing the erased run. */
     fun reset() {
@@ -83,7 +115,15 @@ class BackfillStore(
 
     /** Forgets handled ids older than [cutoffMillis] (30 days): after that a deleted message may be read in again. */
     fun forgetBefore(cutoffMillis: Long) {
-        val old = prefs.all.filter { (k, v) -> k.startsWith(SEEN) && v is Long && v < cutoffMillis }.keys
+        val old =
+            prefs.all
+                .filter { (k, v) ->
+                    when {
+                        k.startsWith(SEEN) -> v is Long && v < cutoffMillis
+                        k.startsWith(SIG) -> v is String && times(k.removePrefix(SIG)).all { it.second < cutoffMillis }
+                        else -> false
+                    }
+                }.keys
         if (old.isNotEmpty()) prefs.edit { old.forEach { remove(it) } }
     }
 
@@ -104,6 +144,9 @@ class BackfillStore(
     companion object {
         const val PREFS_NAME = "masroof_backfill"
         private const val SEEN = "seen:"
+        private const val SIG = "sig:"
+        private const val MAX_TIMES = 8
+        private const val MEMORY_MILLIS = 30L * 24 * 60 * 60 * 1000
         private const val PHASE = "phase"
         private const val KEY = "range_key"
         private const val FROM = "from"

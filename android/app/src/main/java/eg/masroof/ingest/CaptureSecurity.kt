@@ -123,6 +123,16 @@ class KeystoreLocalIdKey(
 object LocalIdHasher {
     private const val MILLIS_PER_SECOND = 1000L
 
+    /** A keyed HMAC of typed values joined with `|` (never the message text of a record): a lookup key that reveals nothing. */
+    fun signature(
+        key: ByteArray,
+        vararg parts: Any?,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key, "HmacSHA256"))
+        return mac.doFinal(parts.joinToString("|").toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+
     fun id(
         key: ByteArray,
         msg: IncomingMessage,

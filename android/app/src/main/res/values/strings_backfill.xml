@@ -43,4 +43,5 @@
         <item quantity="one">%1$s entry added, %2$s to review</item>
         <item quantity="other">%1$s entries added, %2$s to review</item>
     </plurals>
+    <string name="review_reason_possible_repeat">May be a message already recorded. Save it only if it is a different purchase.</string>
 </resources>

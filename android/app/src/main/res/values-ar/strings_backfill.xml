@@ -59,4 +59,5 @@
         <item quantity="many">اتضاف %1$s مصروف، %2$s للمراجعة</item>
         <item quantity="other">اتضاف %1$s مصروف، %2$s للمراجعة</item>
     </plurals>
+    <string name="review_reason_possible_repeat">ممكن تكون رسالة اتسجلت قبل كده. احفظها بس لو دي عملية تانية.</string>
 </resources>

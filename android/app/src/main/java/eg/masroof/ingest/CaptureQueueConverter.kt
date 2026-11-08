@@ -70,7 +70,7 @@ internal class CaptureQueueConverter(
         if (twin != null) {
             db.sources().insert(CaptureRows.source(ids.next(), twin.expense.id, record, row.localId, receivedAt))
             if (twin.captured.instrumentLast4 == null && record.instrumentLast4 != null) {
-                db.expenses().enrichFromTwin(twin.expense.id, record.instrumentLast4, CaptureRows.label(record))
+                db.expenses().enrichFromTwin(twin.expense.id, record.instrumentLast4, CaptureRows.label(record), false)
             }
             if (captured != null) {
                 db.captured().setExpenseId(row.localId, twin.expense.id)

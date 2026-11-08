@@ -1,12 +1,14 @@
 package eg.masroof.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eg.masroof.ingest.backfill.BackfillController
 import eg.masroof.ingest.backfill.BackfillRange
 import eg.masroof.ingest.backfill.BackfillState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** "Read past SMS" on Settings: the range choice and the run state. Everything else is the controller's and the worker's. */
@@ -34,7 +36,9 @@ class BackfillViewModel
         /** Starts (or continues, for the same range) the run. The screen calls this only once READ_SMS is granted. */
         fun start() = controller.start(mutableRange.value)
 
-        fun cancel() = controller.cancel()
+        fun cancel() {
+            viewModelScope.launch { controller.cancel() }
+        }
 
         fun dismiss() = controller.dismiss()
 

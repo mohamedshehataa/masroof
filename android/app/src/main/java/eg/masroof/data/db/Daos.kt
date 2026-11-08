@@ -229,13 +229,16 @@ interface ExpenseDao {
      * an edit made meanwhile wins; `updatedAtMillis` is left alone (the pairing is not an edit). Returns the rows changed.
      */
     @Query(
-        """UPDATE expense SET instrumentLast4 = :last4, merchant = COALESCE(:merchant, merchant)
+        """UPDATE expense SET
+            instrumentLast4 = CASE WHEN :keepExisting THEN COALESCE(instrumentLast4, :last4) ELSE :last4 END,
+            merchant = CASE WHEN :keepExisting THEN COALESCE(merchant, :merchant) ELSE COALESCE(:merchant, merchant) END
             WHERE id = :id AND deletedAtMillis IS NULL AND updatedAtMillis = createdAtMillis""",
     )
     suspend fun enrichFromTwin(
         id: String,
         last4: String?,
         merchant: String?,
+        keepExisting: Boolean,
     ): Int
 
     @Query("DELETE FROM expense WHERE id = :id")
@@ -313,12 +316,14 @@ interface ExpenseSourceDao {
 
     /**
      * A notification entry without an SMS source yet (STORY-186): the backfilled SMS of the same transfer attaches to it even when
-     * the "Recorded" row of the notification expired long ago. Not a deleted entry.
+     * the "Recorded" row of the notification expired long ago. A deleted entry counts too (the SMS must not bring it back). An entry
+     * whose amount the user edited pairs through its "Recorded" row while that lasts (`ChannelPairing`), which keeps the original amount.
      */
     @Query(
         """SELECT e.* FROM expense e JOIN expense_source s ON s.expenseId = e.id
-            WHERE s.channel = 'PUSH' AND e.deletedAtMillis IS NULL AND e.type = :type AND e.currency = :currency
-            AND e.amountMinor = :amountMinor AND s.receivedAtMillis BETWEEN :from AND :to
+            WHERE s.channel = 'PUSH' AND e.type = :type AND e.currency = :currency
+            AND e.amountMinor = :amountMinor
+            AND s.receivedAtMillis BETWEEN :from AND :to
             AND NOT EXISTS (SELECT 1 FROM expense_source o WHERE o.expenseId = e.id AND o.channel IN ('SMS', 'BACKFILL'))
             ORDER BY ABS(s.receivedAtMillis - :at) LIMIT 1""",
     )
@@ -330,6 +335,20 @@ interface ExpenseSourceDao {
         to: Long,
         at: Long,
     ): ExpenseEntity?
+
+    /** Notification entries (deleted ones included) of a direction, amount and currency in a time window, paired or not. */
+    @Query(
+        """SELECT COUNT(*) FROM expense_source s JOIN expense e ON e.id = s.expenseId
+            WHERE s.channel = 'PUSH' AND e.type = :type AND e.currency = :currency AND e.amountMinor = :amountMinor
+            AND s.receivedAtMillis BETWEEN :from AND :to""",
+    )
+    suspend fun pushSourceCount(
+        type: String,
+        currency: String,
+        amountMinor: Long,
+        from: Long,
+        to: Long,
+    ): Int
 
     /** Live-captured SMS sources (deleted entries included) from one sender with the same amount and card tail in a time window. */
     @Query(
@@ -629,6 +648,15 @@ interface ReviewDao {
 
     @Query("SELECT COUNT(*) FROM review_item WHERE createdAtMillis >= :cutoff")
     fun observeCount(cutoff: Long): Flow<Int>
+
+    /** The same message (sender and text) already in the list, received within a window: a backfilled copy of it (STORY-186). */
+    @Query("SELECT COUNT(*) FROM review_item WHERE sender = :sender AND text = :text AND receivedAtMillis BETWEEN :from AND :to")
+    suspend fun countSimilar(
+        sender: String,
+        text: String,
+        from: Long,
+        to: Long,
+    ): Int
 
     @Query("SELECT * FROM review_item WHERE id = :id")
     suspend fun find(id: String): ReviewItemEntity?

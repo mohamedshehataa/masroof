@@ -72,7 +72,7 @@ class SmsBackfill
             if (start.phase != BackfillPhase.RUNNING) return BackfillOutcome.STOPPED
             val epoch = eraseLock.epoch
             return try {
-                readAll(start, epoch).also { if (it == BackfillOutcome.DONE) notifier.finished(store.state.value) }
+                readAll(start, epoch)
             } catch (
                 @Suppress("SwallowedException") _: SecurityException,
             ) {
@@ -115,7 +115,13 @@ class SmsBackfill
                 s = handlePage(page, s, epoch) ?: return BackfillOutcome.STOPPED
             }
             val done = s.copy(phase = BackfillPhase.DONE)
-            return if (commit(epoch) { store.save(done) }) BackfillOutcome.DONE else BackfillOutcome.STOPPED
+            // the summary is posted in the same locked step as the save: never after an erase
+            val saved =
+                commit(epoch) {
+                    store.save(done)
+                    notifier.finished(done)
+                }
+            return if (saved) BackfillOutcome.DONE else BackfillOutcome.STOPPED
         }
 
         /** Handles one page, saving after every message; null when the run must end (Cancel, an erase). */
@@ -142,7 +148,7 @@ class SmsBackfill
         /** Runs [block] under the erase lock only while no erase happened since the run began and the user did not cancel. */
         private suspend fun commit(
             epoch: Long,
-            block: () -> Unit,
+            block: suspend () -> Unit,
         ): Boolean =
             eraseLock.mutex.withLock {
                 if (eraseLock.epoch != epoch || store.state.value.phase != BackfillPhase.RUNNING) {

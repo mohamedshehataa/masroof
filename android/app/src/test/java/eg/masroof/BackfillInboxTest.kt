@@ -226,14 +226,15 @@ class BackfillInboxTest {
     }
 
     @Test
-    fun `REQ-SMS-103 Cancel marks the run stopped at once and keeps its counts`() {
-        val (controller, store) = controller()
-        store.save(BackfillState(BackfillPhase.RUNNING, "D90", 10L, 20L, total = 50, read = 30, entries = 20, review = 4))
-        controller.cancel()
-        val s = store.state.value
-        assertEquals(BackfillPhase.STOPPED, s.phase)
-        assertEquals(20, s.entries)
-    }
+    fun `REQ-SMS-103 Cancel marks the run stopped at once and keeps its counts`() =
+        kotlinx.coroutines.test.runTest {
+            val (controller, store) = controller()
+            store.save(BackfillState(BackfillPhase.RUNNING, "D90", 10L, 20L, total = 50, read = 30, entries = 20, review = 4))
+            controller.cancel()
+            val s = store.state.value
+            assertEquals(BackfillPhase.STOPPED, s.phase)
+            assertEquals(20, s.entries)
+        }
 
     @Test
     fun `REQ-SMS-101 a custom start date and its key round trip, and an unknown key is not a range`() {

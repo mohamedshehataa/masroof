@@ -49,6 +49,7 @@ import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.abs
 
 const val SMS_INTAKE_TAG = "sms-intake"
 const val SMS_UPLOAD_WORK = "sms-upload"
@@ -105,6 +106,20 @@ interface HandledMemory {
         id: String,
         nowMillis: Long,
     )
+
+    /** Remembers a keyed lookup key (a signature of a message or transfer) with the time it happened at. */
+    fun markSignature(
+        signature: String,
+        atMillis: Long,
+        nowMillis: Long,
+    ) = Unit
+
+    /** Was [signature] remembered with a time in this window? */
+    fun seenSignature(
+        signature: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Boolean = false
 }
 
 object NoHandledMemory : HandledMemory {
@@ -160,6 +175,7 @@ class SmsPipeline
         private val memory: HandledMemory = NoHandledMemory,
     ) {
         private val pairing = ChannelPairing(db, clock, notifier)
+        private val repeats = RepeatGuard(db, memory) { idKey.get() }
 
         /**
          * [channel] BACKFILL (STORY-186) is the same pipeline with two differences only: the source row says `BACKFILL`, and no
@@ -214,11 +230,35 @@ class SmsPipeline
             if (stored.disposition != Disposition.DROPPED) {
                 // under the erase lock: after an erase (or in a run that began before it) nothing is written to the cleared prefs
                 eraseLock.mutex.withLock {
-                    if (gate.isOpen() && (epoch == null || eraseLock.epoch == epoch)) memory.mark(id, clock.millis())
+                    if (gate.isOpen() && (epoch == null || eraseLock.epoch == epoch)) markHandled(id, message, outcome)
                 }
             }
             if (stored.changed) signal.changed()
             return stored.disposition
+        }
+
+        /** The message's own key, and the lookup keys of what it was, so a backfilled copy is recognised later even after a purge. */
+        private fun markHandled(
+            id: String,
+            message: IncomingMessage,
+            outcome: ParseOutcome,
+        ) {
+            val now = clock.millis()
+            memory.mark(id, now)
+            val at = message.receivedAtMillis.takeIf { it > 0 } ?: now
+            when (outcome) {
+                is ParseOutcome.Record ->
+                    repeats.marksOf(outcome.record, at).forEach { (key, time) ->
+                        memory.markSignature(key, time, now)
+                    }
+                is ParseOutcome.Review ->
+                    memory.markSignature(
+                        repeats.reviewMark(message.sender, outcome.text.take(MAX_REVIEW_TEXT)),
+                        at,
+                        now,
+                    )
+                is ParseOutcome.Ignore -> Unit
+            }
         }
 
         /** A backfill run (an epoch is given) belongs to the erase generation it began in; live capture has no epoch. */
@@ -250,6 +290,12 @@ class SmsPipeline
                     )
                 is ParseOutcome.Review -> {
                     val now = clock.millis()
+                    val text = outcome.text.take(MAX_REVIEW_TEXT)
+                    // a backfilled copy of what is already in the list (or was, and was dismissed) is not a second item
+                    val sender = message.sender.take(MAX_SENDER)
+                    if (origin.slackMillis > 0 && repeats.isReviewRepeat(sender, text, message.receivedAtMillis, origin.slackMillis)) {
+                        return Stored(Disposition.KNOWN)
+                    }
                     db.reviews().purgeBefore(now - REVIEW_RETENTION_DAYS * MILLIS_PER_DAY)
                     db.reviews().insert(
                         ReviewItemEntity(
@@ -291,11 +337,18 @@ class SmsPipeline
             val last4 = r.instrumentLast4
             if (last4 != null && last4 in answerState.ignoredCards) return storeIgnoredCard(r, id, receivedAt, now)
             // the same transfer announced by the other channel (bank SMS + app notification): one entry, two sources
-            if (channel == CaptureChannel.BACKFILL && isLiveDuplicate(r, receivedAt, origin.slackMillis)) return Stored(Disposition.KNOWN)
+            // no usable sent time and the same message was captured live a moment ago: the user decides (never silently kept or dropped)
+            if (origin.slackMillis > 0 && repeats.isPossibleRepeat(r, receivedAt, origin.slackMillis)) {
+                return storePossibleRepeat(r, id, receivedAt, now)
+            }
             val twin = pairing.claimTwin(r, id, receivedAt)
             if (twin != null) return addToTwin(twin, r, id, templateId, receivedAt, now, channel)
-            // the other channel's entry whose "Recorded" row has expired (7 days) is found by the entry itself
-            if (channel == CaptureChannel.BACKFILL) oldTwinOf(r, receivedAt)?.let { return attachToEntry(it, r, id, receivedAt) }
+            if (channel == CaptureChannel.BACKFILL) {
+                // the other channel's entry whose "Recorded" row has expired (7 days) is found by the entry itself, deleted or not
+                repeats.pushTwin(r, receivedAt)?.let { return attachToEntry(it, r, id, receivedAt) }
+                // ... or, once purged from the trash, by the memory of it
+                if (repeats.isPurgedPushTwin(r, receivedAt)) return Stored(Disposition.KNOWN)
+            }
             val expenseId = ids.next()
             // "Link to an existing account" (REQ-EXP-066): a card tail linked to an account files its captures under it
             val entry =
@@ -318,42 +371,31 @@ class SmsPipeline
             return Stored(Disposition.RECORDED, notice = item, changed = true)
         }
 
-        /** The same SMS that live capture already recorded, stamped a few seconds differently by the provider (no `date_sent`). */
-        private suspend fun isLiveDuplicate(
+        /** The backfilled message may be one live capture already handled: a review item from typed fields, one tap to save it. */
+        private suspend fun storePossibleRepeat(
             r: ParsedRecord,
+            id: String,
             receivedAt: Long,
-            slackMillis: Long,
-        ): Boolean =
-            slackMillis > 0 &&
-                db.sources().liveSmsCount(
-                    r.senderId,
-                    r.currency,
-                    r.amountMinor,
-                    r.instrumentLast4,
-                    receivedAt - slackMillis,
-                    receivedAt + slackMillis,
-                ) >
-                0
+            now: Long,
+        ): Stored {
+            db.reviews().insert(
+                ReviewItemEntity(
+                    id = id,
+                    source = r.source.name,
+                    sender = r.senderId.take(MAX_SENDER),
+                    text = ignoredSummary(r),
+                    reason = REASON_POSSIBLE_REPEAT,
+                    receivedAtMillis = receivedAt,
+                    createdAtMillis = now,
+                ).withSuggestion(r, null),
+            )
+            return Stored(Disposition.REVIEW)
+        }
 
-        /** A notification entry recorded live whose Undo row is gone: same direction, amount and currency, within the twin window. */
-        private suspend fun oldTwinOf(
-            r: ParsedRecord,
-            receivedAt: Long,
-        ): ExpenseEntity? =
-            when (r.kind) {
-                TxKind.INCOME, TxKind.TRANSFER_IN, TxKind.TRANSFER_OUT ->
-                    db.sources().pushTwinOf(
-                        CaptureRows.typeOf(r.kind),
-                        r.currency,
-                        r.amountMinor,
-                        receivedAt - TWIN_WINDOW_MILLIS,
-                        receivedAt + TWIN_WINDOW_MILLIS,
-                        receivedAt,
-                    )
-                else -> null
-            }
-
-        /** Adds the backfilled SMS as a second source of an entry that exists, taking the card tail it knows more of (if untouched). */
+        /**
+         * Adds the backfilled SMS as a second source of an entry that exists (deleted or not: it stays as it is). Only a fresh, untouched
+         * entry within the live pairing window takes a card tail it lacked; its name and any other tail are never changed.
+         */
         private suspend fun attachToEntry(
             entry: ExpenseEntity,
             r: ParsedRecord,
@@ -361,8 +403,9 @@ class SmsPipeline
             receivedAt: Long,
         ): Stored {
             db.sources().insert(CaptureRows.source(ids.next(), entry.id, r, id, receivedAt, CHANNEL_BACKFILL))
-            if (entry.instrumentLast4 == null && r.instrumentLast4 != null) {
-                db.expenses().enrichFromTwin(entry.id, r.instrumentLast4, CaptureRows.label(r))
+            val fresh = abs(entry.occurredAtMillis - receivedAt) <= TWIN_WINDOW_MILLIS
+            if (fresh && entry.deletedAtMillis == null && entry.instrumentLast4 == null && r.instrumentLast4 != null) {
+                db.expenses().enrichFromTwin(entry.id, r.instrumentLast4, CaptureRows.label(r), true)
             }
             return Stored(Disposition.KNOWN, changed = true)
         }
@@ -421,13 +464,13 @@ class SmsPipeline
             val richer = twin.captured.instrumentLast4 == null && r.instrumentLast4 != null
             if (twin.captured.templateId == CaptureRows.REVIEW_SAVED) {
                 // the user saved the first one by hand: take what this one knows, but no new notice and no Undo chip
-                if (richer) db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r))
+                if (richer) db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r), false)
                 return Stored(Disposition.RECORDED, changed = true)
             }
             val replace =
                 richer &&
                     !twin.captured.undoRequested &&
-                    db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r)) == 1
+                    db.expenses().enrichFromTwin(expenseId, r.instrumentLast4, CaptureRows.label(r), false) == 1
             if (!replace) return Stored(Disposition.RECORDED, changed = true)
             db.captured().delete(twin.captured.localId)
             val item = captured(id, expenseId, r, templateId, receivedAt, now, twinId = twin.captured.localId)

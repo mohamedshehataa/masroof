@@ -22,8 +22,10 @@ import eg.masroof.core.CairoTime
 import eg.masroof.core.CountFormat
 import eg.masroof.core.DigitStyle
 import eg.masroof.data.SettingsRepository
+import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.ingest.NotificationPermission
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
@@ -70,7 +72,8 @@ internal fun BackfillRange.fromMillis(nowMillis: Long): Long {
     val first =
         when (this) {
             is BackfillRange.Days -> CairoTime.dateOf(nowMillis).minusDays(days.toLong())
-            is BackfillRange.Since -> date
+            // a date in the future would read nothing: the start is at most today
+            is BackfillRange.Since -> minOf(date, CairoTime.dateOf(nowMillis))
         }
     return first.atStartOfDay(CairoTime.zone).toInstant().toEpochMilli()
 }
@@ -83,6 +86,7 @@ class BackfillController
         private val workManager: WorkManager,
         private val store: BackfillStore,
         private val clock: Clock,
+        private val eraseLock: EraseLock = EraseLock(),
     ) {
         val state get() = store.state
 
@@ -105,10 +109,12 @@ class BackfillController
         }
 
         /** Stops within one batch (the worker checks after every message) and keeps what was stored. */
-        fun cancel() {
-            // first the mark (the engine refuses to save over it), then the work
-            val s = store.state.value
-            if (s.phase == BackfillPhase.RUNNING) store.save(s.copy(phase = BackfillPhase.STOPPED))
+        suspend fun cancel() {
+            // first the mark (the engine refuses to save over it), under the erase lock and from the current state, then the work
+            eraseLock.mutex.withLock {
+                val s = store.state.value
+                if (s.phase == BackfillPhase.RUNNING) store.save(s.copy(phase = BackfillPhase.STOPPED))
+            }
             workManager.cancelUniqueWork(SMS_BACKFILL_WORK)
         }
 

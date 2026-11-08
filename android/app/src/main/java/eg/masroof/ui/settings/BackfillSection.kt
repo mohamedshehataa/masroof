@@ -24,6 +24,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -263,9 +264,22 @@ private fun RangeChoices(
         RangeRow(customLabel, custom != null) { picking = true }
     }
     if (picking) {
+        val todayUtcMillis =
+            LocalDate
+                .now(CairoTime.zone)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
         val initial = (selected as? BackfillRange.Since)?.date ?: LocalDate.now(CairoTime.zone).minusDays(DEFAULT_DAYS)
         val pickerState =
-            rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+            rememberDatePickerState(
+                initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+                // the start is at most today
+                selectableDates =
+                    object : SelectableDates {
+                        override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= todayUtcMillis
+                    },
+            )
         DatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
@@ -284,7 +298,12 @@ private fun RangeChoices(
                     Text(stringResource(R.string.backfill_pick_cancel))
                 }
             },
-        ) { DatePicker(state = pickerState, title = { Text(stringResource(R.string.backfill_pick_date), Modifier.padding(16.dp)) }) }
+        ) {
+            DatePicker(
+                state = pickerState,
+                title = { Text(stringResource(R.string.backfill_pick_date), Modifier.padding(16.dp)) },
+            )
+        }
     }
 }
 
