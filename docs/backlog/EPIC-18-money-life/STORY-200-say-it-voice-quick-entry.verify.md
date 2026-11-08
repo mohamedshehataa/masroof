@@ -33,3 +33,18 @@ EXPLORATORY: 115 cases, 23 problems (listed above); Cairo midnight and summer-ti
 and Arabic labels correct; 10k-char inputs capped at 400 chars, 0-1 ms
 TEST_INTEGRITY: OK
 STATUS: FAIL -> fix round 1 sent with the security review's MINORs (see `.review.md`)
+
+## Loop 2 - head `04997c1`
+Gate: `bash scripts/make/check-fast.sh android` -> GREEN in 119s; `--rerun` 721 tests, 0 failures. TEST_INTEGRITY: OK (0 ->
+264; 4 assertions replaced by stricter ones for the fixes). 145 parser cases (104 from loop 1, 0 regressions, 15 changed
+exactly as intended) + 41 new; 12 view-model steps.
+- MAJOR 1 years: PASS (`3 oct 1500 pounds uber` -> 1,500 EGP on 2026-10-03; future years dropped)
+- MAJOR 2 heard text: PASS (kept, editable, Done re-parses; typing ignored while listening)
+- MAJOR 3 تلاف: PASS (`خمس تلاف جنيه` -> 5,000; 15 new Arabic number phrases correct)
+- Verifier and security MINORs: PASS (online notice, bidi strip, merchant cap, require checks - single caller, KWD removed)
+FINDINGS:
+- [MAJOR] `QuickNumbers.kt` -- نص/ربع before a scale word: `نص مليون` -> 1,000,000 (should be 500,000);
+  `خمسة ونص ألف` -> 5,000.50; `ألف إلا ربع` -> 1,000
+- [MINOR] `150E£`/`£E 150` -> GBP; online notice skipped on the language fallback; unsupported currency words -> EGP;
+  ISO date `2026-10-03` kills the amount
+STATUS: FAIL -> fix round 2 sent (owner rule: keep iterating; see DECISIONS)
