@@ -3,7 +3,7 @@ id: STORY-173
 epic: EPIC-17
 title: A manual entry that looks like a captured one is offered as a possible duplicate
 phase: 6
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -93,3 +93,6 @@ STORY-172
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D1 §7) |
+| 2026-11-08 | 5 build | android-engineer | "Possible duplicate" cards in Needs review, Merge with Undo, Keep both remembered |
+| 2026-11-08 | 6 verify | qa-verifier | loop 1 PASS on e493139; MINORs (merged-away restore, Undo after a link) fixed in 98503c5, diff reviewed |
+| 2026-11-08 | 8 integrate | orchestrator | DONE |

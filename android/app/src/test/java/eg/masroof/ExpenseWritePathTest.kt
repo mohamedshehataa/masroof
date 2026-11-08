@@ -26,6 +26,8 @@ class ExpenseWritePathTest {
             // the helper: answers, Undo, Unlink and reconcile themselves
             "data/answers/AnswerRepository.kt" to 5,
             "data/answers/AnswerWrites.kt" to 13,
+            // STORY-173: the one merge write (update the capture, soft-delete the typed entry) and its Undo; only on a tap, links refused
+            "data/edit/DuplicateMerge.kt" to 4,
             // capture Undo: soft delete, then reconcile in the same transaction
             "ingest/Captured.kt" to 1,
             // new rows only (nothing can be linked to a row that does not exist yet) and the twin enrichment of fresh captures
@@ -102,7 +104,11 @@ class ExpenseWritePathTest {
 
     @Test
     fun `REQ-EXP-065 the files that write linked rows run the link rules`() {
-        listOf("data/edit/ExpenseEdit.kt", "ingest/Captured.kt", "data/answers/AnswerRepository.kt").forEach {
+        listOf(
+            "data/edit/ExpenseEdit.kt",
+            "ingest/Captured.kt",
+            "data/answers/AnswerRepository.kt",
+        ).forEach {
             assertTrue(
                 "$it must call AnswerWrites.reconcile or settle",
                 File("src/main/java/eg/masroof/$it").readText().let { t ->

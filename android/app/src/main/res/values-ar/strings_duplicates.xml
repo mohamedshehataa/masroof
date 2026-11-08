@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="duplicates_title">ممكن يكون مكرر</string>
+    <string name="duplicates_manual">إدخال يدوي</string>
+    <string name="duplicates_source_from">%1$s من %2$s</string>
+    <string name="duplicates_no_merchant">من غير اسم محل</string>
+    <string name="duplicates_date_time">%1$s، %2$s</string>
+    <string name="duplicates_merge">دمج</string>
+    <string name="duplicates_keep_both">سيب الاتنين</string>
+    <string name="duplicates_a11y">ممكن يكون مكرر: %1$s إدخال يدوي و%2$s %3$s</string>
+    <string name="duplicates_merged">اتدمجوا</string>
+    <string name="duplicates_undo">تراجع</string>
+    <string name="duplicates_out_of_date">الاقتراح ده قديم</string>
+    <string name="duplicates_failed">معرفناش ندمج، جرب تاني</string>
+    <string name="duplicates_undo_failed">مينفعش نتراجع: واحد من المصروفين اتغيّر</string>
+</resources>
