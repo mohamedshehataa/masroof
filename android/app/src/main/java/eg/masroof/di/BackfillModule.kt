@@ -9,7 +9,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import eg.masroof.data.auth.BackfillReset
-import eg.masroof.data.auth.TinkKeystore
+import eg.masroof.data.auth.LocalKeystore
+import eg.masroof.data.auth.RecoveringAead
 import eg.masroof.ingest.HandledMemory
 import eg.masroof.ingest.backfill.AndroidBackfillNotifier
 import eg.masroof.ingest.backfill.BackfillNotifier
@@ -40,11 +41,24 @@ object BackfillProvidesModule {
     fun handledMemory(store: BackfillStore): HandledMemory = store
 
     @Provides @Singleton
-    fun backfillReset(store: BackfillStore): BackfillReset = BackfillReset(store::reset)
+    fun localAead(
+        @ApplicationContext context: Context,
+    ): RecoveringAead = LocalKeystore.aead(context)
+
+    /** "Erase all data": the memory is emptied and its key destroyed (a new one is made at the next use). */
+    @Provides @Singleton
+    fun backfillReset(
+        store: BackfillStore,
+        aead: RecoveringAead,
+    ): BackfillReset =
+        BackfillReset {
+            store.reset()
+            aead.reset()
+        }
 
     @Provides @Singleton
     fun backfillStore(
         @ApplicationContext context: Context,
-    ): BackfillStore =
-        BackfillStore(context.getSharedPreferences(BackfillStore.PREFS_NAME, Context.MODE_PRIVATE), TinkKeystore.aead(context))
+        aead: RecoveringAead,
+    ): BackfillStore = BackfillStore(context.getSharedPreferences(BackfillStore.PREFS_NAME, Context.MODE_PRIVATE), aead)
 }

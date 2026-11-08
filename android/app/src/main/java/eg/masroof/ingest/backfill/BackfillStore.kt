@@ -47,7 +47,7 @@ data class BackfillState(
  */
 class BackfillStore(
     private val prefs: SharedPreferences,
-    /** Seals the remembered times (production: the Tink AEAD of the Android Keystore); null only in tests that read the file. */
+    /** Seals the remembered times (production: the phone's own `LocalKeystore`, which a logout or a server forget never destroys); null only in tests that read the file. */
     private val aead: Aead? = null,
 ) : HandledMemory {
     private val mutable = MutableStateFlow(read())
@@ -91,7 +91,7 @@ class BackfillStore(
         nowMillis: Long,
     ) {
         pruneDaily(nowMillis)
-        prefs.edit { putString(SEEN + id, seal(nowMillis.toString())) }
+        seal(nowMillis.toString())?.let { sealed -> prefs.edit { putString(SEEN + id, sealed) } }
     }
 
     /** A signature with the times (of the message, of the mark) it was seen at; at most [MAX_TIMES] are kept per signature. */
@@ -151,12 +151,15 @@ class BackfillStore(
         all: List<Seen>,
     ) {
         val text = all.joinToString(",") { "${it.at}:${it.marked}:${if (it.used) 1 else 0}" }
-        prefs.edit { putString(SIG + signature, seal(text)) }
+        seal(text)?.let { sealed -> prefs.edit { putString(SIG + signature, sealed) } }
     }
 
     /** The values (times) are sealed with the keystore-backed AEAD when there is one: the file alone says nothing about when. */
-    private fun seal(text: String): String =
-        aead?.let { Base64.encodeToString(it.encrypt(text.toByteArray(Charsets.UTF_8), AAD), Base64.NO_WRAP) } ?: text
+    private fun seal(text: String): String? {
+        val cipher = aead ?: return text
+        // a key that cannot seal (and could not be recreated) means nothing is remembered; it never crashes a capture or a run
+        return runCatching { Base64.encodeToString(cipher.encrypt(text.toByteArray(Charsets.UTF_8), AAD), Base64.NO_WRAP) }.getOrNull()
+    }
 
     private fun open(raw: String): String? {
         val cipher = aead ?: return raw
