@@ -42,14 +42,31 @@ interface KeyPrefs {
  * seal under the local keyset into a new entry, commit, read it back and compare, and only then may the session keyset be deleted and
  * the legacy entry removed. At every point one of the two entries opens to the same bytes, so a kill or an exception at any step
  * loses nothing. Plaintext copies used for checking are zeroed.
+ *
+ * A key is made ONLY when no entry exists, or when every entry that exists is deterministically LOST. Loss is decided from what can
+ * be observed now, never from in-memory history:
+ *
+ * | what happens                                                    | class     | action                                                  |
+ * |-----------------------------------------------------------------|-----------|---------------------------------------------------------|
+ * | local entry opens                                               | ok        | return it                                               |
+ * | local entry fails to open, a test value round-trips through the | lost      | the tag is permanently bad: use the legacy key, else    |
+ * | SAME built AEAD (after the build Tink runs in memory)           |           | make one key and keep it                                |
+ * | local entry fails to open and the round trip fails too          | transient | throw (nothing is replaced, callers retry)              |
+ * | local keyset file does not parse twice in a row (corrupt)       | lost      | reset the local keyset (existing LocalKeystore path)    |
+ * | any other I/O error, provider error, busy Keystore, failed write| transient | throw [LocalIdKeyUnavailableException]                  |
+ * | session keyset does not parse twice in a row (corrupt)          | lost      | the legacy key is lost                                  |
+ * | legacy entry fails to open under a BUILT session keyset         | lost      | the legacy key is lost                                  |
+ * | session keyset fails to build for any other reason              | transient | throw                                                   |
+ *
+ * Nothing but a [LocalIdKeyUnavailableException] (or a cancellation) ever leaves [get].
  */
 class KeystoreLocalIdKey(
     private val current: KeyPrefs,
     private val legacy: KeyPrefs,
     private val localAead: () -> Aead,
     private val sessionAead: () -> Aead,
-    /** True only when the local keyset was PROVABLY lost and recreated: an entry sealed under it can never open. */
-    private val localLost: () -> Boolean = { false },
+    /** Destroys the local keyset so the next build makes a new one (used only for a keyset file that is corrupt). */
+    private val localReset: () -> Unit = {},
 ) : LocalIdKey {
     constructor(context: Context, localAead: RecoveringAead) : this(
         SharedKeyPrefs(context, "masroof_capture_key"),
@@ -57,15 +74,9 @@ class KeystoreLocalIdKey(
         { localAead },
         // NON-resetting: a transient Keystore failure while reading the legacy key must never delete the keyset it was sealed under
         { TinkKeystore.aeadOrThrow(context) },
-        { localAead.keyRecreated },
+        { localAead.reset() },
     )
 
-    /**
-     * Returns the key. A key is made ONLY when no entry exists (or every entry that exists is PROVABLY gone: the local keyset was lost
-     * and recreated, and the legacy entry does not open under a built session keyset). An entry that exists but does not open, a
-     * keyset that fails to build, a failed write or a failed read-back all THROW [LocalIdKeyUnavailableException]: callers retry
-     * later, they never get a different key. Intake and the backfill worker retry; a minted key would stop every SMS from deduping.
-     */
     @Synchronized
     @Suppress("TooGenericExceptionCaught") // the Keystore provider can fail with any RuntimeException: all of them mean "try later"
     override fun get(): ByteArray =
@@ -73,6 +84,8 @@ class KeystoreLocalIdKey(
             getChecked()
         } catch (e: LocalIdKeyUnavailableException) {
             throw e
+        } catch (e: java.io.IOException) {
+            throw LocalIdKeyUnavailableException(e)
         } catch (e: GeneralSecurityException) {
             throw LocalIdKeyUnavailableException(e)
         } catch (e: RuntimeException) {
@@ -81,28 +94,85 @@ class KeystoreLocalIdKey(
 
     private fun getChecked(): ByteArray {
         val sealed = current.get(CURRENT)
-        if (sealed != null) {
-            try {
-                return unseal(sealed, localAead())
-            } catch (e: GeneralSecurityException) {
-                // present but not opened: a busy Keystore looks the same as a lost key, so only a PROVABLY lost key may go on
-                if (!localLost()) throw LocalIdKeyUnavailableException(e)
-            }
-        }
-        val old =
-            legacy.get(LEGACY)?.let { stored ->
-                // building the session AEAD may throw (not swallowed: not "no key"); only a failed OPEN under a built keyset is "gone"
-                val a = sessionAead()
-                try {
-                    unseal(stored, a)
-                } catch (_: GeneralSecurityException) {
-                    null
-                }
-            }
+        if (sealed != null) openLocal(sealed)?.let { return it }
+        val stored = legacy.get(LEGACY)
+        val old = if (stored == null) null else openLegacy(stored)
         val key = old ?: ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
         seal(key)
         return key
     }
+
+    /** The key, or null when the entry is LOST (see the table); throws when that cannot be told. */
+    private fun openLocal(sealed: String): ByteArray? {
+        val a = localAead()
+        try {
+            return unseal(sealed, a)
+        } catch (e: java.io.IOException) {
+            if (!isCorrupt(e)) throw LocalIdKeyUnavailableException(e)
+            // RecoveringAead already rebuilt once: a keyset file that does not parse twice is permanently corrupt
+            localReset()
+            return null
+        } catch (_: GeneralSecurityException) {
+            // a bad tag, or a build that failed: the round trip below tells them apart
+        }
+        val probe = ByteArray(PROBE_BYTES).also { SecureRandom().nextBytes(it) }
+        val roundTrip =
+            try {
+                a.decrypt(a.encrypt(probe, PROBE_AAD), PROBE_AAD)
+            } catch (e: java.io.IOException) {
+                if (isCorrupt(e)) {
+                    localReset()
+                    return null
+                }
+                throw LocalIdKeyUnavailableException(e)
+            } catch (e: GeneralSecurityException) {
+                throw LocalIdKeyUnavailableException(e)
+            }
+        if (!roundTrip.contentEquals(probe)) throw LocalIdKeyUnavailableException(GeneralSecurityException("round trip differs"))
+        // The keyset is built and works now. The first failure may have been the build itself (a transient one), so the entry is
+        // tried once more: only if the BUILT keyset rejects it too is the tag permanently bad (lost).
+        return try {
+            unseal(sealed, a)
+        } catch (_: GeneralSecurityException) {
+            null
+        }
+    }
+
+    /** The legacy key, or null when it is LOST (see the table); throws when that cannot be told. */
+    private fun openLegacy(stored: String): ByteArray? {
+        val a =
+            try {
+                buildSession()
+            } catch (_: CorruptSessionKeyset) {
+                return null
+            }
+        return try {
+            unseal(stored, a)
+        } catch (_: GeneralSecurityException) {
+            null
+        }
+    }
+
+    /** Builds the session AEAD; null-free: a keyset that does not parse twice in a row throws [CorruptSessionKeyset]. */
+    private fun buildSession(): Aead =
+        try {
+            sessionAead()
+        } catch (first: java.io.IOException) {
+            if (!isCorrupt(first)) throw LocalIdKeyUnavailableException(first)
+            try {
+                sessionAead()
+            } catch (second: java.io.IOException) {
+                if (!isCorrupt(second)) throw LocalIdKeyUnavailableException(second)
+                throw CorruptSessionKeyset()
+            }
+        }
+
+    private class CorruptSessionKeyset : Exception()
+
+    private fun isCorrupt(e: Throwable): Boolean =
+        generateSequence(e) { it.cause }.take(MAX_CAUSES).any {
+            it is java.io.CharConversionException || it.javaClass.simpleName.contains("InvalidProtocolBuffer")
+        }
 
     private fun unseal(
         stored: String,
@@ -145,6 +215,9 @@ class KeystoreLocalIdKey(
         const val CURRENT = "k_local"
         const val LEGACY = "k"
         const val KEY_BYTES = 32
+        const val PROBE_BYTES = 16
+        const val MAX_CAUSES = 5
+        val PROBE_AAD = "masroof-local-id-probe".toByteArray()
         val AAD = "masroof-local-id".toByteArray()
     }
 }

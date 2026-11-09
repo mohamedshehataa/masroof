@@ -33,22 +33,13 @@ object LocalKeystore {
     fun aead(
         context: Context,
         onKeyRecreated: () -> Unit = {},
-    ): RecoveringAead {
-        lateinit var self: RecoveringAead
-        // every recreation (a provably lost key) is also remembered by the AEAD itself, for callers that must tell "lost" from "busy"
-        val recreated = {
-            self.markRecreated()
-            onKeyRecreated()
-        }
-        self =
-            RecoveringAead(
-                build = { buildRecovering(context, recreated) },
-                destroy = { destroy(context) },
-                recoverIfLost = { recoverIfLost(context) },
-                onKeyRecreated = recreated,
-            )
-        return self
-    }
+    ): RecoveringAead =
+        RecoveringAead(
+            build = { buildRecovering(context, onKeyRecreated) },
+            destroy = { destroy(context) },
+            recoverIfLost = { recoverIfLost(context) },
+            onKeyRecreated = onKeyRecreated,
+        )
 
     /** The "Erase all data" step: destroys the keyset entry and the master key unconditionally; a new pair is made at the next use. */
     fun reset(context: Context) = destroy(context)
@@ -160,22 +151,10 @@ class RecoveringAead(
 ) : Aead {
     private var current: Aead? = null
 
-    /** True once the key was PROVABLY lost and recreated in this process: what was sealed under the old key can never open. */
-    @Volatile
-    var keyRecreated: Boolean = false
-        private set
-
-    internal fun markRecreated() {
-        keyRecreated = true
-    }
-
     @Synchronized
     private fun aead(): Aead =
         current ?: run {
-            if (recoverIfLost()) {
-                markRecreated()
-                onKeyRecreated()
-            }
+            if (recoverIfLost()) onKeyRecreated()
             build().also { current = it }
         }
 

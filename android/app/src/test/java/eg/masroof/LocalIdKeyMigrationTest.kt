@@ -67,8 +67,7 @@ class LocalIdKeyMigrationTest {
         localAead: () -> Aead = { local },
         current: KeyPrefs = prefs,
         legacy: KeyPrefs = legacyPrefs,
-        lost: () -> Boolean = { false },
-    ) = KeystoreLocalIdKey(current, legacy, localAead, { session }, lost)
+    ) = KeystoreLocalIdKey(current, legacy, localAead, { session })
 
     /** The real deletion: afterwards the session keyset is a different, empty one (what Tink makes at the next use). */
     private fun destroySession() {
@@ -189,17 +188,30 @@ class LocalIdKeyMigrationTest {
     fun `REQ-SEC-065 a local entry under a PROVABLY lost keyset falls back to the legacy one before making a new key`() {
         val original = legacyKey()
         prefs.map["k_local"] = Base64.encodeToString(inMemoryAead().encrypt(ByteArray(32), aad), Base64.NO_WRAP)
-        assertArrayEquals(original, key(lost = { true }).get())
+        assertArrayEquals(original, key().get())
         assertArrayEquals(original, key().get())
     }
 
     @Test
-    fun `REQ-SEC-065 a local entry that does not open while the keyset is not provably lost is never replaced`() {
+    fun `REQ-SEC-065 a local entry that does not open while the keyset cannot round-trip is never replaced`() {
         legacyKey()
         val stale = Base64.encodeToString(inMemoryAead().encrypt(ByteArray(32), aad), Base64.NO_WRAP)
         prefs.map["k_local"] = stale
+        // a keyset that rejects the entry AND cannot even round-trip a test value: nothing is known, so nothing is replaced
+        val deaf =
+            object : Aead {
+                override fun encrypt(
+                    plaintext: ByteArray,
+                    associatedData: ByteArray,
+                ): ByteArray = throw GeneralSecurityException("busy")
+
+                override fun decrypt(
+                    ciphertext: ByteArray,
+                    associatedData: ByteArray,
+                ): ByteArray = throw GeneralSecurityException("busy")
+            }
         try {
-            key().get()
+            key({ deaf }).get()
             fail("must throw")
         } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
             // try later
@@ -210,7 +222,7 @@ class LocalIdKeyMigrationTest {
     @Test
     fun `REQ-SEC-065 a lost keyset with no legacy key mints one new key and keeps it`() {
         prefs.map["k_local"] = Base64.encodeToString(inMemoryAead().encrypt(ByteArray(32), aad), Base64.NO_WRAP)
-        val fresh = key(lost = { true }).get()
+        val fresh = key().get()
         assertArrayEquals(fresh, key().get())
     }
 
@@ -245,14 +257,8 @@ class LocalIdKeyMigrationTest {
         legacyPrefs.map.clear()
         val sealed = prefs.map["k_local"]
         val real = realLocalAead(buildFailures = 2)
-        try {
-            key({ real }).get()
-            fail("a key that exists but does not open must be reported, never replaced")
-        } catch (_: java.io.IOException) {
-            // "try later"
-        } catch (_: GeneralSecurityException) {
-            // also "try later"
-        }
+        // the transient window is absorbed (the entry opens once the keyset is built): the SAME bytes, never a new key
+        assertArrayEquals(original, key({ real }).get())
         assertEquals(sealed, prefs.map["k_local"])
         assertArrayEquals(original, key({ real }).get())
     }
@@ -279,6 +285,75 @@ class LocalIdKeyMigrationTest {
         assertTrue(legacyPrefs.map["k"] != null)
         assertNull(prefs.map["k_local"])
         assertArrayEquals(original, KeystoreLocalIdKey(prefs, legacyPrefs, { local }, flakySession).get())
+    }
+
+    private fun sealedUnderOtherKeyset(): String = Base64.encodeToString(inMemoryAead().encrypt(ByteArray(32), aad), Base64.NO_WRAP)
+
+    @Test
+    fun `REQ-SEC-065 a keyset recreated in one process and never sealed is settled by the next process, which mints once and keeps it`() {
+        // process A recreated the local keyset and died before get() sealed anything: k_local is under the OLD keyset
+        prefs.map["k_local"] = sealedUnderOtherKeyset()
+        // process B: a new object over the same stores; the round trip through the built keyset proves the old tag is permanently bad
+        val minted = key().get()
+        assertArrayEquals(minted, key().get())
+        assertArrayEquals(minted, key().get())
+    }
+
+    @Test
+    fun `REQ-SEC-065 a transient failure after a recreation never overwrites the sealed key`() {
+        prefs.map["k_local"] = sealedUnderOtherKeyset()
+        val minted = key().get()
+        val sealed = prefs.map["k_local"]
+        // two build failures in a row (the retry inside RecoveringAead is used up), then it works again
+        val real = realLocalAead(buildFailures = 2)
+        // the transient window is absorbed: the SAME bytes, never a new key
+        assertArrayEquals(minted, key({ real }).get())
+        assertEquals(sealed, prefs.map["k_local"])
+        assertArrayEquals(minted, key({ real }).get())
+    }
+
+    @Test
+    fun `REQ-SEC-065 a local AEAD that cannot be built at all is unavailable, never lost`() {
+        prefs.map["k_local"] = sealedUnderOtherKeyset()
+        val sealed = prefs.map["k_local"]
+        val broken =
+            eg.masroof.data.auth
+                .RecoveringAead(build = { throw GeneralSecurityException("keystore busy") }, destroy = {})
+        try {
+            key({ broken }).get()
+            fail("must throw")
+        } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
+            // the round trip failed too: nothing is known about the key
+        }
+        assertEquals(sealed, prefs.map["k_local"])
+    }
+
+    @Test
+    fun `REQ-SEC-065 no failure of the legacy keyset escapes as a raw exception, each is classified`() {
+        val original = legacyKey()
+        // transient kinds (disk, provider, busy): unavailable, legacy key and keyset untouched
+        val transient: List<() -> Throwable> =
+            listOf(
+                { IOException("disk") },
+                { GeneralSecurityException("busy") },
+                { IllegalStateException("provider") },
+            )
+        for (make in transient) {
+            val k = KeystoreLocalIdKey(prefs, legacyPrefs, { local }, { throw make() })
+            try {
+                k.get()
+                fail("must throw")
+            } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
+                // try later
+            }
+            assertNull(prefs.map["k_local"])
+            assertTrue(legacyPrefs.map["k"] != null)
+        }
+        // a keyset file that does not parse (permanent corruption): the legacy key is lost, one new key is made and kept
+        val corrupt = KeystoreLocalIdKey(prefs, legacyPrefs, { local }, { throw java.io.CharConversionException("corrupt keyset") })
+        val minted = corrupt.get()
+        assertTrue(!minted.contentEquals(original))
+        assertArrayEquals(minted, key().get())
     }
 
     @Test
