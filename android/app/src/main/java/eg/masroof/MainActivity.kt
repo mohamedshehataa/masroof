@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
@@ -20,7 +19,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -28,7 +26,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,7 +75,7 @@ import eg.masroof.ui.nav.tabOwnerOf
 import eg.masroof.ui.onboarding.FinishSetupCard
 import eg.masroof.ui.onboarding.OnboardingRoute
 import eg.masroof.ui.onboarding.OnboardingViewModel
-import eg.masroof.ui.onboarding.SetupMode
+import eg.masroof.ui.onboarding.SetupGate
 import eg.masroof.ui.plan.PlanScreen
 import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
@@ -258,20 +255,21 @@ private fun MasroofRoot(
 ) {
     val onboarding: OnboardingViewModel = hiltViewModel()
     val progress by onboarding.progress.collectAsState()
-    when (progress.mode) {
-        SetupMode.UNDECIDED -> Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
-        SetupMode.GUIDE -> OnboardingRoute(progress.step, onboarding, onSetLanguage)
-        SetupMode.CARD, SetupMode.DONE ->
+    SetupGate(
+        progress = progress,
+        guide = { OnboardingRoute(progress, onboarding, onSetLanguage) },
+        app = { showSetupCard ->
             MasroofApp(
                 openReceipts = openReceipts,
                 onReceiptsOpened = onReceiptsOpened,
                 openRoute = openRoute,
                 onRouteOpened = onRouteOpened,
                 onToggleLanguage = onToggleLanguage,
-                showSetupCard = progress.mode == SetupMode.CARD,
+                showSetupCard = showSetupCard,
                 onboarding = onboarding,
             )
-    }
+        },
+    )
 }
 
 // currentBackStack is the only way to read the whole stack (the highlight needs the nearest tab-owned entry under a shared screen).

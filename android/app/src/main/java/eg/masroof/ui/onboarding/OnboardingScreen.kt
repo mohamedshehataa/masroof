@@ -1,11 +1,14 @@
 package eg.masroof.ui.onboarding
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,11 +42,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -58,10 +65,14 @@ internal data class OnboardingUi(
     val step: Int,
     /** The language the UI shows right now (`ar` or `en`). */
     val language: String,
+    /** SMS capture is on: the permission is granted AND the app's own capture switch is on (the same rule as Settings). */
     val smsGranted: Boolean = false,
     val smsDenied: Boolean = false,
+    /** The system will not ask again ("Don't ask again"): the main button then opens the app's system settings. */
+    val smsPermanentlyDenied: Boolean = false,
     val readSmsGranted: Boolean = false,
     val readSmsDenied: Boolean = false,
+    val readSmsPermanentlyDenied: Boolean = false,
     val rangeDays: Int = 90,
     /** null until the user has been to the system screen; then whether Masroof is enabled there. */
     val notificationAccess: Boolean? = null,
@@ -202,15 +213,20 @@ private fun SmsStep(
     if (ui.smsGranted) {
         Text(stringResource(R.string.onb_sms_on), color = MaterialTheme.colorScheme.primary)
     } else {
-        Button(onClick = actions.onRequestSms, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Text(stringResource(R.string.onb_sms_turn_on))
+        val permanent = ui.smsPermanentlyDenied
+        Button(
+            onClick = if (permanent) actions.onOpenAppSettings else actions.onRequestSms,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text(stringResource(if (permanent) R.string.onb_open_app_settings else R.string.onb_sms_turn_on))
         }
     }
     if (ui.smsDenied && !ui.smsGranted) {
-        Text(stringResource(R.string.onb_sms_denied), color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = actions.onOpenAppSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Text(stringResource(R.string.onb_open_app_settings))
-        }
+        Text(
+            stringResource(R.string.onb_sms_denied),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
     }
 }
 
@@ -237,14 +253,27 @@ private fun PastSmsStep(
             }
         }
     }
-    Button(onClick = actions.onStartPastSms, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        Text(stringResource(if (ui.readSmsGranted) R.string.onb_past_start else R.string.onb_past_allow_start))
+    val permanent = ui.readSmsPermanentlyDenied && !ui.readSmsGranted
+    Button(
+        onClick = if (permanent) actions.onOpenAppSettings else actions.onStartPastSms,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+    ) {
+        Text(
+            stringResource(
+                when {
+                    permanent -> R.string.onb_open_app_settings
+                    ui.readSmsGranted -> R.string.onb_past_start
+                    else -> R.string.onb_past_allow_start
+                },
+            ),
+        )
     }
     if (ui.readSmsDenied && !ui.readSmsGranted) {
-        Text(stringResource(R.string.onb_past_denied), color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = actions.onOpenAppSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Text(stringResource(R.string.onb_open_app_settings))
-        }
+        Text(
+            stringResource(R.string.onb_past_denied),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
     }
 }
 
@@ -263,7 +292,12 @@ private fun NotificationsStep(
     }
     when (ui.notificationAccess) {
         true -> Text(stringResource(R.string.onb_ntf_enabled), color = MaterialTheme.colorScheme.primary)
-        false -> Text(stringResource(R.string.onb_ntf_not_enabled), color = MaterialTheme.colorScheme.error)
+        false ->
+            Text(
+                stringResource(R.string.onb_ntf_not_enabled),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         null -> Unit
     }
 }
@@ -282,7 +316,13 @@ private fun MemberStep(
         onValueChange = onName,
         label = { Text(stringResource(R.string.onb_member_label)) },
         isError = ui.nameError,
-        supportingText = { if (ui.nameError) Text(stringResource(R.string.onb_member_error)) },
+        supportingText = {
+            if (ui.nameError) {
+                // the limit follows the app's digit setting, like every other number on screen
+                val limit = CountFormat.format(MAX_MEMBER_NAME, LocalMoneyStyle.current.digits)
+                Text(stringResource(R.string.onb_member_error, limit), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+        },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -292,39 +332,65 @@ private fun Context.granted(permission: String) = ContextCompat.checkSelfPermiss
 
 private fun Context.notificationAccessOn() = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
 
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
+/** True once the system will no longer show its dialog for [permission] ("Don't ask again"); read only after a denial we asked for. */
+private fun Context.permanentlyDenied(permission: String): Boolean =
+    findActivity()?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, permission) } ?: false
+
 /**
  * The permission plumbing around [OnboardingContent]. A permission is asked only after the step's own text explained it, and a denial
- * never blocks: Continue and Skip always work.
+ * never blocks: Continue and Skip always work. System Back goes to the previous step (and closes a guide that was reopened).
  */
 @Composable
 internal fun OnboardingRoute(
-    step: Int,
+    progress: OnboardingProgress,
     viewModel: OnboardingViewModel,
     onSetLanguage: (String) -> Unit,
 ) {
+    val step = progress.step
     val context = LocalContext.current
-    var smsGranted by remember { mutableStateOf(context.granted(Manifest.permission.RECEIVE_SMS)) }
+    var smsPermitted by remember { mutableStateOf(context.granted(Manifest.permission.RECEIVE_SMS)) }
+    var smsWanted by remember { mutableStateOf(viewModel.smsCaptureWanted()) }
     var smsDenied by rememberSaveable { mutableStateOf(false) }
+    var smsPermanent by rememberSaveable { mutableStateOf(false) }
     var readGranted by remember { mutableStateOf(context.granted(Manifest.permission.READ_SMS)) }
     var readDenied by rememberSaveable { mutableStateOf(false) }
+    var readPermanent by rememberSaveable { mutableStateOf(false) }
     var visitedAccess by rememberSaveable { mutableStateOf(false) }
     var access by remember { mutableStateOf(context.notificationAccessOn()) }
     // back from the system settings pages: any of these may have changed there
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        smsGranted = context.granted(Manifest.permission.RECEIVE_SMS)
+        smsPermitted = context.granted(Manifest.permission.RECEIVE_SMS)
         readGranted = context.granted(Manifest.permission.READ_SMS)
         access = context.notificationAccessOn()
+        smsWanted = viewModel.smsCaptureWanted()
     }
+    // bank-app capture goes on only once the system really lets Masroof read notifications
+    LaunchedEffect(step, access) {
+        if (step == OnboardingSteps.NOTIFICATIONS && access) viewModel.notificationAccessGranted()
+    }
+    BackHandler(enabled = step > 0 || progress.reopened, onBack = viewModel::back)
     val smsLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-            smsGranted = ok
+            smsPermitted = ok
             smsDenied = !ok
-            if (ok) viewModel.smsCaptureGranted()
+            smsPermanent = !ok && context.permanentlyDenied(Manifest.permission.RECEIVE_SMS)
+            if (ok) {
+                viewModel.smsCaptureGranted()
+                smsWanted = true
+            }
         }
     val readLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
             readGranted = ok
             readDenied = !ok
+            readPermanent = !ok && context.permanentlyDenied(Manifest.permission.READ_SMS)
             // granted: the backfill starts in the background and the guide moves on; denied: nothing starts, the step says why
             if (ok) {
                 viewModel.startBackfill()
@@ -333,17 +399,20 @@ internal fun OnboardingRoute(
         }
     val rangeDays by viewModel.rangeDays.collectAsStateWithLifecycle()
     val nameError by viewModel.nameError.collectAsStateWithLifecycle()
+    val language = AppLanguage.current(context).let { if (it == AppLanguage.ARABIC) it else AppLanguage.ENGLISH }
     OnboardingContent(
         ui =
             OnboardingUi(
                 step = step,
-                language = AppLanguage.current(context),
-                smsGranted = smsGranted,
+                language = language,
+                smsGranted = smsPermitted && smsWanted,
                 smsDenied = smsDenied,
+                smsPermanentlyDenied = smsPermanent,
                 readSmsGranted = readGranted,
                 readSmsDenied = readDenied,
+                readSmsPermanentlyDenied = readPermanent,
                 rangeDays = rangeDays,
-                notificationAccess = if (visitedAccess) access else null,
+                notificationAccess = if (visitedAccess || access) access else null,
                 nameError = nameError,
             ),
         actions =
@@ -352,7 +421,13 @@ internal fun OnboardingRoute(
                 onNext = viewModel::next,
                 onRequestSms = {
                     smsDenied = false
-                    smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
+                    if (smsPermitted) {
+                        // the permission is there but the app's own switch is off: just turn it on
+                        viewModel.smsCaptureGranted()
+                        smsWanted = true
+                    } else {
+                        smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
+                    }
                 },
                 onOpenAppSettings = { openAppSettings(context) },
                 onRange = viewModel::chooseRange,
@@ -367,7 +442,6 @@ internal fun OnboardingRoute(
                 },
                 onOpenNotificationAccess = {
                     visitedAccess = true
-                    viewModel.notificationCaptureWanted()
                     context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 },
                 onNameChange = viewModel::nameChanged,
@@ -375,6 +449,24 @@ internal fun OnboardingRoute(
                 onFinish = viewModel::finish,
             ),
     )
+}
+
+/**
+ * The first-run guide takes the whole screen while it runs; finished, it hands over to the app (which starts on Wallet). A phone that
+ * already had data gets the "Finish setup" card on Wallet instead and is never forced into the guide.
+ */
+@Composable
+internal fun SetupGate(
+    progress: OnboardingProgress,
+    guide: @Composable () -> Unit,
+    app: @Composable (showSetupCard: Boolean) -> Unit,
+) {
+    when (progress.mode) {
+        SetupMode.UNDECIDED -> Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+        SetupMode.GUIDE -> guide()
+        SetupMode.CARD -> app(true)
+        SetupMode.DONE -> app(false)
+    }
 }
 
 /** The dismissible "Finish setup" card on Wallet for a phone that already had data when the guide arrived. */
@@ -392,11 +484,12 @@ fun FinishSetupCard(
                 modifier = Modifier.semantics { heading() },
             )
             Text(stringResource(R.string.onb_card_body), style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.onb_card_open)) }
-                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.onb_card_dismiss))
-                }
+            // stacked, so at a large font on a narrow screen neither button is squeezed
+            Button(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.onb_card_open))
+            }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.onb_card_dismiss))
             }
         }
     }

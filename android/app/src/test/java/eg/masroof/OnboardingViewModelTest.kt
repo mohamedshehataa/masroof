@@ -7,9 +7,12 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import eg.masroof.data.IdFactory
+import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
+import eg.masroof.data.db.BudgetEntity
 import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.db.ExpenseEntity
+import eg.masroof.data.db.SavingsGoalEntity
 import eg.masroof.ingest.PrefsNotificationSettings
 import eg.masroof.ingest.PrefsSenderSettings
 import eg.masroof.ingest.backfill.BackfillController
@@ -165,7 +168,7 @@ class OnboardingViewModelTest {
             repeat(3) { vm.next() }
             vm.finish()
             vm.reopen()
-            assertEquals(OnboardingProgress(SetupMode.GUIDE, 0), vm.progress.value)
+            assertEquals(OnboardingProgress(SetupMode.GUIDE, 0, reopened = true), vm.progress.value)
         }
 
     @Test
@@ -223,15 +226,93 @@ class OnboardingViewModelTest {
         }
 
     @Test
-    fun `REQ-AND-140 RECEIVE_SMS granted turns capture on and a notification-access visit wants bank-app capture`() =
+    fun `REQ-AND-140 RECEIVE_SMS granted turns capture on, and bank-app capture only when notification access is granted`() =
         runTest {
             val vm = vm()
             senders.setSmsCaptureEnabled(false)
             notifications.setEnabled(false)
+            assertFalse(vm.smsCaptureWanted())
             vm.smsCaptureGranted()
-            vm.notificationCaptureWanted()
-            assertTrue(senders.smsCaptureEnabled())
+            assertTrue(vm.smsCaptureWanted())
+            assertFalse("not turned on by merely opening the access screen", notifications.enabled())
+            vm.notificationAccessGranted()
             assertTrue(notifications.enabled())
+        }
+
+    @Test
+    fun `REQ-AND-139 a phone with only a budget, a bill, a goal, an account or a receipt gets the card, not the guide`() =
+        runTest {
+            val inserts: List<suspend () -> Unit> =
+                listOf(
+                    { db.budgets().insert(BudgetEntity("b", null, "MONTHLY", 100_000, "EGP", createdAtMillis = 1, updatedAtMillis = 1)) },
+                    { db.savingsGoals().insert(SavingsGoalEntity("g", "Trip", null, 1_000, "EGP", null, 0, 1, null, null)) },
+                    { db.lookups().upsertAccounts(listOf(AccountEntity("a", "Cash", "EGP"))) },
+                    { db.lookups().addMember("m2", "Sara") },
+                )
+            for ((i, insert) in inserts.withIndex()) {
+                // each kind of data alone, on an otherwise fresh phone
+                context
+                    .getSharedPreferences("onb-test", Context.MODE_PRIVATE)
+                    .edit()
+                    .clear()
+                    .commit()
+                db.clearAllTables()
+                DefaultSeed.seed(db.openHelper.writableDatabase)
+                insert()
+                val p = vm().progress.await { it.mode != SetupMode.UNDECIDED }
+                assertEquals("data kind #$i", SetupMode.CARD, p.mode)
+            }
+        }
+
+    @Test
+    fun `REQ-AND-139 a soft-deleted entry still counts as existing data`() =
+        runTest {
+            db.expenses().upsert(entry("gone").copy(deletedAtMillis = 5L))
+            assertEquals(SetupMode.CARD, vm().progress.await { it.mode != SetupMode.UNDECIDED }.mode)
+        }
+
+    @Test
+    fun `REQ-AND-139 only the seeded defaults (categories and Me) leave the phone fresh`() =
+        runTest {
+            assertEquals(SetupMode.GUIDE, vm().progress.await { it.mode != SetupMode.UNDECIDED }.mode)
+        }
+
+    @Test
+    fun `REQ-AND-139 Back goes to the previous step, closes a reopened guide, and does nothing on step 1 of the first run`() =
+        runTest {
+            val vm = vm()
+            vm.progress.await { it.mode == SetupMode.GUIDE }
+            vm.back()
+            assertEquals("first run, step 1: Back is left to the system", OnboardingProgress(SetupMode.GUIDE, 0), vm.progress.value)
+            vm.next()
+            vm.next()
+            vm.back()
+            assertEquals(OnboardingSteps.STAYS_ON_PHONE, vm.progress.value.step)
+            vm.reopen()
+            assertEquals(true, vm.progress.value.reopened)
+            vm.back()
+            assertEquals("a reopened guide closes", SetupMode.DONE, vm.progress.value.mode)
+            assertEquals(false, vm(store()).progress.value.reopened)
+        }
+
+    @Test
+    fun `REQ-AND-141 a name of only invisible, bidi or zero-width characters, or with a line break, is refused`() {
+        assertNull(validMemberName("​‏ ‮⁦"))
+        assertNull(validMemberName("Sa\nra"))
+        assertNull(validMemberName("Sa\u0000ra"))
+        assertEquals("Sara", validMemberName("‏Sara​"))
+        assertEquals("سارة", validMemberName("‫سارة‬"))
+    }
+
+    @Test
+    fun `REQ-AND-141 the duplicate check is case-insensitive in Kotlin for non-ASCII names too`() =
+        runTest {
+            val vm = vm()
+            vm.progress.await { it.mode == SetupMode.GUIDE }
+            vm.addMember("Émile")
+            vm.progress.await { it.step == 1 }
+            db.lookups().addMember("x", "éMILE")
+            assertEquals(listOf("Me", "Émile"), memberNames())
         }
 
     @Test

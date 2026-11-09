@@ -11,7 +11,7 @@
     <string name="onb_phone_title">كل حاجة بتفضل على موبايلك</string>
     <string name="onb_phone_body">مفيش حساب ومفيش سيرفر. مصاريفك وإيصالاتك وإعداداتك متخزّنة على الموبايل ده بس. ولو عايز نسخة احتياطية، استخدم «نسخ احتياطي دلوقتي» من الإعدادات: بتحفظ ملف واحد محمي بكلمة سر إنت اللي بتختارها.</string>
     <string name="onb_sms_title">سجّل المصاريف من رسائل البنك</string>
-    <string name="onb_sms_body">لما توصل رسالة من بنك أو محفظة إنت سامح بيها، مصروف بيحوّلها لمصروف على الموبايل. نص الرسالة عمره ما بيتبعت لأي مكان. أندرويد هيسألك دلوقتي تسمح باستقبال الرسائل.</string>
+    <string name="onb_sms_body">لما توصل رسالة من بنك أو محفظة إنت سامح بيها، التطبيق بيسجّلها كمصروف على الموبايل. نص الرسالة عمره ما بيتبعت لأي مكان. أندرويد هيسألك دلوقتي تسمح باستقبال الرسائل.</string>
     <string name="onb_sms_turn_on">شغّل تسجيل الرسائل</string>
     <string name="onb_sms_on">تسجيل الرسائل شغّال</string>
     <string name="onb_sms_denied">تسجيل الرسائل مقفول - تقدر تشغّله من الإعدادات</string>
@@ -28,7 +28,7 @@
     <string name="onb_member_title">مين تاني بيصرف في البيت؟</string>
     <string name="onb_member_body">اختياري. ضيف اسم واحد عشان تعرف مين اللي دفع. ده مجرد اسم على الموبايل ده، مش حساب.</string>
     <string name="onb_member_label">الاسم</string>
-    <string name="onb_member_error">اكتب اسم لحد ٤٠ حرف</string>
+    <string name="onb_member_error">اكتب اسم لحد %1$s حرف</string>
     <string name="onb_done_title">خلصنا</string>
     <string name="onb_done_body">افتح المحفظة وشوف مصاريفك. وتقدر تعيد الدليل ده في أي وقت من الإعدادات.</string>
     <string name="onb_card_title">كمّل الإعداد</string>

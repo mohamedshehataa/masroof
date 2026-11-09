@@ -24,6 +24,8 @@ data class OnboardingProgress(
     val mode: SetupMode = SetupMode.UNDECIDED,
     /** The step reached, 0-based (see [OnboardingSteps]). */
     val step: Int = 0,
+    /** The guide was opened again from Settings or the card: Back on its first step closes it instead of leaving the app. */
+    val reopened: Boolean = false,
 )
 
 /** The seven steps of the guide, in order. */
@@ -51,7 +53,7 @@ class OnboardingStore(
     private fun read(): OnboardingProgress {
         val mode = prefs.getString("mode", null)?.let { name -> SetupMode.entries.firstOrNull { it.name == name } }
         val step = prefs.getInt("step", 0).coerceIn(0, OnboardingSteps.COUNT - 1)
-        return OnboardingProgress(mode ?: SetupMode.UNDECIDED, step)
+        return OnboardingProgress(mode ?: SetupMode.UNDECIDED, step, prefs.getBoolean("reopened", false))
     }
 
     fun save(next: OnboardingProgress) {
@@ -59,6 +61,7 @@ class OnboardingStore(
         prefs.edit {
             putString("mode", safe.mode.name)
             putInt("step", safe.step)
+            putBoolean("reopened", safe.reopened)
         }
         mutable.value = safe
     }

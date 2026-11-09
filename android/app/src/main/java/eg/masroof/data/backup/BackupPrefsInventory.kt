@@ -95,8 +95,9 @@ object BackupPrefsInventory {
             "shared:masroof_local_keyset" to mapOf("master_made" to "device-bound: whether this phone's Keystore made the master key"),
             "shared:masroof_onboarding" to
                 mapOf(
-                    "mode" to "per-install guide state (guide / card / done); the new phone decides again from its own data",
+                    "mode" to "per-install guide state (guide / card / done); decided once at the first start of this install",
                     "step" to "per-install step reached in the first-run guide",
+                    "reopened" to "per-install: the guide was opened again from Settings",
                 ),
             "shared:masroof_backfill" to
                 mapOf(

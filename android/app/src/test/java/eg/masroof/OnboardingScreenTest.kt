@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -132,9 +133,9 @@ class OnboardingScreenTest {
     }
 
     @Test
-    fun `REQ-AND-140 a denied RECEIVE_SMS says capture is off, Continue still works and the button opens the app settings`() {
+    fun `REQ-AND-140 after Do not ask again the main button opens the app settings and Continue still works`() {
         val taps = GuideTaps()
-        compose.show(ui(OnboardingSteps.SMS_CAPTURE).copy(smsDenied = true), taps)
+        compose.show(ui(OnboardingSteps.SMS_CAPTURE).copy(smsDenied = true, smsPermanentlyDenied = true), taps)
         compose.onNodeWithText("SMS capture is off - you can turn it on in Settings").performScrollTo().assertIsDisplayed()
         compose
             .onNodeWithText("Open app settings")
@@ -176,7 +177,7 @@ class OnboardingScreenTest {
     @Test
     fun `REQ-AND-140 step 4 with READ_SMS denied says why nothing started and Continue still works`() {
         val taps = GuideTaps()
-        compose.show(ui(OnboardingSteps.PAST_SMS).copy(readSmsDenied = true), taps)
+        compose.show(ui(OnboardingSteps.PAST_SMS).copy(readSmsDenied = true, readSmsPermanentlyDenied = true), taps)
         compose.onNodeWithText("Past messages can't be read without permission", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Open app settings").performScrollTo().performClick()
         compose.onNodeWithText("Continue").performClick()
@@ -255,6 +256,51 @@ class OnboardingScreenTest {
         compose.onNodeWithText("Setup guide").assertIsDisplayed()
         compose.onNodeWithText("Open setup guide").assertHeightIsAtLeast(48.dp).performClick()
         assertEquals(1, opened)
+    }
+
+    @Test
+    fun `REQ-AND-140 a first denial of RECEIVE_SMS keeps Turn on asking again and offers no settings button yet`() {
+        val taps = GuideTaps()
+        compose.show(ui(OnboardingSteps.SMS_CAPTURE).copy(smsDenied = true), taps)
+        compose.onNodeWithText("SMS capture is off - you can turn it on in Settings").performScrollTo().assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Open app settings").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Turn on SMS capture").performScrollTo().performClick()
+        assertEquals(listOf("sms"), taps.log)
+    }
+
+    @Test
+    fun `REQ-AND-140 a first denial of READ_SMS keeps Allow and start asking again and offers no settings button yet`() {
+        val taps = GuideTaps()
+        compose.show(ui(OnboardingSteps.PAST_SMS).copy(readSmsDenied = true), taps)
+        assertTrue(compose.onAllNodesWithText("Open app settings").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Allow and start reading").performScrollTo().performClick()
+        assertEquals(listOf("past"), taps.log)
+    }
+
+    @Test
+    fun `REQ-AND-140 SMS capture is shown on only when it is on, with the permission but the switch off the turn-on button shows`() {
+        compose.show(ui(OnboardingSteps.SMS_CAPTURE).copy(smsGranted = false))
+        compose.onNodeWithText("Turn on SMS capture").assertIsDisplayed()
+    }
+}
+
+/** A 320 dp phone with the largest usual font: the card's two buttons must not be squeezed (REQ-AND-139). */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w320dp-h640dp")
+class OnboardingCardNarrowTest {
+    @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun `REQ-AND-139 at font scale 1_5 on a 320dp screen the Dismiss and Continue setup buttons keep at least 88dp width`() {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                MasroofTheme { FinishSetupCard(onOpen = {}, onDismiss = {}) }
+            }
+        }
+        compose.onNodeWithText("Dismiss").assertWidthIsAtLeast(88.dp).assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("Continue setup").assertWidthIsAtLeast(88.dp)
     }
 }
 

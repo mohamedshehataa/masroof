@@ -30,7 +30,7 @@
     <string name="onb_member_title">Who else spends in this household?</string>
     <string name="onb_member_body">Optional. Add one name so you can tell who paid. It is only a label on this phone, not an account.</string>
     <string name="onb_member_label">Name</string>
-    <string name="onb_member_error">Enter a name up to 40 characters</string>
+    <string name="onb_member_error">Enter a name up to %1$s characters</string>
     <string name="onb_done_title">You\'re all set</string>
     <string name="onb_done_body">Open Wallet to see your entries. You can run this guide again any time from Settings.</string>
     <string name="onb_card_title">Finish setup</string>

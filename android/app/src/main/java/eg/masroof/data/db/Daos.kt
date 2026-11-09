@@ -535,8 +535,22 @@ abstract class LookupDao {
     @Query("SELECT * FROM member ORDER BY sortOrder, displayName")
     abstract fun observeMembers(): Flow<List<MemberEntity>>
 
-    @Query("SELECT COUNT(*) FROM member WHERE lower(displayName) = lower(:name)")
-    abstract suspend fun memberNamedCount(name: String): Int
+    @Query("SELECT displayName FROM member")
+    abstract suspend fun memberNames(): List<String>
+
+    /**
+     * True when the phone holds anything the user made or received: entries (soft-deleted too), budgets, bills, subscriptions, goals,
+     * assets, debts, merchant rules, accounts, receipts, review items, or a member other than the default [meId]. The seeded
+     * defaults (categories, "Me") do not count. First-run guide (STORY-187): such a phone gets the card, not the forced guide.
+     */
+    @Query(
+        """SELECT EXISTS(SELECT 1 FROM expense) OR EXISTS(SELECT 1 FROM budget) OR EXISTS(SELECT 1 FROM installment_plan)
+            OR EXISTS(SELECT 1 FROM subscription) OR EXISTS(SELECT 1 FROM savings_goal) OR EXISTS(SELECT 1 FROM asset)
+            OR EXISTS(SELECT 1 FROM debt) OR EXISTS(SELECT 1 FROM merchant_rule) OR EXISTS(SELECT 1 FROM account)
+            OR EXISTS(SELECT 1 FROM receipt) OR EXISTS(SELECT 1 FROM review_item)
+            OR EXISTS(SELECT 1 FROM member WHERE id <> :meId)""",
+    )
+    abstract suspend fun hasUserData(meId: String): Boolean
 
     @Query("SELECT COALESCE(MAX(sortOrder), 0) FROM member")
     abstract suspend fun maxMemberSort(): Int
@@ -550,7 +564,11 @@ abstract class LookupDao {
         id: String,
         name: String,
     ) {
-        if (memberNamedCount(name) == 0) insertMember(MemberEntity(id, name, maxMemberSort() + 1))
+        // the same-name check is done here (not by SQLite lower(), which only folds ASCII): the same rule for every script
+        val key = name.trim().lowercase(java.util.Locale.ROOT)
+        if (memberNames().none { it.trim().lowercase(java.util.Locale.ROOT) == key }) {
+            insertMember(MemberEntity(id, name, maxMemberSort() + 1))
+        }
     }
 
     @Query("SELECT * FROM account ORDER BY label")
