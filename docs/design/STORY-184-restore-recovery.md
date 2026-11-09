@@ -531,6 +531,38 @@ on its branch, so this note does not split it.
   - In PARTIAL the receipts are re-hashed at every start (rare state; accepted).
   - Two stagings may be needed during a re-restore over an unfinished one. Disk full gives "Not enough space (needs X
     MB)" and nothing changes.
-- **SMS between Staged and Restore** is recorded and then replaced by the restore. This is replace-all v1 as
-  confirmed, and accepted.
+- **SMS between Checking and Done** is deferred, not recorded: `RestoreActivity` is held from the start of Checking
+  through Staged and Restoring (see §9), so nothing lands in a database that is about to be replaced.
+- **Known limitation.** In COMMITTED, SWAPPING and SWAPPED the base settings still filter which senders and apps are
+  captured, so a deferred message from a sender the restored settings add is only read once the backfill runs; the
+  backfill is the recovery path. Messages are deferred once they reach the pipeline; one that never reached it (a sender
+  the base settings drop) is not.
+- **Tampering** with a journal or a staging folder needs L5 write access to app-private storage, equivalent to writing
+  the preferences or the receipts directly. Accepted risk.
 - **security-reviewer sign-off is required.** This is L3, it handles the local-id key, and it defers ingestion.
+
+## 9. Security amendments (stage-3 sign-off)
+- **Key (CWE-703).** `LocalIdKeyStore` is bound only to STORY-182's no-mint `LocalIdKey` (`get()` throws `LocalIdKeyUnavailableException` and never replaces an entry; install uses `LocalKeystore`'s non-resetting AEAD), never to `TinkKeystore`/`KeystoreLocalIdKey`. Until 182 is on main the production binding is a `TODO(STORY-182)` stub that throws (the key step then ends INCOMPLETE).
+- **Contract clause 4.** `LocalIdKeyStoreContractTest`: a transient `ProviderException`/`GeneralSecurityException` in `get()` or `install()` never replaces or deletes the stored key (an AEAD that fails once).
+- **Gate before the key.** While the gate is blocked `SmsPipeline.accept` returns DEFERRED with zero `idKey.get()` calls (the check moved before the key read; it is repeated under the erase lock).
+- **SMS lost (CWE-362).** `RestoreActivity` is held from the start of Checking through Staged and Restoring; it is released on Cancel, a failure, Done or a new pick (process death clears it). Intake is DEFERRED in that window and recorded once after Done with the restored key; Cancel in Staged records with the base key.
+- **Unreadable journal at Confirm.** The read is retried once; if it still fails Confirm returns INCOMPLETE ("Finish the restore first") and writes nothing. Only a Corrupt journal may become `committed = unknown`.
+- **Strict parse.** Exact JSON types (no coercion), at most 4 KiB read (else Corrupt), and the parsed value must re-encode to the identical text, which rejects unknown keys, duplicate keys and any other form; `attempts >= 0`; staging paths are built only from the parsed Int with `%08x`.
+- **Symlinks.** `verifyDir` and `readVerified` accept only regular files (NOFOLLOW_LINKS) and re-hash every file against the listing hash; every delete is a non-following `walkFileTree`, and the key file is overwritten only when it is a regular file.
+- **Second read.** `replaceAll` re-applies `maxRowChars` and `maxRowsPerTable` while it inserts and reads each file to EOF through the digest, so a line grown after Staged ends FAILED with nothing changed.
+- **Entry cap.** `extract` counts ZIP entries and refuses more than `maxEntries` (MAX_RECEIPTS + tables + 3) while streaming.
+- **Third way out of PARTIAL.** "Keep the restored data as it is" (with a warning that the current key and settings stay): allowed only when the journal is readable, names a Known committed slot and `A == C.gen`; it deletes the journal and the staging.
+- **Blockers at Confirm.** `RestoreBlockers.busy()` is checked again under the lock (a backup or backfill that started after Staged makes Confirm BUSY); the ServerImporter joins the blockers when STORY-182 lands.
+- **R8 wording.** Messages are deferred once they reach the pipeline (see the §8 known limitation).
+- **Logging.** The crash matrix captures `ShadowLog` and asserts nothing restore-related is logged but an outcome, at INFO or below: no gen hex, hash, `restore-stage` path, row text or Throwable.
+- **Deferred SMS bodies.** A deferred intake job keeps its SMS text in WorkManager input data (a fresh delayed job every 30 minutes, never counted as an attempt) until the restore is Done, the user keeps the data as it is, or Erase deletes it; there is no other bound.
+- **Zeroing** on flash is best-effort (file-based encryption is the control); it runs in every `deleteStage` and sweep path, and the crash matrix asserts no `local-id.key` after every sweep (I9). No-op hooks are bound in release; `RestoreKilled` is only thrown by test hooks.
+
+## 10. Implementation notes
+- `RestoreHooks` keeps `beforeCommit/afterCommit/betweenRenames` and gains `before(op)/after(op)`; `RestoreActivity` stays a process flag and `RestoreGate.blocked()` ORs it with the journal file.
+- `BackupWorker` cannot take the gate as a constructor argument (its main-branch tests build it positionally), so it checks `RestoreActivity.isActive() || RestoreStage.journalBlocks(...)` directly; the effect is the same.
+- Erase deletes the journal at the START of `RoomDataWiper.wipe` (before the database is cleared), not only in the cleanup sweep: a kill between the database clear and the sweep must not leave a journal that resumes after Erase.
+- `StagedRestore.epoch` is read from `EraseLock.epoch` through `RestoreEnvironment.epoch`.
+- `finish` hashes settings and key with `readVerified` (regular file, hash equal to the journal's) and the receipts with `verifyDir`; a missing receipts folder is accepted only at step SWAPPING when `receipts/` already exists (the second rename happened).
+- `RestoreCrashMatrixTest` runs about 4.5 minutes (six scenarios, every operation killed before/after or failing with a full disk, a second kill during recovery). It is a normal test today; tag it slow if CI time matters.
+- Not covered by a dedicated test: R11 (backfill cursor under DEFERRED) and R14 (receipt attach refused) are covered by the gate unit behavior only; see the report.
