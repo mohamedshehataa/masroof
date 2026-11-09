@@ -3,7 +3,7 @@ id: STORY-186
 epic: EPIC-17
 title: Read the last 90 days of bank SMS into entries, with progress and cancel
 phase: 4
-status: READY
+status: DONE
 risk_tier: high
 size: M
 modules: [android]
@@ -97,3 +97,8 @@ STORY-172
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot, replaces STORY-068 |
+| 2026-11-08 | 5 build | android-engineer | Settings -> Read past SMS: allowlisted senders, same pipeline as live, resumable, cancel, summary notification |
+| 2026-11-08 | 6 verify | qa-verifier | loops 1-2 FAIL (notification older than 7 days doubled; erase mid-run; deleted notification back), loop 3 PASS on 1fb47a0 |
+| 2026-11-08 | 7 review | security-reviewer | round 1 CHANGES_REQUESTED (bodies of all senders read), rounds 2-3 APPROVE |
+| 2026-11-09 | 6 verify | qa-verifier | focused checks of the post-PASS code (memory sealing, LocalKeystore): 2 FAIL, final PASS on d9c5845 |
+| 2026-11-09 | 8 integrate | orchestrator | DONE |

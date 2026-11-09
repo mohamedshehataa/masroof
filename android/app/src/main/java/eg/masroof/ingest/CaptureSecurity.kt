@@ -123,6 +123,16 @@ class KeystoreLocalIdKey(
 object LocalIdHasher {
     private const val MILLIS_PER_SECOND = 1000L
 
+    /** A keyed HMAC of typed values joined with `|` (never the message text of a record): a lookup key that reveals nothing. */
+    fun signature(
+        key: ByteArray,
+        vararg parts: Any?,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key, "HmacSHA256"))
+        return mac.doFinal(parts.joinToString("|").toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+
     fun id(
         key: ByteArray,
         msg: IncomingMessage,
@@ -134,7 +144,7 @@ object LocalIdHasher {
     }
 }
 
-/** Everything capture keeps outside Room, cleared with the rest on logout and account switch. */
+/** Everything capture keeps outside Room, cleared with the rest by "Erase all data" (a logout or a session change never clears it). */
 interface CaptureData {
     fun clear()
 }
@@ -148,7 +158,7 @@ class PrefsCaptureData(
     private val key: LocalIdKey,
 ) : CaptureData {
     override fun clear() {
-        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device")) {
+        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device", "masroof_backfill")) {
             context.getSharedPreferences(name, Context.MODE_PRIVATE).edit(commit = true) { clear() }
         }
         key.wipe()

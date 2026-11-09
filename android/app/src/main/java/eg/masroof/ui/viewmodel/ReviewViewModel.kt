@@ -210,7 +210,7 @@ class ReviewViewModel
             if (twin != null) {
                 db.sources().insert(CaptureRows.source(ids.next(), expenseId, record, id, item.receivedAtMillis))
                 if (twin.captured.instrumentLast4 == null && record.instrumentLast4 != null) {
-                    db.expenses().enrichFromTwin(expenseId, record.instrumentLast4, CaptureRows.label(record))
+                    db.expenses().enrichFromTwin(expenseId, record.instrumentLast4, CaptureRows.label(record), false)
                 }
             } else {
                 db.expenses().insert(CaptureRows.expense(expenseId, record, now, confirmedByUser = true).filedByRule(db, record.merchant))

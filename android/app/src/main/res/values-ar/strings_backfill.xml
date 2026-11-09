@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-186: قراءة الرسائل القديمة -->
+    <string name="backfill_title">قراءة الرسائل القديمة</string>
+    <string name="backfill_body">بتحوّل الرسائل اللي في الوارد من البنوك والمحافظ بتاعتك لمصاريف. ده بيحصل على الموبايل بس ومفيش حاجة بتتبعت لأي مكان.</string>
+    <string name="backfill_range_title">الفترة</string>
+    <string name="backfill_range_30">آخر ٣٠ يوم</string>
+    <string name="backfill_range_90">آخر ٩٠ يوم</string>
+    <string name="backfill_range_180">آخر ٦ شهور</string>
+    <string name="backfill_range_custom">من تاريخ معيّن</string>
+    <string name="backfill_range_since">من %1$s</string>
+    <string name="backfill_start">ابدأ</string>
+    <string name="backfill_resume">كمّل</string>
+    <string name="backfill_cancel">إلغاء</string>
+    <string name="backfill_ok">تمام</string>
+    <string name="backfill_pick_date">اختار تاريخ</string>
+    <string name="backfill_pick_ok">تمام</string>
+    <string name="backfill_pick_cancel">إلغاء</string>
+    <string name="backfill_rationale_title">تسمح بقراءة الرسائل؟</string>
+    <string name="backfill_rationale">مصروف بيقرا رسائل البنوك من الجهات اللي إنت سامح بيها، وعلى الموبايل ده بس.</string>
+    <string name="backfill_rationale_continue">كمّل</string>
+    <string name="backfill_rationale_cancel">مش دلوقتي</string>
+    <string name="backfill_denied">مينفعش نقرا الرسائل القديمة من غير إذن</string>
+    <string name="backfill_open_settings">افتح إعدادات التطبيق</string>
+    <string name="backfill_counting">بعدّ الرسائل…</string>
+    <plurals name="backfill_progress">
+        <item quantity="zero">قريت %1$s من %2$s رسالة - %3$s مصروف، %4$s للمراجعة</item>
+        <item quantity="one">قريت %1$s من %2$s رسالة - مصروف واحد، %4$s للمراجعة</item>
+        <item quantity="two">قريت %1$s من %2$s رسالة - مصروفين، %4$s للمراجعة</item>
+        <item quantity="few">قريت %1$s من %2$s رسالة - %3$s مصاريف، %4$s للمراجعة</item>
+        <item quantity="many">قريت %1$s من %2$s رسالة - %3$s مصروف، %4$s للمراجعة</item>
+        <item quantity="other">قريت %1$s من %2$s رسالة - %3$s مصروف، %4$s للمراجعة</item>
+    </plurals>
+    <plurals name="backfill_stopped">
+        <item quantity="zero">اتوقف - مفيش مصاريف اتضافت</item>
+        <item quantity="one">اتوقف - اتضاف مصروف واحد</item>
+        <item quantity="two">اتوقف - اتضاف مصروفين</item>
+        <item quantity="few">اتوقف - اتضافت %1$s مصاريف</item>
+        <item quantity="many">اتوقف - اتضاف %1$s مصروف</item>
+        <item quantity="other">اتوقف - اتضاف %1$s مصروف</item>
+    </plurals>
+    <plurals name="backfill_done">
+        <item quantity="zero">خلص - مفيش مصاريف اتضافت، %2$s للمراجعة</item>
+        <item quantity="one">خلص - اتضاف مصروف واحد، %2$s للمراجعة</item>
+        <item quantity="two">خلص - اتضاف مصروفين، %2$s للمراجعة</item>
+        <item quantity="few">خلص - اتضافت %1$s مصاريف، %2$s للمراجعة</item>
+        <item quantity="many">خلص - اتضاف %1$s مصروف، %2$s للمراجعة</item>
+        <item quantity="other">خلص - اتضاف %1$s مصروف، %2$s للمراجعة</item>
+    </plurals>
+    <string name="backfill_empty">مفيش رسائل بنوك في الفترة دي</string>
+    <string name="backfill_progress_desc">بقرا الرسائل القديمة</string>
+    <string name="backfill_channel_name">قراءة الرسائل القديمة</string>
+    <string name="backfill_notice_title">الرسائل القديمة اتقرت</string>
+    <plurals name="backfill_notice_text">
+        <item quantity="zero">مفيش مصاريف اتضافت، %2$s للمراجعة</item>
+        <item quantity="one">اتضاف مصروف واحد، %2$s للمراجعة</item>
+        <item quantity="two">اتضاف مصروفين، %2$s للمراجعة</item>
+        <item quantity="few">اتضافت %1$s مصاريف، %2$s للمراجعة</item>
+        <item quantity="many">اتضاف %1$s مصروف، %2$s للمراجعة</item>
+        <item quantity="other">اتضاف %1$s مصروف، %2$s للمراجعة</item>
+    </plurals>
+    <string name="review_reason_possible_repeat">ممكن تكون رسالة اتسجلت قبل كده. احفظها بس لو دي عملية تانية.</string>
+</resources>
