@@ -75,6 +75,8 @@ object BackupPrefsInventory {
                 "device-bound sealed memory; after a restore the 30-day memory starts empty, " +
                 "recorded entries still dedupe by their HMAC ids",
             "masroof_local_keyset" to "device-bound key material of the phone's own LocalKeystore, never exported",
+            "masroof_onboarding" to
+                "per-install first-run guide progress (STORY-187); a restored phone is set up by its backup, the guide stays in Settings",
         )
 
     /** Per store (`datastore:<name>` / `shared:<file>`): keys that are deliberately not in the backup, with the reason. */
@@ -91,6 +93,12 @@ object BackupPrefsInventory {
             "shared:masroof_capture_key" to mapOf("k" to "sealed local-id key; travels as keys/local-id.key"),
             "shared:masroof_ui" to mapOf("voice_online_notice_seen" to "one-time hint, shown again after a restore"),
             "shared:masroof_local_keyset" to mapOf("master_made" to "device-bound: whether this phone's Keystore made the master key"),
+            "shared:masroof_onboarding" to
+                mapOf(
+                    "mode" to "per-install guide state (guide / card / done); decided once at the first start of this install",
+                    "step" to "per-install step reached in the first-run guide",
+                    "reopened" to "per-install: the guide was opened again from Settings",
+                ),
             "shared:masroof_backfill" to
                 mapOf(
                     "phase" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",

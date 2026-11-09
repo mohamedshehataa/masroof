@@ -28,6 +28,14 @@ object AppLanguage {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, next) }
     }
 
+    /** Stores the chosen language ([ARABIC] or [ENGLISH]); the caller recreates the activity. */
+    fun set(
+        context: Context,
+        language: String,
+    ) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, language) }
+    }
+
     /** A context whose resources and layout direction follow the stored choice (unchanged when none is stored). */
     fun wrap(base: Context): Context {
         val lang = stored(base) ?: return base
