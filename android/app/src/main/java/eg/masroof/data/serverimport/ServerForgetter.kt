@@ -1,7 +1,10 @@
 package eg.masroof.data.serverimport
 
+import android.content.Context
 import eg.masroof.data.SettingsRepository
 import eg.masroof.data.auth.SessionManager
+import eg.masroof.data.auth.TinkKeystore
+import eg.masroof.ingest.LocalIdKey
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
 import javax.inject.Inject
@@ -18,19 +21,17 @@ interface SessionKeystore {
 }
 
 /**
- * The session key lives in the Tink keyset that the local message id key is sealed with too. Deleting the keyset would make that
- * key unreadable and change every local message id (a backfill would then record each message twice), so the key is read first and
- * sealed again under the keyset the next use creates ([LocalIdKey.surviving]).
+ * Deletes the session keyset and its Keystore master key. The local message id key used to be sealed under that keyset; it now lives
+ * under `LocalKeystore`, and [LocalIdKey.detachFromSessionKeyset] first proves it reads back from there (a crash-safe order: a kill or an
+ * exception at any step loses nothing), and only then runs the deletion.
  */
 class TinkSessionKeystore(
+    private val context: Context,
+    private val localIdKey: LocalIdKey,
     private val onDestroyed: () -> Unit = {},
 ) : SessionKeystore {
-    /**
-     * INTERIM (fix round 1): the keyset is NOT deleted yet. The local message id key still lives in it, and a kill between deleting
-     * the keyset and sealing that key again would lose the key. It is deleted once the key moves to `LocalKeystore` (STORY-186), in
-     * a crash-safe order; until then only the session blob is gone.
-     */
     override fun destroy() {
+        localIdKey.detachFromSessionKeyset { TinkKeystore.destroy(context) }
         onDestroyed()
     }
 }

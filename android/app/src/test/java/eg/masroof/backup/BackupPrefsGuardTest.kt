@@ -50,6 +50,7 @@ class BackupPrefsGuardTest {
             "BackupState.kt" to listOf("masroof_backup"),
             "AppModule.kt" to listOf("masroof_device"),
             "ImportStore.kt" to listOf("masroof_server_import"),
+            "LocalIdKey.kt" to listOf("masroof_capture_key"),
             "BackfillStore.kt" to listOf("masroof_backfill"),
             "LocalKeystore.kt" to listOf("masroof_local_keyset"),
         )

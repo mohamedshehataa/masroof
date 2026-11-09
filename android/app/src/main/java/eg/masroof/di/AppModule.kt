@@ -210,9 +210,13 @@ object ProvidersModule {
         )
 
     @Provides @Singleton
-    fun sessionKeystore(cipher: LazyTokenCipher): eg.masroof.data.serverimport.SessionKeystore =
+    fun sessionKeystore(
+        @ApplicationContext context: Context,
+        key: LocalIdKey,
+        cipher: LazyTokenCipher,
+    ): eg.masroof.data.serverimport.SessionKeystore =
         eg.masroof.data.serverimport
-            .TinkSessionKeystore { cipher.invalidate() }
+            .TinkSessionKeystore(context, key) { cipher.invalidate() }
 
     @Provides @Singleton
     fun tokenCipher(
@@ -229,7 +233,8 @@ object ProvidersModule {
     @Provides @Singleton
     fun localIdKey(
         @ApplicationContext context: Context,
-    ): LocalIdKey = KeystoreLocalIdKey(context)
+        aead: eg.masroof.data.auth.RecoveringAead,
+    ): LocalIdKey = KeystoreLocalIdKey(context, aead)
 
     @Provides @Singleton
     fun captureData(

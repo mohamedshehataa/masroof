@@ -3,11 +3,8 @@ package eg.masroof.ingest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Base64
 import androidx.core.content.edit
-import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.ingest.parse.IncomingMessage
-import java.security.SecureRandom
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -79,40 +76,6 @@ class PrefsCaptureGate(
     private companion object {
         // A new key: the old "capture_open" flag followed the session and must not decide anything any more.
         const val STAGE = "erase_stage"
-    }
-}
-
-/** Per-installation secret that keys the local message id. Never uploaded; wiped on logout. */
-interface LocalIdKey {
-    fun get(): ByteArray
-
-    fun wipe()
-}
-
-/** 32 random bytes, sealed with a Tink AEAD whose key lives in the Android Keystore. */
-class KeystoreLocalIdKey(
-    private val context: Context,
-) : LocalIdKey {
-    private val prefs get() = context.getSharedPreferences("masroof_capture_key", Context.MODE_PRIVATE)
-
-    @Synchronized
-    override fun get(): ByteArray {
-        val aead = TinkKeystore.aead(context)
-        prefs.getString(KEY, null)?.let { stored ->
-            runCatching { return aead.decrypt(Base64.decode(stored, Base64.NO_WRAP), AAD) }
-        }
-        val fresh = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
-        prefs.edit(commit = true) { putString(KEY, Base64.encodeToString(aead.encrypt(fresh, AAD), Base64.NO_WRAP)) }
-        return fresh
-    }
-
-    @Synchronized
-    override fun wipe() = prefs.edit(commit = true) { clear() }
-
-    private companion object {
-        const val KEY = "k"
-        const val KEY_BYTES = 32
-        val AAD = "masroof-local-id".toByteArray()
     }
 }
 

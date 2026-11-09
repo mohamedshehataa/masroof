@@ -94,7 +94,11 @@ object BackupPrefsInventory {
                     "forget" to "forgetting the server was started on this phone",
                 ),
             "shared:masroof_capture" to mapOf("erase_stage" to "erase-in-progress state"),
-            "shared:masroof_capture_key" to mapOf("k" to "sealed local-id key; travels as keys/local-id.key"),
+            "shared:masroof_capture_key" to
+                mapOf(
+                    "k" to "legacy local-id key sealed under the session keyset; travels as keys/local-id.key",
+                    "k_local" to "local-id key sealed under LocalKeystore; travels as keys/local-id.key",
+                ),
             "shared:masroof_ui" to mapOf("voice_online_notice_seen" to "one-time hint, shown again after a restore"),
             "shared:masroof_local_keyset" to mapOf("master_made" to "device-bound: whether this phone's Keystore made the master key"),
             "shared:masroof_backfill" to
