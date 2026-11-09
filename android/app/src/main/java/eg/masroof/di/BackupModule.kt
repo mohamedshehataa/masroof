@@ -12,7 +12,7 @@ import eg.masroof.data.backup.AndroidRestoreSettings
 import eg.masroof.data.backup.AndroidRestoreSources
 import eg.masroof.data.backup.BackupLauncher
 import eg.masroof.data.backup.BackupRestorer
-import eg.masroof.data.backup.LocalIdKeyInstaller
+import eg.masroof.data.backup.LocalIdKeyStore
 import eg.masroof.data.backup.RestoreBlockers
 import eg.masroof.data.backup.RestoreEnvironment
 import eg.masroof.data.backup.RestoreSources
@@ -20,7 +20,6 @@ import eg.masroof.data.backup.RoomRestoreDatabase
 import eg.masroof.data.backup.WorkBackupLauncher
 import eg.masroof.data.backup.WorkRestoreBlockers
 import eg.masroof.data.db.AppDatabase
-import eg.masroof.ingest.KeystoreLocalIdKey
 import java.io.File
 import java.time.Clock
 import javax.inject.Singleton
@@ -38,7 +37,7 @@ abstract class BackupModule {
     abstract fun blockers(impl: WorkRestoreBlockers): RestoreBlockers
 
     @Binds
-    abstract fun pending(impl: eg.masroof.data.backup.FileRestorePending): eg.masroof.data.backup.RestorePending
+    abstract fun gate(impl: eg.masroof.data.backup.FileRestoreGate): eg.masroof.data.backup.RestoreGate
 
     companion object {
         @Provides @Singleton
@@ -48,13 +47,17 @@ abstract class BackupModule {
             answers: AnswerPrefs,
             @ReceiptsDir receiptsDir: File,
             clock: Clock,
+            eraseLock: eg.masroof.data.auth.EraseLock,
         ): BackupRestorer =
             BackupRestorer(
                 RestoreEnvironment(
                     db = RoomRestoreDatabase(db),
                     settings = AndroidRestoreSettings(context, answers),
                     // This phone's Keystore seals the restored key; the file's bytes are never stored as they are.
-                    keys = LocalIdKeyInstaller { KeystoreLocalIdKey(context).install(it) },
+                    // TODO(STORY-182): bind to the no-mint LocalIdKey (install via LocalKeystore). The TinkKeystore-based key resets itself on a transient
+                    // failure, so it is NOT used here; until 182 merges the key step fails (INCOMPLETE) rather than risk a silent replacement.
+                    keys = LocalIdKeyStore { error("TODO(STORY-182): local-id key store not bound yet") },
+                    epoch = { eraseLock.epoch },
                     receiptsDir = receiptsDir,
                     nowMillis = { clock.millis() },
                 ),

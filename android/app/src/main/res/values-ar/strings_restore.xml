@@ -33,10 +33,16 @@
     <string name="restore_err_space">مفيش مساحة كفاية للاسترجاع (محتاج %1$s ميجا). مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_read">معرفناش نقرا الملف. مفيش حاجة اتغيّرت.</string>
     <string name="restore_err_busy">فيه نسخة احتياطية أو فحص رسائل شغّال. جرّب تاني لما يخلص.</string>
-    <string name="restore_err_incomplete">الاسترجاع ماخلصش. اقفل مصروف وافتحه تاني وهيكمّل.</string>
+    <string name="restore_err_incomplete">الاسترجاع ماخلصش. دوس على كمّل الاسترجاع وجرّب تاني.</string>
+    <string name="restore_err_incomplete_again">الاسترجاع لسه مش قادر يخلص. جرّب بعدين، أو استرجع نفس الملف تاني.</string>
     <string name="restore_err_partial">بياناتك اتبدلت بس الاسترجاع ماخلصش. استرجع نفس الملف تاني.</string>
     <string name="restore_err_memory">الذاكرة مش كفاية عشان نفحص النسخة دي. اقفل التطبيقات التانية وجرّب تاني. مفيش حاجة اتغيّرت.</string>
     <string name="restore_pending_banner">التقاط الرسائل والنسخ الاحتياطي واقفين لحد ما الاسترجاع يخلص.</string>
     <string name="restore_pending_finish">كمّل الاسترجاع</string>
+    <string name="restore_pending_partial">الموبايل اتسترجع جزء بس. التقاط الرسائل والنسخ الاحتياطي واقفين لحد ما تسترجع نفس ملف النسخة تاني.</string>
+    <string name="restore_pending_again">استرجع تاني</string>
+    <string name="restore_pending_keep">سيب البيانات المسترجعة زي ما هي</string>
+    <string name="restore_pending_keep_warning">لو سبتها كده هتفضل المفتاح والإعدادات الحالية؛ ممكن شوية إيصالات أو إعدادات متطابقش مع النسخة.</string>
     <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
+    <string name="rcpt_err_restore_pending">كمّل الاسترجاع الأول</string>
 </resources>

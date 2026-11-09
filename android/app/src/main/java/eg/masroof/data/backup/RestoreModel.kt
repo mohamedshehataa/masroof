@@ -82,14 +82,40 @@ data class RestoreLimits(
     val maxSettingsBytes: Long = 4L shl 20,
     val maxRowChars: Int = 1 shl 20,
     val maxRowsPerTable: Long = 2_000_000,
+    /** ZIP entries the extraction accepts: every receipt, the 20 tables, the manifest, the settings and the key. */
+    val maxEntries: Int = 100_000 + 23,
     /** Nesting of `[` and `{` in one JSON text: real rows are flat, so a deep text is a stack bomb and is refused before it is parsed. */
     val maxJsonDepth: Int = 8,
     /** Bytes the checker may keep in memory for ids and references (a bomb of ids must not exhaust the heap). */
     val maxTrackedBytes: Long = 64L shl 20,
 )
 
-/** Test seams that stand in for a process kill. A hook throws [RestoreKilled]; the restore then leaves everything as a kill would. */
+/** One durable operation of a restore, named so a test can kill the process, fail the disk or damage a file right before or after it. */
+enum class RestoreOp {
+    JOURNAL_WRITE,
+    JOURNAL_DELETE,
+    STAGE_DELETE,
+    TX_COMMIT,
+    DELETE_O,
+    RENAME_R_TO_O,
+    RENAME_N_TO_R,
+    FSYNC_DIR,
+    READ_STAGED,
+    SETTINGS_APPLY,
+    KEY_INSTALL,
+}
+
+/**
+ * Test seams that stand in for a process kill, a full disk or a failing Keystore. A hook throws [RestoreKilled] (a kill: nothing is cleaned
+ * up) or an [java.io.IOException] (a disk fault). Every durable operation of the recovery goes through [before] and [after].
+ */
 interface RestoreHooks {
+    /** Right before [op] runs. */
+    fun before(op: RestoreOp) = Unit
+
+    /** Right after [op] ran. */
+    fun after(op: RestoreOp) = Unit
+
     /** Inside the Room transaction, after every row was written and before it commits. */
     fun beforeCommit() = Unit
 
@@ -106,11 +132,11 @@ interface RestoreHooks {
 class RestoreKilled : RuntimeException("killed")
 
 /**
- * Installs the local-id HMAC key under THIS phone's Keystore (REQ-OPS-178). Crash-safe: the new sealed copy is verified before it
- * replaces the old one in a single atomic commit, so there is never a moment without a decryptable key. It may be called again
- * (recovery repeats the finish), and it must throw rather than leave a different key behind.
+ * Seals the restored local-id key under THIS phone's Keystore (REQ-OPS-178). Contract: the key is 32 bytes and not all zero, else
+ * [IllegalArgumentException]; the call is idempotent; on return the stored key reads back equal; on a throw either the old or the new key
+ * is fully in place (never a torn one); it keeps no reference to [key].
  */
-fun interface LocalIdKeyInstaller {
+fun interface LocalIdKeyStore {
     fun install(key: ByteArray)
 }
 
@@ -122,7 +148,7 @@ fun interface RestoreSettingsApplier {
 class RestoreEnvironment(
     val db: RestoreDatabase,
     val settings: RestoreSettingsApplier,
-    val keys: LocalIdKeyInstaller,
+    val keys: LocalIdKeyStore,
     val receiptsDir: File,
     val nowMillis: () -> Long,
     val limits: RestoreLimits = RestoreLimits(),
@@ -131,7 +157,12 @@ class RestoreEnvironment(
     val freeSpace: (File) -> Long = ::freeBytes,
     val openStageFile: (File) -> OutputStream = { FileOutputStream(it) },
     val hooks: RestoreHooks = RestoreHooks.None,
-)
+    /** The erase generation (EraseLock.epoch): staging made before an Erase is never applied after it. */
+    val epoch: () -> Long = { 0L },
+) {
+    /** `filesDir`: the journal, the staging root, the receipts directory and the old receipts all live in it (one file system). */
+    val filesDir: File get() = receiptsDir.absoluteFile.parentFile!!
+}
 
 /**
  * True while a restore is replacing data. A backup (and STORY-186's SMS scan) checks it before it reads or writes and refuses: a receipts
@@ -151,22 +182,25 @@ object RestoreActivity {
     fun isActive(): Boolean = flag.get()
 }
 
-/** True while a restore is running or has committed and not finished (its marker is on disk): other writers must not run across it. */
-fun interface RestorePending {
-    fun active(): Boolean
+/**
+ * True while a restore is running or has committed and not finished (its journal is on disk, or a legacy marker of an old dev build). Other
+ * writers check it under the erase lock and wait: intake is deferred, backups, receipt attaches, the purge and the backfill pause.
+ */
+fun interface RestoreGate {
+    fun blocked(): Boolean
 }
 
-object NoRestorePending : RestorePending {
-    override fun active() = false
+object OpenRestoreGate : RestoreGate {
+    override fun blocked() = false
 }
 
-/** The marker file lives beside the receipts directory, which is `filesDir/receipts`. */
-class FileRestorePending
+/** A file check, so it holds in a WorkManager process before the start recovery has run. */
+class FileRestoreGate
     @javax.inject.Inject
     constructor(
         @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
-    ) : RestorePending {
-        override fun active() = RestoreActivity.isActive() || RestoreStage.marker(File(context.filesDir, "receipts")).exists()
+    ) : RestoreGate {
+        override fun blocked() = RestoreActivity.isActive() || RestoreStage.journalBlocks(File(context.filesDir, "receipts"))
     }
 
 /** The staging folder is checked against the plain free space on purpose: cached data is not something a restore may count on. */
@@ -185,18 +219,36 @@ internal fun readHeaderBytes(source: java.io.InputStream): ByteArray {
     return buf.copyOf(n)
 }
 
-/** Where a restore stages and which file marks it as committed; a cancel, a failure, a finished restore and Erase remove all of it. */
+/** Where a restore stages and the journal that names an unfinished one; Erase deletes the journal FIRST, then the staging, then the old receipts. */
 object RestoreStage {
     const val FOLDER = "restore-stage"
-    const val MARKER = "restore-marker.json"
+    const val JOURNAL = "restore-journal.json"
+    const val LEGACY_MARKER = "restore-marker.json"
     const val OLD_RECEIPTS = "receipts.old"
 
     fun dir(receiptsDir: File): File = File(receiptsDir.absoluteFile.parentFile, FOLDER)
 
-    fun marker(receiptsDir: File): File = File(receiptsDir.absoluteFile.parentFile, MARKER)
+    fun journal(receiptsDir: File): File = File(receiptsDir.absoluteFile.parentFile, JOURNAL)
+
+    fun legacyMarker(receiptsDir: File): File = File(receiptsDir.absoluteFile.parentFile, LEGACY_MARKER)
+
+    /** True when the journal or the legacy marker exists. */
+    fun journalBlocks(receiptsDir: File): Boolean = journal(receiptsDir).exists() || legacyMarker(receiptsDir).exists()
+
+    /** Deletes the journal, its tmp file and the legacy marker; true when none is left. */
+    fun deleteJournal(receiptsDir: File): Boolean {
+        val parent = receiptsDir.absoluteFile.parentFile
+        return listOf(File(parent, JOURNAL), File(parent, "$JOURNAL.tmp"), File(parent, LEGACY_MARKER)).all { !it.exists() || it.delete() }
+    }
 
     fun sweep(receiptsDir: File): Boolean {
         val parent = receiptsDir.absoluteFile.parentFile
-        return listOf(File(parent, FOLDER), File(parent, MARKER), File(parent, OLD_RECEIPTS)).all { !it.exists() || it.deleteRecursively() }
+        // Journal first: a kill after it leaves only unreferenced staging, which the next start sweeps.
+        val journalGone =
+            listOf(File(parent, JOURNAL), File(parent, JOURNAL + ".tmp"), File(parent, LEGACY_MARKER)).all {
+                !it.exists() ||
+                    it.delete()
+            }
+        return journalGone && listOf(File(parent, FOLDER), File(parent, OLD_RECEIPTS)).all { !it.exists() || it.deleteRecursively() }
     }
 }

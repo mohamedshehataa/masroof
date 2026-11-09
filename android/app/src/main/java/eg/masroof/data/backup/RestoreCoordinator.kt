@@ -48,6 +48,8 @@ sealed interface RestoreState {
     data class Failed(
         val failure: RestoreFailure,
         val neededMb: Long = 0L,
+        /** Failed finishes so far (INCOMPLETE): from three on the message says it still cannot finish. */
+        val attempts: Int = 0,
     ) : RestoreState
 }
 
@@ -96,9 +98,10 @@ class WorkRestoreBlockers
     }
 
 /**
- * Runs the restore flow in the application scope, so leaving the screen cannot cancel a restore half way. It holds the erase lock
- * around the replace like every other writer, and refuses while a backup or an SMS scan runs. The passphrase is passed through and
- * never stored; the staging folder is deleted on Cancel, on any failure and after a restore.
+ * Runs the restore flow in the application scope, so leaving the screen cannot cancel a restore half way. The SESSION (one file being
+ * picked, checked and confirmed) lives here in memory and never reads or writes the journal until Confirm; the DURABLE state (journal plus
+ * `application_id`) is owned by [RestoreRecovery]. A pick, a wrong passphrase, a failed check or a Cancel therefore never change an unfinished
+ * restore. Everything durable runs under the erase lock, the restore flag and NonCancellable, and never throws past this class.
  */
 @Singleton
 class RestoreCoordinator
@@ -114,62 +117,34 @@ class RestoreCoordinator
         private val mutableState = MutableStateFlow<RestoreState>(RestoreState.Idle)
         val state: StateFlow<RestoreState> get() = mutableState
 
-        private val mutablePending = MutableStateFlow(false)
+        private val mutablePending = MutableStateFlow(initialPending())
 
-        /** True while a restore marker is on disk: SMS capture and backups are paused until it is finished (shown as a lasting banner). */
-        val pending: StateFlow<Boolean> get() = mutablePending
+        /** None, or what is unfinished: Incomplete (the banner offers Finish) or Partial (the banner says Restore again). */
+        val pending: StateFlow<PendingState> get() = mutablePending
 
-        private fun refreshPending() {
-            mutablePending.value = runCatching { restorer.hasMarker() }.getOrDefault(false)
-        }
-
-        init {
-            refreshPending()
-            // Every state change can move the marker (a failure after the commit keeps it, a finished restore removes it).
-            scope.launch { mutableState.collect { refreshPending() } }
-        }
-
-        /** The banner's action: runs the recovery now (a broken marker needs the same file restored again, which the message says). */
-        fun finishPending() {
-            scope.launch(io) {
-                val wasPending = restorer.hasMarker()
-                lock.mutex.withLock {
-                    val error = recoverCore()
-                    // Finished: the state says so (it stays "did not finish" otherwise, which would be false).
-                    if (error != null) {
-                        mutableState.value = RestoreState.Failed(error.failure, error.neededMb)
-                    } else if (wasPending && !restorer.hasMarker()) {
-                        mutableState.value = RestoreState.Done
-                    }
-                }
-                refreshPending()
+        private fun initialPending(): PendingState =
+            try {
+                // Before the start recovery has run an existing journal is shown as Incomplete (conservative); a corrupt one as Partial.
+                restorer.pendingState()
+            } catch (_: Exception) {
+                PendingState.None
             }
-        }
 
         private var uri: Uri? = null
         private var header: BackupHeader? = null
         private var staged: StagedRestore? = null
         private var job: Job? = null
+        private var startJob: Job? = null
 
-        /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read here. */
-        @Suppress("ThrowsCount") // one named failure per refusal
+        /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read; the journal is never touched. */
         fun onPicked(picked: Uri?) {
             if (picked == null || mutableState.value is RestoreState.Checking || mutableState.value is RestoreState.Restoring) return
-            // Picking again at the confirmation: the staged files (and the raw key among them) go first.
-            restorer.discard(staged)
-            reset()
+            dropSession()
             uri = picked
             job =
                 scope.launch(io) {
                     mutableState.value =
                         try {
-                            // A restore that committed and did not finish is finished first: its staging must not be replaced. A marker
-                            // that is "broken" is repaired by restoring the same file again, which is what this pick starts.
-                            if (restorer.hasMarker() && !restorer.markerBroken()) {
-                                // Whether it finishes or not, this pick goes on: restoring a file again is always the way out of a marker.
-                                // Only another restore that is running right now stops the pick (BUSY).
-                                recoverGuarded()?.let { if (it.failure == RestoreFailure.BUSY) throw it }
-                            }
                             header = sources.open(picked).use { restorer.checkHeader(it) }
                             RestoreState.NeedsPassphrase
                         } catch (e: CancellationException) {
@@ -194,8 +169,12 @@ class RestoreCoordinator
             mutableState.value = RestoreState.Checking(null)
             job =
                 scope.launch(io) {
+                    // The start recovery sweeps staging nobody names: it must be over before this session creates its own.
+                    startJob?.join()
                     mutableState.value =
                         try {
+                            // From here to Done, Cancel or a failure the restore flag is held: intake is deferred (recorded once after Done).
+                            acquire()
                             if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
                             val result =
                                 restorer.stage({ sources.open(picked) }, sources.size(picked), head, passphrase) { p ->
@@ -213,63 +192,56 @@ class RestoreCoordinator
                             @Suppress("TooGenericExceptionCaught") e: Throwable,
                         ) {
                             // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
-
-                            failed(
-                                RestoreException(
-                                    RestoreFailure.INVALID_CONTENT,
-                                ).also { it.addSuppressed(e) },
-                            )
+                            failed(RestoreException(RestoreFailure.INVALID_CONTENT).also { it.addSuppressed(e) })
                         }
                 }
         }
 
         fun onConfirm() {
-            val pending = staged ?: return
+            val pendingRestore = staged ?: return
             if (mutableState.value !is RestoreState.Confirm) return
             mutableState.value = RestoreState.Restoring
             job =
                 scope.launch(io) {
-                    mutableState.value =
-                        try {
-                            withContext(NonCancellable) {
-                                lock.mutex.withLock {
-                                    // Set BEFORE asking whether a backup runs (a backup checks it AFTER it is marked running, so one sees
-                                    // the other) and cleared inside the lock, so a message that gets the lock next is not turned away.
-                                    if (!RestoreActivity.begin()) throw RestoreException(RestoreFailure.BUSY)
-                                    try {
-                                        if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
-                                        restorer.apply(pending)
-                                    } finally {
-                                        RestoreActivity.end()
-                                    }
-                                }
+                    startJob?.join()
+                    var failure: RestoreException? = null
+                    try {
+                        withContext(NonCancellable) {
+                            lock.mutex.withLock {
+                                // The restore flag has been held since Checking (acquire): intake is deferred, so nothing lands in the DB
+                                // that is about to be replaced. A backup or scan that started since Staged makes this BUSY (checked again here).
+                                if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
+                                restorer.apply(pendingRestore)
                             }
-                            reset()
-                            RestoreState.Done
-                        } catch (e: RestoreException) {
-                            failed(e)
-                        } catch (
-                            @Suppress("TooGenericExceptionCaught") e: Throwable,
-                        ) {
-                            // After the data commit the staging must stay (the next start finishes it); before it nothing changed.
-                            val committed = restorer.hasMarker()
-                            failed(
-                                RestoreException(
-                                    if (committed) RestoreFailure.INCOMPLETE else RestoreFailure.FAILED,
-                                ).also { it.addSuppressed(e) },
-                            )
                         }
+                    } catch (e: RestoreException) {
+                        failure = e
+                    } catch (e: RestoreKilled) {
+                        throw e
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught") e: Throwable,
+                    ) {
+                        failure = RestoreException(RestoreFailure.INCOMPLETE).also { it.addSuppressed(e) }
+                    }
+                    staged = null
+                    job = null
+                    uri = null
+                    header = null
+                    afterOutcome(failure?.failure)
+                    release()
+                    mutableState.value = if (failure == null) RestoreState.Done else RestoreState.Failed(failure.failure, failure.neededMb)
                 }
         }
 
-        /** Cancel at any step: a running check stops, the staging folder is deleted, nothing changed. */
+        /** Cancel at any step: a running check stops, the session's own staging is deleted, the journal and its staging are untouched. */
         fun onCancel() {
             if (mutableState.value is RestoreState.Restoring) return
             val running = job
+            val gen = staged?.gen
             reset()
             scope.launch(io) {
                 running?.cancelAndJoinQuietly()
-                restorer.discard(null)
+                gen?.let { restorer.discardSession(it) }
             }
         }
 
@@ -277,14 +249,39 @@ class RestoreCoordinator
             if (mutableState.value is RestoreState.Done || mutableState.value is RestoreState.Failed) mutableState.value = RestoreState.Idle
         }
 
+        /** A failed session: only the session's own staging goes (apply already deleted it when it refused). */
         private fun failed(e: RestoreException): RestoreState {
-            // An unfinished restore (INCOMPLETE) keeps its staging: the settings, the key and the receipts are still in it.
-            if (e.failure != RestoreFailure.INCOMPLETE && e.failure != RestoreFailure.PARTIAL) restorer.discard(staged)
+            staged?.let { restorer.discardSession(it.gen) }
             staged = null
+            release()
             return RestoreState.Failed(e.failure, e.neededMb)
         }
 
+        /** Drops the session (a new pick): its own staging is deleted; the journal and any slot's staging are not touched. */
+        private fun dropSession() {
+            staged?.let { restorer.discardSession(it.gen) }
+            reset()
+        }
+
+        private var holding = false
+
+        /** Holds the restore flag for this session (Checking through Restoring); BUSY when another restore already holds it. */
+        private fun acquire() {
+            if (!holding) {
+                if (!RestoreActivity.begin()) throw RestoreException(RestoreFailure.BUSY)
+                holding = true
+            }
+        }
+
+        private fun release() {
+            if (holding) {
+                RestoreActivity.end()
+                holding = false
+            }
+        }
+
         private fun reset() {
+            release()
             uri = null
             header = null
             staged = null
@@ -297,47 +294,104 @@ class RestoreCoordinator
             join()
         }
 
-        /**
-         * Every recovery (app start and a new pick) runs here: under the restore flag (so a backup and the SMS pipeline stand aside),
-         * shielded from cancellation, and never lets an exception out: the result is a [RestoreException] to show, or null.
-         * The caller holds the erase lock.
-         */
-        private suspend fun recoverCore(): RestoreException? =
-            withContext(NonCancellable) {
-                if (!RestoreActivity.begin()) return@withContext RestoreException(RestoreFailure.BUSY)
+        /** After an outcome: the banner state follows the journal (None when it is gone). */
+        private fun afterOutcome(outcome: RestoreFailure?) {
+            val journalState =
                 try {
-                    restorer.recover()
-                    null
-                } catch (e: RestoreException) {
-                    e
+                    restorer.pendingState()
+                } catch (_: Exception) {
+                    PendingState.Incomplete(0)
+                }
+            mutablePending.value =
+                when {
+                    journalState is PendingState.None -> PendingState.None
+                    outcome == RestoreFailure.PARTIAL -> PendingState.Partial
+                    outcome == RestoreFailure.FAILED && mutablePending.value is PendingState.Partial -> PendingState.Partial
+                    else -> journalState
+                }
+        }
+
+        /**
+         * Every recovery (app start and Finish) runs here: under the restore flag (so a backup, the SMS pipeline and the others stand aside),
+         * shielded from cancellation, never letting an exception out. The caller holds the erase lock.
+         */
+        private suspend fun recoverCore(atStart: Boolean): RestoreOutcome =
+            withContext(NonCancellable) {
+                if (!RestoreActivity.begin()) return@withContext RestoreOutcome.INCOMPLETE
+                try {
+                    restorer.recover(atStart)
+                } catch (e: RestoreKilled) {
+                    throw e
                 } catch (
-                    @Suppress("TooGenericExceptionCaught") e: Throwable,
+                    @Suppress("TooGenericExceptionCaught") _: Throwable,
                 ) {
-                    RestoreException(RestoreFailure.INCOMPLETE).also { it.addSuppressed(e) }
+                    RestoreOutcome.INCOMPLETE
                 } finally {
                     RestoreActivity.end()
                 }
             }
 
-        private suspend fun recoverGuarded(): RestoreException? = lock.mutex.withLock { recoverCore() }
+        private fun report(
+            outcome: RestoreOutcome,
+            wasPending: Boolean,
+        ) {
+            when (outcome) {
+                RestoreOutcome.DONE -> {
+                    mutablePending.value = PendingState.None
+                    if (wasPending) mutableState.value = RestoreState.Done
+                }
+                RestoreOutcome.INCOMPLETE -> {
+                    afterOutcome(RestoreFailure.INCOMPLETE)
+                    val attempts = (mutablePending.value as? PendingState.Incomplete)?.attempts ?: 0
+                    mutableState.value = RestoreState.Failed(RestoreFailure.INCOMPLETE, attempts = attempts)
+                }
+                RestoreOutcome.PARTIAL -> {
+                    mutablePending.value = PendingState.Partial
+                    mutableState.value = RestoreState.Failed(RestoreFailure.PARTIAL)
+                }
+                RestoreOutcome.FAILED -> afterOutcome(RestoreFailure.FAILED)
+            }
+        }
+
+        /** "Keep the restored data as it is": the third way out of PARTIAL (deletes the journal and staging, keeps the current key). */
+        fun keepAsIs() {
+            scope.launch(io) {
+                startJob?.join()
+                lock.mutex.withLock {
+                    if (!restorer.keepAsIs()) return@withLock
+                    mutablePending.value = PendingState.None
+                    mutableState.value = RestoreState.Idle
+                }
+            }
+        }
+
+        /** The banner's Finish: runs the recovery now (no sweep); a finished restore moves the state to Done. */
+        fun finishPending() {
+            scope.launch(io) {
+                startJob?.join()
+                val wasPending = mutablePending.value !is PendingState.None
+                lock.mutex.withLock { report(recoverCore(atStart = false), wasPending) }
+            }
+        }
 
         /**
-         * At app start (REQ-OPS-179): finishes a restore that committed, or removes the staging of one that did not. Takes the erase lock
-         * before the UI can save anything.
+         * At app start (REQ-OPS-179): decides from the journal and `application_id` what is left to do and does it. Takes the erase lock on
+         * the calling thread before the UI can save anything. A kill at any point is handled by the next start.
          */
         fun recoverInterrupted(): Job? {
             if (DatabaseStartup.isBlocked()) return null
-            // Taken here, on the calling thread, so a save made right after start waits for the recovery (as DataEraser does).
             val taken = lock.mutex.tryLock()
-            return scope.launch(io) {
-                if (!taken) lock.mutex.lock()
-                try {
-                    // Never crashes the app: a failure becomes a message the Settings section shows.
-                    recoverCore()?.let { mutableState.value = RestoreState.Failed(it.failure, it.neededMb) }
-                    refreshPending()
-                } finally {
-                    lock.mutex.unlock()
+            val started =
+                scope.launch(io) {
+                    if (!taken) lock.mutex.lock()
+                    try {
+                        val wasPending = mutablePending.value !is PendingState.None
+                        report(recoverCore(atStart = true), wasPending = false)
+                    } finally {
+                        lock.mutex.unlock()
+                    }
                 }
-            }
+            startJob = started
+            return started
         }
     }

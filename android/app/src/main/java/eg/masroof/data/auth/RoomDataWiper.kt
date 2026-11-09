@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
+import eg.masroof.data.backup.RestoreStage
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.insights.InsightsCache
@@ -21,6 +22,7 @@ import eg.masroof.ingest.NoopCaptureGate
 import eg.masroof.ingest.SMS_INTAKE_TAG
 import eg.masroof.ingest.SMS_UPLOAD_RETRY_WORK
 import eg.masroof.ingest.SMS_UPLOAD_WORK
+import eg.masroof.ingest.backfill.SMS_BACKFILL_WORK
 import eg.masroof.work.OUTBOX_RETRY_WORK_NAME
 import eg.masroof.work.OUTBOX_WORK_NAME
 import kotlinx.coroutines.CoroutineDispatcher
@@ -47,6 +49,8 @@ class RoomDataWiper
         private val reminders: eg.masroof.work.ReminderLog = eg.masroof.work.NoReminderLog,
         private val subscriptionPrefs: eg.masroof.data.bills.SubscriptionPrefs = eg.masroof.data.bills.NoSubscriptionPrefs,
         private val answerPrefs: eg.masroof.data.answers.AnswerPrefs = eg.masroof.data.answers.NoAnswerPrefs,
+        private val eraseLock: EraseLock = EraseLock(),
+        private val backfillReset: BackfillReset = BackfillReset {},
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -60,8 +64,13 @@ class RoomDataWiper
         @Suppress("TooGenericExceptionCaught") // rethrown: only decides whether the stage returns to NONE
         override suspend fun wipe() {
             check(gate.setStage(EraseStage.ERASING)) { "could not record the erase" }
+            // every long job that began before this (a "Read past SMS" run) is stale from now on and writes nothing more
+            eraseLock.bump()
             var committed = false
             try {
+                workManager.cancelUniqueWork(SMS_BACKFILL_WORK).await()
+                // An unfinished restore must not resume after an Erase: its journal goes FIRST.
+                withContext(io) { check(deleteRestoreJournal()) { "restore journal could not be deleted" } }
                 workManager.cancelUniqueWork(OUTBOX_WORK_NAME).await()
                 workManager.cancelUniqueWork(OUTBOX_RETRY_WORK_NAME).await()
                 // Queued messages' input data holds text: cancel the jobs and WAIT for the cancellation, so no intake worker can
@@ -128,6 +137,8 @@ class RoomDataWiper
                         }
                     },
                     { withContext(io) { capture.clear() } },
+                    // the run state and the 30-day memory of "Read past SMS": the screen must not show an erased run
+                    { withContext(io) { backfillReset.reset() } },
                     { withContext(io) { insights.clear() } },
                     // nothing stays on the lock screen: every "Recorded ... Undo" notification goes
                     { notifier.cancelAll() },
@@ -150,6 +161,13 @@ class RoomDataWiper
             // Shrink the file so deleted rows do not linger in free pages or the WAL (best effort, not part of "failed").
             withContext(io) { runCatching { compact() } }
             if (failed || !gate.setStage(EraseStage.NONE)) throw PartialEraseException()
+        }
+
+        private fun deleteRestoreJournal(): Boolean {
+            val journalGone =
+                eg.masroof.data.backup.RestoreStage
+                    .deleteJournal(receiptsDir)
+            return journalGone
         }
 
         private fun compact() {
@@ -195,3 +213,8 @@ class RoomDataWiper
             const val IDLE_POLL_MILLIS = 50L
         }
     }
+
+/** What "Erase all data" calls to forget a "Read past SMS" run (state and memory); a function so the data layer needs no ingest type. */
+fun interface BackfillReset {
+    fun reset()
+}

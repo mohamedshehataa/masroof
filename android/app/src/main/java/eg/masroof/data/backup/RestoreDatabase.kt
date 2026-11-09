@@ -40,12 +40,15 @@ interface RestoreDatabase {
     fun applicationId(): Int
 
     /**
-     * Replaces every table in ONE transaction: all backup and pipeline tables are emptied, then each of [tables] (table name to its
-     * JSON-lines file) is inserted, [nonce] is written to `application_id`, and [beforeCommit] runs last. A failure rolls it all back.
+     * Replaces every table in ONE transaction, run with `PRAGMA synchronous = FULL` so the commit is durable against power loss: all backup
+     * and pipeline tables are emptied, then each of [tables] (table name to its JSON-lines file, sorted by name) is inserted while its bytes
+     * are hashed, the combined hash must equal [expectedTablesSha] (else the transaction rolls back), `application_id` is set to [gen] (the
+     * commit point), and [beforeCommit] runs last. A failure rolls it all back.
      */
     fun replaceAll(
-        nonce: Int,
+        gen: Int,
         tables: List<Pair<String, File>>,
+        expectedTablesSha: String,
         beforeCommit: () -> Unit,
     )
 }
@@ -56,6 +59,7 @@ internal val BOOLEAN_COLUMNS =
 
 class RoomRestoreDatabase(
     private val db: AppDatabase,
+    private val limits: RestoreLimits = RestoreLimits(),
 ) : RestoreDatabase {
     override fun schema(): RestoreSchema {
         val tables = LinkedHashMap<String, TableSchema>()
@@ -84,28 +88,46 @@ class RoomRestoreDatabase(
     override fun applicationId(): Int = db.query("PRAGMA application_id", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     override fun replaceAll(
-        nonce: Int,
+        gen: Int,
         tables: List<Pair<String, File>>,
+        expectedTablesSha: String,
         beforeCommit: () -> Unit,
     ) {
         val schema = schema()
-        db.runInTransaction(
-            Callable {
-                val raw = db.openHelper.writableDatabase
-                // Foreign keys are checked at the commit, so the order of the inserts does not matter.
-                raw.execSQL("PRAGMA defer_foreign_keys = ON")
-                for (name in BackupTables.INCLUDED.map { it.name } + BackupTables.EXCLUDED) raw.delete(name, null, null)
-                for ((name, file) in tables) {
-                    val table = schema.tables.getValue(known(name))
-                    RestoreRows.forEachLine(file, Int.MAX_VALUE) { line ->
-                        raw.insert(name, SQLiteDatabase.CONFLICT_ABORT, values(table, line))
+        val raw = db.openHelper.writableDatabase
+        // Set BEFORE the transaction begins, on the writer connection; the previous value is restored afterwards.
+        val previous = raw.query("PRAGMA synchronous").use { if (it.moveToFirst()) it.getInt(0) else 1 }
+        raw.execSQL("PRAGMA synchronous = FULL")
+        try {
+            db.runInTransaction(
+                Callable {
+                    // Foreign keys are checked at the commit, so the order of the inserts does not matter.
+                    raw.execSQL("PRAGMA defer_foreign_keys = ON")
+                    for (name in BackupTables.INCLUDED.map { it.name } + BackupTables.EXCLUDED) raw.delete(name, null, null)
+                    val shas = java.util.TreeMap<String, String>()
+                    var rowsRead = 0L
+                    for ((name, file) in tables.sortedBy { it.first }) {
+                        val table = schema.tables.getValue(known(name))
+                        rowsRead = 0L
+                        shas[name] =
+                            RestoreRows.forEachLine(file, limits.maxRowChars) { line ->
+                                // The caps of check 6 apply to this second read too: a file changed since the checks cannot be a bomb.
+                                check(++rowsRead <= limits.maxRowsPerTable) { "too many rows" }
+                                raw.insert(name, SQLiteDatabase.CONFLICT_ABORT, values(table, line))
+                            }
                     }
-                }
-                // Not a template: [nonce] is an Int, and this pragma is the only way to write a value that commits with the transaction.
-                raw.execSQL("PRAGMA application_id = " + nonce)
-                beforeCommit()
-            },
-        )
+                    val actual = RestoreRows.sha256(shas.entries.joinToString("") { it.key + ":" + it.value + "\n" }.toByteArray())
+                    // The bytes inserted are the bytes that were checked; a file that changed since is refused (rolled back).
+                    check(actual == expectedTablesSha) { "staged table bytes changed" }
+                    // Not a template: [gen] is an Int, and this pragma is the only way to write a value that commits with the transaction.
+                    raw.execSQL("PRAGMA application_id = " + gen)
+                    beforeCommit()
+                },
+            )
+        } finally {
+            // An Int read from SQLite, never text from a file.
+            runCatching { raw.execSQL("PRAGMA synchronous = " + previous) }
+        }
     }
 
     private fun values(

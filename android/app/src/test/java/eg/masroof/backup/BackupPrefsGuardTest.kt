@@ -21,7 +21,18 @@ class BackupPrefsGuardTest {
     )
 
     // Constants in a SharedPreferences file that are not preference keys.
-    private val notKeys = setOf("ar", "en", "captured_transactions", "bill_reminders", "masroof_session_keyset", "masroof_session_master")
+    private val notKeys =
+        setOf(
+            "ar",
+            "en",
+            "captured_transactions",
+            "bill_reminders",
+            "masroof_session_keyset",
+            "masroof_session_master",
+            // the phone's own LocalKeystore (STORY-186): a keyset entry name and a Keystore alias, not preference files
+            "masroof_local_keyset_entry",
+            "masroof_local_master",
+        )
 
     /**
      * Which preferences file(s) the keys of a source file belong to. The classes take their SharedPreferences from the DI module, so the
@@ -38,6 +49,8 @@ class BackupPrefsGuardTest {
             "EncryptedSessionStore.kt" to listOf("masroof_session"),
             "BackupState.kt" to listOf("masroof_backup"),
             "AppModule.kt" to listOf("masroof_device"),
+            "BackfillStore.kt" to listOf("masroof_backfill"),
+            "LocalKeystore.kt" to listOf("masroof_local_keyset"),
         )
 
     @Suppress("NestedBlockDepth", "CyclomaticComplexMethod")
@@ -133,18 +146,18 @@ class BackupPrefsGuardTest {
             private val a = stringSetPreferencesKey("brand_new_answers_key")
             private val Context.store by preferencesDataStore(name = "brand_new_store")
             class Fresh(private val prefs: android.content.SharedPreferences) {
-                fun f(c: Context) = c.getSharedPreferences("masroof_backfill", 0)
+                fun f(c: Context) = c.getSharedPreferences("masroof_unplaced_example", 0)
                 companion object { const val NEW_KEY = "backfill_resume_position" }
             }
             """.trimIndent()
         val found = scan(listOf("Fresh.kt" to probe))
         assertTrue(found.dataStores.contains("brand_new_store"))
-        assertTrue(found.sharedFiles.contains("masroof_backfill"))
+        assertTrue(found.sharedFiles.contains("masroof_unplaced_example"))
         assertEquals(
             listOf("datastore:brand_new_store: brand_new_answers_key", "unowned:Fresh.kt: backfill_resume_position"),
             unplaced(found),
         )
-        assertTrue("masroof_backfill" !in inFiles && "masroof_backfill" !in BackupPrefsInventory.OUT_FILES)
+        assertTrue("masroof_unplaced_example" !in inFiles && "masroof_unplaced_example" !in BackupPrefsInventory.OUT_FILES)
     }
 
     @Test

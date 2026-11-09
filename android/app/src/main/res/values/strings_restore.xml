@@ -29,10 +29,16 @@
     <string name="restore_err_space">Not enough space to restore (needs %1$s MB). Nothing was changed.</string>
     <string name="restore_err_read">The file could not be read. Nothing was changed.</string>
     <string name="restore_err_busy">A backup or an SMS scan is running. Try again when it finishes.</string>
-    <string name="restore_err_incomplete">The restore did not finish. Close and reopen Masroof and it will complete.</string>
+    <string name="restore_err_incomplete">The restore did not finish. Tap Finish the restore to try again.</string>
+    <string name="restore_err_incomplete_again">The restore still cannot finish. Try again later, or restore the same file again.</string>
     <string name="restore_err_partial">Your data was replaced but the restore did not finish. Restore the same file again.</string>
     <string name="restore_err_memory">Not enough memory to check this backup. Close other apps and try again. Nothing was changed.</string>
     <string name="restore_pending_banner">SMS capture and backups are paused until the restore finishes.</string>
     <string name="restore_pending_finish">Finish the restore</string>
+    <string name="restore_pending_partial">Your phone was only partly restored. SMS capture and backups are paused until you restore the same backup file again.</string>
+    <string name="restore_pending_again">Restore again</string>
+    <string name="restore_pending_keep">Keep the restored data as it is</string>
+    <string name="restore_pending_keep_warning">Keeping it leaves your current key and settings; some receipts or settings may not match the backup.</string>
     <string name="restore_err_failed">The restore could not finish. Nothing was changed.</string>
+    <string name="rcpt_err_restore_pending">Finish the restore first</string>
 </resources>

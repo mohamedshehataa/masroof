@@ -238,6 +238,7 @@ internal fun errorRes(reason: Refusal?) =
         Refusal.PDF_UNREADABLE -> R.string.rcpt_err_pdf_unreadable
         Refusal.IMAGE_UNREADABLE -> R.string.rcpt_err_image_unreadable
         Refusal.QUOTA -> R.string.rcpt_err_quota
+        Refusal.RESTORE_PENDING -> R.string.rcpt_err_restore_pending
         null -> R.string.rcpt_err_failed
     }
 

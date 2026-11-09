@@ -75,6 +75,8 @@ class BackupManifestTest {
                 "android.permission.INTERNET",
                 "android.permission.ACCESS_NETWORK_STATE",
                 "android.permission.RECEIVE_SMS",
+                // STORY-186 "Read past SMS": asked only on Start, after an explanation
+                "android.permission.READ_SMS",
                 "android.permission.POST_NOTIFICATIONS",
                 "android.permission.RECORD_AUDIO",
                 "android.permission.FOREGROUND_SERVICE",

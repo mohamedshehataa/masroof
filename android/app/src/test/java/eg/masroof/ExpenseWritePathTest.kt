@@ -31,7 +31,8 @@ class ExpenseWritePathTest {
             // capture Undo: soft delete, then reconcile in the same transaction
             "ingest/Captured.kt" to 1,
             // new rows only (nothing can be linked to a row that does not exist yet) and the twin enrichment of fresh captures
-            "ingest/SmsWork.kt" to 4,
+            // STORY-186: +1 enrichFromTwin when a backfilled SMS joins a notification entry (untouched entries only)
+            "ingest/SmsWork.kt" to 5,
             "ingest/CaptureQueueConverter.kt" to 2,
             "data/ExpenseRepository.kt" to 1,
             "data/OutboxConverter.kt" to 3,

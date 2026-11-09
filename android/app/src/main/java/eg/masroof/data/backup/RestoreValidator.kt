@@ -46,15 +46,26 @@ internal object RestoreRows {
     }
 
     /** A local-id key is exactly 32 bytes and not all zero (a zeroed key would make every message id guessable). */
-    fun keyOk(file: File): Boolean = file.length() == BackupFormat.KEY_BYTES.toLong() && file.readBytes().any { it.toInt() != 0 }
+    fun keyOk(bytes: ByteArray): Boolean = bytes.size == BackupFormat.KEY_BYTES && bytes.any { it.toInt() != 0 }
+
+    fun sha256(bytes: ByteArray): String =
+        hex(
+            java.security.MessageDigest
+                .getInstance("SHA-256")
+                .digest(bytes),
+        )
+
+    fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
     /** Reads UTF-8 lines; a line longer than [maxChars] is refused (a file with no line breaks must not fill the memory). */
     fun forEachLine(
         file: File,
         maxChars: Int,
         action: (String) -> Unit,
-    ) {
-        file.inputStream().buffered().use { raw ->
+    ): String {
+        // The bytes are hashed while they are read: what is checked (or inserted) is exactly what the hash names.
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        java.security.DigestInputStream(file.inputStream(), digest).buffered().use { raw ->
             InputStreamReader(raw, StandardCharsets.UTF_8).use { reader ->
                 val sb = StringBuilder()
                 while (true) {
@@ -71,6 +82,7 @@ internal object RestoreRows {
                 if (sb.isNotEmpty()) action(sb.toString())
             }
         }
+        return hex(digest.digest())
     }
 }
 
@@ -78,6 +90,7 @@ internal object RestoreRows {
 class StagedReceipt(
     val id: String,
     val fileName: String,
+    val sha256: String,
 )
 
 /** The result of checks 6 and 7. */
@@ -87,6 +100,8 @@ class ValidatedBackup(
     val receipts: List<StagedReceipt>,
     val settings: File,
     val key: File,
+    /** SHA-256 of what checks 6 and 7 read; the journal carries them and every byte applied later is hashed against them. */
+    val hashes: StageHashes,
 )
 
 /** A ZIP entry that was written to the staging folder, with what was measured while it streamed. */
@@ -130,12 +145,19 @@ class RestoreValidator(
     ): ValidatedBackup {
         val manifest = parseManifest(files.manifest)
         val counts = checkTables(files, manifest, cancelled)
-        val settings = files.settings.readText()
-        RestoreSettingKeys.parse(settings)
-        if (!RestoreRows.keyOk(files.key)) throw fail(6)
+        // The bytes that are parsed here are the bytes that are hashed: no gap between a check and the hash that names it.
+        val settingsBytes = files.settings.readBytes()
+        RestoreSettingKeys.parse(String(settingsBytes, StandardCharsets.UTF_8))
+        val keyBytes = files.key.readBytes()
+        if (!RestoreRows.keyOk(keyBytes)) throw fail(6)
         val receipts = checkReceipts(files, manifest)
+        val receiptsSha =
+            RestoreRows.sha256(receipts.sortedBy { it.fileName }.joinToString("") { it.fileName + ":" + it.sha256 + "\n" }.toByteArray())
         val info = RestoreInfo(manifest.createdAtMillis, counts.entries, receipts.size, counts.budgets, currentEntries)
-        return ValidatedBackup(info, files.tables.map { it.key to it.value }, receipts, files.settings, files.key)
+        val tables = files.tables.toSortedMap().map { it.key to it.value }
+        val hashes = StageHashes(counts.tablesSha, RestoreRows.sha256(settingsBytes), RestoreRows.sha256(keyBytes), receiptsSha)
+        keyBytes.fill(0)
+        return ValidatedBackup(info, tables, receipts, files.settings, files.key, hashes)
     }
 
     private class Manifest(
@@ -147,6 +169,7 @@ class RestoreValidator(
     private class Counts(
         val entries: Long,
         val budgets: Long,
+        val tablesSha: String,
     )
 
     private fun fail(step: Int) = RestoreException(RestoreFailure.INVALID_CONTENT, step)
@@ -213,34 +236,36 @@ class RestoreValidator(
         var tracked = 0L
         val receiptRows = HashMap<String, String>()
         val receiptNames = HashSet<String>()
+        val tableShas = java.util.TreeMap<String, String>()
         for (table in BackupTables.INCLUDED) {
             val t = schema.tables.getValue(table.name)
             val file = files.tables[table.name] ?: throw fail(6)
             val pk = HashSet<String>()
             var rows = 0L
-            RestoreRows.forEachLine(file, limits.maxRowChars) { line ->
-                if (rows % CANCEL_EVERY == 0L) cancelled()
-                if (++rows > limits.maxRowsPerTable) throw fail(6)
-                val row = row(t, line)
-                val id = row["id"] as? String ?: throw fail(6)
-                if (id.isEmpty() || id.length > MAX_ID || !pk.add(id)) throw fail(6)
-                tracked += id.length * 2L + ENTRY_OVERHEAD
-                for (fk in t.foreignKeys) {
-                    (row[fk.column] as? String)?.let {
-                        if (refs.getOrPut(fk.parentTable) { HashSet() }.add(it)) tracked += it.length * 2L + ENTRY_OVERHEAD
+            tableShas[table.name] =
+                RestoreRows.forEachLine(file, limits.maxRowChars) { line ->
+                    if (rows % CANCEL_EVERY == 0L) cancelled()
+                    if (++rows > limits.maxRowsPerTable) throw fail(6)
+                    val row = row(t, line)
+                    val id = row["id"] as? String ?: throw fail(6)
+                    if (id.isEmpty() || id.length > MAX_ID || !pk.add(id)) throw fail(6)
+                    tracked += id.length * 2L + ENTRY_OVERHEAD
+                    for (fk in t.foreignKeys) {
+                        (row[fk.column] as? String)?.let {
+                            if (refs.getOrPut(fk.parentTable) { HashSet() }.add(it)) tracked += it.length * 2L + ENTRY_OVERHEAD
+                        }
+                    }
+                    // The ids and references the checker keeps in memory have a budget: a file of many long ids must not exhaust the heap.
+                    if (tracked > limits.maxTrackedBytes) throw RestoreException(RestoreFailure.LOW_MEMORY, 6)
+                    if (table.name == "expense" && row["deletedAtMillis"] == null) entries++
+                    if (table.name == "budget") budgets++
+                    if (table.name == "receipt") {
+                        val name = row["fileName"] as? String ?: throw fail(6)
+                        receiptRows[id] = name
+                        tracked += (id.length + name.length) * 2L + ENTRY_OVERHEAD
+                        if (!receiptNames.add(name)) throw fail(6)
                     }
                 }
-                // The ids and references the checker keeps in memory have a budget: a file of many long ids must not exhaust the heap.
-                if (tracked > limits.maxTrackedBytes) throw RestoreException(RestoreFailure.LOW_MEMORY, 6)
-                if (table.name == "expense" && row["deletedAtMillis"] == null) entries++
-                if (table.name == "budget") budgets++
-                if (table.name == "receipt") {
-                    val name = row["fileName"] as? String ?: throw fail(6)
-                    receiptRows[id] = name
-                    tracked += (id.length + name.length) * 2L + ENTRY_OVERHEAD
-                    if (!receiptNames.add(name)) throw fail(6)
-                }
-            }
             if (rows != manifest.rows.getValue(table.name)) throw fail(6)
             if (table.name in parents) ids[table.name] = pk
         }
@@ -248,7 +273,8 @@ class RestoreValidator(
         for ((parent, wanted) in refs) if (!ids.getValue(parent).containsAll(wanted)) throw fail(6)
         // Exactly the same (id, file name) pairs in the manifest and in the receipt rows.
         if (manifest.receipts.associate { it.id to it.fileName } != receiptRows) throw fail(6)
-        return Counts(entries, budgets)
+        val tablesSha = RestoreRows.sha256(tableShas.entries.joinToString("") { it.key + ":" + it.value + "\n" }.toByteArray())
+        return Counts(entries, budgets, tablesSha)
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount")
@@ -337,7 +363,7 @@ class RestoreValidator(
             val got = files.receipts.getValue(r.entry)
             if (got.size != r.size || got.sha256 != r.sha256) throw fail(7)
         }
-        return listed.map { StagedReceipt(it.id, it.fileName) }
+        return listed.map { StagedReceipt(it.id, it.fileName, files.receipts.getValue(it.entry).sha256) }
     }
 
     companion object {

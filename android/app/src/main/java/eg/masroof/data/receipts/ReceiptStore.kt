@@ -58,6 +58,7 @@ class ReceiptStore
         private val clock: Clock,
         private val eraseLock: EraseLock,
         @IoDispatcher private val io: CoroutineDispatcher,
+        private val restoreGate: eg.masroof.data.backup.RestoreGate = eg.masroof.data.backup.OpenRestoreGate,
     ) {
         private val attachLock = Mutex()
 
@@ -183,6 +184,11 @@ class ReceiptStore
             stored: Made.Stored,
         ): AttachResult =
             eraseLock.mutex.withLock {
+                // A restore is running or unfinished: the receipts directory is about to be replaced. The copy is dropped, not kept.
+                if (restoreGate.blocked()) {
+                    stored.file.delete()
+                    return@withLock AttachResult.Refused(Refusal.RESTORE_PENDING)
+                }
                 val hash = sha256(stored.file)
                 val same = db.receipts().bySha(hash)
                 if (same != null) {

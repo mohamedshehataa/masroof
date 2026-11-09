@@ -62,7 +62,7 @@ class BackupWorker
                 return failure(BackupFailure.KEY_LOST)
             }
             // A restore swaps the receipts directory: a backup that ran across it would fail with "receipt changed" (STORY-184).
-            if (RestoreActivity.isActive() || RestoreStage.marker(java.io.File(context.filesDir, "receipts")).exists()) {
+            if (RestoreActivity.isActive() || RestoreStage.journalBlocks(java.io.File(context.filesDir, "receipts"))) {
                 input.key.fill(0)
                 return failure(BackupFailure.RESTORE_RUNNING)
             }

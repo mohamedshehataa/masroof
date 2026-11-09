@@ -158,7 +158,16 @@ private fun failureText(run: RestoreState.Failed): String =
         RestoreFailure.CANNOT_READ -> stringResource(R.string.restore_err_read)
         RestoreFailure.BUSY -> stringResource(R.string.restore_err_busy)
         RestoreFailure.FAILED -> stringResource(R.string.restore_err_failed)
-        RestoreFailure.INCOMPLETE -> stringResource(R.string.restore_err_incomplete)
+        RestoreFailure.INCOMPLETE ->
+            stringResource(
+                if (run.attempts >=
+                    INCOMPLETE_ESCALATES
+                ) {
+                    R.string.restore_err_incomplete_again
+                } else {
+                    R.string.restore_err_incomplete
+                },
+            )
         RestoreFailure.PARTIAL -> stringResource(R.string.restore_err_partial)
         RestoreFailure.LOW_MEMORY -> stringResource(R.string.restore_err_memory)
     }
@@ -290,3 +299,4 @@ internal fun restoreDate(
 }
 
 private const val PERCENT_MAX = 100f
+private const val INCOMPLETE_ESCALATES = 3

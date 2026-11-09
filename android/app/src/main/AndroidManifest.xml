@@ -10,8 +10,13 @@
     <!-- Normal (install-time) permission: only to show "offline" on the login screen and disable Sign in. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Dangerous (runtime) permission, requested from Settings only when the user turns SMS capture on. The app works
-         fully without it; READ_SMS (history backfill) is added with that feature. -->
+         fully without it. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Dangerous (runtime) permission (STORY-186, REQ-SMS-103), requested only when the user taps Start on Settings -> "Read past SMS",
+         after an explanation. It reads the inbox rows of allowlisted senders in the chosen range, on this phone, in WorkManager; nothing
+         is uploaded or logged and no component is exported for it. Live capture (RECEIVE_SMS) does not depend on it, and the app works
+         fully without it. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
     <!-- Runtime permission (Android 13+), requested from Settings only when the user turns on the "Recorded ... Undo"
          notification for transactions the phone captured by itself. The app works fully without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

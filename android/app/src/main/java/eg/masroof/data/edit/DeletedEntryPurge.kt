@@ -19,6 +19,10 @@ import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.DatabaseStartup
 import eg.masroof.di.ReceiptsDir
+import eg.masroof.ingest.HandledMemory
+import eg.masroof.ingest.LocalIdKey
+import eg.masroof.ingest.NoHandledMemory
+import eg.masroof.ingest.RepeatGuard
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.time.Clock
@@ -38,7 +42,20 @@ class DeletedEntryPurger
         private val eraseLock: EraseLock,
         @ReceiptsDir private val receiptsDir: File = File("no-receipts-dir"),
         private val answers: AnswerPrefs = NoAnswerPrefs,
+        private val memory: HandledMemory = NoHandledMemory,
+        private val idKey: LocalIdKey? = null,
+        private val restoreGate: eg.masroof.data.backup.RestoreGate = eg.masroof.data.backup.OpenRestoreGate,
     ) {
+        /** What the 30-day memory of "Read past SMS" must know of the entries that are about to disappear (STORY-186). */
+        private suspend fun rememberPurged(cutoff: Long) {
+            val key = idKey ?: return
+            val guard = RepeatGuard(db, memory, clock) { key.get() }
+            val now = clock.millis()
+            db.sources().sourcesOfPurgeable(cutoff).forEach { row ->
+                guard.marksOfPurged(row).forEach { (signature, at) -> memory.markSignature(signature, at, now) }
+            }
+        }
+
         /** A pair or refund link whose row was purged has nothing left to restore: drop it, and let the survivor ask again. */
         private suspend fun dropLinksOfPurgedRows() {
             val dead =
@@ -56,8 +73,10 @@ class DeletedEntryPurger
         suspend fun purge(): Int {
             val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(PURGE_AFTER_DAYS)
             return eraseLock.mutex.withLock {
-                // a restore racing this read could lose its receipt files: the entry was over 30 days deleted, accepted
+                // While a restore runs or is unfinished nothing is hashed with a possibly stale key and no file is deleted: the daily job retries.
+                if (restoreGate.blocked()) return@withLock 0
                 val files = db.expenses().receiptsDeletedBefore(cutoff)
+                rememberPurged(cutoff)
                 val removed = db.expenses().purgeDeletedBefore(cutoff)
                 // a file that cannot be deleted here has no row any more: the startup sweeper removes it
                 files.forEach { runCatching { File(receiptsDir, it.fileName).delete() } }

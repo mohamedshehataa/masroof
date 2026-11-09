@@ -109,32 +109,6 @@ class KeystoreLocalIdKey(
     @Synchronized
     override fun wipe() = prefs.edit(commit = true) { clear() }
 
-    /**
-     * Seals [key] (a restored backup's local-id key) under THIS phone's Keystore (STORY-184). Same keyset as [get] today. Crash-safe:
-     * the new sealed copy must decrypt to the same bytes BEFORE it replaces the stored one, and the replace is one atomic commit, so
-     * there is never a moment without a decryptable key and a failure leaves the old key in place (restore recovery repeats this).
-     */
-    fun install(key: ByteArray) = installWith(TinkKeystore.aead(context), key)
-
-    @Synchronized
-    internal fun installWith(
-        aead: com.google.crypto.tink.Aead,
-        key: ByteArray,
-    ) {
-        // Exactly 32 bytes and not all zero: a short or zeroed key would make every local message id guessable.
-        require(key.size == KEY_BYTES && key.any { it.toInt() != 0 }) { "not a local-id key" }
-        val sealed = aead.encrypt(key, AAD)
-        val check = aead.decrypt(sealed, AAD)
-        try {
-            check(check.contentEquals(key)) { "sealed key does not round trip" }
-        } finally {
-            check.fill(0)
-        }
-        @SuppressLint("UseKtx") // the KTX edit() hides the commit() result, which decides whether the key is installed
-        val ok = prefs.edit().putString(KEY, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
-        check(ok) { "could not store the sealed key" }
-    }
-
     private companion object {
         const val KEY = "k"
         const val KEY_BYTES = 32
@@ -149,6 +123,16 @@ class KeystoreLocalIdKey(
 object LocalIdHasher {
     private const val MILLIS_PER_SECOND = 1000L
 
+    /** A keyed HMAC of typed values joined with `|` (never the message text of a record): a lookup key that reveals nothing. */
+    fun signature(
+        key: ByteArray,
+        vararg parts: Any?,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key, "HmacSHA256"))
+        return mac.doFinal(parts.joinToString("|").toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+
     fun id(
         key: ByteArray,
         msg: IncomingMessage,
@@ -160,7 +144,7 @@ object LocalIdHasher {
     }
 }
 
-/** Everything capture keeps outside Room, cleared with the rest on logout and account switch. */
+/** Everything capture keeps outside Room, cleared with the rest by "Erase all data" (a logout or a session change never clears it). */
 interface CaptureData {
     fun clear()
 }
@@ -174,7 +158,7 @@ class PrefsCaptureData(
     private val key: LocalIdKey,
 ) : CaptureData {
     override fun clear() {
-        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device")) {
+        for (name in listOf("masroof_senders", "masroof_notifications", "masroof_device", "masroof_backfill")) {
             context.getSharedPreferences(name, Context.MODE_PRIVATE).edit(commit = true) { clear() }
         }
         key.wipe()
