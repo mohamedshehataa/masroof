@@ -732,11 +732,9 @@ class RestoreRegressionTest {
             object : RestoreHooks {
                 var afterDelete = false
 
-                override fun after(op: RestoreOp) {
-                    if (op == RestoreOp.JOURNAL_DELETE) afterDelete = true
-                }
-
                 override fun before(op: RestoreOp) {
+                    // the directory fsync of the delete runs INSIDE the JOURNAL_DELETE operation, after the file is gone
+                    if (op == RestoreOp.JOURNAL_DELETE) afterDelete = true
                     if (afterDelete && op == RestoreOp.FSYNC_DIR) throw java.io.IOException("EIO")
                 }
             }

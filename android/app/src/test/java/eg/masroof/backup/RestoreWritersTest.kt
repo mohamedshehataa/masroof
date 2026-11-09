@@ -178,6 +178,7 @@ class RestoreWritersTest {
                 eg.masroof.ingest.LocalIdHasher
                     .id(FixedKey.get(), message)
             assertTrue("a deferred message is not remembered as handled", !store.handled(id, clock.millis()))
+            assertTrue("nor under an empty id", !store.handled("", clock.millis()))
             assertEquals(eg.masroof.ingest.Disposition.RECORDED, pipeline.accept(message))
         }
 
