@@ -137,3 +137,4 @@ Newest entries at the bottom. The SessionStart hook prints the last 20 lines, so
 2026-11-08 20:34 · P7 · STORY-183 · integrate · GREEN · encrypted backup: verify loop 2 PASS, security APPROVE (L3), MINOR fixes reviewed; PR to main
 2026-11-09 10:42 · P7 · STORY-186 · integrate · GREEN · Read past SMS: loop 3 PASS, security APPROVE, post-PASS focused checks PASS on d9c5845; PR to main
 2026-11-09 11:07 · P7 · STORY-184 · verify · RED · restore blocked after 5 loops (ESCALATIONS LOOP-184); STORY-186 Read past SMS merged (#117)
+2026-11-09 14:48 · P7 · STORY-187 · integrate · GREEN · first-run guide: verify+review loop 1 PASS, MINOR fixes on 6d35fab diff-checked; PR to main
