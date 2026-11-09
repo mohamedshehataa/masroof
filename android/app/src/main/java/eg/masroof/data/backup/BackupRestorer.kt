@@ -450,7 +450,7 @@ class BackupRestorer(
         includeTables: Boolean,
     ): Staging =
         try {
-            // A MISSING file is a difference (it can never come back), not a read error: only an existing file that cannot be read is transient.
+            // A MISSING file is a difference (it can never come back), not a read error: only an existing unreadable file is transient.
             val required = listOf(VALIDATED_FILE, SETTINGS_FILE, KEY_FILE)
             if (required.any { !File(env.stageRoot, it).exists() }) return Staging.DIFFERS
             val validated = File(env.stageRoot, VALIDATED_FILE)
@@ -483,7 +483,7 @@ class BackupRestorer(
         val validated: String,
         val swapped: Boolean,
         val broken: Boolean,
-        /** Starts (or picks) at which finishing failed again with INCOMPLETE; the third makes it PARTIAL so the user is told to restore again. */
+        /** Recoveries at which finishing failed again with INCOMPLETE; the third makes it PARTIAL so the user is told to restore again. */
         val failures: Int = 0,
     )
 
