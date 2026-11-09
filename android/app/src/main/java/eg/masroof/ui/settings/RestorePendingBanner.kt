@@ -38,6 +38,8 @@ class RestorePendingViewModel
         fun finish() = coordinator.finishPending()
 
         fun keep() = coordinator.keepAsIs()
+
+        fun keepCurrentKey() = coordinator.keepCurrentKey()
     }
 
 /**
@@ -53,7 +55,7 @@ fun RestorePendingBanner(
     RestorePendingBannerContent(pending, onFinish = {
         viewModel.finish()
         onOpenSettings()
-    }, onRestoreAgain = onOpenSettings, onKeep = viewModel::keep)
+    }, onRestoreAgain = onOpenSettings, onKeep = viewModel::keep, onKeepCurrentKey = viewModel::keepCurrentKey)
 }
 
 @Composable
@@ -62,25 +64,46 @@ fun RestorePendingBannerContent(
     onFinish: () -> Unit,
     onRestoreAgain: () -> Unit = {},
     onKeep: () -> Unit = {},
+    onKeepCurrentKey: () -> Unit = {},
 ) {
     if (pending is PendingState.None) return
-    val partial = pending is PendingState.Partial
+    val partial = pending as? PendingState.Partial
+    // From three failed attempts at the key step a way out is offered: keep the data and the CURRENT key.
+    val stuckAtKey = pending is PendingState.Incomplete && pending.atKeyStep && pending.attempts >= KEY_STEP_ATTEMPTS
     Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val onColor = MaterialTheme.colorScheme.onErrorContainer
             Text(
-                stringResource(if (partial) R.string.restore_pending_partial else R.string.restore_pending_banner),
-                color = MaterialTheme.colorScheme.onErrorContainer,
+                stringResource(
+                    if (partial !=
+                        null
+                    ) {
+                        R.string.restore_pending_partial
+                    } else {
+                        R.string.restore_pending_banner
+                    },
+                ),
+                color = onColor,
             )
-            if (partial) Text(stringResource(R.string.restore_pending_keep_warning), color = MaterialTheme.colorScheme.onErrorContainer)
-            if (partial) {
+            // "Keep as it is" is shown only when it can act (a readable journal names a committed attempt that is the phone's data).
+            if (partial?.canKeep == true) {
+                Text(stringResource(R.string.restore_pending_keep_warning), color = onColor)
                 TextButton(
                     onClick = onKeep,
                     modifier = Modifier.heightIn(min = 48.dp),
                 ) { Text(stringResource(R.string.restore_pending_keep)) }
             }
-            TextButton(onClick = if (partial) onRestoreAgain else onFinish, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(if (partial) R.string.restore_pending_again else R.string.restore_pending_finish))
+            if (stuckAtKey) {
+                Text(stringResource(R.string.restore_pending_key_warning), color = onColor)
+                TextButton(onClick = onKeepCurrentKey, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.restore_pending_key_keep))
+                }
+            }
+            TextButton(onClick = if (partial != null) onRestoreAgain else onFinish, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(if (partial != null) R.string.restore_pending_again else R.string.restore_pending_finish))
             }
         }
     }
 }
+
+private const val KEY_STEP_ATTEMPTS = 3

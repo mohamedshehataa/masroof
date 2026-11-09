@@ -39,6 +39,9 @@ abstract class BackupModule {
     @Binds
     abstract fun gate(impl: eg.masroof.data.backup.FileRestoreGate): eg.masroof.data.backup.RestoreGate
 
+    @Binds
+    abstract fun erased(impl: eg.masroof.data.backup.RestoreCoordinator): eg.masroof.data.backup.RestoreErasedListener
+
     companion object {
         @Provides @Singleton
         fun restorer(

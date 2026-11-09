@@ -41,4 +41,6 @@
     <string name="restore_pending_keep_warning">Keeping it leaves your current key and settings; some receipts or settings may not match the backup.</string>
     <string name="restore_err_failed">The restore could not finish. Nothing was changed.</string>
     <string name="rcpt_err_restore_pending">Finish the restore first</string>
+    <string name="restore_pending_key_warning">The key could not be restored. If you keep the data with your current key, SMS you already captured may be recorded twice.</string>
+    <string name="restore_pending_key_keep">Keep the restored data and the current key</string>
 </resources>

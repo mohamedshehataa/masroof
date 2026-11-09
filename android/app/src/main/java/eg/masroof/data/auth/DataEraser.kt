@@ -27,6 +27,7 @@ class DataEraser
         private val gate: CaptureGate,
         @AppScope private val scope: CoroutineScope,
         private val lock: EraseLock = EraseLock(),
+        private val restoreErased: eg.masroof.data.backup.RestoreErasedListener = eg.masroof.data.backup.NoRestoreErased,
     ) {
         suspend fun counts(): EraseCounts = wiper.counts()
 
@@ -39,7 +40,11 @@ class DataEraser
                     lock.mutex.withLock {
                         // The server-side revoke may be cut off by the cap; the local session is cleared either way (logout's finally).
                         runCatching { withTimeoutOrNull(SIGN_OUT_WAIT_MILLIS) { session.logout() } }
-                        wiper.wipe()
+                        try {
+                            wiper.wipe()
+                        } finally {
+                            restoreErased.onErased() // whatever the outcome, the data is erased: the restore banner goes
+                        }
                     }
                     done.complete(Unit)
                 } catch (e: Throwable) {

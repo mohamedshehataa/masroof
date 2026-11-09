@@ -45,4 +45,6 @@
     <string name="restore_pending_keep_warning">لو سبتها كده هتفضل المفتاح والإعدادات الحالية؛ ممكن شوية إيصالات أو إعدادات متطابقش مع النسخة.</string>
     <string name="restore_err_failed">الاسترجاع ماكملش. مفيش حاجة اتغيّرت.</string>
     <string name="rcpt_err_restore_pending">كمّل الاسترجاع الأول</string>
+    <string name="restore_pending_key_warning">معرفناش نسترجع المفتاح. لو سبت البيانات بالمفتاح الحالي، الرسائل اللي اتلقطت قبل كده ممكن تتسجل مرتين.</string>
+    <string name="restore_pending_key_keep">سيب البيانات المسترجعة والمفتاح الحالي</string>
 </resources>

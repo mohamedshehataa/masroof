@@ -229,7 +229,12 @@ class RestoreDisk(
         op: RestoreOp,
     ) = op(op) {
         Files.deleteIfExists(file.toPath())
-        fsyncDir(file.absoluteFile.parentFile!!)
+        // The delete happened: a failing directory fsync afterwards is not a reason to report the restore as unfinished.
+        try {
+            fsyncDir(file.absoluteFile.parentFile!!)
+        } catch (_: IOException) {
+            // durability of the delete is best effort from here
+        }
     }
 }
 

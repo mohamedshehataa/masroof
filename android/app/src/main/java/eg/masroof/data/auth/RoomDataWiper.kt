@@ -85,6 +85,8 @@ class RoomDataWiper
                         db.clearAllTables()
                         // The defaults (categories, "Me") are not user data: the app must be as after a fresh install.
                         DefaultSeed.seed(db.openHelper.writableDatabase)
+                        // The restore commit point must not outlive the data it described.
+                        db.openHelper.writableDatabase.execSQL("PRAGMA application_id = 0")
                     }
                 }
                 committed = true

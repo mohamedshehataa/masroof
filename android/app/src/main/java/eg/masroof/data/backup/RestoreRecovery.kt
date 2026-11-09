@@ -20,11 +20,16 @@ enum class RestoreOutcome { DONE, FAILED, INCOMPLETE, PARTIAL }
 sealed interface PendingState {
     data object None : PendingState
 
+    /** [atKeyStep]: the finish is stuck at the key step (everything before it is applied); from three attempts a way out is offered. */
     data class Incomplete(
         val attempts: Int,
+        val atKeyStep: Boolean = false,
     ) : PendingState
 
-    data object Partial : PendingState
+    /** [canKeep]: "Keep the restored data as it is" can act (a readable journal names a committed attempt that is the phone's data). */
+    data class Partial(
+        val canKeep: Boolean = false,
+    ) : PendingState
 }
 
 /** A staged restore waits here for Confirm: its generation, its own staging folder and the hashes of what checks 6 and 7 read. */
@@ -226,8 +231,8 @@ class RestoreRecovery(
 
     /** The staging must still be exactly what was checked: hashes from memory, never from disk. Table bytes are hashed when read. */
     private fun verifyStaged(s: StagedRestore) {
-        readVerified(File(s.dir, SETTINGS_FILE), s.hashes.settings)
-        readVerified(File(s.dir, KEY_FILE), s.hashes.key)
+        readVerified(File(s.dir, SETTINGS_FILE), s.hashes.settings).fill(0)
+        readVerified(File(s.dir, KEY_FILE), s.hashes.key).fill(0)
         verifyDir(File(s.dir, NEW_RECEIPTS), s.hashes.receipts)
     }
 
@@ -264,6 +269,7 @@ class RestoreRecovery(
     suspend fun finish(c: CommittedSlot.Known): RestoreOutcome {
         val dir = stageDir(c.gen)
         val n = File(dir, NEW_RECEIPTS)
+        var keyBytes: ByteArray? = null
         try {
             if (c.step == Step.COMMITTED) verifyDir(n, c.hashes.receipts)
             if (c.step == Step.SWAPPING && n.exists()) verifyDir(n, c.hashes.receipts)
@@ -279,7 +285,7 @@ class RestoreRecovery(
                 } else {
                     null
                 }
-            val keyBytes = if (c.step.ordinal <= Step.SETTINGS_DONE.ordinal) readVerified(File(dir, KEY_FILE), c.hashes.key) else null
+            keyBytes = if (c.step.ordinal <= Step.SETTINGS_DONE.ordinal) readVerified(File(dir, KEY_FILE), c.hashes.key) else null
             var s = c.step
             if (s == Step.COMMITTED) s = journal.step(c, Step.SWAPPING)
             if (s == Step.SWAPPING) {
@@ -299,9 +305,10 @@ class RestoreRecovery(
                 s = journal.step(c, Step.SETTINGS_DONE)
             }
             if (s == Step.SETTINGS_DONE) {
-                if (!(keyBytes!!.size == KEY_BYTES && keyBytes.any { it.toInt() != 0 })) throw PartialEvidence()
+                val key = keyBytes!!
+                if (!(key.size == KEY_BYTES && key.any { it.toInt() != 0 })) throw PartialEvidence()
                 env.hooks.before(RestoreOp.KEY_INSTALL)
-                env.keys.install(keyBytes)
+                env.keys.install(key)
                 env.hooks.after(RestoreOp.KEY_INSTALL)
                 s = journal.step(c, Step.KEY_DONE)
             }
@@ -322,6 +329,8 @@ class RestoreRecovery(
         } catch (e: Throwable) {
             runCatching { journal.bumpAttempts(c.gen) }
             return RestoreOutcome.INCOMPLETE
+        } finally {
+            keyBytes?.fill(0) // on every exit: Done, PARTIAL, INCOMPLETE or a kill
         }
     }
 
@@ -408,9 +417,12 @@ class RestoreRecovery(
     fun pendingOf(read: JournalRead = journal.read()): PendingState =
         when (read) {
             JournalRead.Absent -> PendingState.None
-            JournalRead.Corrupt -> PendingState.Partial
+            JournalRead.Corrupt -> PendingState.Partial(canKeep = false)
             JournalRead.Unreadable -> PendingState.Incomplete(0)
-            is JournalRead.Ok -> PendingState.Incomplete((read.j.committed as? CommittedSlot.Known)?.attempts ?: 0)
+            is JournalRead.Ok -> {
+                val c = read.j.committed as? CommittedSlot.Known
+                PendingState.Incomplete(c?.attempts ?: 0, atKeyStep = c?.step == Step.SETTINGS_DONE)
+            }
         }
 
     /** A fresh generation: non-zero, not the phone's own, not named by the journal, with no staging folder yet. */
@@ -426,22 +438,58 @@ class RestoreRecovery(
         }
     }
 
-    /**
-     * The third way out of PARTIAL: "keep the restored data as it is". Allowed only when the journal is readable, names a committed
-     * attempt and `application_id` is that attempt (the data really is the restore's). Deletes the journal and the staging; the receipts,
-     * settings and key stay as they are now (the current key is kept).
-     */
-    fun keepAsIs(): Boolean {
+    /** True when "Keep the restored data as it is" can act: a readable journal names a committed attempt and A is that attempt. */
+    fun canKeepAsIs(): Boolean {
         val j = (journal.read() as? JournalRead.Ok)?.j ?: return false
         val c = j.committed as? CommittedSlot.Known ?: return false
-        val a = env.db.applicationId()
-        if (a != c.gen) return false
+        return runCatching { env.db.applicationId() == c.gen }.getOrDefault(false)
+    }
+
+    /**
+     * The third way out of PARTIAL: "keep the restored data as it is". Allowed only when [canKeepAsIs]. Every staged receipt that is a regular
+     * file and belongs to a restored receipt row is moved into place (so the restored rows do not point at missing files); the rest is
+     * dropped. Deletes the journal and the staging; the settings and key stay as they are now (the current key is kept).
+     */
+    fun keepAsIs(): Boolean {
+        if (!canKeepAsIs()) return false
+        val j = (journal.read() as JournalRead.Ok).j
+        val c = j.committed as CommittedSlot.Known
+        moveVerifiedReceipts(File(stageDir(c.gen), NEW_RECEIPTS))
+        return finishKeep(j, c.gen)
+    }
+
+    /**
+     * The way out of a finish that is stuck at the KEY step: after three failed attempts the restore is completed with the CURRENT key
+     * (the receipts and settings are already applied). Journal and staging are deleted and the gate reopens.
+     */
+    fun keepCurrentKey(): Boolean {
+        val j = (journal.read() as? JournalRead.Ok)?.j ?: return false
+        val c = j.committed as? CommittedSlot.Known ?: return false
+        if (c.step != Step.SETTINGS_DONE || c.attempts < KEY_STEP_ATTEMPTS) return false
+        if (runCatching { env.db.applicationId() != c.gen }.getOrDefault(true)) return false
+        return finishKeep(j, c.gen)
+    }
+
+    private fun finishKeep(
+        j: Journal,
+        gen: Int,
+    ): Boolean {
         journal.delete()
         File(env.filesDir, RestoreStage.LEGACY_MARKER).delete()
-        deleteStage(c.gen)
+        deleteStage(gen)
         j.pending?.let { deleteStage(it.gen) }
         disk.deleteRecursively(oldReceipts, RestoreOp.DELETE_O)
         return true
+    }
+
+    private fun moveVerifiedReceipts(fresh: File) {
+        if (!disk.isRealDir(fresh)) return
+        val rowNames = runCatching { env.db.receiptFileNames() }.getOrDefault(emptySet())
+        receipts.mkdirs()
+        for (f in fresh.listFiles().orEmpty()) {
+            val target = File(receipts, f.name)
+            if (disk.isRegular(f) && f.name in rowNames && !target.exists()) runCatching { disk.move(f, target, RestoreOp.RENAME_N_TO_R) }
+        }
     }
 
     /** Deletes only the session's own staging (Cancel, a failed check, picking again): a journal slot's staging is never touched. */
@@ -460,6 +508,7 @@ class RestoreRecovery(
         const val KEY_FILE = "local-id.key"
         const val NEW_RECEIPTS = "receipts-new"
         const val KEY_BYTES = 32
+        const val KEY_STEP_ATTEMPTS = 3
 
         fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
     }

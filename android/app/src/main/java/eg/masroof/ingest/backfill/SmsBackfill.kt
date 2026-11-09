@@ -182,6 +182,8 @@ class SmsBackfill
             // the same cheap drop as the live receiver: a plain OTP never reaches the pipeline
             if (MessageHygiene.isPlainSecret(sms.body)) return read
             val message = IncomingMessage(CaptureSource.SMS, sms.address, sms.body, sms.stampMillis).capped()
+            // A pending restore: do not even read the key (it may be about to change); the message is read again later.
+            if (restoreGate.blocked()) throw RestoreDeferred()
             val id = LocalIdHasher.id(idKey.get(), message)
             // recorded by live capture, by an earlier run, or handled and since deleted/dismissed: nothing new
             if (store.handled(id, clock.millis()) || known(id)) return read

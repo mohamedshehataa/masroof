@@ -17,6 +17,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -51,6 +52,15 @@ sealed interface RestoreState {
         /** Failed finishes so far (INCOMPLETE): from three on the message says it still cannot finish. */
         val attempts: Int = 0,
     ) : RestoreState
+}
+
+/** Told when "Erase all data" has run, so an unfinished restore's banner and session disappear with its data. */
+fun interface RestoreErasedListener {
+    fun onErased()
+}
+
+object NoRestoreErased : RestoreErasedListener {
+    override fun onErased() = Unit
 }
 
 /** Opens the picked document; faked in tests. */
@@ -113,7 +123,7 @@ class RestoreCoordinator
         private val sources: RestoreSources,
         @AppScope private val scope: CoroutineScope,
         @IoDispatcher private val io: CoroutineDispatcher,
-    ) {
+    ) : RestoreErasedListener {
         private val mutableState = MutableStateFlow<RestoreState>(RestoreState.Idle)
         val state: StateFlow<RestoreState> get() = mutableState
 
@@ -162,45 +172,81 @@ class RestoreCoordinator
                 }
         }
 
+        /** Guards every session field: the UI thread (Cancel, a new pick) and the staging job both change them. */
+        private val sessionLock = Any()
+        private var sessionId = 0L
+
         fun onPassphrase(passphrase: String) {
-            val picked = uri
-            val head = header
-            if (picked == null || head == null || mutableState.value != RestoreState.NeedsPassphrase) return
-            mutableState.value = RestoreState.Checking(null)
+            val mine: Long
+            val picked: Uri
+            val head: BackupHeader
+            synchronized(sessionLock) {
+                picked = uri ?: return
+                head = header ?: return
+                if (mutableState.value != RestoreState.NeedsPassphrase) return
+                mutableState.value = RestoreState.Checking(null)
+                mine = sessionId
+            }
             job =
                 scope.launch(io) {
                     // The start recovery sweeps staging nobody names: it must be over before this session creates its own.
                     startJob?.join()
-                    mutableState.value =
-                        try {
-                            // From here to Done, Cancel or a failure the restore flag is held: intake is deferred.
+                    try {
+                        // From here to Done, Cancel or a failure the restore flag is held: intake is deferred. A Cancel that already ran
+                        // (the session id moved on) must not take it.
+                        synchronized(sessionLock) {
+                            if (sessionId != mine) throw CancellationException("cancelled")
                             acquire()
-                            if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
-                            val result =
-                                restorer.stage({ sources.open(picked) }, sources.size(picked), head, passphrase) { p ->
-                                    mutableState.value = RestoreState.Checking(p)
-                                }
-                            staged = result
-                            RestoreState.Confirm(result.info)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: RestoreException) {
-                            failed(e)
-                        } catch (e: OutOfMemoryError) {
-                            failed(RestoreException(RestoreFailure.LOW_MEMORY).also { it.addSuppressed(e) })
-                        } catch (
-                            @Suppress("TooGenericExceptionCaught") e: Throwable,
-                        ) {
-                            // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
-                            failed(RestoreException(RestoreFailure.INVALID_CONTENT).also { it.addSuppressed(e) })
                         }
+                        if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
+                        val result =
+                            restorer.stage({ sources.open(picked) }, sources.size(picked), head, passphrase) { p ->
+                                synchronized(sessionLock) { if (sessionId == mine) mutableState.value = RestoreState.Checking(p) }
+                            }
+                        val active = isActive
+                        synchronized(sessionLock) {
+                            // Published only while this very session is still the live one: after a Cancel its staging just goes.
+                            if (sessionId == mine && active) {
+                                staged = result
+                                mutableState.value = RestoreState.Confirm(result.info)
+                            } else {
+                                restorer.discardSession(result.gen)
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: RestoreException) {
+                        publishFailure(mine, e)
+                    } catch (e: OutOfMemoryError) {
+                        publishFailure(mine, RestoreException(RestoreFailure.LOW_MEMORY).also { it.addSuppressed(e) })
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught") e: Throwable,
+                    ) {
+                        // Whatever a crafted file provoked (stack, memory, a provider): a message, never a crash; nothing changed.
+                        publishFailure(mine, RestoreException(RestoreFailure.INVALID_CONTENT).also { it.addSuppressed(e) })
+                    }
                 }
         }
 
+        private fun publishFailure(
+            mine: Long,
+            e: RestoreException,
+        ) {
+            synchronized(sessionLock) {
+                if (sessionId != mine) return
+                mutableState.value = failed(e)
+            }
+        }
+
         fun onConfirm() {
-            val pendingRestore = staged ?: return
-            if (mutableState.value !is RestoreState.Confirm) return
-            mutableState.value = RestoreState.Restoring
+            val pendingRestore: StagedRestore
+            val mine: Long
+            synchronized(sessionLock) {
+                pendingRestore = staged ?: return
+                if (mutableState.value !is RestoreState.Confirm) return
+                mutableState.value = RestoreState.Restoring
+                mine = sessionId
+            }
             job =
                 scope.launch(io) {
                     startJob?.join()
@@ -208,8 +254,10 @@ class RestoreCoordinator
                     try {
                         withContext(NonCancellable) {
                             lock.mutex.withLock {
-                                // The restore flag has been held since Checking (acquire): intake is deferred, so nothing lands in the DB
-                                // that is about to be replaced. A backup or scan started since Staged makes this BUSY (checked again here).
+                                // The restore flag has been held by THIS session since Checking: without it intake could have landed in the
+                                // database that is about to be replaced, so Confirm refuses.
+                                if (!holding) throw RestoreException(RestoreFailure.BUSY)
+                                // A backup or scan started since Staged makes this BUSY (checked again under the lock).
                                 if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
                                 restorer.apply(pendingRestore)
                             }
@@ -223,22 +271,31 @@ class RestoreCoordinator
                     ) {
                         failure = RestoreException(RestoreFailure.INCOMPLETE).also { it.addSuppressed(e) }
                     }
-                    staged = null
-                    job = null
-                    uri = null
-                    header = null
-                    afterOutcome(failure?.failure)
-                    release()
-                    mutableState.value = if (failure == null) RestoreState.Done else RestoreState.Failed(failure.failure, failure.neededMb)
+                    synchronized(sessionLock) {
+                        if (sessionId == mine) {
+                            staged = null
+                            job = null
+                            uri = null
+                            header = null
+                            afterOutcome(failure?.failure)
+                            release()
+                            mutableState.value =
+                                if (failure == null) RestoreState.Done else RestoreState.Failed(failure.failure, failure.neededMb)
+                        }
+                    }
                 }
         }
 
         /** Cancel at any step: a running check stops, the session's own staging is deleted, the journal and its staging are untouched. */
         fun onCancel() {
-            if (mutableState.value is RestoreState.Restoring) return
-            val running = job
-            val gen = staged?.gen
-            reset()
+            val running: Job?
+            val gen: Int?
+            synchronized(sessionLock) {
+                if (mutableState.value is RestoreState.Restoring) return
+                running = job
+                gen = staged?.gen
+                reset()
+            }
             scope.launch(io) {
                 running?.cancelAndJoinQuietly()
                 gen?.let { restorer.discardSession(it) }
@@ -259,11 +316,13 @@ class RestoreCoordinator
 
         /** Drops the session (a new pick): its own staging is deleted; the journal and any slot's staging are not touched. */
         private fun dropSession() {
-            staged?.let { restorer.discardSession(it.gen) }
-            reset()
+            synchronized(sessionLock) {
+                staged?.let { restorer.discardSession(it.gen) }
+                reset()
+            }
         }
 
-        private var holding = false
+        @Volatile private var holding = false
 
         /** Holds the restore flag for this session (Checking through Restoring); BUSY when another restore already holds it. */
         private fun acquire() {
@@ -281,18 +340,23 @@ class RestoreCoordinator
         }
 
         private fun reset() {
-            release()
-            uri = null
-            header = null
-            staged = null
-            job = null
-            mutableState.value = RestoreState.Idle
+            synchronized(sessionLock) {
+                sessionId++
+                release()
+                uri = null
+                header = null
+                staged = null
+                job = null
+                mutableState.value = RestoreState.Idle
+            }
         }
 
         private suspend fun Job.cancelAndJoinQuietly() {
             cancel()
             join()
         }
+
+        private fun partialState() = PendingState.Partial(canKeep = runCatching { restorer.canKeepAsIs() }.getOrDefault(false))
 
         /** After an outcome: the banner state follows the journal (None when it is gone). */
         private fun afterOutcome(outcome: RestoreFailure?) {
@@ -305,8 +369,8 @@ class RestoreCoordinator
             mutablePending.value =
                 when {
                     journalState is PendingState.None -> PendingState.None
-                    outcome == RestoreFailure.PARTIAL -> PendingState.Partial
-                    outcome == RestoreFailure.FAILED && mutablePending.value is PendingState.Partial -> PendingState.Partial
+                    outcome == RestoreFailure.PARTIAL -> partialState()
+                    outcome == RestoreFailure.FAILED && mutablePending.value is PendingState.Partial -> partialState()
                     else -> journalState
                 }
         }
@@ -346,11 +410,30 @@ class RestoreCoordinator
                     mutableState.value = RestoreState.Failed(RestoreFailure.INCOMPLETE, attempts = attempts)
                 }
                 RestoreOutcome.PARTIAL -> {
-                    mutablePending.value = PendingState.Partial
+                    mutablePending.value = partialState()
                     mutableState.value = RestoreState.Failed(RestoreFailure.PARTIAL)
                 }
                 RestoreOutcome.FAILED -> afterOutcome(RestoreFailure.FAILED)
             }
+        }
+
+        /** After three failed attempts at the KEY step: completes the restore with the current key (journal and staging deleted, gate open). */
+        fun keepCurrentKey() {
+            scope.launch(io) {
+                startJob?.join()
+                lock.mutex.withLock {
+                    if (restorer.keepCurrentKey()) {
+                        mutablePending.value = PendingState.None
+                        mutableState.value = RestoreState.Idle
+                    }
+                }
+            }
+        }
+
+        /** "Erase all data" ran: nothing of a restore is left, so the banner and the session go (the next start finds no journal either). */
+        override fun onErased() {
+            reset()
+            mutablePending.value = PendingState.None
         }
 
         /** "Keep the restored data as it is": the third way out of PARTIAL (deletes the journal and staging, keeps the current key). */

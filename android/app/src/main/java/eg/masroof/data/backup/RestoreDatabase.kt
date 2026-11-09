@@ -2,6 +2,7 @@ package eg.masroof.data.backup
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteQueryBuilder
 import eg.masroof.data.db.AppDatabase
 import org.json.JSONObject
 import java.io.File
@@ -38,6 +39,9 @@ interface RestoreDatabase {
 
     /** SQLite's `application_id` header field: Room never uses it, and it commits with the transaction that sets it. */
     fun applicationId(): Int
+
+    /** The file names of the receipt rows now in the database (what "keep as it is" may move into place). */
+    fun receiptFileNames(): Set<String>
 
     /**
      * Replaces every table in ONE transaction, run with `PRAGMA synchronous = FULL` so the commit is durable against power loss: all backup
@@ -86,6 +90,11 @@ class RoomRestoreDatabase(
     override fun liveEntryCount(): Long = RoomBackupDatabase(db).liveEntryCount()
 
     override fun applicationId(): Int = db.query("PRAGMA application_id", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    override fun receiptFileNames(): Set<String> =
+        db.query(SupportSQLiteQueryBuilder.builder("receipt").columns(arrayOf("fileName")).create()).use { c ->
+            buildSet { while (c.moveToNext()) add(c.getString(0)) }
+        }
 
     override fun replaceAll(
         gen: Int,

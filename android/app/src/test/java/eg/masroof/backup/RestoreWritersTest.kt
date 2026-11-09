@@ -104,6 +104,51 @@ class RestoreWritersTest {
         }
 
     @Test
+    fun `REQ-OPS-179 a message deferred under the lock is not marked handled and a later backfill records it`() =
+        runTest {
+            val store = BackfillStore(context.getSharedPreferences("restore-writers-handled", Context.MODE_PRIVATE))
+            val settings = MemorySettings()
+            var calls = 0
+            var blockedNow = false
+            var readsWhileBlocked = 0
+            val sharedGate =
+                RestoreGate {
+                    calls++
+                    blockedNow = calls == 2 // blocked on its second question only: the restore starts between two checks
+                    blockedNow
+                }
+            val key =
+                object : eg.masroof.ingest.LocalIdKey {
+                    override fun get(): ByteArray {
+                        if (blockedNow) readsWhileBlocked++
+                        return FixedKey.get()
+                    }
+
+                    override fun wipe() = Unit
+                }
+            val pipeline =
+                SmsPipeline(
+                    db,
+                    settings,
+                    MemoryNotifications(),
+                    clock,
+                    MemoryGate(),
+                    key,
+                    answers = FakeAnswerPrefs(),
+                    memory = store,
+                    restoreGate = sharedGate,
+                )
+            val inbox = FakeInbox(listOf(sms(1, purchase(10)), sms(2, purchase(20))))
+            val engine = SmsBackfill(db, pipeline, inbox, store, settings, key, MemoryGate(), clock, restoreGate = sharedGate)
+            store.save(BackfillState(BackfillPhase.RUNNING, "D90", BACKFILL_NOW - 90 * BACKFILL_DAY, BACKFILL_NOW + 1))
+            assertEquals(BackfillOutcome.DEFERRED, engine.run())
+            assertEquals("no key read while blocked", 0, readsWhileBlocked)
+            assertTrue("nothing recorded yet", db.expenses().all().isEmpty())
+            assertEquals(BackfillOutcome.DONE, engine.run())
+            assertEquals("both messages are recorded, none was marked handled while deferred", 2, db.expenses().all().size)
+        }
+
+    @Test
     fun `REQ-OPS-179 R14 a receipt attach is refused and the copy deleted while a restore is pending, and works after`() =
         runTest {
             val dir = File(context.filesDir, "writers-receipts-" + System.nanoTime())

@@ -216,13 +216,8 @@ class SmsPipeline
                 android.util.Log.i("SmsIntake", "intake deferred: restore pending")
                 return Disposition.DEFERRED
             }
-            // Makes sure the key exists (the wipe race below); the stored id is computed under the lock (a restore may change the key).
-            var id = LocalIdHasher.id(idKey.get(), message)
-            if (!gate.isOpen()) {
-                // A wipe raced us and the key may have been recreated after it: forget it again.
-                idKey.wipe()
-                return Disposition.DROPPED
-            }
+            // The id (and so the key read) happens only under the lock, after the restore gate was checked there: never while blocked.
+            var id = ""
             // A message in a format the user confirmed on this phone is recorded like a proven family
             val applied = TemplateLearning.apply(db, message, MessageParser.parse(message))
             val outcome = applied.outcome
@@ -241,6 +236,11 @@ class SmsPipeline
                     }
                     // After a restore the key is the backup's: the id is hashed with whatever key is current under the lock.
                     id = LocalIdHasher.id(idKey.get(), message)
+                    if (!gate.isOpen()) {
+                        // A wipe raced us and the key may have been recreated after it: forget it again.
+                        idKey.wipe()
+                        return@withLock Stored(Disposition.DROPPED)
+                    }
                     db.withTransaction {
                         if (gate.isOpen() && isAllowed(message, channel) && inEpoch(epoch)) {
                             store(message, id, outcome, applied.templateId, answerState, Origin(channel, slackMillis))
@@ -260,7 +260,8 @@ class SmsPipeline
             stored.withdraw?.let(notifier::cancel)
             // a backfill posts one summary at its end, never one notice per message
             if (channel == CaptureChannel.LIVE) stored.notice?.let(notifier::captured)
-            if (stored.disposition != Disposition.DROPPED) {
+            // DEFERRED is never "handled": a refused or cancelled restore must leave the message for a later backfill.
+            if (stored.disposition != Disposition.DROPPED && stored.disposition != Disposition.DEFERRED) {
                 // under the erase lock: after an erase (or in a run that began before it) nothing is written to the cleared prefs
                 eraseLock.mutex.withLock {
                     if (gate.isOpen() && (epoch == null || eraseLock.epoch == epoch)) markHandled(id, message, outcome)

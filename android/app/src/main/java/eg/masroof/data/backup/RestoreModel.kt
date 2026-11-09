@@ -235,20 +235,37 @@ object RestoreStage {
     /** True when the journal or the legacy marker exists. */
     fun journalBlocks(receiptsDir: File): Boolean = journal(receiptsDir).exists() || legacyMarker(receiptsDir).exists()
 
-    /** Deletes the journal, its tmp file and the legacy marker; true when none is left. */
+    /** Deletes the journal, its tmp file and the legacy marker (each delete is fsynced); true when none is left. */
     fun deleteJournal(receiptsDir: File): Boolean {
-        val parent = receiptsDir.absoluteFile.parentFile
-        return listOf(File(parent, JOURNAL), File(parent, "$JOURNAL.tmp"), File(parent, LEGACY_MARKER)).all { !it.exists() || it.delete() }
+        val parent = receiptsDir.absoluteFile.parentFile!!
+        val disk = RestoreDisk(RestoreHooks.None)
+        return try {
+            for (name in listOf(JOURNAL, "$JOURNAL.tmp", LEGACY_MARKER)) disk.deleteFile(File(parent, name), RestoreOp.JOURNAL_DELETE)
+            true
+        } catch (_: java.io.IOException) {
+            false
+        }
     }
 
+    /**
+     * Erase and the start sweep: the journal FIRST, then every staging folder (the raw key in it is zeroed before the folder goes; links
+     * are never followed), then the old receipts, each delete followed by a directory fsync.
+     */
     fun sweep(receiptsDir: File): Boolean {
-        val parent = receiptsDir.absoluteFile.parentFile
-        // Journal first: a kill after it leaves only unreferenced staging, which the next start sweeps.
-        val journalGone =
-            listOf(File(parent, JOURNAL), File(parent, JOURNAL + ".tmp"), File(parent, LEGACY_MARKER)).all {
-                !it.exists() ||
-                    it.delete()
+        val parent = receiptsDir.absoluteFile.parentFile!!
+        if (!deleteJournal(receiptsDir)) return false
+        val disk = RestoreDisk(RestoreHooks.None)
+        return try {
+            File(parent, FOLDER).listFiles().orEmpty().forEach { dir ->
+                val key = File(dir, "local-id.key")
+                if (disk.isRegular(key)) runCatching { key.writeBytes(ByteArray(key.length().toInt())) }
             }
-        return journalGone && listOf(File(parent, FOLDER), File(parent, OLD_RECEIPTS)).all { !it.exists() || it.deleteRecursively() }
+            disk.deleteTree(File(parent, FOLDER))
+            disk.deleteTree(File(parent, OLD_RECEIPTS))
+            disk.fsyncDir(parent)
+            true
+        } catch (_: java.io.IOException) {
+            false
+        }
     }
 }

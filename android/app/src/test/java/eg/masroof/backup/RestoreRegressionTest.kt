@@ -604,6 +604,11 @@ class RestoreRegressionTest {
         assertTrue(p.restorer().keepAsIs())
         assertFalse(p.journal.exists())
         assertTrue(stageDirs().isEmpty())
+        assertEquals(
+            "the staged receipt that verifies is kept, so the restored row has its file",
+            mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)),
+            p.receiptHashes(),
+        )
         assertNull("the current key is kept, none was installed", p.installedKey)
         assertFalse("not applicable twice", p.restorer().keepAsIs())
         // a journal whose generation does not explain A is refused
@@ -613,7 +618,7 @@ class RestoreRegressionTest {
 
     @Test
     fun `REQ-SEC-068 a staged receipt directory behind a symbolic link is PARTIAL and is deleted without following the link`() {
-        if (!System.getProperty("os.name").orEmpty().contains("Linux")) return // symbolic links need Linux (CI)
+        org.junit.Assume.assumeTrue("symbolic links need Linux (CI)", System.getProperty("os.name").orEmpty().contains("Linux"))
         incompleteG1()
         val dir = stageDirs().single()
         val outside = File(context.cacheDir, "outside-" + System.nanoTime()).also { it.mkdirs() }
@@ -647,5 +652,115 @@ class RestoreRegressionTest {
         val many = (1..30).map { "receipts/r$it.jpg" to ByteArray(4) }
         val crafted = encrypt(zipOf(many))
         expectRefused(p, crafted, RestoreFailure.INVALID_CONTENT, 4, limits = RestoreLimits(minMemoryKiB = 1, maxEntries = 10))
+    }
+
+    @Test
+    fun `REQ-OPS-179 after three failed attempts at the key step the restore can be completed with the current key`() {
+        p.keyFailures = 100
+        val (r, s) = stage(f1)
+        assertEquals(RestoreFailure.INCOMPLETE, applyOutcome(r, s))
+        assertFalse("one failed attempt is not enough", p.restorer().keepCurrentKey())
+        runBlocking { p.restorer().recover(atStart = false) }
+        assertFalse("two failed attempts are not enough", p.restorer().keepCurrentKey())
+        runBlocking { p.restorer().recover(atStart = false) }
+        val state = p.restorer().pendingState() as PendingState.Incomplete
+        assertTrue(state.atKeyStep)
+        assertTrue(state.attempts >= 3)
+        assertTrue(p.restorer().keepCurrentKey())
+        assertFalse(p.journal.exists())
+        assertTrue(stageDirs().isEmpty())
+        assertFalse("the gate is open", RestoreStage.journalBlocks(p.receipts))
+        assertTrue("the settings step was applied", p.applied.isNotEmpty())
+        assertNull("the current key is kept", p.installedKey)
+        assertEquals(mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)), p.receiptHashes())
+    }
+
+    @Test
+    fun `REQ-OPS-179 the keep-as-is exit is offered only when it can act`() {
+        p.journal.writeText("{")
+        val c = coordinator()
+        runBlocking { c.recoverInterrupted()?.join() }
+        assertEquals(PendingState.Partial(canKeep = false), c.pending.value)
+        assertFalse(p.restorer().keepAsIs())
+    }
+
+    @Test
+    fun `REQ-OPS-179 Erase all data resets the banner and the session of an unfinished restore`() {
+        incompleteG1()
+        val c = coordinator()
+        assertTrue(c.pending.value is PendingState.Incomplete)
+        c.onErased()
+        assertEquals(PendingState.None, c.pending.value)
+        assertEquals(RestoreState.Idle, c.state.value)
+    }
+
+    @Test
+    fun `REQ-OPS-179 Cancel during Checking never publishes Confirm and leaves the gate open`() {
+        val c = coordinator()
+        c.toPassphrase()
+        hold = java.util.concurrent.CountDownLatch(1)
+        c.onPassphrase(RESTORE_PASS)
+        runBlocking {
+            withTimeout(20_000) {
+                while (!eg.masroof.data.backup.RestoreActivity
+                        .isActive()
+                ) {
+                    kotlinx.coroutines.yield()
+                }
+            }
+        }
+        c.onCancel()
+        assertFalse(
+            "the flag is released by the Cancel",
+            eg.masroof.data.backup.RestoreActivity
+                .isActive(),
+        )
+        hold?.countDown()
+        runBlocking { withTimeout(20_000) { while (stageDirs().isNotEmpty()) kotlinx.coroutines.yield() } }
+        assertEquals(RestoreState.Idle, c.state.value)
+        assertFalse(
+            eg.masroof.data.backup.RestoreActivity
+                .isActive(),
+        )
+        val key = CountingKey { ByteArray(32) { 7 } }
+        assertEquals(Disposition.RECORDED, runBlocking { pipeline(key, journalGate).accept(sms) })
+    }
+
+    @Test
+    fun `REQ-OPS-179 a failing directory fsync after the journal was deleted still reports Done`() {
+        val hooks =
+            object : RestoreHooks {
+                var afterDelete = false
+
+                override fun after(op: RestoreOp) {
+                    if (op == RestoreOp.JOURNAL_DELETE) afterDelete = true
+                }
+
+                override fun before(op: RestoreOp) {
+                    if (afterDelete && op == RestoreOp.FSYNC_DIR) throw java.io.IOException("EIO")
+                }
+            }
+        val (r, s) = stage(f1, hooks)
+        assertNull(applyOutcome(r, s))
+        assertFalse(p.journal.exists())
+        assertArrayEquals(LOCAL_KEY, p.installedKey)
+    }
+
+    @Test
+    fun `REQ-SEC-068 the Erase sweep never follows a directory link and zeroes the key before the folder goes`() {
+        org.junit.Assume.assumeTrue("links need Linux (CI)", System.getProperty("os.name").orEmpty().contains("Linux"))
+        val outside = File(context.cacheDir, "sweep-outside-" + System.nanoTime()).also { it.mkdirs() }
+        val victim = File(outside, "keep.txt").also { it.writeText("keep") }
+        val keyCopy = File(outside, "key-copy")
+        val g = File(p.stage, "g00000001").also { it.mkdirs() }
+        File(g, "local-id.key").writeBytes(ByteArray(32) { 9 })
+        java.nio.file.Files
+            .createLink(keyCopy.toPath(), File(g, "local-id.key").toPath())
+        java.nio.file.Files
+            .createSymbolicLink(File(p.stage, "link").toPath(), outside.toPath())
+        assertTrue(RestoreStage.sweep(p.receipts))
+        assertTrue("the link target is untouched", victim.exists())
+        assertTrue("the key was zeroed before its folder was deleted", keyCopy.readBytes().all { it.toInt() == 0 })
+        assertFalse(p.stage.exists())
     }
 }

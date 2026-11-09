@@ -413,6 +413,11 @@ class BackupRestorer(
     /** PARTIAL exit 3: keeps the restored data as it is (journal and staging deleted, current key kept). False if it does not apply. */
     fun keepAsIs(): Boolean = recovery.keepAsIs()
 
+    fun canKeepAsIs(): Boolean = recovery.canKeepAsIs()
+
+    /** The way out of a finish stuck at the key step (three failed attempts): completes the restore with the CURRENT key. */
+    fun keepCurrentKey(): Boolean = recovery.keepCurrentKey()
+
     /** Deletes only this session's own staging (Cancel, a failed check, picking again): a journal slot's staging is never touched. */
     fun discardSession(gen: Int) = recovery.discardSession(gen)
 

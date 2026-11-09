@@ -189,6 +189,8 @@ class ReceiptStore
                     stored.file.delete()
                     return@withLock AttachResult.Refused(Refusal.RESTORE_PENDING)
                 }
+                // The stored copy must still be there under the lock (a restore swaps the receipts directory): else nothing is recorded.
+                if (!stored.file.exists()) return@withLock AttachResult.Failed
                 val hash = sha256(stored.file)
                 val same = db.receipts().bySha(hash)
                 if (same != null) {
