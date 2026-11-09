@@ -8,6 +8,7 @@ internal class MemoryImportStore : ImportStore {
     private val members = mutableMapOf<String, String>()
     override var pending = false
     override var forgetPending = false
+    override var importedCount = 0
 
     override fun categoryOf(serverId: String) = categories[serverId]
 
@@ -31,6 +32,7 @@ internal class MemoryImportStore : ImportStore {
         categories.clear()
         members.clear()
         pending = false
+        importedCount = 0
         forgetPending = false
     }
 }

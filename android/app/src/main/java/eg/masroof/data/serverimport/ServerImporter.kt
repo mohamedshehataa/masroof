@@ -49,6 +49,16 @@ sealed interface ImportResult {
         val skippedOther: Int = 0,
     ) : ImportResult
 
+    /**
+     * The entries are stored but forgetting the server did not finish (a Keystore or disk failure): the card says so and keeps the
+     * count; Import (it needs no network) finishes the cleanup.
+     */
+    data class CleanupPending(
+        val imported: Int,
+        val skipped: Int,
+        val skippedOther: Int = 0,
+    ) : ImportResult
+
     /** The run stopped; credentials are kept so Import can be tapped again. */
     data class Failed(
         val kind: ImportFailureKind,
@@ -109,19 +119,26 @@ class ServerImporter
         /** True when a finished import still has credentials or the URL to delete (the forget was cut short or failed). */
         fun forgetUnfinished(): Boolean = store.forgetPending
 
-        private suspend fun forgetNow() {
+        /** Forgets the server. True when done; false when it failed (the entries are stored, the cleanup stays pending). */
+        private suspend fun forgetNow(imported: Int): Boolean {
+            store.importedCount = imported
             store.forgetPending = true
-            // a cancel arriving here cannot half-do it; the forgetter retries until the credentials and the URL are gone
-            withContext(NonCancellable) { forgetter.forget() }
-            store.clear()
+            return try {
+                // a cancel arriving here cannot half-do it; the forgetter retries until the credentials and the URL are gone
+                withContext(NonCancellable) { forgetter.forget() }
+                store.clear()
+                true
+            } catch (_: IOException) {
+                false
+            }
         }
 
         private suspend fun runChecked(onProgress: (ImportProgress) -> Unit): ImportResult {
-            // the import completed earlier but forgetting the server did not finish: finish it, import nothing again
+            // the import completed earlier but forgetting the server did not finish: finish it, import nothing again (no network)
             if (store.forgetPending) {
-                forgetNow()
+                val earlier = store.importedCount
                 signal.changed()
-                return ImportResult.Completed(0, 0)
+                return if (forgetNow(earlier)) ImportResult.Completed(earlier, 0) else ImportResult.CleanupPending(earlier, 0)
             }
             // no session: nothing to import with, and no request is made
             val me = session.memberId() ?: return ImportResult.Failed(ImportFailureKind.SESSION)
@@ -133,9 +150,14 @@ class ServerImporter
             val skippedBudgets = ctx.skippedBudgets
             val (imported, rejected) = writeExpenses(download.live, ctx.context, onProgress)
             // the run completed: only now is the server forgotten
-            forgetNow()
+            val forgotten = forgetNow(imported)
             signal.changed()
-            return ImportResult.Completed(imported, download.invalid + rejected, skippedBudgets)
+            val skipped = download.invalid + rejected
+            return if (forgotten) {
+                ImportResult.Completed(imported, skipped, skippedBudgets)
+            } else {
+                ImportResult.CleanupPending(imported, skipped, skippedBudgets)
+            }
         }
 
         private class Lookups(
@@ -228,7 +250,8 @@ class ServerImporter
                                 nameEn = c.nameEn,
                                 nameAr = c.nameAr,
                                 sortOrder = c.sortOrder,
-                                parentId = c.parentId?.let { categoryMap[it] },
+                                // a category that names itself as its parent (or whose parent maps onto it) is stored top level, not hidden
+                                parentId = c.parentId?.let { categoryMap[it] }?.takeIf { it != categoryMap[c.id] },
                                 color = c.color,
                                 archived = c.archived,
                                 system = false,

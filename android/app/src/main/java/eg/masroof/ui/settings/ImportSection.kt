@@ -100,6 +100,12 @@ fun ImportContent(
             is ImportPhase.Running -> Progress(phase, digits)
             is ImportPhase.Done -> Result(phase, digits, onDismiss)
             is ImportPhase.Failed -> Failure(phase.kind)
+            is ImportPhase.Cleaning ->
+                Text(
+                    pluralStringResource(R.plurals.import_cleaning, phase.imported, importCount(phase.imported, digits)),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
         }
         Actions(state, onImport, onCancel, onSignIn)
         if (state.offline && !state.running && state.phase !is ImportPhase.Done) {
@@ -132,7 +138,7 @@ private fun Actions(
         state.phase is ImportPhase.Done -> Unit
         else ->
             Button(onClick = onImport, enabled = state.canImport, modifier = Modifier.fillMaxWidth().heightIn(min = TARGET_DP.dp)) {
-                Text(stringResource(R.string.import_action))
+                Text(stringResource(if (state.phase is ImportPhase.Cleaning) R.string.import_finish else R.string.import_action))
             }
     }
 }

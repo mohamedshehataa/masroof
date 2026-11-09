@@ -30,6 +30,9 @@ interface ImportStore {
     /** The run completed and forgetting the server has started: it is retried until the credentials and the URL are gone. */
     var forgetPending: Boolean
 
+    /** How many entries the completed run imported, kept while the forgetting is unfinished so the card can still say so. */
+    var importedCount: Int
+
     /** A completed import, or "Erase all data": the mappings and flags go. */
     fun clear()
 }
@@ -52,6 +55,7 @@ object NoImportStore : ImportStore {
 
     override var pending: Boolean = false
     override var forgetPending: Boolean = false
+    override var importedCount: Int = 0
 
     override fun clear() = Unit
 }
@@ -94,6 +98,12 @@ class PrefsImportStore(
             prefs.edit(commit = true) { putBoolean(FORGET, value) }
         }
 
+    override var importedCount: Int
+        get() = prefs.getInt(IMPORTED, 0)
+        set(value) {
+            prefs.edit(commit = true) { putInt(IMPORTED, value) }
+        }
+
     override fun clear() {
         prefs.edit(commit = true) { clear() }
     }
@@ -103,5 +113,6 @@ class PrefsImportStore(
         const val MEMBER = "mem:"
         const val PENDING = "pending"
         const val FORGET = "forget"
+        const val IMPORTED = "imported"
     }
 }

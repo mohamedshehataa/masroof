@@ -33,6 +33,15 @@
         <item quantity="many">%1$s ميزانية أو حساب معرفناش نستوردهم</item>
         <item quantity="other">%1$s ميزانية أو حساب معرفناش نستوردهم</item>
     </plurals>
+    <plurals name="import_cleaning">
+        <item quantity="zero">اتستورد %1$s عملية؛ بنخلّص التنضيف</item>
+        <item quantity="one">اتستوردت عملية واحدة؛ بنخلّص التنضيف</item>
+        <item quantity="two">اتستوردت عمليتين؛ بنخلّص التنضيف</item>
+        <item quantity="few">اتستوردت %1$s عمليات؛ بنخلّص التنضيف</item>
+        <item quantity="many">اتستورد %1$s عملية؛ بنخلّص التنضيف</item>
+        <item quantity="other">اتستورد %1$s عملية؛ بنخلّص التنضيف</item>
+    </plurals>
+    <string name="import_finish">خلّص التنضيف</string>
     <string name="import_error_network">معرفناش نوصل للسيرفر، جرب تاني</string>
     <string name="import_error_server">السيرفر فيه مشكلة، جرب تاني</string>
     <string name="import_error_data">السيرفر بعت بيانات مش متوقعة</string>

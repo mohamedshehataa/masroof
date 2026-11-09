@@ -108,10 +108,8 @@ class KeystoreLocalIdKey(
         try {
             return unseal(sealed, a)
         } catch (e: java.io.IOException) {
-            if (!isCorrupt(e)) throw LocalIdKeyUnavailableException(e)
             // RecoveringAead already rebuilt once: a keyset file that does not parse twice is permanently corrupt
-            localReset()
-            return null
+            return corruptOrThrow(e)
         } catch (_: GeneralSecurityException) {
             // a bad tag, or a build that failed: the round trip below tells them apart
         }
@@ -120,15 +118,10 @@ class KeystoreLocalIdKey(
             try {
                 a.decrypt(a.encrypt(probe, PROBE_AAD), PROBE_AAD)
             } catch (e: java.io.IOException) {
-                if (isCorrupt(e)) {
-                    localReset()
-                    return null
-                }
-                throw LocalIdKeyUnavailableException(e)
-            } catch (e: GeneralSecurityException) {
-                throw LocalIdKeyUnavailableException(e)
+                return corruptOrThrow(e)
             }
-        if (!roundTrip.contentEquals(probe)) throw LocalIdKeyUnavailableException(GeneralSecurityException("round trip differs"))
+        // a GeneralSecurityException above is a failed round trip: it propagates and get() reports it as unavailable
+        if (!roundTrip.contentEquals(probe)) throw GeneralSecurityException("round trip differs")
         // The keyset is built and works now. The first failure may have been the build itself (a transient one), so the entry is
         // tried once more: only if the BUILT keyset rejects it too is the tag permanently bad (lost).
         return try {
@@ -136,6 +129,13 @@ class KeystoreLocalIdKey(
         } catch (_: GeneralSecurityException) {
             null
         }
+    }
+
+    /** A keyset file that does not parse is permanently corrupt: reset it and report the entry lost; any other I/O error is transient. */
+    private fun corruptOrThrow(e: java.io.IOException): ByteArray? {
+        if (!isCorrupt(e)) throw e
+        localReset()
+        return null
     }
 
     /** The legacy key, or null when it is LOST (see the table); throws when that cannot be told. */

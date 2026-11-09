@@ -92,6 +92,7 @@ object BackupPrefsInventory {
                 mapOf(
                     "pending" to "an import is on offer on this phone",
                     "forget" to "forgetting the server was started on this phone",
+                    "imported" to "how many entries the import brought, shown while its cleanup is unfinished",
                 ),
             "shared:masroof_capture" to mapOf("erase_stage" to "erase-in-progress state"),
             "shared:masroof_capture_key" to

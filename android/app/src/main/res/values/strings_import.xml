@@ -21,6 +21,11 @@
         <item quantity="one">%1$s budget or account could not be imported</item>
         <item quantity="other">%1$s budgets or accounts could not be imported</item>
     </plurals>
+    <plurals name="import_cleaning">
+        <item quantity="one">Imported %1$s entry; finishing cleanup</item>
+        <item quantity="other">Imported %1$s entries; finishing cleanup</item>
+    </plurals>
+    <string name="import_finish">Finish cleanup</string>
     <string name="import_error_network">Couldn\'t reach the server, try again</string>
     <string name="import_error_server">The server had a problem, try again</string>
     <string name="import_error_data">The server sent unexpected data</string>

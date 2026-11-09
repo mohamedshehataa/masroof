@@ -175,6 +175,46 @@ class ServerImportViewModelTest {
         }
 
     @Test
+    fun `REQ-SEC-065 an import whose cleanup failed says so with the count, and the cleanup finishes offline`() =
+        runTest {
+            var failures = 1
+            val flaky =
+                object : eg.masroof.data.serverimport.SessionKeystore {
+                    override fun destroy() {
+                        if (failures-- > 0) error("keystore")
+                    }
+                }
+            val importer =
+                ServerImporter(
+                    w.db,
+                    source,
+                    manager,
+                    w.settings,
+                    w.repo,
+                    w.prefs,
+                    eg.masroof.data.serverimport
+                        .DefaultServerForgetter(manager, w.settings, flaky),
+                    EraseLock(),
+                    LocalDataSignal(),
+                    w.clock,
+                    Dispatchers.IO,
+                    importStore,
+                )
+            val vm = ImportViewModel(importer, manager, network, importStore)
+            vm.state.await { it.visible }
+            vm.start()
+            // stored, but the cleanup failed: the card keeps the count instead of "could not be saved"
+            val cleaning = vm.state.await { it.phase is ImportPhase.Cleaning }
+            assertEquals(ImportPhase.Cleaning(1_240), cleaning.phase)
+            assertEquals(1_240, w.db.expenses().count())
+            // no network needed to finish
+            network.flow.value = false
+            assertTrue(vm.state.await { it.offline && it.phase is ImportPhase.Cleaning }.canImport)
+            vm.start()
+            assertEquals(ImportPhase.Done(1_240, 0), vm.state.await { it.phase is ImportPhase.Done }.phase)
+        }
+
+    @Test
     fun `REQ-OPS-174 offline disables Import`() =
         runTest {
             network.flow.value = false

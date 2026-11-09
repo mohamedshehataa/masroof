@@ -657,13 +657,13 @@ class ServerImportTest {
                 }
             val forgetter = DefaultServerForgetter(manager, w.settings, flaky)
             // the rest still goes, the failure is reported and the forget stays pending
-            assertEquals(ImportResult.Failed(ImportFailureKind.STORAGE), run(importer(forgetter)))
+            assertEquals(ImportResult.CleanupPending(1_240, 0), run(importer(forgetter)))
             assertEquals("", w.settings.current().serverUrl)
             assertTrue(store.stored is LoadedSession.Empty)
             assertTrue(importStore.forgetPending)
             assertEquals(0, flaky.destroyed)
             // the next Import (or Settings open) finishes the deletion and imports nothing again
-            assertEquals(ImportResult.Completed(0, 0), run(importer(forgetter)))
+            assertEquals(ImportResult.Completed(1_240, 0), run(importer(forgetter)))
             assertEquals(1, flaky.destroyed)
             assertFalse(importStore.forgetPending)
         }
@@ -685,12 +685,12 @@ class ServerImportTest {
             val flaky = FlakyUrlSettings(failures = 3)
             val forgetter = DefaultServerForgetter(manager, flaky, keystore)
             // all 3 attempts of the first forget fail: an error state, never an exception out of run()
-            assertEquals(ImportResult.Failed(ImportFailureKind.STORAGE), run(importer(forgetter)))
+            assertEquals(ImportResult.CleanupPending(1_240, 0), run(importer(forgetter)))
             assertTrue(importStore.forgetPending)
             assertEquals("https://masroof.example/", w.settings.current().serverUrl)
             val callsBefore = source.calls
             // the next tap imports nothing again and only finishes forgetting
-            assertEquals(ImportResult.Completed(0, 0), run(importer(forgetter)))
+            assertEquals(ImportResult.Completed(1_240, 0), run(importer(forgetter)))
             assertEquals(callsBefore, source.calls)
             assertEquals("", w.settings.current().serverUrl)
             assertFalse(importStore.forgetPending)
@@ -794,6 +794,21 @@ class ServerImportTest {
                     .lookups()
                     .allCategories()
                     .none { it.nameEn == "Groceries" },
+            )
+        }
+
+    @Test
+    fun `REQ-OPS-175 a server category that is its own parent is stored top level`() =
+        runTest {
+            source.categories =
+                serverCategories().map { if (it.id == "srv-cat-29") it.copy(parentId = "srv-cat-29") else it }
+            run()
+            assertNull(
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .single { it.id == "srv-cat-29" }
+                    .parentId,
             )
         }
 

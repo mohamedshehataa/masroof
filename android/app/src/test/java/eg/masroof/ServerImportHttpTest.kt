@@ -29,7 +29,9 @@ import eg.masroof.ingest.SessionUploadCheck
 import eg.masroof.ingest.SmsUploader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -57,6 +59,7 @@ private fun uuid(
 private val ME_ID = uuid(3, 1)
 
 /** The real client stack (Retrofit, bearer, refresh, generated models) against a fake server: STORY-182 end to end. */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ServerImportHttpTest {
@@ -129,6 +132,7 @@ class ServerImportHttpTest {
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(kotlinx.coroutines.test.UnconfinedTestDispatcher())
         w = AnswerWorld(ApplicationProvider.getApplicationContext<Context>())
         eg.masroof.data.db.DefaultSeed
             .seed(w.db.openHelper.writableDatabase)
@@ -170,6 +174,7 @@ class ServerImportHttpTest {
     @After
     fun tearDown() {
         server.close()
+        Dispatchers.resetMain()
         w.close()
     }
 

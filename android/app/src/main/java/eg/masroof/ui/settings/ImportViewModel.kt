@@ -42,6 +42,11 @@ sealed interface ImportPhase {
         val skippedOther: Int = 0,
     ) : ImportPhase
 
+    /** The entries are stored; only forgetting the server is left. It needs no network, so it can be finished offline. */
+    data class Cleaning(
+        val imported: Int,
+    ) : ImportPhase
+
     data class Failed(
         val kind: ImportFailureKind,
     ) : ImportPhase
@@ -56,7 +61,7 @@ data class ImportUiState(
     val signInOpen: Boolean = false,
 ) {
     val running: Boolean get() = phase is ImportPhase.Running
-    val canImport: Boolean get() = visible && !offline && !running && phase !is ImportPhase.Done
+    val canImport: Boolean get() = visible && (!offline || phase is ImportPhase.Cleaning) && !running && phase !is ImportPhase.Done
 }
 
 private data class ImportInputs(
@@ -101,8 +106,13 @@ class ImportViewModel
             viewModelScope.launch { session.restore() }
             // a finished import whose forgetting was cut short (a Keystore or disk failure): finished now, quietly, at the next open
             if (importer.forgetUnfinished()) {
+                inputs.update { it.copy(phase = ImportPhase.Cleaning(store.importedCount)) }
                 viewModelScope.launch {
-                    if (importer.run {} is ImportResult.Completed) inputs.update { it.copy(pending = false) }
+                    when (val r = importer.run {}) {
+                        is ImportResult.Completed ->
+                            inputs.update { it.copy(phase = ImportPhase.Done(r.imported, r.skipped, r.skippedOther), pending = false) }
+                        else -> Unit
+                    }
                 }
             }
             // a successful sign-in from the card ends "Sign in again": Import can be tapped again
@@ -124,7 +134,8 @@ class ImportViewModel
         }
 
         fun start() {
-            if (job?.isActive == true || state.value.offline) return
+            val cleaningOnly = importer.forgetUnfinished()
+            if (job?.isActive == true || (state.value.offline && !cleaningOnly)) return
             inputs.update { it.copy(phase = ImportPhase.Running(ImportStage.DOWNLOADING, 0, null), signInOpen = false) }
             job =
                 viewModelScope.launch {
@@ -143,6 +154,7 @@ class ImportViewModel
                                     phase = ImportPhase.Done(result.imported, result.skipped, result.skippedOther),
                                     pending = false,
                                 )
+                            is ImportResult.CleanupPending -> it.copy(phase = ImportPhase.Cleaning(result.imported))
                             is ImportResult.Failed ->
                                 it.copy(phase = ImportPhase.Failed(result.kind), signInOpen = result.kind == ImportFailureKind.SESSION)
                         }
