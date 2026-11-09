@@ -3,7 +3,7 @@ id: STORY-184
 epic: EPIC-17
 title: Restore everything from a backup file on a new or wiped phone
 phase: 9
-status: READY
+status: IN_PROGRESS
 risk_tier: high
 size: M
 modules: [android]
@@ -105,3 +105,7 @@ STORY-183
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D5) |
+| 2026-11-08 | 5 build | android-engineer | restore flow built on branch story/STORY-184-restore-from-backup |
+| 2026-11-09 | 6 verify | qa-verifier + security-reviewer | loops 1-5 FAIL (security L3 APPROVE in round 2); each loop fixed its MAJORs, new ones kept appearing in the interrupted-restore recovery state machine |
+| 2026-11-09 | 8 escalate | orchestrator | BLOCKED - ESCALATIONS LOOP-184 (recovery state machine needs a design pass); code stays on its branch, not merged |
+| 2026-11-09 | 3 design | orchestrator | owner chose LOOP-184 option (a): architect design of the recovery state machine, then rebuild and one verify loop |
