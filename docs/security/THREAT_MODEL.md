@@ -238,6 +238,21 @@ included, push protection).
 Supersedes the B9 row's "required `gate` check": the aggregate `PR gate` job is removed. Branch protection requires
 the 14 `required_checks` of `delivery-gates.yaml` (STORY-016).
 
+### L3 backup file -> app restore (local-only, STORY-184)
+
+Boundary: a `.masroof` file chosen by the user, decrypted with the user's passphrase, replaces every table, the receipts, the
+allowlisted settings and the local-id key on this phone. Design: `docs/design/STORY-184-restore-recovery.md` (§8, §9).
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| T | The file is attacker-influenced (a crafted or damaged backup) | Checks 1-7 run in a per-generation staging folder before anything changes: header and KDF bounds before derivation, decryption read to EOF, entry allowlist, size/ratio/entry-count caps while streaming, JSON type/format/FK checks, receipt size and SHA-256. The hashes of what was checked (tables, settings, key, receipts) are taken in memory, written to the journal, and re-checked on every read before a byte is applied | REQ-SEC-068 | Mitigated |
+| T | A forged journal or staging folder | Needs L5 write access to app-private storage (equivalent to writing the preferences or receipts directly): accepted risk. It can at most cause PARTIAL or apply a staging that matches its own hashes. Strict journal parse (exact types, re-encode equality, 4 KiB cap) | REQ-OPS-179 | Accepted (L5) |
+| I | The plaintext local-id key exists as a file while a restore is unfinished | Only in `restore-stage/g*` while a journal slot names it; overwritten with zeros (best effort on flash; file-based encryption is the control) and deleted at cleanup, in every delete and sweep path. The journal holds only SHA-256 values. Only the outcome enum is logged (INFO or below), never a generation, hash, path, row or Throwable. Deferred SMS bodies stay in WorkManager input data while a restore is pending | REQ-SEC-068 | Mitigated |
+| D | KDF, size, ratio, entry-count and row bombs; a corrupt or unreadable journal | KDF bounds before derivation; 4 GiB total, 250:1 ratio, entry-count and per-table row caps, memory budget for ids; a Corrupt or Unreadable journal defers capture until Finish, a new restore, "keep as it is" or Erase (the user is told, nothing is dropped) | REQ-SEC-068, REQ-OPS-179 | Mitigated |
+| E | Zip-slip, symlinks, path tricks in a backup or in staging | Entry-name allowlist, generated receipt file names, canonical-path guard, regular files only (NOFOLLOW_LINKS), non-following deletes, settings allowlist with fixed types | REQ-SEC-068 | Mitigated |
+| E | The restored key is silently replaced (SMS recorded twice) | The key is installed only through the no-mint `LocalIdKey` (STORY-182); never through `TinkKeystore`, which resets itself on a transient failure. Contract clause 4 tests it | REQ-OPS-178 | Open until STORY-182 merges (production binding is a stub) |
+| T | An SMS recorded into the database that is about to be replaced, or with a stale key | Intake is DEFERRED (requeued, never an attempt) from Checking until Done, while a journal exists, with the gate checked before the key is read and again under the erase lock | REQ-OPS-178 | Mitigated |
+
 ## 4. Requirement register (REQ-SEC)
 
 | REQ | One-line requirement | Boundaries | Verification |
