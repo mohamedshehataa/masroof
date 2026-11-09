@@ -262,12 +262,12 @@ class RestoreFixRound2Test {
         c.onConfirm()
         c.await { it is RestoreState.Failed }
         c.onDismiss()
-        c.onPicked(uri) // recovery fails again
-        val failed = c.await { it is RestoreState.Failed } as RestoreState.Failed
-        assertEquals(RestoreFailure.INCOMPLETE, failed.failure)
+        c.onPicked(uri) // its recovery fails again (no crash); the pick itself goes on: a file can always be picked again
+        c.await { it == RestoreState.NeedsPassphrase }
         assertTrue(target.marker.exists())
-        c.onDismiss()
-        c.onPicked(uri)
+        c.onCancel()
+        c.await { it == RestoreState.Idle }
+        c.onPicked(uri) // the Keystore works again: the recovery finishes the restore
         c.await { it == RestoreState.NeedsPassphrase }
         assertArrayEquals(LOCAL_KEY, target.installedKey)
         assertFalse(target.marker.exists())

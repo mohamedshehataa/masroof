@@ -132,7 +132,16 @@ class RestoreCoordinator
         /** The banner's action: runs the recovery now (a broken marker needs the same file restored again, which the message says). */
         fun finishPending() {
             scope.launch(io) {
-                lock.mutex.withLock { recoverCore()?.let { mutableState.value = RestoreState.Failed(it.failure, it.neededMb) } }
+                val wasPending = restorer.hasMarker()
+                lock.mutex.withLock {
+                    val error = recoverCore()
+                    // Finished: the state says so (it stays "did not finish" otherwise, which would be false).
+                    if (error != null) {
+                        mutableState.value = RestoreState.Failed(error.failure, error.neededMb)
+                    } else if (wasPending && !restorer.hasMarker()) {
+                        mutableState.value = RestoreState.Done
+                    }
+                }
                 refreshPending()
             }
         }
@@ -157,8 +166,9 @@ class RestoreCoordinator
                             // A restore that committed and did not finish is finished first: its staging must not be replaced. A marker
                             // that is "broken" is repaired by restoring the same file again, which is what this pick starts.
                             if (restorer.hasMarker() && !restorer.markerBroken()) {
-                                recoverGuarded()?.let { throw it }
-                                if (restorer.hasMarker() && !restorer.markerBroken()) throw RestoreException(RestoreFailure.INCOMPLETE)
+                                // Whether it finishes or not, this pick goes on: restoring a file again is always the way out of a marker.
+                                // Only another restore that is running right now stops the pick (BUSY).
+                                recoverGuarded()?.let { if (it.failure == RestoreFailure.BUSY) throw it }
                             }
                             header = sources.open(picked).use { restorer.checkHeader(it) }
                             RestoreState.NeedsPassphrase

@@ -106,8 +106,6 @@ class BackupRestorer(
         passphrase: String,
         progress: (Int?) -> Unit = {},
     ): StagedRestore {
-        // A restore that committed and did not finish owns the staging folder: nothing may replace it (the coordinator finishes it first).
-        if (hasMarker() && !markerBroken()) throw RestoreException(RestoreFailure.FAILED)
         val key = deriveKey(passphrase, header)
         try {
             val total = if (sizeHint > 0) sizeHint * 2 else 0L
@@ -117,6 +115,16 @@ class BackupRestorer(
                 progress(if (total > 0) (done * PERCENT / total).toInt().coerceIn(0, PERCENT.toInt()) else null)
             }
             drain(openSource, header, key, tick)
+            // There is always a way out of a marker: picking a file again runs every check and the confirmation, then replaces everything.
+            // The old staging (which an unfinished restore needed) is about to go, so that restore is marked broken first: it can only be
+            // repaired by the restore this pick starts.
+            readMarker()?.let {
+                if (!it.broken) {
+                    writeMarker(
+                        Marker(it.nonce, it.validated, it.swapped, broken = true, failures = it.failures),
+                    )
+                }
+            }
             wipeStage()
             env.stageRoot.mkdirs()
             try {
@@ -442,6 +450,9 @@ class BackupRestorer(
         includeTables: Boolean,
     ): Staging =
         try {
+            // A MISSING file is a difference (it can never come back), not a read error: only an existing file that cannot be read is transient.
+            val required = listOf(VALIDATED_FILE, SETTINGS_FILE, KEY_FILE)
+            if (required.any { !File(env.stageRoot, it).exists() }) return Staging.DIFFERS
             val validated = File(env.stageRoot, VALIDATED_FILE)
             val info = JSONObject(validated.readText())
             val fresh = File(env.stageRoot, NEW_RECEIPTS)
@@ -472,12 +483,20 @@ class BackupRestorer(
         val validated: String,
         val swapped: Boolean,
         val broken: Boolean,
+        /** Starts (or picks) at which finishing failed again with INCOMPLETE; the third makes it PARTIAL so the user is told to restore again. */
+        val failures: Int = 0,
     )
 
     private fun readMarker(): Marker? =
         try {
             val j = JSONObject(markerFile().readText())
-            Marker(j.getInt("nonce"), j.getString("validated"), j.optBoolean("swapped", false), j.optBoolean("broken", false))
+            Marker(
+                j.getInt("nonce"),
+                j.getString("validated"),
+                j.optBoolean("swapped", false),
+                j.optBoolean("broken", false),
+                j.optInt("failures", 0),
+            )
         } catch (_: IOException) {
             null
         } catch (_: org.json.JSONException) {
@@ -559,7 +578,7 @@ class BackupRestorer(
             Staging.UNREADABLE -> throw RestoreException(RestoreFailure.INCOMPLETE)
             Staging.DIFFERS -> {
                 returnOldReceipts()
-                writeMarker(Marker(marker.nonce, marker.validated, marker.swapped, broken = true))
+                writeMarker(Marker(marker.nonce, marker.validated, marker.swapped, broken = true, failures = marker.failures))
                 throw RestoreException(RestoreFailure.PARTIAL)
             }
         }
@@ -610,7 +629,19 @@ class BackupRestorer(
         if (marker != null && env.db.applicationId() == marker.nonce) {
             // Committed. A broken marker stays broken until the same file is restored again; anything else is finished now.
             if (marker.broken) throw RestoreException(RestoreFailure.PARTIAL)
-            finishGuarded()
+            try {
+                finishGuarded()
+            } catch (e: RestoreException) {
+                // An INCOMPLETE that fails again and again must not say "close and reopen" forever: the third time it is PARTIAL.
+                if (e.failure != RestoreFailure.INCOMPLETE) throw e
+                val failures = marker.failures + 1
+                if (failures < MAX_FINISH_FAILURES) {
+                    readMarker()?.let { writeMarker(Marker(it.nonce, it.validated, it.swapped, it.broken, failures)) }
+                    throw e
+                }
+                readMarker()?.let { writeMarker(Marker(it.nonce, it.validated, it.swapped, broken = true, failures = failures)) }
+                throw RestoreException(RestoreFailure.PARTIAL).also { it.addSuppressed(e) }
+            }
         } else {
             discardMarker()
             wipeStage()
@@ -643,6 +674,7 @@ class BackupRestorer(
                     .put("validated", m.validated)
                     .put("swapped", m.swapped)
                     .put("broken", m.broken)
+                    .put("failures", m.failures)
                     .toString()
                     .toByteArray(),
             )
@@ -670,6 +702,7 @@ class BackupRestorer(
         const val CHUNK = 8 * 1024
         const val PERCENT = 100L
         const val NEW_RECEIPTS = "receipts-new"
+        const val MAX_FINISH_FAILURES = 3
         const val SETTINGS_FILE = "settings.json"
         const val KEY_FILE = "local-id.key"
         const val VALIDATED_FILE = "validated.json"

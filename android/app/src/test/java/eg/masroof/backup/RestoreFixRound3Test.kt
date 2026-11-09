@@ -6,7 +6,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
-import androidx.work.ListenableWorker
 import eg.masroof.core.UserDate
 import eg.masroof.data.auth.EraseLock
 import eg.masroof.data.backup.BackupRestorer
@@ -19,8 +18,6 @@ import eg.masroof.data.backup.RestoreSources
 import eg.masroof.data.backup.RestoreState
 import eg.masroof.data.goals.GoalInput
 import eg.masroof.data.wealth.WealthValidation
-import eg.masroof.ingest.Disposition
-import eg.masroof.ingest.intakeResult
 import eg.masroof.ui.bills.parseDate
 import eg.masroof.ui.settings.RestorePendingBannerContent
 import eg.masroof.ui.theme.MasroofTheme
@@ -103,14 +100,6 @@ class RestoreFixRound3Test {
         }
 
     // ---- MAJOR 1: never drop ---------------------------------------------------------------------------------------------------
-
-    @Test
-    fun `REQ-OPS-178 a deferred intake is retried for days and does not use the database retry budget`() {
-        assertEquals(ListenableWorker.Result.retry(), runBlocking { intakeResult(1) { Disposition.DEFERRED } })
-        assertEquals(ListenableWorker.Result.retry(), runBlocking { intakeResult(39) { Disposition.DEFERRED } })
-        assertEquals(ListenableWorker.Result.failure(), runBlocking { intakeResult(40) { Disposition.DEFERRED } })
-        assertEquals(ListenableWorker.Result.success(), runBlocking { intakeResult(1) { Disposition.RECORDED } })
-    }
 
     @Test
     fun `REQ-OPS-178 while a restore marker exists the banner is up, and finishing it takes it down`() {

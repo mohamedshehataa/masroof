@@ -645,21 +645,27 @@ class SmsUploader
 /** After this many tries a message the database keeps refusing is given up on (its text leaves the WorkManager input with the job). */
 internal const val MAX_INTAKE_ATTEMPTS = 10
 
-/** A deferred message (restore unfinished) has its own, much longer cap: about six days at WorkManager's five-hour backoff ceiling. */
-internal const val MAX_DEFERRED_ATTEMPTS = 40
-
 /**
  * Turns the outcome of one intake into the job result: a database that cannot write (full disk, locked) wrote nothing, so the job
  * is tried again later with its input intact; any other failure is final. Nothing here touches the network.
  */
 internal suspend fun intakeResult(
     attempt: Int,
+    requeue: () -> Unit = {},
     accept: suspend () -> Disposition,
 ): ListenableWorker.Result =
     try {
         if (accept() == Disposition.DEFERRED) {
-            // A restore is unfinished: the message waits in the job (WorkManager's backoff tops out at hours), for days, then is given up.
-            if (attempt < MAX_DEFERRED_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+            // A restore is unfinished: the message waits in a FRESH job (same input, delayed), so a deferral is never an attempt and has
+            // no cap while the marker exists (the banner tells the user). Only if the new job cannot be queued is this one retried.
+            try {
+                requeue()
+                ListenableWorker.Result.success()
+            } catch (
+                @Suppress("TooGenericExceptionCaught", "SwallowedException") _: RuntimeException,
+            ) {
+                ListenableWorker.Result.retry()
+            }
         } else {
             ListenableWorker.Result.success()
         }
@@ -686,7 +692,24 @@ class SmsIntakeWorker
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
             // The entry is in Room when this returns: nothing is queued, scheduled or sent (ADR-0009 D3/D7).
-            return intakeResult(runAttemptCount) { pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L))) }
+            return intakeResult(runAttemptCount, requeue = ::requeueDeferred) {
+                pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L)))
+            }
+        }
+
+        /** A fresh job with the same input after a delay: a restore is unfinished, so this message waits without using up an attempt. */
+        private fun requeueDeferred() {
+            val request =
+                OneTimeWorkRequestBuilder<SmsIntakeWorker>()
+                    .addTag(SMS_INTAKE_TAG)
+                    .setInputData(inputData)
+                    .setInitialDelay(DEFER_MINUTES, java.util.concurrent.TimeUnit.MINUTES)
+                    .build()
+            WorkManager.getInstance(applicationContext).enqueue(request)
+        }
+
+        private companion object {
+            const val DEFER_MINUTES = 30L
         }
     }
 
