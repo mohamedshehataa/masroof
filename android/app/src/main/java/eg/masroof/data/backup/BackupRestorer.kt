@@ -388,7 +388,7 @@ class BackupRestorer(
     private val recovery = RestoreRecovery(env)
     private val disk = RestoreDisk(env.hooks)
 
-    /** Every staged file is fsynced after its last write, then the folders, all BEFORE Confirm is shown (the journal will point at them). */
+    /** Every staged file is fsynced after its last write, then the folders, all BEFORE Confirm is shown. */
     private fun syncStaging(dir: File) {
         dir.walkTopDown().filter { it.isFile }.forEach { disk.fsyncFile(it) }
         dir
@@ -400,7 +400,7 @@ class BackupRestorer(
         disk.fsyncDir(env.stageRoot)
     }
 
-    /** Confirm: the durable half (journal, commit point, forward-only finish). Maps the outcome to a [RestoreException]; a kill passes through. */
+    /** Confirm: the durable half (journal, commit point, forward-only finish). Maps the outcome to a [RestoreException]. */
     suspend fun apply(staged: StagedRestore) = outcome(recovery.apply(staged))
 
     /** App start (sweeps unreferenced staging) or the banner's Finish. */
@@ -410,7 +410,7 @@ class BackupRestorer(
 
     fun journalRead(): JournalRead = recovery.journalRead()
 
-    /** PARTIAL exit 3: keeps the restored data as it is (journal and staging deleted, the current key kept). False when it does not apply. */
+    /** PARTIAL exit 3: keeps the restored data as it is (journal and staging deleted, current key kept). False if it does not apply. */
     fun keepAsIs(): Boolean = recovery.keepAsIs()
 
     /** Deletes only this session's own staging (Cancel, a failed check, picking again): a journal slot's staging is never touched. */

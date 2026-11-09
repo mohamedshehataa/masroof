@@ -1,3 +1,5 @@
+@file:Suppress("ComplexCondition") // the strict parse checks several fields in one condition
+
 package eg.masroof.data.backup
 
 import org.json.JSONException
@@ -84,7 +86,7 @@ sealed interface Decision {
     data object Unreadable : Decision
 }
 
-/** Where the phone's own commit marker stands: A is `PRAGMA application_id`. This is the pure function the tests use as an oracle (§4.2). */
+/** What to do with a journal given A = `PRAGMA application_id`: the pure function the tests use as an oracle (design 4.2). */
 fun decide(
     read: JournalRead,
     a: Int,
@@ -324,7 +326,7 @@ class RestoreJournal(
         const val MAX_BYTES = 4096L
 
         /**
-         * Anything that is not exactly a version-2 journal is [JournalRead.Corrupt]: exact JSON types (no coercion), and the parsed value must
+         * Anything that is not exactly a version-2 journal is [JournalRead.Corrupt]: exact JSON types (no coercion), and the parsed value
          * re-encode to the very same text, which rejects unknown keys, duplicate keys, other key order and extra whitespace in one check.
          */
         fun parse(text: String): JournalRead {

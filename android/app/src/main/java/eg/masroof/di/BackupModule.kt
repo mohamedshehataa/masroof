@@ -54,8 +54,8 @@ abstract class BackupModule {
                     db = RoomRestoreDatabase(db),
                     settings = AndroidRestoreSettings(context, answers),
                     // This phone's Keystore seals the restored key; the file's bytes are never stored as they are.
-                    // TODO(STORY-182): bind to the no-mint LocalIdKey (install via LocalKeystore). The TinkKeystore-based key resets itself on a transient
-                    // failure, so it is NOT used here; until 182 merges the key step fails (INCOMPLETE) rather than risk a silent replacement.
+                    // TODO(STORY-182): bind to the no-mint LocalIdKey (install via LocalKeystore). TinkKeystore resets itself on a
+                    // transient failure, so it is NOT used; until 182 merges the key step fails (INCOMPLETE), never a silent replacement.
                     keys = LocalIdKeyStore { error("TODO(STORY-182): local-id key store not bound yet") },
                     epoch = { eraseLock.epoch },
                     receiptsDir = receiptsDir,

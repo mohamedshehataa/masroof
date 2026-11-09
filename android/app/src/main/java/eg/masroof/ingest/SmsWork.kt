@@ -216,7 +216,7 @@ class SmsPipeline
                 android.util.Log.i("SmsIntake", "intake deferred: restore pending")
                 return Disposition.DEFERRED
             }
-            // Makes sure the key exists (the wipe race below); the id that is stored is computed under the lock (a restore may change the key).
+            // Makes sure the key exists (the wipe race below); the stored id is computed under the lock (a restore may change the key).
             var id = LocalIdHasher.id(idKey.get(), message)
             if (!gate.isOpen()) {
                 // A wipe raced us and the key may have been recreated after it: forget it again.

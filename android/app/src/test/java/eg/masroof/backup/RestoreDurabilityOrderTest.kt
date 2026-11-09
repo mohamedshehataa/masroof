@@ -123,7 +123,7 @@ class RestoreDurabilityOrderTest {
     }
 }
 
-/** A reference implementation of the LocalIdKeyStore port over an AEAD, used to run the contract (design section 5) until STORY-182's binding lands. */
+/** A reference LocalIdKeyStore over an AEAD, to run the contract (design section 5) until STORY-182 binds the real one. */
 class ReferenceKeyStore(
     private val aead: () -> Aead,
     private val storage: MutableMap<String, ByteArray>,

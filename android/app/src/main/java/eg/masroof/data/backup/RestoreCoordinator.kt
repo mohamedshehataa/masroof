@@ -100,7 +100,7 @@ class WorkRestoreBlockers
 /**
  * Runs the restore flow in the application scope, so leaving the screen cannot cancel a restore half way. The SESSION (one file being
  * picked, checked and confirmed) lives here in memory and never reads or writes the journal until Confirm; the DURABLE state (journal plus
- * `application_id`) is owned by [RestoreRecovery]. A pick, a wrong passphrase, a failed check or a Cancel therefore never change an unfinished
+ * `application_id`) is owned by [RestoreRecovery]. A pick, a wrong passphrase, a failed check or a Cancel never change an unfinished
  * restore. Everything durable runs under the erase lock, the restore flag and NonCancellable, and never throws past this class.
  */
 @Singleton
@@ -136,7 +136,7 @@ class RestoreCoordinator
         private var job: Job? = null
         private var startJob: Job? = null
 
-        /** The system picker returned. Null (cancelled) changes nothing and reads nothing. Only the header is read; the journal is never touched. */
+        /** The system picker returned. Null (cancelled) reads nothing. Only the header is read; the journal is never touched. */
         fun onPicked(picked: Uri?) {
             if (picked == null || mutableState.value is RestoreState.Checking || mutableState.value is RestoreState.Restoring) return
             dropSession()
@@ -173,7 +173,7 @@ class RestoreCoordinator
                     startJob?.join()
                     mutableState.value =
                         try {
-                            // From here to Done, Cancel or a failure the restore flag is held: intake is deferred (recorded once after Done).
+                            // From here to Done, Cancel or a failure the restore flag is held: intake is deferred.
                             acquire()
                             if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
                             val result =
@@ -209,7 +209,7 @@ class RestoreCoordinator
                         withContext(NonCancellable) {
                             lock.mutex.withLock {
                                 // The restore flag has been held since Checking (acquire): intake is deferred, so nothing lands in the DB
-                                // that is about to be replaced. A backup or scan that started since Staged makes this BUSY (checked again here).
+                                // that is about to be replaced. A backup or scan started since Staged makes this BUSY (checked again here).
                                 if (blockers.busy()) throw RestoreException(RestoreFailure.BUSY)
                                 restorer.apply(pendingRestore)
                             }
@@ -312,7 +312,7 @@ class RestoreCoordinator
         }
 
         /**
-         * Every recovery (app start and Finish) runs here: under the restore flag (so a backup, the SMS pipeline and the others stand aside),
+         * Every recovery (app start and Finish) runs here: under the restore flag (so a backup and the pipeline stand aside),
          * shielded from cancellation, never letting an exception out. The caller holds the erase lock.
          */
         private suspend fun recoverCore(atStart: Boolean): RestoreOutcome =

@@ -42,7 +42,7 @@ object ReceiptSniffer {
     ) = text.indices.all { this[at + it].toInt() == text[it].code }
 }
 
-/** Why a file was not stored. [RESTORE_PENDING]: a restore is running or unfinished; the receipts directory is about to be replaced (STORY-184). */
+/** Why a file was not stored. [RESTORE_PENDING]: a restore is running or unfinished (STORY-184), so receipts wait. */
 enum class Refusal { UNSUPPORTED, TOO_LARGE, TOO_MANY_PAGES, PDF_UNREADABLE, IMAGE_UNREADABLE, QUOTA, RESTORE_PENDING }
 
 sealed interface AttachResult {

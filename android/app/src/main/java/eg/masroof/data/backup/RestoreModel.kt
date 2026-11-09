@@ -219,7 +219,7 @@ internal fun readHeaderBytes(source: java.io.InputStream): ByteArray {
     return buf.copyOf(n)
 }
 
-/** Where a restore stages and the journal that names an unfinished one; Erase deletes the journal FIRST, then the staging, then the old receipts. */
+/** Where a restore stages and the journal that names an unfinished one; Erase deletes the journal FIRST. */
 object RestoreStage {
     const val FOLDER = "restore-stage"
     const val JOURNAL = "restore-journal.json"

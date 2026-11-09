@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The oracle for design section 4.2 (REQ-OPS-179): every journal read x committed x pending x application_id, against an independent `when`. */
+/** The oracle for design 4.2 (REQ-OPS-179): every journal read x committed x pending x application_id against an independent `when`. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class RestoreDecideTest {

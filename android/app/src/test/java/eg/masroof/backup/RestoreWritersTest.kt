@@ -43,7 +43,7 @@ import java.io.File
 import java.time.Clock
 import java.time.ZoneOffset
 
-/** The writers that stand aside while a restore is pending (design section 5): the backfill (R11), the receipt attach (R14) and the purge. */
+/** Writers that stand aside while a restore is pending (design section 5): the backfill (R11), receipt attach (R14), the purge. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class RestoreWritersTest {

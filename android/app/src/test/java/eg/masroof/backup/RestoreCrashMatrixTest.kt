@@ -1,3 +1,5 @@
+@file:Suppress("CyclomaticComplexMethod", "ComplexCondition") // the invariant checker states many independent conditions
+
 package eg.masroof.backup
 
 import android.content.Context

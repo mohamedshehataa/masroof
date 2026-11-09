@@ -41,7 +41,7 @@ interface RestoreDatabase {
 
     /**
      * Replaces every table in ONE transaction, run with `PRAGMA synchronous = FULL` so the commit is durable against power loss: all backup
-     * and pipeline tables are emptied, then each of [tables] (table name to its JSON-lines file, sorted by name) is inserted while its bytes
+     * and pipeline tables are emptied, then each of [tables] (table name to its JSON-lines file, by name) is inserted while its bytes
      * are hashed, the combined hash must equal [expectedTablesSha] (else the transaction rolls back), `application_id` is set to [gen] (the
      * commit point), and [beforeCommit] runs last. A failure rolls it all back.
      */

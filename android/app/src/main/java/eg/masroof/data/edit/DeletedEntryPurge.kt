@@ -73,7 +73,7 @@ class DeletedEntryPurger
         suspend fun purge(): Int {
             val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(PURGE_AFTER_DAYS)
             return eraseLock.mutex.withLock {
-                // While a restore runs or is unfinished nothing is hashed with a possibly stale key and no file is deleted: the daily job retries.
+                // While a restore runs or is unfinished nothing is hashed with a stale key and no file is deleted: the daily job retries.
                 if (restoreGate.blocked()) return@withLock 0
                 val files = db.expenses().receiptsDeletedBefore(cutoff)
                 rememberPurged(cutoff)

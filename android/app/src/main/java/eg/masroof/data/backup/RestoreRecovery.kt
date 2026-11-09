@@ -1,4 +1,11 @@
-@file:Suppress("TooGenericExceptionCaught", "ThrowsCount", "TooManyFunctions") // one named outcome per failure; a kill must pass through
+@file:Suppress(
+    "TooGenericExceptionCaught",
+    "ThrowsCount",
+    "TooManyFunctions",
+    "SwallowedException",
+    "CyclomaticComplexMethod",
+    "ComplexCondition",
+) // one named outcome per failure; a kill must pass through
 
 package eg.masroof.data.backup
 
@@ -55,7 +62,7 @@ class RestoreRecovery(
         disk.deleteRecursively(dir, RestoreOp.STAGE_DELETE)
     }
 
-    /** Best effort on flash (file-based encryption is the control): overwrite the raw key with zeros before its file goes; never through a link. */
+    /** Best effort on flash (file-based encryption is the control): zero the raw key before its file goes; never through a link. */
     private fun zeroKey(dir: File) {
         val key = File(dir, KEY_FILE)
         if (disk.isRegular(key)) runCatching { key.writeBytes(ByteArray(key.length().toInt())) }
