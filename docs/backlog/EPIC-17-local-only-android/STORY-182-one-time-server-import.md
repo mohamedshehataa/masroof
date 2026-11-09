@@ -93,6 +93,11 @@ None.
 ## Design notes (architect)
 ADR-0009 D6. Adding budgets and settings to the import list is a scope addition recorded in the EPIC-17 README.
 
+Local-id key availability (REQ-SEC-065, loop 5): `docs/design/STORY-182-local-id-key-policy.md` is the binding design: pure
+`decide()` table as the test oracle, durable per-keyset failure episodes with bounded escalation (no mint on a transient
+failure; a permanent loss resolves within 26 h worst case), intake holds by requeue (never dropped), the session keyset
+never reset while the legacy `k` exists, and a generated kill-at-every-write fault matrix.
+
 ## Dependencies
 STORY-173 (duplicate card), STORY-181 (local budgets to import into)
 
@@ -111,3 +116,4 @@ STORY-173 (duplicate card), STORY-181 (local budgets to import into)
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D6) |
+| 2026-11-09 | 3 design | architect | DESIGN_READY - local-id key availability policy after loop 4 (docs/design/STORY-182-local-id-key-policy.md) |
