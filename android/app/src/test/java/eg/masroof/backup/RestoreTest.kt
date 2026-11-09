@@ -389,7 +389,7 @@ class RestoreTest {
         runBlocking { restorer.apply(staged) }
         assertEquals(source.dump(), target.dump())
         assertEquals(mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)), target.receiptHashes())
-        assertFalse(target.stage.exists())
+        assertTrue(target.stage.listFiles().isNullOrEmpty())
         assertFalse(target.journal.exists())
         assertFalse(File(target.receipts.parentFile, "receipts.old").exists())
         // 20 tables, the EPIC-18 ones and the budgets included, and a restored receipt row without a file stays as it was

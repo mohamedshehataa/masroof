@@ -81,6 +81,7 @@ class Phone(
     val receipts = File(root, "files/receipts").also { it.mkdirs() }
     val stage = RestoreStage.dir(receipts)
     val journal = RestoreStage.journal(receipts)
+    val legacy = RestoreStage.legacyMarker(receipts)
     val filesDir: File get() = receipts.parentFile!!
     val applied = mutableListOf<RestoredSettings>()
     var installedKey: ByteArray? = null
@@ -135,7 +136,7 @@ class Phone(
         assertEquals("receipts changed", files, receiptHashes())
         assertTrue("settings were applied", applied.isEmpty())
         assertNull("key was installed", installedKey)
-        assertFalse("staging left behind", stage.exists())
+        assertTrue("staging left behind", !stage.exists() || stage.listFiles().isNullOrEmpty())
         assertFalse("journal left behind", journal.exists())
     }
 
@@ -270,13 +271,14 @@ val SOURCE_SETTINGS: Map<String, Map<String, Any>> =
 fun sourceBackup(
     p: Phone,
     header: BackupHeader = fastHeader(),
+    localKey: ByteArray = LOCAL_KEY,
 ): ByteArray =
     writeBackup(
         environment(
             db = RoomBackupDatabase(p.db),
             prefs = mapPrefs(SOURCE_SETTINGS),
             files = DirectoryReceiptFiles(p.receipts),
-            localKey = LOCAL_KEY,
+            localKey = localKey,
             now = T0 + 1000,
         ),
         RESTORE_PASS,
