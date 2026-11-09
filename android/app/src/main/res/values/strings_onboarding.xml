@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-187: the first-run guide (no sign-in), the Wallet card and the Settings entry. -->
+    <string name="onb_step_of">Step %1$s of %2$s</string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_continue">Continue</string>
+    <string name="onb_open_wallet">Open Wallet</string>
+    <string name="onb_open_app_settings">Open app settings</string>
+    <string name="onb_lang_title">Choose your language</string>
+    <string name="onb_lang_body">The whole app switches at once. You can change it later in Settings.</string>
+    <string name="onb_lang_arabic" translatable="false">العربية</string>
+    <string name="onb_lang_english" translatable="false">English</string>
+    <string name="onb_phone_title">Everything stays on this phone</string>
+    <string name="onb_phone_body">There is no account and no server. Your entries, receipts and settings are stored only on this phone. To keep a safe copy, use Back up now in Settings: it saves one file protected by a passphrase you choose.</string>
+    <string name="onb_sms_title">Record expenses from bank SMS</string>
+    <string name="onb_sms_body">When an SMS arrives from a bank or wallet sender you allow, Masroof turns it into an expense on this phone. The text is never sent anywhere. Android will now ask you to allow receiving SMS.</string>
+    <string name="onb_sms_turn_on">Turn on SMS capture</string>
+    <string name="onb_sms_on">SMS capture is on</string>
+    <string name="onb_sms_denied">SMS capture is off - you can turn it on in Settings</string>
+    <string name="onb_past_title">Add your past SMS</string>
+    <string name="onb_past_body">Masroof can read the bank and wallet messages already in your inbox and turn them into entries. It happens in the background on this phone, and you can keep going meanwhile. Choose how far back to read.</string>
+    <string name="onb_past_start">Start reading</string>
+    <string name="onb_past_allow_start">Allow and start reading</string>
+    <string name="onb_past_denied">Past messages can\'t be read without permission, so reading did not start. You can start it later in Settings.</string>
+    <string name="onb_ntf_title">Read bank-app notifications</string>
+    <string name="onb_ntf_body">Some bank apps send a notification instead of an SMS. Android will open a screen where you allow Masroof to read notifications; Masroof only looks at the banking apps you allow, on this phone.</string>
+    <string name="onb_ntf_open">Open notification access</string>
+    <string name="onb_ntf_enabled">Enabled</string>
+    <string name="onb_ntf_not_enabled">Not enabled</string>
+    <string name="onb_member_title">Who else spends in this household?</string>
+    <string name="onb_member_body">Optional. Add one name so you can tell who paid. It is only a label on this phone, not an account.</string>
+    <string name="onb_member_label">Name</string>
+    <string name="onb_member_error">Enter a name up to 40 characters</string>
+    <string name="onb_done_title">You\'re all set</string>
+    <string name="onb_done_body">Open Wallet to see your entries. You can run this guide again any time from Settings.</string>
+    <string name="onb_card_title">Finish setup</string>
+    <string name="onb_card_body">A few quick steps to turn on SMS capture and read your past messages.</string>
+    <string name="onb_card_open">Continue setup</string>
+    <string name="onb_card_dismiss">Dismiss</string>
+    <string name="onb_settings_title">Setup guide</string>
+    <string name="onb_settings_body">Go through the setup steps again: language, SMS, notifications and the household.</string>
+    <string name="onb_settings_open">Open setup guide</string>
+</resources>

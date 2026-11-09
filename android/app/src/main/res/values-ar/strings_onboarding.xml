@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STORY-187: دليل أول تشغيل (من غير تسجيل دخول) -->
+    <string name="onb_step_of">الخطوة %1$s من %2$s</string>
+    <string name="onb_skip">تخطّي</string>
+    <string name="onb_continue">كمّل</string>
+    <string name="onb_open_wallet">افتح المحفظة</string>
+    <string name="onb_open_app_settings">افتح إعدادات التطبيق</string>
+    <string name="onb_lang_title">اختار لغتك</string>
+    <string name="onb_lang_body">التطبيق كله بيتغيّر على طول. وتقدر تغيّرها بعدين من الإعدادات.</string>
+    <string name="onb_phone_title">كل حاجة بتفضل على موبايلك</string>
+    <string name="onb_phone_body">مفيش حساب ومفيش سيرفر. مصاريفك وإيصالاتك وإعداداتك متخزّنة على الموبايل ده بس. ولو عايز نسخة احتياطية، استخدم «نسخ احتياطي دلوقتي» من الإعدادات: بتحفظ ملف واحد محمي بكلمة سر إنت اللي بتختارها.</string>
+    <string name="onb_sms_title">سجّل المصاريف من رسائل البنك</string>
+    <string name="onb_sms_body">لما توصل رسالة من بنك أو محفظة إنت سامح بيها، مصروف بيحوّلها لمصروف على الموبايل. نص الرسالة عمره ما بيتبعت لأي مكان. أندرويد هيسألك دلوقتي تسمح باستقبال الرسائل.</string>
+    <string name="onb_sms_turn_on">شغّل تسجيل الرسائل</string>
+    <string name="onb_sms_on">تسجيل الرسائل شغّال</string>
+    <string name="onb_sms_denied">تسجيل الرسائل مقفول - تقدر تشغّله من الإعدادات</string>
+    <string name="onb_past_title">ضيف رسايلك القديمة</string>
+    <string name="onb_past_body">مصروف يقدر يقرا رسايل البنوك والمحافظ اللي في الوارد ويحوّلها لمصاريف. ده بيحصل في الخلفية على الموبايل، وتقدر تكمّل شغلك في الوقت ده. اختار هيرجع لورا قد إيه.</string>
+    <string name="onb_past_start">ابدأ القراءة</string>
+    <string name="onb_past_allow_start">اسمح وابدأ القراءة</string>
+    <string name="onb_past_denied">الرسايل القديمة مش هتتقرا من غير إذن، فالقراءة ما بدأتش. تقدر تبدأها بعدين من الإعدادات.</string>
+    <string name="onb_ntf_title">اقرا إشعارات تطبيقات البنوك</string>
+    <string name="onb_ntf_body">بعض تطبيقات البنوك بتبعت إشعار بدل الرسالة. أندرويد هيفتح شاشة تسمح فيها لمصروف يقرا الإشعارات، ومصروف بيبص على تطبيقات البنوك اللي إنت سامح بيها بس، على الموبايل ده.</string>
+    <string name="onb_ntf_open">افتح صلاحية الإشعارات</string>
+    <string name="onb_ntf_enabled">مفعّلة</string>
+    <string name="onb_ntf_not_enabled">مش مفعّلة</string>
+    <string name="onb_member_title">مين تاني بيصرف في البيت؟</string>
+    <string name="onb_member_body">اختياري. ضيف اسم واحد عشان تعرف مين اللي دفع. ده مجرد اسم على الموبايل ده، مش حساب.</string>
+    <string name="onb_member_label">الاسم</string>
+    <string name="onb_member_error">اكتب اسم لحد ٤٠ حرف</string>
+    <string name="onb_done_title">خلصنا</string>
+    <string name="onb_done_body">افتح المحفظة وشوف مصاريفك. وتقدر تعيد الدليل ده في أي وقت من الإعدادات.</string>
+    <string name="onb_card_title">كمّل الإعداد</string>
+    <string name="onb_card_body">كام خطوة سريعة لتشغيل تسجيل الرسائل وقراءة رسايلك القديمة.</string>
+    <string name="onb_card_open">كمّل الإعداد</string>
+    <string name="onb_card_dismiss">إخفاء</string>
+    <string name="onb_settings_title">دليل الإعداد</string>
+    <string name="onb_settings_body">راجع خطوات الإعداد تاني: اللغة والرسائل والإشعارات والبيت.</string>
+    <string name="onb_settings_open">افتح دليل الإعداد</string>
+</resources>

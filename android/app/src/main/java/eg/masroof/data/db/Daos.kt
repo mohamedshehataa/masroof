@@ -535,6 +535,24 @@ abstract class LookupDao {
     @Query("SELECT * FROM member ORDER BY sortOrder, displayName")
     abstract fun observeMembers(): Flow<List<MemberEntity>>
 
+    @Query("SELECT COUNT(*) FROM member WHERE lower(displayName) = lower(:name)")
+    abstract suspend fun memberNamedCount(name: String): Int
+
+    @Query("SELECT COALESCE(MAX(sortOrder), 0) FROM member")
+    abstract suspend fun maxMemberSort(): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertMember(member: MemberEntity)
+
+    /** Adds a household member after the existing ones (first-run guide, STORY-187); a name already there is not added twice. */
+    @Transaction
+    open suspend fun addMember(
+        id: String,
+        name: String,
+    ) {
+        if (memberNamedCount(name) == 0) insertMember(MemberEntity(id, name, maxMemberSort() + 1))
+    }
+
     @Query("SELECT * FROM account ORDER BY label")
     abstract fun observeAccounts(): Flow<List<AccountEntity>>
 
