@@ -176,6 +176,7 @@ class RestoreCoordinator
         private val sessionLock = Any()
         private var sessionId = 0L
 
+        @Suppress("ThrowsCount") // one named refusal per reason
         fun onPassphrase(passphrase: String) {
             val mine: Long
             val picked: Uri
@@ -238,6 +239,7 @@ class RestoreCoordinator
             }
         }
 
+        @Suppress("ThrowsCount") // one named refusal per reason
         fun onConfirm() {
             val pendingRestore: StagedRestore
             val mine: Long
@@ -417,7 +419,7 @@ class RestoreCoordinator
             }
         }
 
-        /** After three failed attempts at the KEY step: completes the restore with the current key (journal and staging deleted, gate open). */
+        /** After three failed attempts at the KEY step: completes the restore with the current key (journal, staging gone, gate open). */
         fun keepCurrentKey() {
             scope.launch(io) {
                 startJob?.join()
@@ -430,7 +432,7 @@ class RestoreCoordinator
             }
         }
 
-        /** "Erase all data" ran: nothing of a restore is left, so the banner and the session go (the next start finds no journal either). */
+        /** "Erase all data" ran: nothing of a restore is left, so the banner and the session go. */
         override fun onErased() {
             reset()
             mutablePending.value = PendingState.None

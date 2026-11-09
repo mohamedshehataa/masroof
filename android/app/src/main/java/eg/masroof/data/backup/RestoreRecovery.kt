@@ -446,7 +446,7 @@ class RestoreRecovery(
     }
 
     /**
-     * The third way out of PARTIAL: "keep the restored data as it is". Allowed only when [canKeepAsIs]. Every staged receipt that is a regular
+     * The third way out of PARTIAL: "keep the restored data as it is" (only when [canKeepAsIs]). Every staged receipt that is a regular
      * file and belongs to a restored receipt row is moved into place (so the restored rows do not point at missing files); the rest is
      * dropped. Deletes the journal and the staging; the settings and key stay as they are now (the current key is kept).
      */

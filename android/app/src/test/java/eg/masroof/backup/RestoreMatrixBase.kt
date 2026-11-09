@@ -294,7 +294,7 @@ abstract class RestoreMatrixBase {
                 p.receiptHashes() == target.receipts &&
                 p.applied.lastOrNull()?.stores == target.settings &&
                 p.installedKey?.toList() == target.key
-        // A receipt damaged between its verification and its rename is the accepted L5 race of design section 8 (the file is replaced, not applied)
+        // A receipt damaged between its verification and its rename is the accepted L5 race (design section 8)
         val receiptRace = currentVictim?.startsWith("receipts") == true && read == JournalRead.Absent
         if (a == gen && !fully && !receiptRace) {
             val named =
