@@ -250,6 +250,7 @@ private fun reasonLabel(reason: String): String =
             "unconfirmed" -> R.string.review_reason_unconfirmed
             "rejected" -> R.string.review_reason_rejected
             "ignored_card" -> R.string.review_reason_ignored_card
+            "possible_repeat" -> R.string.review_reason_possible_repeat
             else -> R.string.review_reason_other
         },
     )

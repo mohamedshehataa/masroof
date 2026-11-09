@@ -36,8 +36,8 @@ import kotlinx.coroutines.flow.first
  *
  * Nothing is classified by hand only: BackupPrefsGuardTest scans the sources for every preference key and file and fails until each
  * one is on [DATASTORE_KEYS] / [SHARED_KEYS] (in) or [OUT_KEYS] / [OUT_FILES] (out, with the reason).
- * STORY-186's `masroof_backfill`: when it lands, its
- * 30-day handled-ids memory is keyed with the local-id key the backup carries, so it goes IN; its run state and resume position go OUT.
+ * STORY-186's `masroof_backfill` (its 30-day memory is sealed with the device-bound LocalKeystore, so a restore on another phone could
+ * not read it) and `masroof_local_keyset` are OUT.
  */
 object BackupPrefsInventory {
     const val STORE_SETTINGS = "datastore:settings"
@@ -72,6 +72,10 @@ object BackupPrefsInventory {
             "masroof_reminders" to "which reminders were shown; a repeat reminder is harmless",
             "masroof_backup" to "describes this phone's last backup file, not the data",
             "masroof_server_import" to "state of the one-time server import (STORY-182): ids and flags, meaningless on another phone",
+            "masroof_backfill" to
+                "device-bound sealed memory; after a restore the 30-day memory starts empty, " +
+                "recorded entries still dedupe by their HMAC ids",
+            "masroof_local_keyset" to "device-bound key material of the phone's own LocalKeystore, never exported",
         )
 
     /** Per store (`datastore:<name>` / `shared:<file>`): keys that are deliberately not in the backup, with the reason. */
@@ -92,6 +96,21 @@ object BackupPrefsInventory {
             "shared:masroof_capture" to mapOf("erase_stage" to "erase-in-progress state"),
             "shared:masroof_capture_key" to mapOf("k" to "sealed local-id key; travels as keys/local-id.key"),
             "shared:masroof_ui" to mapOf("voice_online_notice_seen" to "one-time hint, shown again after a restore"),
+            "shared:masroof_local_keyset" to mapOf("master_made" to "device-bound: whether this phone's Keystore made the master key"),
+            "shared:masroof_backfill" to
+                mapOf(
+                    "phase" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "range_key" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "from_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "to_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "total" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "read" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "entries" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "review" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "last_day" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "day_read" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                    "last_id" to "device-bound sealed memory and run state of Read past SMS; a restore starts it empty",
+                ),
             "shared:masroof_backup" to
                 mapOf(
                     "last_at" to "last backup line",
