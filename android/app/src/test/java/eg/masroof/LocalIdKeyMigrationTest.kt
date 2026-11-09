@@ -357,6 +357,37 @@ class LocalIdKeyMigrationTest {
     }
 
     @Test
+    fun `REQ-SEC-065 an I-O error while sealing or probing never escapes as a raw exception`() {
+        val brokenDisk =
+            object : Aead {
+                override fun encrypt(
+                    plaintext: ByteArray,
+                    associatedData: ByteArray,
+                ): ByteArray = throw IOException("disk")
+
+                override fun decrypt(
+                    ciphertext: ByteArray,
+                    associatedData: ByteArray,
+                ): ByteArray = throw IOException("disk")
+            }
+        // sealing a new key (no entry yet)
+        try {
+            key({ brokenDisk }).get()
+            fail("must throw")
+        } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
+            // try later
+        }
+        // an entry that is present while the keyset cannot be read (a non-corrupt I/O error is transient)
+        prefs.map["k_local"] = sealedUnderOtherKeyset()
+        try {
+            key({ brokenDisk }).get()
+            fail("must throw")
+        } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
+            // try later
+        }
+    }
+
+    @Test
     fun `REQ-SEC-065 Erase all data wipes both entries`() {
         legacyKey()
         val k = key()
