@@ -34,6 +34,7 @@ import eg.masroof.R
 import eg.masroof.core.DateFormat
 import eg.masroof.core.DigitStyle
 import eg.masroof.ui.components.SectionCard
+import eg.masroof.ui.onboarding.SetupGuideSection
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.EraseState
 import eg.masroof.ui.viewmodel.SettingsUiState
@@ -46,6 +47,7 @@ fun SettingsRoute(
     onOpenReceipts: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
     onOpenRules: () -> Unit = {},
+    onOpenSetupGuide: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -62,6 +64,7 @@ fun SettingsRoute(
             onToggleLanguage,
         ),
         extra = {
+            SetupGuideSection(onOpenSetupGuide)
             AnalyticsSettingsSection()
             SmsCaptureSection(onOpenReview = onOpenReview)
             BackfillSection()

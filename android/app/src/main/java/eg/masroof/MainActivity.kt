@@ -8,6 +8,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
@@ -70,6 +72,10 @@ import eg.masroof.ui.nav.openIn
 import eg.masroof.ui.nav.openTab
 import eg.masroof.ui.nav.selectedTab
 import eg.masroof.ui.nav.tabOwnerOf
+import eg.masroof.ui.onboarding.FinishSetupCard
+import eg.masroof.ui.onboarding.OnboardingRoute
+import eg.masroof.ui.onboarding.OnboardingViewModel
+import eg.masroof.ui.onboarding.SetupGate
 import eg.masroof.ui.plan.PlanScreen
 import eg.masroof.ui.receipts.ReceiptsListRoute
 import eg.masroof.ui.review.ReviewAddRoute
@@ -221,14 +227,23 @@ class MainActivity : ComponentActivity() {
                         AppLanguage.toggle(this@MainActivity)
                         recreate()
                     },
+                    // the guide's language step: the step reached is already saved, so the recreated activity resumes on it
+                    onSetLanguage = { language ->
+                        if (AppLanguage.current(this@MainActivity) != language) {
+                            AppLanguage.set(this@MainActivity, language)
+                            recreate()
+                        }
+                    },
                 )
             }
         }
     }
 }
 
-// currentBackStack is the only way to read the whole stack (the highlight needs the nearest tab-owned entry under a shared screen).
-@SuppressLint("RestrictedApi")
+/**
+ * The first-run guide (REQ-AND-139) takes the whole screen while it is running; finished, it hands over to the app, which then starts on
+ * Wallet. A phone that already had data gets the "Finish setup" card on Wallet instead and is never forced into the guide.
+ */
 @Composable
 private fun MasroofRoot(
     openReceipts: Boolean,
@@ -236,6 +251,38 @@ private fun MasroofRoot(
     openRoute: String?,
     onRouteOpened: () -> Unit,
     onToggleLanguage: () -> Unit,
+    onSetLanguage: (String) -> Unit,
+) {
+    val onboarding: OnboardingViewModel = hiltViewModel()
+    val progress by onboarding.progress.collectAsState()
+    SetupGate(
+        progress = progress,
+        guide = { OnboardingRoute(progress, onboarding, onSetLanguage) },
+        app = { showSetupCard ->
+            MasroofApp(
+                openReceipts = openReceipts,
+                onReceiptsOpened = onReceiptsOpened,
+                openRoute = openRoute,
+                onRouteOpened = onRouteOpened,
+                onToggleLanguage = onToggleLanguage,
+                showSetupCard = showSetupCard,
+                onboarding = onboarding,
+            )
+        },
+    )
+}
+
+// currentBackStack is the only way to read the whole stack (the highlight needs the nearest tab-owned entry under a shared screen).
+@SuppressLint("RestrictedApi")
+@Composable
+private fun MasroofApp(
+    openReceipts: Boolean,
+    onReceiptsOpened: () -> Unit,
+    openRoute: String?,
+    onRouteOpened: () -> Unit,
+    onToggleLanguage: () -> Unit,
+    showSetupCard: Boolean,
+    onboarding: OnboardingViewModel,
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -297,26 +344,31 @@ private fun MasroofRoot(
     ) { padding ->
         NavHost(nav, startDestination = Tab.Wallet.route, modifier = Modifier.padding(padding)) {
             composable(Tab.Wallet.route) {
-                WalletRoute(
-                    actions =
-                        WalletActions(
-                            onOpenSettings = { nav.navigate(SETTINGS_ROUTE) },
-                            onOpenInsights = { nav.navigate(INSIGHTS_ROUTE) },
-                            onOpenTransactions = { nav.navigate(TRANSACTIONS_ROUTE) },
-                            onOpenExpense = { id -> nav.navigate("edit/$id") },
-                            onAdd = { nav.navigate("add") },
-                            onSayIt = { nav.navigate("add?mic=true") },
-                            onAsk = { openTab(Tab.Ask.route) },
-                            onOpenAccounts = { openIn(Tab.Wealth, ACCOUNTS_ROUTE) },
-                            onOpenWealth = { openTab(Tab.Wealth.route) },
-                            onOpenBills = { openTab(Tab.Bills.route) },
-                            onOpenBudgets = { openTab(Tab.Plan.route) },
-                            onOpenGoals = { openIn(Tab.Plan, GOALS_ROUTE) },
-                            onTurnOnCapture = { nav.navigate(SETTINGS_ROUTE) },
-                            onAddBill = { openIn(Tab.Bills, BILL_ADD_ROUTE) },
-                        ),
-                    onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
-                )
+                Column {
+                    if (showSetupCard) FinishSetupCard(onOpen = onboarding::reopen, onDismiss = onboarding::dismissCard)
+                    Box(Modifier.weight(1f)) {
+                        WalletRoute(
+                            actions =
+                                WalletActions(
+                                    onOpenSettings = { nav.navigate(SETTINGS_ROUTE) },
+                                    onOpenInsights = { nav.navigate(INSIGHTS_ROUTE) },
+                                    onOpenTransactions = { nav.navigate(TRANSACTIONS_ROUTE) },
+                                    onOpenExpense = { id -> nav.navigate("edit/$id") },
+                                    onAdd = { nav.navigate("add") },
+                                    onSayIt = { nav.navigate("add?mic=true") },
+                                    onAsk = { openTab(Tab.Ask.route) },
+                                    onOpenAccounts = { openIn(Tab.Wealth, ACCOUNTS_ROUTE) },
+                                    onOpenWealth = { openTab(Tab.Wealth.route) },
+                                    onOpenBills = { openTab(Tab.Bills.route) },
+                                    onOpenBudgets = { openTab(Tab.Plan.route) },
+                                    onOpenGoals = { openIn(Tab.Plan, GOALS_ROUTE) },
+                                    onTurnOnCapture = { nav.navigate(SETTINGS_ROUTE) },
+                                    onAddBill = { openIn(Tab.Bills, BILL_ADD_ROUTE) },
+                                ),
+                            onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
+                        )
+                    }
+                }
             }
             composable(INSIGHTS_ROUTE) {
                 InsightsRoute(onOpenBudgets = { openTab(Tab.Plan.route) }, onOpenAsk = { openTab(Tab.Ask.route) })
@@ -335,6 +387,7 @@ private fun MasroofRoot(
                     onOpenReceipts = { nav.navigate(RECEIPTS_ROUTE) },
                     onOpenCategories = { nav.navigate(CATEGORIES_ROUTE) },
                     onOpenRules = { nav.navigate(RULES_ROUTE) },
+                    onOpenSetupGuide = onboarding::reopen,
                 )
             }
             composable(CATEGORIES_ROUTE) { CategoriesRoute() }
