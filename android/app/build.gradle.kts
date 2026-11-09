@@ -89,6 +89,8 @@ android {
             System.getProperty("answer.seed")?.let { test.systemProperty("answer.seed", it) }
             // DuplicateGeneratedTest (STORY-173): `-Dduplicate.seed=N`
             System.getProperty("duplicate.seed")?.let { test.systemProperty("duplicate.seed", it) }
+            // The restore crash matrix is one class per scenario: run classes in parallel forks (STORY-184).
+            test.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 3)
         }
     }
 

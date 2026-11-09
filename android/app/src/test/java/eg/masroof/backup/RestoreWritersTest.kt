@@ -149,6 +149,39 @@ class RestoreWritersTest {
         }
 
     @Test
+    fun `REQ-OPS-179 the pipeline itself never marks a message deferred under the lock as handled`() =
+        runTest {
+            val store = BackfillStore(context.getSharedPreferences("restore-writers-handled2", Context.MODE_PRIVATE))
+            var calls = 0
+            val gateOnSecondQuestion = RestoreGate { ++calls == 2 } // open at the early check, blocked under the lock
+            val pipeline =
+                SmsPipeline(
+                    db,
+                    MemorySettings(),
+                    MemoryNotifications(),
+                    clock,
+                    MemoryGate(),
+                    FixedKey,
+                    answers = FakeAnswerPrefs(),
+                    memory = store,
+                    restoreGate = gateOnSecondQuestion,
+                )
+            val message =
+                eg.masroof.ingest.parse.IncomingMessage(
+                    eg.masroof.ingest.parse.CaptureSource.SMS,
+                    "CIB",
+                    purchase(10),
+                    BACKFILL_NOW - BACKFILL_DAY,
+                )
+            assertEquals(eg.masroof.ingest.Disposition.DEFERRED, pipeline.accept(message))
+            val id =
+                eg.masroof.ingest.LocalIdHasher
+                    .id(FixedKey.get(), message)
+            assertTrue("a deferred message is not remembered as handled", !store.handled(id, clock.millis()))
+            assertEquals(eg.masroof.ingest.Disposition.RECORDED, pipeline.accept(message))
+        }
+
+    @Test
     fun `REQ-OPS-179 R14 a receipt attach is refused and the copy deleted while a restore is pending, and works after`() =
         runTest {
             val dir = File(context.filesDir, "writers-receipts-" + System.nanoTime())
