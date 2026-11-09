@@ -85,7 +85,15 @@ made with its date shown (rollback threat accepted). security-reviewer sign-off 
 None.
 
 ## Design notes (architect)
-ADR-0009 D5 "Restore validation".
+ADR-0009 D5 "Restore validation". The interrupted-restore recovery (REQ-OPS-178/179) follows
+`docs/design/STORY-184-restore-recovery.md` exactly: two-slot journal `restore-journal.json` (committed + pending),
+commit point = `application_id == gen` in the replace transaction (synchronous FULL), per-generation staging
+`restore-stage/g<hex>/`, hashes from memory into the journal (no `validated.json`), forward-only finish steps
+(SWAPPING, SWAPPED, SETTINGS_DONE, KEY_DONE), PARTIAL only on non-retryable evidence, an unreadable journal counts as
+committed, and a file-based `RestoreGate` that defers intake, backfill, purge, receipt attach and backup. Key install
+goes through the `LocalIdKeyStore` port (works before and after STORY-182). Test levels: unit (pure `decide` oracle),
+Robolectric integration (crash matrix: every op x kill/IO/disk full/Keystore/corrupt file, double kill), regression
+repros R1-R14. security-reviewer sign-off required (L3, local-id key).
 
 ## Dependencies
 STORY-183
@@ -105,3 +113,7 @@ STORY-183
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot (ADR-0009 D5) |
+| 2026-11-08 | 5 build | android-engineer | restore flow built on branch story/STORY-184-restore-from-backup |
+| 2026-11-09 | 6 verify | qa-verifier + security-reviewer | loops 1-5 FAIL (security L3 APPROVE in round 2); each loop fixed its MAJORs, new ones kept appearing in the interrupted-restore recovery state machine |
+| 2026-11-09 | 8 escalate | orchestrator | BLOCKED - ESCALATIONS LOOP-184 (recovery state machine needs a design pass); code stays on its branch, not merged |
+| 2026-11-09 | 3 design | architect | recovery state machine designed (docs/design/STORY-184-restore-recovery.md) per LOOP-184 option (a); one build + verify loop next |
