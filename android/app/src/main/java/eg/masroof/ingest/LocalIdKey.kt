@@ -2,15 +2,17 @@ package eg.masroof.ingest
 
 import android.content.Context
 import android.util.Base64
-import androidx.core.content.edit
 import com.google.crypto.tink.Aead
+import eg.masroof.data.auth.LocalKeystore
 import eg.masroof.data.auth.RecoveringAead
 import eg.masroof.data.auth.TinkKeystore
+import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.SecureRandom
 
 /** Per-installation secret that keys the local message id. Never uploaded; wiped by "Erase all data" only. */
 interface LocalIdKey {
+    /** 32 bytes, or [LocalIdKeyUnavailableException]: nothing else ever leaves. The caller zeroes the copy. */
     fun get(): ByteArray
 
     fun wipe()
@@ -20,214 +22,407 @@ interface LocalIdKey {
      * that never lived in that keyset just runs it.
      */
     fun detachFromSessionKeyset(destroy: () -> Unit) = destroy()
+
+    /** A restore replaces the key by the user's decision (STORY-184's `LocalIdKeyStore` port). */
+    fun install(key: ByteArray): Unit = throw UnsupportedOperationException("install")
+
+    /** True while an unmoved legacy key is sealed under the SESSION keyset: that keyset must not be reset. */
+    fun dependsOnSessionKeyset(): Boolean = false
 }
 
-/** The two small string stores of the key (SharedPreferences in production; commits are synchronous). */
+/** The small string store of the key (SharedPreferences in production). Writes are CHECKED: a failed commit throws. */
 interface KeyPrefs {
     fun get(name: String): String?
 
-    fun put(
-        name: String,
-        value: String,
-    )
+    fun has(name: String): Boolean = get(name) != null
 
-    fun remove(name: String)
+    /** One atomic update. Throws [IOException] when it did not reach the disk. */
+    fun commit(
+        puts: Map<String, String> = emptyMap(),
+        removes: Set<String> = emptySet(),
+    )
 
     fun clear()
 }
 
+/** A keyset the policy builds an AEAD from. [build] returns the raw primitive and never destroys anything. */
+interface KeysetPort {
+    fun build(fresh: Boolean): Aead
+
+    /** Another witness that the keyset is gone for good (an exception that names it, a missing alias). */
+    fun corroborates(e: Throwable): Boolean
+
+    /** The policy's escalation only: destroy the keyset so the next build makes a new one. */
+    fun recreate()
+}
+
+/** One notification after a key was replaced (design D10). */
+fun interface KeyRenewedNotice {
+    fun post()
+}
+
 /**
- * The 32-byte local-id key, sealed under `LocalKeystore` (its own keyset, never destroyed by logout, session expiry or the server
- * "forget" step). A key made by an older build is sealed under the SESSION keyset (`legacy`); it is moved with a crash-safe order:
- * seal under the local keyset into a new entry, commit, read it back and compare, and only then may the session keyset be deleted and
- * the legacy entry removed. At every point one of the two entries opens to the same bytes, so a kill or an exception at any step
- * loses nothing. Plaintext copies used for checking are zeroed.
- *
- * A key is made ONLY when no entry exists, or when every entry that exists is deterministically LOST. Loss is decided from what can
- * be observed now, never from in-memory history:
- *
- * | what happens                                                    | class     | action                                                  |
- * |-----------------------------------------------------------------|-----------|---------------------------------------------------------|
- * | local entry opens                                               | ok        | return it                                               |
- * | local entry fails to open, a test value round-trips through the | lost      | the tag is permanently bad: use the legacy key, else    |
- * | SAME built AEAD (after the build Tink runs in memory)           |           | make one key and keep it                                |
- * | local entry fails to open and the round trip fails too          | transient | throw (nothing is replaced, callers retry)              |
- * | local keyset file does not parse twice in a row (corrupt)       | lost      | reset the local keyset (existing LocalKeystore path)    |
- * | any other I/O error, provider error, busy Keystore, failed write| transient | throw [LocalIdKeyUnavailableException]                  |
- * | session keyset does not parse twice in a row (corrupt)          | lost      | the legacy key is lost                                  |
- * | legacy entry fails to open under a BUILT session keyset         | lost      | the legacy key is lost                                  |
- * | session keyset fails to build for any other reason              | transient | throw                                                   |
- *
- * Nothing but a [LocalIdKeyUnavailableException] (or a cancellation) ever leaves [get].
+ * The 32-byte local-id key, sealed under `LocalKeystore`. What happens on a Keystore or Tink failure is the pure policy in
+ * `LocalIdKeyPolicy.kt` (docs/design/STORY-182-local-id-key-policy.md): a bad tag under a keyset that BUILT is certain loss; a build
+ * failure is held, counted at most once a minute, and escalates only on bounded evidence. Nothing but
+ * [LocalIdKeyUnavailableException] (or an `Error`) ever leaves [get] or [install]. Key bytes never appear in exceptions.
  */
 class KeystoreLocalIdKey(
-    private val current: KeyPrefs,
-    private val legacy: KeyPrefs,
-    private val localAead: () -> Aead,
-    private val sessionAead: () -> Aead,
-    /** Destroys the local keyset so the next build makes a new one (used only for a keyset file that is corrupt). */
-    private val localReset: () -> Unit = {},
+    private val prefs: KeyPrefs,
+    private val local: KeysetPort,
+    private val session: KeysetPort,
+    private val clock: () -> Long,
+    private val notice: KeyRenewedNotice,
+    /** Changes per process start (de-duplicates the start count of an episode). */
+    private val token: Long,
 ) : LocalIdKey {
-    constructor(context: Context, localAead: RecoveringAead) : this(
+    constructor(context: Context, localAead: RecoveringAead, notice: KeyRenewedNotice) : this(
         SharedKeyPrefs(context, "masroof_capture_key"),
-        SharedKeyPrefs(context, "masroof_capture_key"),
-        { localAead },
-        // NON-resetting: a transient Keystore failure while reading the legacy key must never delete the keyset it was sealed under
-        { TinkKeystore.aeadOrThrow(context) },
-        { localAead.reset() },
+        LocalPort(context, localAead),
+        SessionPort(context),
+        System::currentTimeMillis,
+        notice,
+        System.nanoTime(),
     )
 
     @Synchronized
-    @Suppress("TooGenericExceptionCaught") // the Keystore provider can fail with any RuntimeException: all of them mean "try later"
-    override fun get(): ByteArray =
-        try {
-            getChecked()
-        } catch (e: LocalIdKeyUnavailableException) {
-            throw e
-        } catch (e: java.io.IOException) {
-            throw LocalIdKeyUnavailableException(e)
-        } catch (e: GeneralSecurityException) {
-            throw LocalIdKeyUnavailableException(e)
-        } catch (e: RuntimeException) {
-            throw LocalIdKeyUnavailableException(e)
+    override fun get(): ByteArray {
+        val key = Run(clock()).get()
+        // the flag is removed BEFORE the note is posted: a kill can drop the note, never repeat it
+        if (prefs.has(RENEWED)) {
+            if (quietly { prefs.commit(removes = setOf(RENEWED)) }) quietly { notice.post() }
         }
-
-    private fun getChecked(): ByteArray {
-        val sealed = current.get(CURRENT)
-        if (sealed != null) openLocal(sealed)?.let { return it }
-        val stored = legacy.get(LEGACY)
-        val old = if (stored == null) null else openLegacy(stored)
-        val key = old ?: ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
-        seal(key)
         return key
     }
 
-    /** The key, or null when the entry is LOST (see the table); throws when that cannot be told. */
-    private fun openLocal(sealed: String): ByteArray? {
-        val a = localAead()
-        try {
-            return unseal(sealed, a)
-        } catch (e: java.io.IOException) {
-            // RecoveringAead already rebuilt once: a keyset file that does not parse twice is permanently corrupt
-            return corruptOrThrow(e)
-        } catch (_: GeneralSecurityException) {
-            // a bad tag, or a build that failed: the round trip below tells them apart
-        }
-        val probe = ByteArray(PROBE_BYTES).also { SecureRandom().nextBytes(it) }
-        val roundTrip =
-            try {
-                a.decrypt(a.encrypt(probe, PROBE_AAD), PROBE_AAD)
-            } catch (e: java.io.IOException) {
-                return corruptOrThrow(e)
-            }
-        // a GeneralSecurityException above is a failed round trip: it propagates and get() reports it as unavailable
-        if (!roundTrip.contentEquals(probe)) throw GeneralSecurityException("round trip differs")
-        // The keyset is built and works now. The first failure may have been the build itself (a transient one), so the entry is
-        // tried once more: only if the BUILT keyset rejects it too is the tag permanently bad (lost).
-        return try {
-            unseal(sealed, a)
-        } catch (_: GeneralSecurityException) {
-            null
-        }
+    @Synchronized
+    override fun install(key: ByteArray) {
+        require(key.size == KEY_BYTES && key.any { it != 0.toByte() }) { "a key is 32 non-zero bytes" }
+        val run = Run(clock())
+        val aead = run.ensureLocalBuilt()
+        run.seal(aead, key, replaces = false, extraRemoves = setOf(LEGACY, RENEWED))
+        run.clearEpisodes()
     }
 
-    /** A keyset file that does not parse is permanently corrupt: reset it and report the entry lost; any other I/O error is transient. */
-    private fun corruptOrThrow(e: java.io.IOException): ByteArray? {
-        if (!isCorrupt(e)) throw e
-        localReset()
-        return null
+    @Synchronized
+    override fun dependsOnSessionKeyset(): Boolean = prefs.has(LEGACY)
+
+    @Synchronized
+    override fun detachFromSessionKeyset(destroy: () -> Unit) {
+        // the key is read (and so moved) first; the copy is zeroed
+        get().fill(0)
+        destroy()
+        quietly { prefs.commit(removes = setOf(LEGACY)) }
     }
 
-    /** The legacy key, or null when it is LOST (see the table); throws when that cannot be told. */
-    private fun openLegacy(stored: String): ByteArray? {
-        val a =
-            try {
-                buildSession()
-            } catch (_: CorruptSessionKeyset) {
-                return null
+    @Synchronized
+    override fun wipe() = prefs.clear()
+
+    /** One call of the driver (design §5.1). All state is re-read from [prefs]; nothing is remembered between calls. */
+    @Suppress("TooManyFunctions") // one small step per action of the policy table
+    private inner class Run(
+        private val now: Long,
+    ) {
+        private var o = Obs(localEntry = prefs.has(K_LOCAL), legacyEntry = prefs.has(LEGACY))
+        private var h = readHealth()
+        private var localAead: Aead? = null
+        private var localFresh = false
+        private var sessionAead: Aead? = null
+        private var cause: Throwable? = null
+        private var opened: ByteArray? = null
+
+        fun get(): ByteArray {
+            repeat(MAX_STEPS) {
+                when (val a = decide(o, h, now)) {
+                    Action.BuildLocal -> buildLocal()
+                    Action.OpenLocal -> openLocal()
+                    Action.BuildSession -> buildSession()
+                    Action.OpenLegacy -> openLegacy()
+                    Action.UseLocal -> {
+                        cleanup()
+                        return opened!!
+                    }
+                    Action.MoveLegacy -> {
+                        val key = opened!!
+                        seal(localAead!!, key, replaces = false)
+                        quietly { prefs.commit(removes = setOf(LEGACY)) } // failure ignored: the next call cleans up
+                        clearEpisodes()
+                        return key
+                    }
+                    is Action.Mint -> {
+                        val fresh = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
+                        seal(localAead!!, fresh, replaces = a.replaces)
+                        clearEpisodes()
+                        return fresh
+                    }
+                    Action.RecreateLocal -> recreateLocal()
+                    Action.DropLegacy -> dropLegacy()
+                    is Action.Hold -> throw LocalIdKeyUnavailableException(cause ?: IllegalStateException("held"))
+                }
             }
-        return try {
-            unseal(stored, a)
-        } catch (_: GeneralSecurityException) {
-            null
+            throw LocalIdKeyUnavailableException(IllegalStateException("policy did not settle"))
+        }
+
+        /** Rows 1-4 only: a built LOCAL keyset, or Unavailable (used by [install]). */
+        fun ensureLocalBuilt(): Aead {
+            var obs = Obs(localEntry = false, legacyEntry = false)
+            repeat(MAX_STEPS) {
+                when (decide(obs, h, now)) {
+                    Action.BuildLocal -> {
+                        o = obs
+                        buildLocal()
+                        obs = o
+                        if (obs.localBuild == BuildObs.Built) return localAead!!
+                    }
+                    Action.RecreateLocal -> {
+                        recreateLocal()
+                        obs = Obs(localEntry = false, legacyEntry = false, recreatedThisCall = true)
+                    }
+                    else -> throw LocalIdKeyUnavailableException(cause ?: IllegalStateException("held"))
+                }
+            }
+            throw LocalIdKeyUnavailableException(IllegalStateException("policy did not settle"))
+        }
+
+        private fun readHealth() = Health(decodeEpisode(prefs.get(H_LOCAL)), decodeEpisode(prefs.get(H_SESSION)))
+
+        private fun attempts(b: BuildObs) = (b as? BuildObs.Failed)?.attempts ?: 0
+
+        @Suppress("TooGenericExceptionCaught") // the Keystore provider can fail with any RuntimeException: all are a failed build
+        private fun buildLocal() {
+            val fresh = o.localBuild != BuildObs.NotTried
+            try {
+                localAead = local.build(fresh)
+                localFresh = fresh
+                o = o.copy(localBuild = BuildObs.Built)
+                clearEpisode(Keyset.LOCAL)
+            } catch (e: Exception) {
+                failLocal(e, attempts(o.localBuild) + 1)
+            }
+        }
+
+        private fun failLocal(
+            e: Exception,
+            attempts: Int,
+        ) {
+            cause = e
+            note(Keyset.LOCAL, e)
+            o = o.copy(localBuild = BuildObs.Failed(classify(e), attempts))
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        private fun openLocal() {
+            val stored = prefs.get(K_LOCAL) ?: return
+            try {
+                opened = unseal(stored, localAead!!)
+                o = o.copy(localOpen = OpenObs.OPENED)
+            } catch (_: GeneralSecurityException) {
+                badTagLocal(stored)
+            } catch (_: IllegalArgumentException) {
+                badTagLocal(stored)
+            } catch (e: Exception) {
+                failLocal(e, 2)
+            }
+        }
+
+        /** A rejection through a cached primitive is confirmed with a fresh build before it counts (a bad tag is then certain). */
+        @Suppress("TooGenericExceptionCaught")
+        private fun badTagLocal(stored: String) {
+            if (localFresh) {
+                o = o.copy(localOpen = OpenObs.BAD_TAG)
+                return
+            }
+            try {
+                localAead = local.build(true)
+                localFresh = true
+                try {
+                    opened = unseal(stored, localAead!!)
+                    o = o.copy(localOpen = OpenObs.OPENED)
+                } catch (_: GeneralSecurityException) {
+                    o = o.copy(localOpen = OpenObs.BAD_TAG)
+                } catch (_: IllegalArgumentException) {
+                    o = o.copy(localOpen = OpenObs.BAD_TAG)
+                }
+            } catch (e: Exception) {
+                failLocal(e, 2)
+            }
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        private fun buildSession() {
+            try {
+                sessionAead = session.build(true)
+                o = o.copy(sessionBuild = BuildObs.Built)
+                clearEpisode(Keyset.SESSION)
+            } catch (e: Exception) {
+                failSession(e, attempts(o.sessionBuild) + 1)
+            }
+        }
+
+        private fun failSession(
+            e: Exception,
+            attempts: Int,
+        ) {
+            cause = e
+            note(Keyset.SESSION, e)
+            o = o.copy(sessionBuild = BuildObs.Failed(classify(e), attempts))
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        private fun openLegacy() {
+            val stored = prefs.get(LEGACY) ?: return
+            try {
+                opened = unseal(stored, sessionAead!!)
+                o = o.copy(legacyOpen = OpenObs.OPENED)
+            } catch (_: GeneralSecurityException) {
+                o = o.copy(legacyOpen = OpenObs.BAD_TAG)
+            } catch (_: IllegalArgumentException) {
+                o = o.copy(legacyOpen = OpenObs.BAD_TAG)
+            } catch (e: Exception) {
+                failSession(e, 2)
+            }
+        }
+
+        private fun recreateLocal() {
+            local.recreate()
+            quietly { prefs.commit(removes = setOf(H_LOCAL)) }
+            h = readHealth()
+            localAead = null
+            localFresh = false
+            o = Obs(localEntry = prefs.has(K_LOCAL), legacyEntry = prefs.has(LEGACY), recreatedThisCall = true)
+        }
+
+        private fun dropLegacy() {
+            commitOrHold(puts = mapOf(RENEWED to "1"), removes = setOf(LEGACY, H_SESSION))
+            h = readHealth()
+            o = o.copy(legacyEntry = false, sessionBuild = BuildObs.NotTried, legacyOpen = OpenObs.NOT_TRIED)
+        }
+
+        /** A storage failure is a hold, and is NOT counted as a Keystore failure (D9). */
+        private fun commitOrHold(
+            puts: Map<String, String> = emptyMap(),
+            removes: Set<String> = emptySet(),
+        ) {
+            try {
+                prefs.commit(puts, removes)
+            } catch (e: IOException) {
+                throw LocalIdKeyUnavailableException(e)
+            }
+        }
+
+        /** Seals [key], commits it, and proves it reads back through a FRESH build (else nothing is returned). */
+        @Suppress("TooGenericExceptionCaught")
+        fun seal(
+            aead: Aead,
+            key: ByteArray,
+            replaces: Boolean,
+            extraRemoves: Set<String> = emptySet(),
+        ) {
+            val sealed =
+                try {
+                    Base64.encodeToString(aead.encrypt(key, AAD), Base64.NO_WRAP)
+                } catch (e: Exception) {
+                    note(Keyset.LOCAL, e)
+                    throw LocalIdKeyUnavailableException(e)
+                }
+            commitOrHold(puts = mapOf(K_LOCAL to sealed) + (if (replaces) mapOf(RENEWED to "1") else emptyMap()), removes = extraRemoves)
+            var back: ByteArray? = null
+            try {
+                back = unseal(prefs.get(K_LOCAL).orEmpty(), local.build(true))
+                if (!back.contentEquals(key)) throw GeneralSecurityException("local-id key did not read back")
+            } catch (e: Exception) {
+                note(Keyset.LOCAL, e)
+                throw LocalIdKeyUnavailableException(e)
+            } finally {
+                back?.fill(0)
+            }
+        }
+
+        private fun cleanup() {
+            if (o.legacyEntry) quietly { prefs.commit(removes = setOf(LEGACY)) }
+            clearEpisodes()
+        }
+
+        fun clearEpisodes() {
+            clearEpisode(Keyset.LOCAL)
+            clearEpisode(Keyset.SESSION)
+        }
+
+        private fun clearEpisode(k: Keyset) {
+            val has = if (k == Keyset.LOCAL) h.local != null else h.session != null
+            if (!has) return
+            quietly { prefs.commit(removes = setOf(if (k == Keyset.LOCAL) H_LOCAL else H_SESSION)) }
+            h = if (k == Keyset.LOCAL) h.copy(local = null) else h.copy(session = null)
+        }
+
+        private fun note(
+            k: Keyset,
+            e: Throwable,
+        ) {
+            val port = if (k == Keyset.LOCAL) local else session
+            val old = if (k == Keyset.LOCAL) h.local else h.session
+            val next = record(old, classify(e), corroborates = k == Keyset.SESSION || port.corroborates(e), now = now, token = token)
+            val name = if (k == Keyset.LOCAL) H_LOCAL else H_SESSION
+            quietly { prefs.commit(puts = mapOf(name to encodeEpisode(next))) }
+            h = if (k == Keyset.LOCAL) h.copy(local = next) else h.copy(session = next)
         }
     }
-
-    /** Builds the session AEAD; null-free: a keyset that does not parse twice in a row throws [CorruptSessionKeyset]. */
-    private fun buildSession(): Aead =
-        try {
-            sessionAead()
-        } catch (first: java.io.IOException) {
-            if (!isCorrupt(first)) throw LocalIdKeyUnavailableException(first)
-            try {
-                sessionAead()
-            } catch (second: java.io.IOException) {
-                if (!isCorrupt(second)) throw LocalIdKeyUnavailableException(second)
-                throw CorruptSessionKeyset()
-            }
-        }
-
-    private class CorruptSessionKeyset : Exception()
-
-    private fun isCorrupt(e: Throwable): Boolean =
-        generateSequence(e) { it.cause }.take(MAX_CAUSES).any {
-            it is java.io.CharConversionException || it.javaClass.simpleName.contains("InvalidProtocolBuffer")
-        }
 
     private fun unseal(
         stored: String,
         aead: Aead,
-    ): ByteArray =
-        try {
-            aead.decrypt(Base64.decode(stored, Base64.NO_WRAP), AAD)
-        } catch (e: IllegalArgumentException) {
-            throw GeneralSecurityException("bad entry", e)
-        }
-
-    /** Seals [key] under the local keyset, commits it, and proves it reads back identical (else throws, nothing is destroyed). */
-    private fun seal(key: ByteArray) {
-        current.put(CURRENT, Base64.encodeToString(localAead().encrypt(key, AAD), Base64.NO_WRAP))
-        val check = unseal(current.get(CURRENT).orEmpty(), localAead())
-        try {
-            if (!check.contentEquals(key)) throw GeneralSecurityException("local-id key did not read back")
-        } finally {
-            check.fill(0)
-        }
-    }
-
-    @Synchronized
-    override fun detachFromSessionKeyset(destroy: () -> Unit) {
-        // 1-3: the key is sealed under the local keyset, committed and verified (get() migrates and proves it); the copy is zeroed
-        get().fill(0)
-        // 4: only now the session keyset goes; if this throws, the verified entry still opens
-        destroy()
-        // 5: the legacy entry is useless once its keyset is gone
-        legacy.remove(LEGACY)
-    }
-
-    @Synchronized
-    override fun wipe() {
-        current.clear()
-        legacy.clear()
-    }
+    ): ByteArray = aead.decrypt(Base64.decode(stored, Base64.NO_WRAP), AAD)
 
     private companion object {
-        const val CURRENT = "k_local"
+        const val K_LOCAL = "k_local"
         const val LEGACY = "k"
+        const val H_LOCAL = "h_local"
+        const val H_SESSION = "h_session"
+        const val RENEWED = "renewed"
         const val KEY_BYTES = 32
-        const val PROBE_BYTES = 16
-        const val MAX_CAUSES = 5
-        val PROBE_AAD = "masroof-local-id-probe".toByteArray()
         val AAD = "masroof-local-id".toByteArray()
     }
 }
 
-/** The key cannot be read or written right now. It is NOT "no key": the caller tries again later and never uses another key. */
+/** The LOCAL keyset: the `RecoveringAead` primitive plus the alias witness. */
+private class LocalPort(
+    private val context: Context,
+    private val aead: RecoveringAead,
+) : KeysetPort {
+    override fun build(fresh: Boolean): Aead = aead.primitive(fresh)
+
+    override fun corroborates(e: Throwable): Boolean = LocalKeystore.isKeyLost(e) || LocalKeystore.aliasGone(context)
+
+    override fun recreate() = aead.recreate()
+}
+
+/** The SESSION keyset, read with the NON-resetting builder; the policy never destroys it. */
+private class SessionPort(
+    private val context: Context,
+) : KeysetPort {
+    override fun build(fresh: Boolean): Aead = TinkKeystore.aeadOrThrow(context)
+
+    override fun corroborates(e: Throwable): Boolean = true
+
+    override fun recreate(): Unit = throw UnsupportedOperationException("the session keyset is never recreated by the policy")
+}
+
+/** Best effort: a failure of an [Exception] kind is ignored (true when it ran). An `Error` (a kill) is never swallowed. */
+@Suppress("TooGenericExceptionCaught", "SwallowedException")
+internal inline fun quietly(block: () -> Unit): Boolean =
+    try {
+        block()
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+/** The key cannot be read or written right now. It is NOT "no key": the caller holds the work and tries again, never another key. */
 class LocalIdKeyUnavailableException(
     cause: Throwable,
-) : java.io.IOException("local-id key unavailable", cause)
+) : IOException("local-id key unavailable", cause)
 
-/** [KeyPrefs] over one SharedPreferences file. */
+/** [KeyPrefs] over one SharedPreferences file. A commit that returns false is an error, not a silent success. */
 class SharedKeyPrefs(
     private val context: Context,
     private val file: String,
@@ -236,12 +431,19 @@ class SharedKeyPrefs(
 
     override fun get(name: String): String? = prefs.getString(name, null)
 
-    override fun put(
-        name: String,
-        value: String,
-    ) = prefs.edit(commit = true) { putString(name, value) }
+    @android.annotation.SuppressLint("ApplySharedPref") // commit() on purpose: the result is checked and a failure is a hold
+    override fun commit(
+        puts: Map<String, String>,
+        removes: Set<String>,
+    ) {
+        val e = prefs.edit()
+        removes.forEach { e.remove(it) }
+        puts.forEach { (k, v) -> e.putString(k, v) }
+        if (!e.commit()) throw IOException("prefs commit failed")
+    }
 
-    override fun remove(name: String) = prefs.edit(commit = true) { remove(name) }
-
-    override fun clear() = prefs.edit(commit = true) { clear() }
+    @android.annotation.SuppressLint("ApplySharedPref")
+    override fun clear() {
+        prefs.edit().clear().commit()
+    }
 }

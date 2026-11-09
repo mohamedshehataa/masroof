@@ -371,4 +371,6 @@
         <item quantity="many">الإيصالات: %1$s ملف، %2$s ميجا</item>
         <item quantity="other">الإيصالات: %1$s ملف، %2$s ميجا</item>
     </plurals>
+    <string name="key_renewed_title">تمت إعادة ضبط مطابقة الرسائل</string>
+    <string name="key_renewed_text">تعذّر على مصروف فتح مفتاح الرسائل على هذا الهاتف فأنشأ مفتاحًا جديدًا. إذا قُرئت رسائل قديمة مرة أخرى فقد يظهر بعضها كتكرار محتمل لتراجعه.</string>
 </resources>

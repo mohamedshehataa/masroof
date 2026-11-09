@@ -73,7 +73,13 @@ class WorkManagerSmsScheduler
     constructor(
         private val workManager: WorkManager,
     ) : SmsWorkScheduler {
-        override fun enqueueIntake(message: IncomingMessage) {
+        override fun enqueueIntake(message: IncomingMessage) = enqueueHeld(message, 0L)
+
+        /** The same request as a first hand-off (same tag, same input) after [delayMillis]; the local id dedups a repeated run. */
+        override fun enqueueHeld(
+            message: IncomingMessage,
+            delayMillis: Long,
+        ) {
             val request =
                 OneTimeWorkRequestBuilder<SmsIntakeWorker>()
                     .addTag(SMS_INTAKE_TAG)
@@ -84,7 +90,8 @@ class WorkManagerSmsScheduler
                             KEY_TEXT to message.text,
                             KEY_TS to message.receivedAtMillis,
                         ),
-                    ).build()
+                    ).apply { if (delayMillis > 0) setInitialDelay(delayMillis, java.util.concurrent.TimeUnit.MILLISECONDS) }
+                    .build()
             // Not unique by name: every message is its own job; the outbox insert dedups on the local id.
             workManager.enqueue(request)
         }
@@ -838,6 +845,7 @@ internal const val MAX_INTAKE_ATTEMPTS = 10
  */
 internal suspend fun intakeResult(
     attempt: Int,
+    hold: (() -> Unit)? = null,
     accept: suspend () -> Disposition,
 ): ListenableWorker.Result =
     try {
@@ -852,9 +860,21 @@ internal suspend fun intakeResult(
     } catch (
         @Suppress("SwallowedException") _: LocalIdKeyUnavailableException,
     ) {
-        // the local-id key cannot be read right now (a busy Keystore): the message stays in the job and is tried again later with
-        // the SAME key; recording it under a different key would stop it from ever deduping
-        if (attempt < MAX_INTAKE_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+        // The local-id key is held (design D6): the SAME message becomes a fresh job (attempt 0, 15 min later) and this one ends in
+        // success, so a key hold never uses up MAX_INTAKE_ATTEMPTS and nothing is dropped. Without a scheduler the job retries,
+        // also without a cap. Recording under a different key would stop the message from ever deduping.
+        if (hold == null) {
+            ListenableWorker.Result.retry()
+        } else {
+            try {
+                hold()
+                ListenableWorker.Result.success()
+            } catch (
+                @Suppress("TooGenericExceptionCaught", "SwallowedException") _: Exception,
+            ) {
+                ListenableWorker.Result.retry()
+            }
+        }
     }
 
 @HiltWorker
@@ -864,6 +884,7 @@ class SmsIntakeWorker
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         private val pipeline: SmsPipeline,
+        private val scheduler: SmsWorkScheduler? = null,
     ) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             // Blocked start: keep the captured message in the job (not lost) and try again later.
@@ -871,8 +892,11 @@ class SmsIntakeWorker
             val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
             val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
             val source = inputData.getString(KEY_SOURCE)?.let { runCatching { CaptureSource.valueOf(it) }.getOrNull() } ?: CaptureSource.SMS
+            val message = IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L))
             // The entry is in Room when this returns: nothing is queued, scheduled or sent (ADR-0009 D3/D7).
-            return intakeResult(runAttemptCount) { pipeline.accept(IncomingMessage(source, sender, text, inputData.getLong(KEY_TS, 0L))) }
+            return intakeResult(runAttemptCount, scheduler?.let { s -> { s.enqueueHeld(message, KEY_HOLD_DELAY_MILLIS) } }) {
+                pipeline.accept(message)
+            }
         }
     }
 

@@ -15,7 +15,6 @@ import eg.masroof.data.DefaultExpenseRepository
 import eg.masroof.data.ExpenseRepository
 import eg.masroof.data.NetworkMonitor
 import eg.masroof.data.SettingsRepository
-import eg.masroof.data.auth.AeadTokenCipher
 import eg.masroof.data.auth.ApiAuthRemote
 import eg.masroof.data.auth.AuthRemote
 import eg.masroof.data.auth.EncryptedSessionStore
@@ -23,7 +22,6 @@ import eg.masroof.data.auth.LazyTokenCipher
 import eg.masroof.data.auth.LocalDataWiper
 import eg.masroof.data.auth.RoomDataWiper
 import eg.masroof.data.auth.SessionStore
-import eg.masroof.data.auth.TinkKeystore
 import eg.masroof.data.budgets.BudgetsRepository
 import eg.masroof.data.budgets.RoomBudgetsRepository
 import eg.masroof.data.db.AppDatabase
@@ -150,6 +148,8 @@ abstract class BindingsModule {
 
     @Binds abstract fun budgets(impl: RoomBudgetsRepository): BudgetsRepository
 
+    @Binds abstract fun keyRenewedNotice(impl: eg.masroof.ingest.AndroidKeyRenewedNotice): eg.masroof.ingest.KeyRenewedNotice
+
     // STORY-182: the one-time import from the v0.1.x server (ADR-0009 D6). Deleted with the server-era code.
     @Binds abstract fun serverImportSource(
         impl: eg.masroof.data.serverimport.ApiServerImportSource,
@@ -223,16 +223,8 @@ object ProvidersModule {
         @ApplicationContext context: Context,
         localIdKey: LocalIdKey,
     ): LazyTokenCipher =
-        LazyTokenCipher {
-            // the local-id key leaves the session keyset BEFORE anything can reset it (REQ-SEC-065)
-            AeadTokenCipher(
-                eg.masroof.data.auth.sessionAeadAfterMove(
-                    localIdKey,
-                    resetting = { TinkKeystore.aead(context) },
-                    safe = { TinkKeystore.aeadOrThrow(context) },
-                ),
-            )
-        }
+        eg.masroof.data.auth
+            .sessionTokenCipher(context, localIdKey)
 
     @Provides @Singleton
     fun importStore(
@@ -245,7 +237,8 @@ object ProvidersModule {
     fun localIdKey(
         @ApplicationContext context: Context,
         aead: eg.masroof.data.auth.RecoveringAead,
-    ): LocalIdKey = KeystoreLocalIdKey(context, aead)
+        notice: eg.masroof.ingest.KeyRenewedNotice,
+    ): LocalIdKey = KeystoreLocalIdKey(context, aead, notice)
 
     @Provides @Singleton
     fun captureData(

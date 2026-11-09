@@ -29,17 +29,39 @@ object LocalKeystore {
     private const val MAX_CAUSES = 5
     private const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
 
-    /** An AEAD that recovers by itself from a lost key and is reset only by [RecoveringAead.reset] (Erase all data). */
+    /**
+     * An AEAD that never destroys a key by itself (STORY-182 policy, D7): it is reset by [RecoveringAead.reset] (Erase all data) and by
+     * [RecoveringAead.recreate], which only the local-id key policy calls after its bounded evidence says the keyset is lost.
+     */
     fun aead(
         context: Context,
         onKeyRecreated: () -> Unit = {},
     ): RecoveringAead =
         RecoveringAead(
-            build = { buildRecovering(context, onKeyRecreated) },
+            build = { build(context).also { rememberMasterMade(context) } },
             destroy = { destroy(context) },
-            recoverIfLost = { recoverIfLost(context) },
             onKeyRecreated = onKeyRecreated,
         )
+
+    /**
+     * True when a keyset entry exists, the Keystore once made the master key and now reports none (via [needsRecovery]). It only
+     * CORROBORATES a lost key; it never destroys anything (AOSP also answers false on a binder error). A Keystore that cannot be
+     * asked counts as present.
+     */
+    internal fun aliasGone(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE)
+        val present =
+            try {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(MASTER_KEY_ALIAS)
+            } catch (_: GeneralSecurityException) {
+                true
+            } catch (_: IOException) {
+                true
+            } catch (_: ProviderException) {
+                true
+            }
+        return needsRecovery(prefs.contains(KEYSET_NAME), present, prefs.getBoolean(MASTER_MADE, false))
+    }
 
     /** The "Erase all data" step: destroys the keyset entry and the master key unconditionally; a new pair is made at the next use. */
     fun reset(context: Context) = destroy(context)
@@ -60,40 +82,6 @@ object LocalKeystore {
         generateSequence(
             e,
         ) { it.cause }.take(MAX_CAUSES).any { it is KeyPermanentlyInvalidatedException || it is UnrecoverableKeyException }
-
-    private fun recoverIfLost(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE)
-        val hasKeyset = prefs.contains(KEYSET_NAME)
-        // when the Keystore cannot be asked, the key is not known to be gone: nothing is destroyed
-        val present =
-            try {
-                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(MASTER_KEY_ALIAS)
-            } catch (_: GeneralSecurityException) {
-                true
-            } catch (_: IOException) {
-                true
-            } catch (_: ProviderException) {
-                true
-            }
-        if (needsRecovery(hasKeyset, present, prefs.getBoolean(MASTER_MADE, false))) {
-            destroy(context)
-            return true
-        }
-        return false
-    }
-
-    private fun buildRecovering(
-        context: Context,
-        onKeyRecreated: () -> Unit,
-    ): Aead =
-        try {
-            build(context).also { rememberMasterMade(context) }
-        } catch (e: GeneralSecurityException) {
-            if (!isKeyLost(e)) throw e
-            destroy(context)
-            onKeyRecreated()
-            build(context).also { rememberMasterMade(context) }
-        }
 
     /** Remembers that the Keystore made the master key (so "keyset without master key" later means lost, not "never worked"). */
     private fun rememberMasterMade(context: Context) {
@@ -162,6 +150,20 @@ class RecoveringAead(
     fun reset() {
         current = null
         runCatching { destroy() }
+    }
+
+    /** The raw primitive: a cached one, or (with [fresh]) a newly built one. Never destroys; a build failure is thrown as it is. */
+    @Synchronized
+    fun primitive(fresh: Boolean): Aead {
+        if (fresh) current = null
+        return aead()
+    }
+
+    /** The policy's escalation only: tells the owner of what was sealed (the backfill memory) and then destroys the keyset. */
+    @Synchronized
+    fun recreate() {
+        runCatching { onKeyRecreated() }
+        reset()
     }
 
     @Synchronized

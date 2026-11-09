@@ -339,4 +339,6 @@
         <item quantity="one">Receipts: %1$s file, %2$s MB</item>
         <item quantity="other">Receipts: %1$s files, %2$s MB</item>
     </plurals>
+    <string name="key_renewed_title">Message matching was reset</string>
+    <string name="key_renewed_text">Masroof could not open this phone\'s message key and made a new one. If older SMS are read again, some may show up as possible duplicates for you to review.</string>
 </resources>

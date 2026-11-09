@@ -46,6 +46,9 @@ class EncryptedSessionStore(
         return try {
             val plain = cipher.decrypt(Base64.decode(encoded, Base64.NO_WRAP))
             LoadedSession.Found(Json.decodeFromString(Session.serializer(), plain.decodeToString()))
+        } catch (_: SessionKeysetHeldException) {
+            // the legacy local-id key still lives in that keyset: the blob is KEPT (it looks signed out until the key resolves)
+            LoadedSession.Empty
         } catch (_: GeneralSecurityException) {
             discard()
         } catch (_: IOException) {

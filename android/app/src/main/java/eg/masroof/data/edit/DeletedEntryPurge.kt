@@ -99,6 +99,9 @@ class PurgeDeletedWorker
                 Result.success()
             } catch (_: SQLiteException) {
                 Result.retry()
+            } catch (_: eg.masroof.ingest.LocalIdKeyUnavailableException) {
+                // the key is held: nothing was purged (the memory is written before the delete), try again later
+                Result.retry()
             }
         }
     }

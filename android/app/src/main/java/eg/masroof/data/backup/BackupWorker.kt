@@ -39,6 +39,11 @@ import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Opens the destination the user picked ("wt" truncates it). A seam, so the order "key first, document second" can be tested. */
+fun interface BackupSinkOpener {
+    fun open(uri: Uri): java.io.OutputStream?
+}
+
 /** The foreground task that writes the backup to the file the user picked (REQ-OPS-177). */
 @HiltWorker
 class BackupWorker
@@ -50,6 +55,7 @@ class BackupWorker
         private val pending: PendingBackupKey,
         private val status: BackupStatusStore,
         private val clock: Clock,
+        private val sinks: BackupSinkOpener = BackupSinkOpener { uri -> context.contentResolver.openOutputStream(uri, "wt") },
     ) : CoroutineWorker(context, params) {
         override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(context, id, 0)
 
@@ -68,7 +74,7 @@ class BackupWorker
                 val backupEnv = env.create(clock.millis())
                 // The local-id key is read BEFORE the document is opened: opening it with "wt" truncates what the user already had.
                 backupEnv.localIdKey().fill(0)
-                val sink = context.contentResolver.openOutputStream(destination, "wt") ?: throw FileNotFoundException()
+                val sink = sinks.open(destination) ?: throw FileNotFoundException()
                 val result =
                     BackupWriter(backupEnv).write(sink, input) { pct ->
                         setProgressAsync(workDataOf(KEY_PERCENT to pct))

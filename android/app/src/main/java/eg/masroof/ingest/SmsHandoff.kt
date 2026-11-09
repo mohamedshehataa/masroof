@@ -20,6 +20,12 @@ data class IncomingSms(
 interface SmsWorkScheduler {
     /** Hand one allowlisted, non-OTP message (SMS or notification) to the background pipeline. */
     fun enqueueIntake(message: IncomingMessage)
+
+    /** The same message again as a fresh job after [delayMillis] (the local-id key is held; design D6). Fakes may keep the default. */
+    fun enqueueHeld(
+        message: IncomingMessage,
+        delayMillis: Long,
+    ) = enqueueIntake(message)
 }
 
 /**

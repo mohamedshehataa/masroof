@@ -155,13 +155,9 @@ class SmsBackfillWorker
             } catch (
                 @Suppress("SwallowedException") _: eg.masroof.ingest.LocalIdKeyUnavailableException,
             ) {
-                // the local-id key cannot be read right now: continue from the saved position later, with the same key
-                if (runAttemptCount < MAX_BACKFILL_ATTEMPTS) {
-                    Result.retry()
-                } else {
-                    store.save(store.state.value.copy(phase = BackfillPhase.STOPPED))
-                    Result.failure()
-                }
+                // The local-id key is held (design D6): retry WITHOUT a cap and without STOPPED for this cause. The saved position is
+                // kept, the phase stays RUNNING and the SMS stay in the inbox until the key resolves.
+                Result.retry()
             } catch (
                 @Suppress("SwallowedException") _: SQLiteException,
             ) {
