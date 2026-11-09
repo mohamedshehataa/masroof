@@ -3,7 +3,7 @@ id: STORY-187
 epic: EPIC-17
 title: A first-run guide sets up capture, past SMS and the household without any sign-in
 phase: 4
-status: READY
+status: DONE
 risk_tier: low
 size: M
 modules: [android]
@@ -85,3 +85,6 @@ STORY-186
 | date | stage | agent | result |
 |---|---|---|---|
 | 2026-10-27 | 1 spec | product-analyst | READY - EPIC-17 local-only pivot, replaces STORY-070 |
+| 2026-11-09 | 5 build | android-engineer | 7-step first-run guide (language, SMS capture, past SMS, notification access, household, done); Finish setup card for phones with data; Settings reopen |
+| 2026-11-09 | 6+7 verify+review | qa-verifier | loop 1 PASS on 2d9f166 (9 MINOR, 9 NIT); MINOR fix round on 6d35fab, diff checked |
+| 2026-11-09 | 8 integrate | orchestrator | DONE |
