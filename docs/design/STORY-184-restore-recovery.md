@@ -565,4 +565,3 @@ on its branch, so this note does not split it.
 - `StagedRestore.epoch` is read from `EraseLock.epoch` through `RestoreEnvironment.epoch`.
 - `finish` hashes settings and key with `readVerified` (regular file, hash equal to the journal's) and the receipts with `verifyDir`; a missing receipts folder is accepted only at step SWAPPING when `receipts/` already exists (the second rename happened).
 - `RestoreCrashMatrixTest` runs about 4.5 minutes (six scenarios, every operation killed before/after or failing with a full disk, a second kill during recovery). It is a normal test today; tag it slow if CI time matters.
-- Not covered by a dedicated test: R11 (backfill cursor under DEFERRED) and R14 (receipt attach refused) are covered by the gate unit behavior only; see the report.
