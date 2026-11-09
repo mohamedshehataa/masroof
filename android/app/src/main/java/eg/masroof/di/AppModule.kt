@@ -221,7 +221,18 @@ object ProvidersModule {
     @Provides @Singleton
     fun tokenCipher(
         @ApplicationContext context: Context,
-    ): LazyTokenCipher = LazyTokenCipher { AeadTokenCipher(TinkKeystore.aead(context)) }
+        localIdKey: LocalIdKey,
+    ): LazyTokenCipher =
+        LazyTokenCipher {
+            // the local-id key leaves the session keyset BEFORE anything can reset it (REQ-SEC-065)
+            AeadTokenCipher(
+                eg.masroof.data.auth.sessionAeadAfterMove(
+                    localIdKey,
+                    resetting = { TinkKeystore.aead(context) },
+                    safe = { TinkKeystore.aeadOrThrow(context) },
+                ),
+            )
+        }
 
     @Provides @Singleton
     fun importStore(

@@ -194,6 +194,7 @@ private fun reasonText(reason: BackupFailure): Int =
         BackupFailure.CANNOT_OPEN -> R.string.backup_reason_cannot_open
         BackupFailure.RECEIPT_CHANGED -> R.string.backup_reason_receipt_changed
         BackupFailure.KEY_LOST -> R.string.backup_reason_key_lost
+        BackupFailure.KEY_UNAVAILABLE -> R.string.backup_reason_key_unavailable
         BackupFailure.OTHER -> R.string.backup_reason_other
     }
 

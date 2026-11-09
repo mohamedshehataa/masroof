@@ -32,6 +32,7 @@
     <string name="backup_reason_cannot_open">Reason: the chosen location could not be opened.</string>
     <string name="backup_reason_receipt_changed">Reason: a receipt changed while the backup was running. Try again.</string>
     <string name="backup_reason_key_lost">Reason: the backup was interrupted before it started. Try again.</string>
+    <string name="backup_reason_key_unavailable">Reason: the key on this phone was busy. Try again in a moment.</string>
     <string name="backup_interrupted">Backup was interrupted - please start again</string>
     <string name="backup_start_failed">The backup could not start - please try again</string>
     <string name="backup_file_kept">Backup did not start; your existing file was not changed</string>

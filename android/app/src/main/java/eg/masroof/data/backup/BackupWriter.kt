@@ -114,15 +114,17 @@ class BackupWriter(
     ): BackupResult {
         val context = currentCoroutineContext()
         val cancelled = { context.ensureActive() }
-        val localIdKey = env.localIdKey()
+        var localIdKey: ByteArray? = null
         try {
+            // inside the try: a key that cannot be read still closes the provider's stream
+            localIdKey = env.localIdKey()
             return writeAll(sink, input, report, cancelled, localIdKey)
         } catch (e: Throwable) {
             // Whatever went wrong (provider failure, Cancel, a changed receipt): the provider's stream is closed and nothing is reported.
             runCatching { sink.close() }
             throw e
         } finally {
-            localIdKey.fill(0)
+            localIdKey?.fill(0)
         }
     }
 

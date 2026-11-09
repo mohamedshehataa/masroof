@@ -118,6 +118,44 @@ class BackupWorkerTest {
         }
 
     @Test
+    fun `REQ-SEC-065 a local-id key that cannot be read fails the backup as KEY_UNAVAILABLE and writes nothing`() {
+        val sink = ByteArrayOutputStream()
+        shadowOf(context.contentResolver).registerOutputStream(uri, sink)
+        pending.put(workId, input())
+        val busy =
+            object : LocalIdKey {
+                override fun get(): ByteArray = throw eg.masroof.ingest.LocalIdKeyUnavailableException(
+                    java.security.GeneralSecurityException("busy"),
+                )
+
+                override fun wipe() = Unit
+            }
+        val factory = BackupEnvironmentFactory(db, context, receipts, busy)
+        val result =
+            runBlocking {
+                TestListenableWorkerBuilder<BackupWorker>(context)
+                    .setId(workId)
+                    .setInputData(workDataOf(BackupWorker.KEY_URI to uri.toString()))
+                    .setWorkerFactory(
+                        object : WorkerFactory() {
+                            override fun createWorker(
+                                appContext: Context,
+                                workerClassName: String,
+                                workerParameters: WorkerParameters,
+                            ): ListenableWorker = BackupWorker(appContext, workerParameters, factory, pending, status, clock)
+                        },
+                    ).build()
+                    .doWork()
+            }
+        assertTrue(result is ListenableWorker.Result.Failure)
+        assertEquals(
+            eg.masroof.data.backup.BackupFailure.KEY_UNAVAILABLE.name,
+            (result as ListenableWorker.Result.Failure).outputData.getString(BackupWorker.KEY_REASON),
+        )
+        assertEquals(0, sink.size())
+    }
+
+    @Test
     fun `REQ-OPS-177 the task writes the file the user picked, records the last backup and reports the counts`() {
         val sink = ByteArrayOutputStream()
         shadowOf(context.contentResolver).registerOutputStream(uri, sink)

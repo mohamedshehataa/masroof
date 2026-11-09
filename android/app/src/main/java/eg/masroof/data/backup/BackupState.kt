@@ -110,6 +110,9 @@ enum class BackupFailure {
     CANNOT_OPEN,
     RECEIPT_CHANGED,
     KEY_LOST,
+
+    /** The local-id key could not be read right now (a busy Keystore): nothing was written; try again. */
+    KEY_UNAVAILABLE,
     OTHER,
     ;
 
@@ -117,6 +120,7 @@ enum class BackupFailure {
         fun classify(e: Throwable): BackupFailure =
             when {
                 e is BackupSourceChangedException -> RECEIPT_CHANGED
+                e is eg.masroof.ingest.LocalIdKeyUnavailableException -> KEY_UNAVAILABLE
                 e is FileNotFoundException -> CANNOT_OPEN
                 e is IOException && e.message.orEmpty().let { "ENOSPC" in it || "space" in it.lowercase() } -> STORAGE_FULL
                 else -> OTHER

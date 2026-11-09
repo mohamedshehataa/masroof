@@ -65,9 +65,12 @@ class BackupWorker
                 // Leftovers of a backup that was killed: the unique work guarantees nothing else uses the folder.
                 BackupStage.sweep(BackupStage.dir(context.noBackupFilesDir))
                 setForeground(foregroundInfo(context, id, 0))
+                val backupEnv = env.create(clock.millis())
+                // The local-id key is read BEFORE the document is opened: opening it with "wt" truncates what the user already had.
+                backupEnv.localIdKey().fill(0)
                 val sink = context.contentResolver.openOutputStream(destination, "wt") ?: throw FileNotFoundException()
                 val result =
-                    BackupWriter(env.create(clock.millis())).write(sink, input) { pct ->
+                    BackupWriter(backupEnv).write(sink, input) { pct ->
                         setProgressAsync(workDataOf(KEY_PERCENT to pct))
                         notify(context, foregroundInfo(context, id, pct).notification)
                     }
