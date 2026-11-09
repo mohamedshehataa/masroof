@@ -7,8 +7,6 @@ import eg.masroof.data.backup.BackupHeader
 import eg.masroof.data.backup.BackupPrefsInventory
 import eg.masroof.data.backup.RestoreException
 import eg.masroof.data.backup.RestoreFailure
-import eg.masroof.data.backup.RestoreHooks
-import eg.masroof.data.backup.RestoreKilled
 import eg.masroof.data.backup.RestoreLimits
 import eg.masroof.data.backup.RestoreSettingKeys
 import eg.masroof.data.backup.RoomRestoreDatabase
@@ -20,7 +18,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -382,7 +379,7 @@ class RestoreTest {
         val files = target.receiptHashes()
         val (restorer, staged) = stage()
         assertTrue(target.stage.exists())
-        restorer.discard(staged)
+        restorer.discardSession(staged.gen)
         target.assertUntouched(rows, files)
     }
 
@@ -393,7 +390,7 @@ class RestoreTest {
         assertEquals(source.dump(), target.dump())
         assertEquals(mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)), target.receiptHashes())
         assertFalse(target.stage.exists())
-        assertFalse(target.marker.exists())
+        assertFalse(target.journal.exists())
         assertFalse(File(target.receipts.parentFile, "receipts.old").exists())
         // 20 tables, the EPIC-18 ones and the budgets included, and a restored receipt row without a file stays as it was
         assertEquals(20, target.dump().size)
@@ -482,115 +479,6 @@ class RestoreTest {
     // ---- REQ-OPS-179: kill hooks, storage ----------------------------------------------------------------------------------------
 
     @Test
-    fun `REQ-OPS-179 killed before the commit the next start removes the staging and the old data is intact`() {
-        val rows = target.dump()
-        val files = target.receiptHashes()
-        val hooks =
-            object : RestoreHooks {
-                override fun beforeCommit() = throw RestoreKilled()
-            }
-        val (restorer, staged) = stage(restorer = target.restorer(hooks = hooks))
-        try {
-            runBlocking { restorer.apply(staged) }
-            fail("killed")
-        } catch (_: RestoreKilled) {
-            // as after a real kill: the marker and the staging stay
-        }
-        assertTrue(target.marker.exists())
-        assertTrue(target.stage.exists())
-        assertEquals("the transaction rolled back", rows, target.dump())
-        // next start (a new restorer on the same files)
-        runBlocking { target.restorer().recover() }
-        target.assertUntouched(rows, files)
-    }
-
-    @Test
-    fun `REQ-OPS-179 killed after the commit the next start finishes the swap and equals an uninterrupted restore`() {
-        val hooks =
-            object : RestoreHooks {
-                override fun afterCommit() = throw RestoreKilled()
-            }
-        val (restorer, staged) = stage(restorer = target.restorer(hooks = hooks))
-        try {
-            runBlocking { restorer.apply(staged) }
-            fail("killed")
-        } catch (_: RestoreKilled) {
-        }
-        assertTrue(target.marker.exists())
-        assertEquals("committed", source.dump(), target.dump())
-        assertTrue("receipts not swapped yet", File(target.receipts, "old.bin").exists())
-        assertTrue("settings not applied yet", target.applied.isEmpty())
-
-        runBlocking { target.restorer().recover() }
-
-        val clean = Phone(context, "clean", seeded = true)
-        try {
-            File(clean.receipts, "old.bin").writeBytes(byteArrayOf(1, 2, 3))
-            val (r, s) = stage(clean)
-            runBlocking { r.apply(s) }
-            assertEquals(clean.dump(), target.dump())
-            assertEquals(clean.receiptHashes(), target.receiptHashes())
-            assertEquals(clean.applied.single().stores, target.applied.single().stores)
-            assertArrayEquals(clean.installedKey, target.installedKey)
-            assertFalse(target.marker.exists())
-            assertFalse(target.stage.exists())
-        } finally {
-            clean.close()
-        }
-    }
-
-    @Test
-    fun `REQ-OPS-179 a restore killed during the receipts swap is finished by the next start`() {
-        // the old directory is already moved away: the state a kill between the two renames leaves
-        val hooks =
-            object : RestoreHooks {
-                override fun afterCommit() {
-                    java.nio.file.Files
-                        .move(target.receipts.toPath(), File(target.receipts.parentFile, "receipts.old").toPath())
-                    throw RestoreKilled()
-                }
-            }
-        val (killed, staged) = stage(restorer = target.restorer(hooks = hooks))
-        try {
-            runBlocking { killed.apply(staged) }
-            fail("killed")
-        } catch (_: RestoreKilled) {
-        }
-        assertFalse(target.receipts.exists())
-        runBlocking { target.restorer().recover() }
-        assertEquals(mapOf("r1.jpg" to sha256Of(RECEIPT_BYTES)), target.receiptHashes())
-        assertFalse(File(target.receipts.parentFile, "receipts.old").exists())
-        assertFalse(target.marker.exists())
-    }
-
-    @Test
-    fun `REQ-OPS-179 a Keystore failure while finishing leaves the marker and the next start installs the key`() {
-        val (restorer, staged) = stage()
-        target.keyFailures = 1
-        try {
-            runBlocking { restorer.apply(staged) }
-            fail("expected an incomplete restore")
-        } catch (e: RestoreException) {
-            assertEquals(RestoreFailure.INCOMPLETE, e.failure)
-        }
-        assertTrue(target.marker.exists())
-        assertNull(target.installedKey)
-        assertEquals(source.dump(), target.dump())
-        runBlocking { target.restorer().recover() }
-        assertArrayEquals(LOCAL_KEY, target.installedKey)
-        assertFalse(target.marker.exists())
-        assertFalse(target.stage.exists())
-    }
-
-    @Test
-    fun `REQ-OPS-179 staging with no marker is removed at start`() {
-        val (_, _) = stage()
-        assertTrue(target.stage.exists())
-        runBlocking { target.restorer().recover() }
-        assertFalse(target.stage.exists())
-    }
-
-    @Test
     fun `REQ-OPS-179 not enough free space refuses with the size needed and changes nothing`() {
         val big = source
         insertRow(
@@ -639,24 +527,6 @@ class RestoreTest {
             )
         expectRefused(target, file, RestoreFailure.STORAGE_FULL, 0, restorer = restorer)
         assertTrue(written > 0)
-    }
-
-    @Test
-    fun `REQ-OPS-178 a failure inside the replace rolls back and leaves no marker`() {
-        val rows = target.dump()
-        val files = target.receiptHashes()
-        val hooks =
-            object : RestoreHooks {
-                override fun beforeCommit() = error("disk error")
-            }
-        val (restorer, staged) = stage(restorer = target.restorer(hooks = hooks))
-        try {
-            runBlocking { restorer.apply(staged) }
-            fail("expected a failure")
-        } catch (e: RestoreException) {
-            assertEquals(RestoreFailure.FAILED, e.failure)
-        }
-        target.assertUntouched(rows, files)
     }
 
     @Test

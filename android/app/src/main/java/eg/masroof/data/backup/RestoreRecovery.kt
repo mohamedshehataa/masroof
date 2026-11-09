@@ -288,12 +288,14 @@ class RestoreRecovery(
                     }
                 env.hooks.before(RestoreOp.SETTINGS_APPLY)
                 env.settings.apply(parsed)
+                env.hooks.after(RestoreOp.SETTINGS_APPLY)
                 s = journal.step(c, Step.SETTINGS_DONE)
             }
             if (s == Step.SETTINGS_DONE) {
                 if (!(keyBytes!!.size == KEY_BYTES && keyBytes.any { it.toInt() != 0 })) throw PartialEvidence()
                 env.hooks.before(RestoreOp.KEY_INSTALL)
                 env.keys.install(keyBytes)
+                env.hooks.after(RestoreOp.KEY_INSTALL)
                 s = journal.step(c, Step.KEY_DONE)
             }
             keyBytes?.fill(0)

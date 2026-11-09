@@ -8,7 +8,7 @@ import eg.masroof.data.backup.BackupHeader
 import eg.masroof.data.backup.BackupRestorer
 import eg.masroof.data.backup.BackupTables
 import eg.masroof.data.backup.DirectoryReceiptFiles
-import eg.masroof.data.backup.LocalIdKeyInstaller
+import eg.masroof.data.backup.LocalIdKeyStore
 import eg.masroof.data.backup.PassphraseKdf
 import eg.masroof.data.backup.RestoreEnvironment
 import eg.masroof.data.backup.RestoreException
@@ -80,7 +80,8 @@ class Phone(
     val root = File(context.cacheDir, "phone-$name").also { it.deleteRecursively() }
     val receipts = File(root, "files/receipts").also { it.mkdirs() }
     val stage = RestoreStage.dir(receipts)
-    val marker = RestoreStage.marker(receipts)
+    val journal = RestoreStage.journal(receipts)
+    val filesDir: File get() = receipts.parentFile!!
     val applied = mutableListOf<RestoredSettings>()
     var installedKey: ByteArray? = null
     var keyFailures = 0
@@ -88,7 +89,7 @@ class Phone(
 
     val settings = RestoreSettingsApplier { applied += it }
     val keys =
-        LocalIdKeyInstaller {
+        LocalIdKeyStore {
             onInstall()
             if (keyFailures > 0) {
                 keyFailures--
@@ -135,8 +136,11 @@ class Phone(
         assertTrue("settings were applied", applied.isEmpty())
         assertNull("key was installed", installedKey)
         assertFalse("staging left behind", stage.exists())
-        assertFalse("marker left behind", marker.exists())
+        assertFalse("journal left behind", journal.exists())
     }
+
+    /** True when no plaintext local-id key file is left anywhere under filesDir (I9). */
+    fun noKeyFiles(): Boolean = filesDir.walkTopDown().none { it.name == "local-id.key" }
 
     fun close() {
         db.close()
