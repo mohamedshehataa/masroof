@@ -50,6 +50,7 @@ class RoomDataWiper
         private val answerPrefs: eg.masroof.data.answers.AnswerPrefs = eg.masroof.data.answers.NoAnswerPrefs,
         private val eraseLock: EraseLock = EraseLock(),
         private val backfillReset: BackfillReset = BackfillReset {},
+        private val importStore: eg.masroof.data.serverimport.ImportStore = eg.masroof.data.serverimport.NoImportStore,
     ) : LocalDataWiper {
         override suspend fun counts(): EraseCounts = withContext(io) { EraseCounts(db.expenses().count(), db.receipts().count()) }
 
@@ -136,6 +137,8 @@ class RoomDataWiper
                     { subscriptionPrefs.clear() },
                     // answered cards, refund and transfer links, ignored cards, card aliases, the ATM choice (STORY-208)
                     { answerPrefs.clear() },
+                    // the one-time server import: its pending flag and the category and member mappings (the rows they point to are gone)
+                    { withContext(io) { importStore.clear() } },
                 )
             for (step in steps) {
                 try {

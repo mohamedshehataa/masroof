@@ -153,6 +153,16 @@ class SmsBackfillWorker
             } catch (e: CancellationException) {
                 throw e
             } catch (
+                @Suppress("SwallowedException") _: eg.masroof.ingest.LocalIdKeyUnavailableException,
+            ) {
+                // the local-id key cannot be read right now: continue from the saved position later, with the same key
+                if (runAttemptCount < MAX_BACKFILL_ATTEMPTS) {
+                    Result.retry()
+                } else {
+                    store.save(store.state.value.copy(phase = BackfillPhase.STOPPED))
+                    Result.failure()
+                }
+            } catch (
                 @Suppress("SwallowedException") _: SQLiteException,
             ) {
                 // a database that cannot write (full disk, locked) wrote nothing: continue from the saved position

@@ -34,8 +34,33 @@ interface ImportStore {
     fun clear()
 }
 
-/** SharedPreferences-backed [ImportStore] (file `masroof_server_import`): ids and flags only, in app-private storage. */
-@SuppressLint("ApplySharedPref")
+/** For code paths that have no import state (previews and older tests). */
+object NoImportStore : ImportStore {
+    override fun categoryOf(serverId: String): String? = null
+
+    override fun mapCategory(
+        serverId: String,
+        localId: String,
+    ) = Unit
+
+    override fun memberOf(serverId: String): String? = null
+
+    override fun mapMember(
+        serverId: String,
+        localId: String,
+    ) = Unit
+
+    override var pending: Boolean = false
+    override var forgetPending: Boolean = false
+
+    override fun clear() = Unit
+}
+
+/**
+ * SharedPreferences-backed [ImportStore] (file `masroof_server_import`): ids and flags only, in app-private storage.
+ * The writes use commit(): `forgetPending` must be on disk before the forget starts, and a mapping before the rows that use it.
+ */
+@SuppressLint("ApplySharedPref") // KDoc above: commit() is deliberate (synchronous, durable before the next step)
 class PrefsImportStore(
     private val prefs: SharedPreferences,
 ) : ImportStore {

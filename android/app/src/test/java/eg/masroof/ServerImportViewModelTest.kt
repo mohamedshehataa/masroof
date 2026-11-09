@@ -126,7 +126,7 @@ class ServerImportViewModelTest {
             store.stored = LoadedSession.Empty
             val fresh = SessionManager(store, FakeAuthRemote(), w.settings, Dispatchers.Unconfined)
             fresh.restore()
-            val s =
+            val vm =
                 ImportViewModel(
                     ServerImporter(
                         w.db,
@@ -145,8 +145,16 @@ class ServerImportViewModelTest {
                     fresh,
                     network,
                     importStore,
-                ).state.await { true }
-            assertFalse(s.visible)
+                )
+            // observed over time: every state from the first (Restoring) to the settled SignedOut one hides the card
+            val seen = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+            backgroundScope.launch { vm.state.collect { seen += it.visible } }
+            fresh.state.await { it is eg.masroof.data.auth.SessionState.SignedOut }
+            network.flow.value = false
+            network.flow.value = true
+            assertTrue(seen.isNotEmpty())
+            assertTrue("the card showed: $seen", seen.none { it })
+            assertFalse(importStore.pending)
         }
 
     @Test

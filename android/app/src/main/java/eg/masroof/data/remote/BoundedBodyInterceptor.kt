@@ -12,7 +12,8 @@ import java.io.IOException
 class ResponseTooLargeException : IOException("Response body too large")
 
 /**
- * Network interceptor that stops a response body at [maxBytes] (REQ-SEC-065, hostile server): a declared length above the cap fails
+ * Application interceptor (it must see the DECODED body, a gzip bomb included) that stops a response body at [maxBytes]
+ * (REQ-SEC-065, hostile server): a declared length above the cap fails
  * at once, and a chunked body fails as soon as more than [maxBytes] have been read. Nothing is logged.
  */
 class BoundedBodyInterceptor(

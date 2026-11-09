@@ -43,6 +43,16 @@ object TinkKeystore {
         }
     }
 
+    /**
+     * Like [aead] but NEVER resets: any failure is thrown and nothing is deleted. For a caller that must read something sealed under
+     * this keyset (the legacy local-id key during its move): a transient Keystore failure there must not delete the keyset the entry
+     * was sealed under.
+     */
+    fun aeadOrThrow(context: Context): Aead {
+        AeadConfig.register()
+        return build(context)
+    }
+
     private fun build(context: Context): Aead {
         val handle =
             AndroidKeysetManager

@@ -14,6 +14,7 @@ import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.db.AppDatabase
 import eg.masroof.data.db.BudgetEntity
 import eg.masroof.data.db.CategoryEntity
+import eg.masroof.data.db.DefaultSeed
 import eg.masroof.data.db.ME_MEMBER_ID
 import eg.masroof.data.db.ME_MEMBER_NAME
 import eg.masroof.data.db.MemberEntity
@@ -206,11 +207,8 @@ class ServerImporter
             eraseLock.mutex.withLock {
                 db.withTransaction {
                     val lookups = db.lookups()
-                    val defaults =
-                        lookups
-                            .allCategories()
-                            .filter { it.id.startsWith(DEFAULT_PREFIX) }
-                            .associateBy { it.nameEn.trim().lowercase() }
+                    // the defaults that still exist, by their stable seeded id (a rename on the phone does not change which one it is)
+                    val existingIds = lookups.allCategories().mapTo(HashSet()) { it.id }
                     // The FIRST run maps a server category that is one of the phone's defaults (same English name) onto it and the rest
                     // to their own id, and records that. Later runs only read the record: a rename on the phone never re-maps.
                     val categoryMap =
@@ -218,7 +216,8 @@ class ServerImporter
                             c.id to
                                 (
                                     store.categoryOf(c.id)
-                                        ?: (defaults[c.nameEn.trim().lowercase()]?.id ?: c.id).also { store.mapCategory(c.id, it) }
+                                        ?: (DefaultSeed.defaultIdOfOriginalName(c.nameEn)?.takeIf { it in existingIds } ?: c.id)
+                                            .also { store.mapCategory(c.id, it) }
                                 )
                         }
                     for (c in l.categories) {
@@ -369,8 +368,4 @@ class ServerImporter
 
         private fun ImportContext.withBlocked(ids: Set<String>) =
             ImportContext(categories, accountIds, members, stampMillis, nowMillis, ids)
-
-        private companion object {
-            const val DEFAULT_PREFIX = "cat-"
-        }
     }

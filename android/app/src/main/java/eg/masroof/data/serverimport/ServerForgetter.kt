@@ -58,24 +58,30 @@ class DefaultServerForgetter
             } catch (_: Exception) {
                 // the revoke is best effort
             }
+            // a keystore failure must not stop the URL from going, but it is NOT forgotten: it is thrown at the end, the caller keeps
+            // `forgetPending`, and the next Import (or Settings open) runs this again until the keyset and its master key are gone
+            var keystoreFailure: Exception? = null
             try {
                 keystore.destroy()
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // the blob is already gone: an undeletable key protects nothing
+            } catch (e: Exception) {
+                keystoreFailure = e
             }
             // a DataStore write can fail (full disk): retried, and if it still fails the caller keeps `forgetPending` and tries again
             var failure: IOException? = null
+            var urlGone = false
             repeat(URL_ATTEMPTS) {
+                if (urlGone) return@repeat
                 try {
                     settings.update { it.copy(serverUrl = NO_SERVER) }
-                    return
+                    urlGone = true
                 } catch (e: IOException) {
                     failure = e
                 }
             }
-            throw failure ?: IOException("server URL not deleted")
+            if (!urlGone) throw failure ?: IOException("server URL not deleted")
+            if (keystoreFailure != null) throw IOException("session keyset not deleted", keystoreFailure)
         }
 
         companion object {

@@ -849,6 +849,12 @@ internal suspend fun intakeResult(
         @Suppress("SwallowedException") _: SQLiteException,
     ) {
         if (attempt < MAX_INTAKE_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
+    } catch (
+        @Suppress("SwallowedException") _: LocalIdKeyUnavailableException,
+    ) {
+        // the local-id key cannot be read right now (a busy Keystore): the message stays in the job and is tried again later with
+        // the SAME key; recording it under a different key would stop it from ever deduping
+        if (attempt < MAX_INTAKE_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
     }
 
 @HiltWorker

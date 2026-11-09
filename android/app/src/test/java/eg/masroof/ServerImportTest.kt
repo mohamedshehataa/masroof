@@ -643,18 +643,29 @@ class ServerImportTest {
         }
 
     @Test
-    fun `REQ-SEC-065 a keystore that cannot be deleted does not stop the rest`() =
+    fun `REQ-SEC-065 a keystore that cannot be deleted still clears the URL and session, and is retried until it is gone`() =
         runTest {
-            val broken =
+            var failures = 1
+            val flaky =
                 object : eg.masroof.data.serverimport.SessionKeystore {
-                    override fun destroy() = error("keystore")
+                    var destroyed = 0
+
+                    override fun destroy() {
+                        if (failures-- > 0) error("keystore")
+                        destroyed++
+                    }
                 }
-            assertEquals(
-                ImportResult.Completed(1_240, 0),
-                run(importer(DefaultServerForgetter(manager, w.settings, broken))),
-            )
+            val forgetter = DefaultServerForgetter(manager, w.settings, flaky)
+            // the rest still goes, the failure is reported and the forget stays pending
+            assertEquals(ImportResult.Failed(ImportFailureKind.STORAGE), run(importer(forgetter)))
             assertEquals("", w.settings.current().serverUrl)
             assertTrue(store.stored is LoadedSession.Empty)
+            assertTrue(importStore.forgetPending)
+            assertEquals(0, flaky.destroyed)
+            // the next Import (or Settings open) finishes the deletion and imports nothing again
+            assertEquals(ImportResult.Completed(0, 0), run(importer(forgetter)))
+            assertEquals(1, flaky.destroyed)
+            assertFalse(importStore.forgetPending)
         }
 
     /** A settings store whose write of an empty server URL fails [failures] times with an I/O error (a full disk). */
@@ -730,6 +741,60 @@ class ServerImportTest {
                         .ServerBudget("b0", null, "MONTHLY", 0, "EGP", false, emptyList()),
                 )
             assertEquals(ImportResult.Completed(1_240, 0, 1), run())
+        }
+
+    @Test
+    fun `REQ-AND-131 Erase all data clears the import's pending flag and mappings`() =
+        runTest {
+            importStore.pending = true
+            importStore.forgetPending = true
+            importStore.mapCategory("srv-cat-0", "cat-groceries")
+            importStore.mapMember("m", "member-me")
+            eg.masroof.data.auth
+                .RoomDataWiper(
+                    w.db,
+                    NoInsightsCache,
+                    androidx.work.WorkManager.getInstance(ApplicationProvider.getApplicationContext()),
+                    Dispatchers.Unconfined,
+                    importStore = importStore,
+                ).wipe()
+            assertFalse(importStore.pending)
+            assertFalse(importStore.forgetPending)
+            assertNull(importStore.categoryOf("srv-cat-0"))
+            assertNull(importStore.memberOf("m"))
+        }
+
+    @Test
+    fun `REQ-OPS-175 a default category renamed on the phone before the first import is still matched to its server twin`() =
+        runTest {
+            val groceries =
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .single { it.id == "cat-groceries" }
+            w.db.lookups().upsertCategories(listOf(groceries.copy(nameEn = "Supermarket")))
+            run()
+            // 29 defaults + 2 custom: the server's "Groceries" did not become a third duplicate
+            assertEquals(
+                31,
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .size,
+            )
+            assertEquals(
+                "cat-groceries",
+                w.db
+                    .expenses()
+                    .findByServerId("srv-exp-0031")!!
+                    .categoryId,
+            )
+            assertTrue(
+                w.db
+                    .lookups()
+                    .allCategories()
+                    .none { it.nameEn == "Groceries" },
+            )
         }
 
     @Test

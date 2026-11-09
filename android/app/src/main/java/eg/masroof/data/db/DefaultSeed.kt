@@ -72,6 +72,16 @@ private val SUBCATEGORIES =
  * member "Me" when the `member` table is empty. Idempotent: running it again changes nothing. It never reads or logs row contents.
  */
 object DefaultSeed {
+    private val idByOriginalName: Map<String, String> by lazy {
+        (TOP_LEVEL + SUBCATEGORIES).associate { it.nameEn.trim().lowercase() to seededCategoryId(it.key) }
+    }
+
+    /**
+     * The id of the default category that was SEEDED with this English name (the original name, never the current label: the user may
+     * have renamed it). The one-time import maps a server category onto a default by this identity.
+     */
+    fun defaultIdOfOriginalName(nameEn: String): String? = idByOriginalName[nameEn.trim().lowercase()]
+
     fun seed(db: SupportSQLiteDatabase) {
         db.beginTransaction()
         try {

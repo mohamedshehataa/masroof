@@ -48,48 +48,80 @@ class KeystoreLocalIdKey(
     private val legacy: KeyPrefs,
     private val localAead: () -> Aead,
     private val sessionAead: () -> Aead,
+    /** True only when the local keyset was PROVABLY lost and recreated: an entry sealed under it can never open. */
+    private val localLost: () -> Boolean = { false },
 ) : LocalIdKey {
     constructor(context: Context, localAead: RecoveringAead) : this(
         SharedKeyPrefs(context, "masroof_capture_key"),
         SharedKeyPrefs(context, "masroof_capture_key"),
         { localAead },
-        { TinkKeystore.aead(context) },
+        // NON-resetting: a transient Keystore failure while reading the legacy key must never delete the keyset it was sealed under
+        { TinkKeystore.aeadOrThrow(context) },
+        { localAead.keyRecreated },
     )
 
+    /**
+     * Returns the key. A key is made ONLY when no entry exists (or every entry that exists is PROVABLY gone: the local keyset was lost
+     * and recreated, and the legacy entry does not open under a built session keyset). An entry that exists but does not open, a
+     * keyset that fails to build, a failed write or a failed read-back all THROW [LocalIdKeyUnavailableException]: callers retry
+     * later, they never get a different key. Intake and the backfill worker retry; a minted key would stop every SMS from deduping.
+     */
     @Synchronized
-    override fun get(): ByteArray {
-        open(current.get(CURRENT), localAead)?.let { return it }
-        // a key of an older build, sealed under the session keyset; a failure to even build that AEAD is not "no key": it propagates
-        val old = legacy.get(LEGACY)?.let { stored -> open(stored, sessionAead) }
+    @Suppress("TooGenericExceptionCaught") // the Keystore provider can fail with any RuntimeException: all of them mean "try later"
+    override fun get(): ByteArray =
+        try {
+            getChecked()
+        } catch (e: LocalIdKeyUnavailableException) {
+            throw e
+        } catch (e: GeneralSecurityException) {
+            throw LocalIdKeyUnavailableException(e)
+        } catch (e: RuntimeException) {
+            throw LocalIdKeyUnavailableException(e)
+        }
+
+    private fun getChecked(): ByteArray {
+        val sealed = current.get(CURRENT)
+        if (sealed != null) {
+            try {
+                return unseal(sealed, localAead())
+            } catch (e: GeneralSecurityException) {
+                // present but not opened: a busy Keystore looks the same as a lost key, so only a PROVABLY lost key may go on
+                if (!localLost()) throw LocalIdKeyUnavailableException(e)
+            }
+        }
+        val old =
+            legacy.get(LEGACY)?.let { stored ->
+                // building the session AEAD may throw (not swallowed: not "no key"); only a failed OPEN under a built keyset is "gone"
+                val a = sessionAead()
+                try {
+                    unseal(stored, a)
+                } catch (_: GeneralSecurityException) {
+                    null
+                }
+            }
         val key = old ?: ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
         seal(key)
         return key
     }
 
+    private fun unseal(
+        stored: String,
+        aead: Aead,
+    ): ByteArray =
+        try {
+            aead.decrypt(Base64.decode(stored, Base64.NO_WRAP), AAD)
+        } catch (e: IllegalArgumentException) {
+            throw GeneralSecurityException("bad entry", e)
+        }
+
     /** Seals [key] under the local keyset, commits it, and proves it reads back identical (else throws, nothing is destroyed). */
     private fun seal(key: ByteArray) {
         current.put(CURRENT, Base64.encodeToString(localAead().encrypt(key, AAD), Base64.NO_WRAP))
-        val check = open(current.get(CURRENT), localAead)
+        val check = unseal(current.get(CURRENT).orEmpty(), localAead())
         try {
-            if (check == null || !check.contentEquals(key)) throw GeneralSecurityException("local-id key did not read back")
+            if (!check.contentEquals(key)) throw GeneralSecurityException("local-id key did not read back")
         } finally {
-            check?.fill(0)
-        }
-    }
-
-    private fun open(
-        stored: String?,
-        aead: () -> Aead,
-    ): ByteArray? {
-        if (stored == null) return null
-        // building the AEAD may throw (a transient Keystore failure): that is not "the key is gone" and is never swallowed here
-        val a = aead()
-        return try {
-            a.decrypt(Base64.decode(stored, Base64.NO_WRAP), AAD)
-        } catch (_: GeneralSecurityException) {
-            null
-        } catch (_: IllegalArgumentException) {
-            null
+            check.fill(0)
         }
     }
 
@@ -116,6 +148,11 @@ class KeystoreLocalIdKey(
         val AAD = "masroof-local-id".toByteArray()
     }
 }
+
+/** The key cannot be read or written right now. It is NOT "no key": the caller tries again later and never uses another key. */
+class LocalIdKeyUnavailableException(
+    cause: Throwable,
+) : java.io.IOException("local-id key unavailable", cause)
 
 /** [KeyPrefs] over one SharedPreferences file. */
 class SharedKeyPrefs(

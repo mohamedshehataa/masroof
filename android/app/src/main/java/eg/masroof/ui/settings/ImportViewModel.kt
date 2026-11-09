@@ -99,6 +99,12 @@ class ImportViewModel
         init {
             // reads the stored session once so the card knows whether one exists
             viewModelScope.launch { session.restore() }
+            // a finished import whose forgetting was cut short (a Keystore or disk failure): finished now, quietly, at the next open
+            if (importer.forgetUnfinished()) {
+                viewModelScope.launch {
+                    if (importer.run {} is ImportResult.Completed) inputs.update { it.copy(pending = false) }
+                }
+            }
             // a successful sign-in from the card ends "Sign in again": Import can be tapped again
             viewModelScope.launch {
                 session.state.collect { s ->

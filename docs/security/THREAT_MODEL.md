@@ -45,7 +45,7 @@ flowchart LR
 |---|---|---|
 | B1 | Internet -> Caddy -> backend | HTTPS (Caddy ACME), HSTS; backend only reachable on the compose network |
 | B2 | Meta webhook -> backend `/webhooks/whatsapp` | HTTPS; `X-Hub-Signature-256` HMAC with `WHATSAPP_APP_SECRET`; GET handshake with `WHATSAPP_VERIFY_TOKEN` |
-| B3 | Android app -> `/api/ingest/*`, `/api/*` | HTTPS + certificate pinning; per-device ingestion token (hashed in DB) + member JWT |
+| B3 | Android app -> `/api/ingest/*`, `/api/*` | HTTPS only (system CAs, user CAs not trusted, cleartext blocked in release); no certificate pinning exists, accepted for the one-time import (DECISIONS 2026-11-08); per-device ingestion token (hashed in DB) + member JWT |
 | B4 | iOS Shortcut -> `/api/ingest/sms`, `/api/ingest/receipt` | HTTPS; per-device token header; no interactive auth possible |
 | B5 | PWA -> `/api/*` | HTTPS; short-lived JWT access + rotating refresh token; CORS locked to `WEB_BASE_URL` |
 | B6 | backend -> Anthropic API (and B6b STT, B6c FX) | HTTPS, API key from env; outbound only |
@@ -113,7 +113,7 @@ In STORY-143 the endpoint is reachable only from the compose network and, throug
 | STRIDE | Threat | Mitigation | REQ | Status |
 |---|---|---|---|---|
 | S | Stolen device token injects fake SMS | Token bound to device id, hashed (SHA-256 + pepper) in DB, revocable from Settings and by admin instantly | REQ-SEC-003, REQ-SEC-014 | Planned |
-| S | Rogue Wi-Fi MITM | Certificate pinning to our domain with a backup pin; network security config HTTPS-only | REQ-SEC-017 | Planned |
+| S | Rogue Wi-Fi MITM | ACCEPTED RISK (one-time import only, STORY-182): no certificate pinning; HTTPS only with system CAs, cleartext blocked in release, redirects refused, nothing sent after the import | REQ-SEC-017, REQ-SEC-065 | Accepted |
 | T | Modified APK (sideloaded) | APK signed with the release keystore; in-app update verifies SHA-256 from `/api/app/android/latest` | REQ-SEC-028 | Planned |
 | I | OTPs or non-financial SMS uploaded | Sender allowlist on device; OTP/verification patterns dropped on device and never persisted | REQ-SEC-018 | Planned |
 | I | SMS bodies in backend logs | Structured logging with redaction; semgrep rule `masroof-no-log-message-content-*`; never at INFO | REQ-SEC-005 | Planned (semgrep rule: Done) |
@@ -286,3 +286,11 @@ the 14 `required_checks` of `delivery-gates.yaml` (STORY-016).
 - Framework support window: Spring Boot 3.5.16 (OSS support ended 2026-06-30) was accepted for STORY-002 only, which had no network surface. STORY-143 replaces it with 4.1.2 before the first endpoint ships (ADR-0004). If ADR-0004's fallback triggers, this becomes "Accepted risk (ADR-0003)" with manual tracking of Spring advisories.
 
 TODO(owner): confirm the VPS provider's disk-encryption and snapshot policy; decide whether raw media retention is 90 days or indefinite.
+
+### L1 and L4 on the phone (STORY-182, ADR-0009)
+
+| STRIDE | Threat | Mitigation | REQ | Status |
+|---|---|---|---|---|
+| T | L4: a hostile or compromised server sends a redirect, an oversized or compressed body, or an endless list during the one-time import | Redirects are never followed; every response body is capped at 8 MB AFTER gzip decoding (application interceptor); at most 100,000 rows, 2,000 per lookup list, strings bounded by the contract; a page larger than asked for or a malformed page stores nothing | REQ-SEC-065 | Done |
+| I | L4: credentials or the server address outlive the import | After a completed import: one best-effort logout, the session blob, its Keystore key and the stored URL are deleted; the forget is retried until done; without a session ApiRemoteSource refuses to build a request; the Server section and Members are hidden | REQ-SEC-065 | Done |
+| D | L1: the local message-id key changes and every SMS stops deduping | The key is sealed under LocalKeystore (own keyset, reset only by Erase all data); a transient Keystore failure never mints a new key while a sealed copy exists (the read throws and intake and backfill retry); a legacy key is moved crash-safely before the session keyset is deleted | REQ-SEC-065 | Done |

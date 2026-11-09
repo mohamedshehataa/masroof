@@ -333,6 +333,33 @@ class ServerImportHttpTest {
         }
 
     @Test
+    fun `REQ-SEC-065 a small gzip body that expands past the cap (a gzip bomb) stops the run as unexpected data`() =
+        runTest {
+            build()
+            val json = "{\"items\":[],\"pad\":\"" + "x".repeat(20 * 1024 * 1024) + "\"}"
+            val gz =
+                java.io
+                    .ByteArrayOutputStream()
+                    .also { o ->
+                        java.util.zip
+                            .GZIPOutputStream(o)
+                            .use { it.write(json.toByteArray()) }
+                    }.toByteArray()
+            // ~20 KB on the wire, 20 MB decoded
+            assertTrue(gz.size < 1024 * 1024)
+            categoriesOverride =
+                MockResponse
+                    .Builder()
+                    .code(200)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Content-Encoding", "gzip")
+                    .body(okio.Buffer().write(gz))
+                    .build()
+            assertEquals(ImportResult.Failed(ImportFailureKind.UNEXPECTED_DATA), importer().run {})
+            assertEquals(0, w.db.expenses().count())
+        }
+
+    @Test
     fun `REQ-SEC-065 a redirect is never followed (the bearer token would go with it)`() =
         runTest {
             build()

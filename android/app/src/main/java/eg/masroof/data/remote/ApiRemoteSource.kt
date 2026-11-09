@@ -202,7 +202,8 @@ class ApiRemoteSource
                 .followRedirects(false)
                 .followSslRedirects(false)
                 // a hostile server cannot make the phone buffer an unbounded body
-                .addNetworkInterceptor(BoundedBodyInterceptor(MAX_RESPONSE_BYTES))
+                // an APPLICATION interceptor: it sees the body after OkHttp unzipped it, so a gzip bomb is counted as decoded bytes
+                .addInterceptor(BoundedBodyInterceptor(MAX_RESPONSE_BYTES))
                 // no request outlives the claim the uploader holds on its row (UPLOAD_CLAIM_TTL_MILLIS)
                 .callTimeout(CALL_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
