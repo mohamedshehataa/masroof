@@ -40,7 +40,7 @@ plugins {
     jacoco
     checkstyle
     id("org.springframework.boot") version "4.1.2"
-    id("net.ltgt.errorprone") version "5.1.1"
+    id("net.ltgt.errorprone") version "5.2.0"
     id("com.diffplug.spotless") version "8.10.4"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
