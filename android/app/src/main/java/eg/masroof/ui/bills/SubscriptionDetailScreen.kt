@@ -68,18 +68,27 @@ fun SubscriptionDetailContent(
     val cadence = Cadence.of(row.cadence)
     val perYear = RenewalMath.perYearMinor(row.amountMinor, cadence)
     Column(
-        modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(row.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         SectionCard(stringResource(R.string.subs_details)) {
             Text(billMoney(row.amountMinor, row.currency) + " - " + cadenceLabel(cadence), style = MaterialTheme.typography.titleLarge)
             if (row.active) {
-                Text(stringResource(R.string.subs_renews, billDate(item.date), renewalIn(item.daysUntil)))
+                Text(
+                    stringResource(R.string.subs_renews, billDate(item.date), renewalIn(item.daysUntil)),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             } else {
-                Text(stringResource(R.string.subs_paused))
+                Text(stringResource(R.string.subs_paused), style = MaterialTheme.typography.bodyMedium)
             }
-            item.lastPaid?.let { Text(stringResource(R.string.subs_paid_on, billDate(it))) }
+            item.lastPaid?.let {
+                Text(
+                    stringResource(R.string.subs_paid_on, billDate(it)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 stringResource(R.string.subs_year_cost, billMoney(perYear, row.currency)),
                 style = MaterialTheme.typography.bodySmall,
@@ -93,8 +102,8 @@ fun SubscriptionDetailContent(
         OutlinedButton(onClick = { actions.onSetActive(!row.active) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(if (row.active) R.string.subs_pause else R.string.subs_resume))
         }
-        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Text(stringResource(R.string.subs_delete))
+        TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.subs_delete), color = MaterialTheme.colorScheme.error)
         }
     }
     if (confirmDelete) {
@@ -109,7 +118,7 @@ fun SubscriptionDetailContent(
                         actions.onDelete()
                     },
                     modifier = Modifier.heightIn(min = 48.dp),
-                ) { Text(stringResource(R.string.subs_delete)) }
+                ) { Text(stringResource(R.string.subs_delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }, modifier = Modifier.heightIn(min = 48.dp)) {

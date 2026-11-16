@@ -83,7 +83,7 @@ fun SubscriptionFormContent(
 ) {
     val form = state.form
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -101,10 +101,7 @@ fun SubscriptionFormContent(
                 )
             }
         }
-        Text(
-            stringResource(if (form.isIncome) R.string.subs_income_type else R.string.subs_service),
-            style = MaterialTheme.typography.titleSmall,
-        )
+        FormLabel(stringResource(if (form.isIncome) R.string.subs_income_type else R.string.subs_service))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (form.isIncome) {
                 IncomePreset.entries.forEach { preset ->
@@ -165,7 +162,7 @@ fun SubscriptionFormContent(
                 )
             }
         }
-        Text(stringResource(R.string.subs_cadence), style = MaterialTheme.typography.titleSmall)
+        FormLabel(stringResource(R.string.subs_cadence))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Cadence.entries.forEach { cadence ->
                 FilterChip(
@@ -205,7 +202,7 @@ private fun AccountAndReminder(
 ) {
     val form = state.form
     if (state.accounts.isNotEmpty()) {
-        Text(stringResource(R.string.bills_account), style = MaterialTheme.typography.titleSmall)
+        FormLabel(stringResource(R.string.bills_account))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             state.accounts.forEach { a ->
                 FilterChip(
@@ -218,7 +215,7 @@ private fun AccountAndReminder(
         }
     }
     if (form.isIncome) return
-    Text(stringResource(R.string.bills_remind_me), style = MaterialTheme.typography.titleSmall)
+    FormLabel(stringResource(R.string.bills_remind_me))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(0, 1, 3, 7).forEach { days ->
             FilterChip(

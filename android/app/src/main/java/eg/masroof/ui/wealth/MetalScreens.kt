@@ -2,6 +2,7 @@ package eg.masroof.ui.wealth
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,11 +10,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -49,8 +49,11 @@ import eg.masroof.data.wealth.MetalMath
 import eg.masroof.data.wealth.MetalOutcome
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.MessageState
-import eg.masroof.ui.components.SectionCard
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.components.SectionLabel
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.theme.extra
 import java.time.LocalDate
 
 /** Grams from milligrams: `35`, `7.5`, `0.125`, in the chosen digits. */
@@ -231,7 +234,7 @@ fun MetalDetailContent(
 ) {
     val holding = state.holding
     if (holding == null) {
-        MessageState(stringResource(R.string.gold_not_found), "", modifier.fillMaxSize(), Icons.Filled.Info)
+        MessageState(stringResource(R.string.gold_not_found), "", modifier.fillMaxSize(), AppIcons.Info)
         return
     }
     var lotDialog by remember { mutableStateOf<LotDialogState?>(null) }
@@ -241,15 +244,22 @@ fun MetalDetailContent(
     var confirmDeleteLot by remember { mutableStateOf<AssetLotEntity?>(null) }
     var confirmDeleteHolding by remember { mutableStateOf(false) }
     var lotError by remember { mutableStateOf<MetalOutcome?>(null) }
+    val scheme = MaterialTheme.colorScheme
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        TextButton(onClick = actions.onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_back)) }
-        Text(holding.asset.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        Text(karatLabel(holding.asset.kind, holding.asset.karat), style = MaterialTheme.typography.labelLarge)
+        Column {
+            TextButton(onClick = actions.onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_back)) }
+            Text(holding.asset.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+            Text(
+                karatLabel(holding.asset.kind, holding.asset.karat),
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.onSurfaceVariant,
+            )
+        }
         ValueCard(holding) { priceDialog = true }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 { lotDialog = LotDialogState(MetalMath.BUY, null) },
                 Modifier.heightIn(min = 48.dp),
@@ -259,26 +269,46 @@ fun MetalDetailContent(
             }
         }
         state.undoLotId?.let { lotId ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.gold_entry_excluded), modifier = Modifier.weight(1f))
-                TextButton({ actions.onUndoEntry(lotId) }, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_undo)) }
-                TextButton(actions.onDismissUndo, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_ok)) }
+            // Something the user may want to take back: the amber notice, like the banners on Home.
+            Panel(Modifier.fillMaxWidth(), color = scheme.tertiaryContainer) {
+                Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.gold_entry_excluded),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onTertiaryContainer,
+                        modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                    )
+                    TextButton({ actions.onUndoEntry(lotId) }, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_undo)) }
+                    TextButton(actions.onDismissUndo, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_ok)) }
+                }
             }
         }
-        lotError?.let { Text(outcomeText(it), color = MaterialTheme.colorScheme.error) }
+        lotError?.let { Text(outcomeText(it), style = MaterialTheme.typography.bodyMedium, color = scheme.error) }
         GoalCard(holding, onLink = { goalPicker = true }, onUnlink = { confirmUnlink = true })
-        SectionCard(stringResource(R.string.gold_lots)) {
-            if (holding.lots.isEmpty()) Text(stringResource(R.string.gold_lots_empty))
-            holding.lots.forEach { lot ->
-                LotRow(lot, onEdit = { lotDialog = LotDialogState(lot.side, lot) }, onDelete = { confirmDeleteLot = lot })
-            }
+        Text(
+            stringResource(R.string.gold_lots),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp).semantics { heading() },
+        )
+        if (holding.lots.isEmpty()) {
+            Text(
+                stringResource(R.string.gold_lots_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.gold_hide), modifier = Modifier.weight(1f))
+        holding.lots.forEachIndexed { index, lot ->
+            if (index > 0) HorizontalDivider(color = scheme.outlineVariant)
+            LotRow(lot, onEdit = { lotDialog = LotDialogState(lot.side, lot) }, onDelete = { confirmDeleteLot = lot })
+        }
+        HorizontalDivider(color = scheme.outlineVariant)
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.gold_hide), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Switch(checked = holding.asset.hiddenFromTotals, onCheckedChange = actions.onHide)
         }
         TextButton({ confirmDeleteHolding = true }, Modifier.heightIn(min = 48.dp)) {
-            Text(stringResource(R.string.gold_delete_holding), color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.gold_delete_holding), color = scheme.error)
         }
     }
     lotDialog?.let { d ->
@@ -350,55 +380,80 @@ private fun ValueCard(
 ) {
     val v = holding.valuation
     val style = LocalMoneyStyle.current
-    SectionCard(stringResource(R.string.gold_held)) {
-        Text(gramsText(v.position.heldMilli), style = MaterialTheme.typography.headlineSmall)
-        Text(
-            stringResource(if (v.priceState == MetalMath.PriceState.NONE) R.string.gold_value_at_cost else R.string.gold_value),
-            style = MaterialTheme.typography.labelMedium,
-        )
-        AmountText(Money(v.valueMinor, holding.asset.currency), style = MaterialTheme.typography.headlineMedium)
-        v.position.averagePerGramMinor?.let {
-            Text(stringResource(R.string.gold_average, moneyText(it)), style = MaterialTheme.typography.bodyMedium)
-        }
-        if (v.priceState != MetalMath.PriceState.NONE) {
-            val gain = moneyText(v.gainMinor).let { if (v.gainMinor > 0) "+$it" else it }
-            val bp = v.gainBp
-            Text(
-                if (bp == null) {
-                    stringResource(R.string.gold_gain_no_pct, gain)
-                } else {
-                    stringResource(R.string.gold_gain, gain, gainPercent(bp, style.arabic, style.digits))
-                },
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        if (v.position.realisedMinor != 0L) {
-            Text(stringResource(R.string.gold_realised, moneyText(v.position.realisedMinor)), style = MaterialTheme.typography.bodyMedium)
-        }
-        val priceAt = v.priceAtMillis
-        val date = priceAt?.let { DateFormat.shortDate(CairoTime.dateOf(it), style.arabic, style.digits) }
-        when {
-            v.priceMinor == null || date == null -> Text(stringResource(R.string.gold_add_price), color = MaterialTheme.colorScheme.error)
-            v.priceState == MetalMath.PriceState.STALE ->
-                Text(stringResource(R.string.gold_price_stale, date), color = MaterialTheme.colorScheme.error)
-            else ->
+    val scheme = MaterialTheme.colorScheme
+    val figures = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum")
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SectionLabel(stringResource(R.string.gold_held))
+                Text(gramsText(v.position.heldMilli), style = MaterialTheme.typography.titleLarge)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    stringResource(R.string.gold_price_line, moneyText(v.priceMinor), date),
-                    style = MaterialTheme.typography.bodyMedium,
+                    stringResource(if (v.priceState == MetalMath.PriceState.NONE) R.string.gold_value_at_cost else R.string.gold_value),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = scheme.onSurfaceVariant,
                 )
-        }
-        OutlinedButton(onPrice, Modifier.heightIn(min = 48.dp)) {
-            Text(
-                stringResource(
-                    if (holding.asset.kind ==
-                        MetalMath.SILVER
-                    ) {
-                        R.string.gold_price_sheet_silver
-                    } else {
-                        R.string.gold_price_sheet_gold
-                    },
-                ),
-            )
+                AmountText(Money(v.valueMinor, holding.asset.currency), style = MaterialTheme.typography.headlineMedium, smallUnit = true)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                v.position.averagePerGramMinor?.let {
+                    Text(stringResource(R.string.gold_average, moneyText(it)), style = figures, color = scheme.onSurfaceVariant)
+                }
+                if (v.priceState != MetalMath.PriceState.NONE) {
+                    val gain = moneyText(v.gainMinor).let { if (v.gainMinor > 0) "+$it" else it }
+                    val bp = v.gainBp
+                    val extra = MaterialTheme.extra
+                    Text(
+                        if (bp == null) {
+                            stringResource(R.string.gold_gain_no_pct, gain)
+                        } else {
+                            stringResource(R.string.gold_gain, gain, gainPercent(bp, style.arabic, style.digits))
+                        },
+                        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                        color =
+                            when {
+                                v.gainMinor > 0 -> extra.positive
+                                v.gainMinor < 0 -> extra.negative
+                                else -> scheme.onSurface
+                            },
+                    )
+                }
+                if (v.position.realisedMinor != 0L) {
+                    Text(
+                        stringResource(R.string.gold_realised, moneyText(v.position.realisedMinor)),
+                        style = figures,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val priceAt = v.priceAtMillis
+            val date = priceAt?.let { DateFormat.shortDate(CairoTime.dateOf(it), style.arabic, style.digits) }
+            when {
+                v.priceMinor == null || date == null ->
+                    Text(stringResource(R.string.gold_add_price), style = MaterialTheme.typography.bodyMedium, color = scheme.error)
+                v.priceState == MetalMath.PriceState.STALE ->
+                    Text(stringResource(R.string.gold_price_stale, date), style = MaterialTheme.typography.bodyMedium, color = scheme.error)
+                else ->
+                    Text(
+                        stringResource(R.string.gold_price_line, moneyText(v.priceMinor), date),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                        color = scheme.onSurfaceVariant,
+                    )
+            }
+            OutlinedButton(onPrice, Modifier.heightIn(min = 48.dp)) {
+                Text(
+                    stringResource(
+                        if (holding.asset.kind ==
+                            MetalMath.SILVER
+                        ) {
+                            R.string.gold_price_sheet_silver
+                        } else {
+                            R.string.gold_price_sheet_gold
+                        },
+                    ),
+                )
+            }
         }
     }
 }
@@ -409,13 +464,15 @@ private fun GoalCard(
     onLink: () -> Unit,
     onUnlink: () -> Unit,
 ) {
-    SectionCard(stringResource(R.string.gold_goal_section)) {
+    // Flat on the page: a quiet label, one line, one quiet action (the filled button of this screen is Buy more).
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel(stringResource(R.string.gold_goal_section))
         val name = holding.goalName
         if (holding.asset.goalId == null || name == null) {
-            Text(stringResource(R.string.gold_goal_none))
-            Button(onLink, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_goal_link)) }
+            Text(stringResource(R.string.gold_goal_none), style = MaterialTheme.typography.bodyMedium)
+            OutlinedButton(onLink, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_goal_link)) }
         } else {
-            Text(stringResource(R.string.gold_goal_backing, name))
+            Text(stringResource(R.string.gold_goal_backing, name), style = MaterialTheme.typography.bodyMedium)
             OutlinedButton(onUnlink, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_goal_unlink)) }
         }
     }
@@ -434,8 +491,8 @@ private fun LotRow(
             gramsText(lot.quantityMilli),
             moneyText(lot.totalMinor),
         )
-    Column(Modifier.fillMaxWidth()) {
-        Text(line)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(line, style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"))
         Text(
             DateFormat.shortDate(CairoTime.dateOf(lot.atMillis), style.arabic, style.digits),
             style = MaterialTheme.typography.bodySmall,
@@ -445,12 +502,14 @@ private fun LotRow(
             Text(
                 stringResource(R.string.gold_lot_entry),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row {
             TextButton(onEdit, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_edit)) }
-            TextButton(onDelete, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.gold_delete)) }
+            TextButton(onDelete, Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.gold_delete), color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

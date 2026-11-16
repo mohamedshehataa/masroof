@@ -50,6 +50,7 @@ private const val FULL_CIRCLE = 360f
 private const val START_ANGLE = -90f
 private const val SLICE_GAP = 2f
 private const val BPS_TOTAL = 10_000f
+private const val RING_FRACTION = 0.09f
 
 /**
  * Ring chart of category shares. Drawn on a Canvas and mirrored in RTL so it reads in the same direction as the text.
@@ -64,13 +65,13 @@ fun CategoryDonut(
     centerContent: @Composable () -> Unit = {},
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    val track = MaterialTheme.colorScheme.surfaceContainerHigh
     Box(
         modifier.size(size).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = if (rtl) -1f else 1f }) {
-            val stroke = 24.dp.toPx()
+            val stroke = (size.toPx() * RING_FRACTION)
             val topLeft = Offset(stroke / 2, stroke / 2)
             val arc = Size(this.size.width - stroke, this.size.height - stroke)
             drawArc(track, 0f, FULL_CIRCLE, false, topLeft, arc, style = Stroke(stroke))
@@ -107,11 +108,14 @@ fun BarChart(
     modifier: Modifier = Modifier,
     height: Dp = 132.dp,
     showLabels: Boolean = true,
+    barColor: Color = MaterialTheme.colorScheme.primary,
+    restColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+    gap: Dp = 8.dp,
 ) {
     val max = items.maxOfOrNull { it.value }?.coerceAtLeast(1L) ?: 1L
     Row(
         modifier.fillMaxWidth().height(height).semantics { contentDescription = description },
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(gap),
     ) {
         items.forEach { item ->
             val fraction =
@@ -121,15 +125,10 @@ fun BarChart(
                     Box(
                         Modifier
                             .fillMaxWidth(BAR_WIDTH_FRACTION)
-                            .fillMaxHeight(fraction)
-                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                            .background(
-                                if (item.highlighted) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)
-                                },
-                            ),
+                            // a month with no spending still gets a short stub, so the row reads as a chart
+                            .then(if (fraction > 0f) Modifier.fillMaxHeight(fraction) else Modifier.height(2.dp))
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (item.highlighted) barColor else restColor),
                     )
                 }
                 if (showLabels) {
@@ -260,17 +259,17 @@ fun WeekdayBars(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(WEEKDAY_LABEL_WIDTH.dp),
                 )
-                Box(Modifier.weight(1f).height(14.dp)) {
+                Box(Modifier.weight(1f).height(10.dp)) {
                     Box(
                         Modifier
                             .fillMaxWidth(fraction)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(7.dp))
+                            .clip(RoundedCornerShape(5.dp))
                             .background(
                                 if (bar === top) {
-                                    MaterialTheme.colorScheme.secondary
+                                    MaterialTheme.colorScheme.tertiary
                                 } else {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
                                 },
                             ),
                     )

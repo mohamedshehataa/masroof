@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,16 +12,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
@@ -53,7 +54,6 @@ import eg.masroof.data.db.DbStartup
 import eg.masroof.ui.AppLanguage
 import eg.masroof.ui.accounts.AccountsRoute
 import eg.masroof.ui.add.AddExpenseRoute
-import eg.masroof.ui.ask.AskIcon
 import eg.masroof.ui.ask.AskRoute
 import eg.masroof.ui.bills.AddPlanRoute
 import eg.masroof.ui.bills.BillsRoute
@@ -82,6 +82,7 @@ import eg.masroof.ui.review.ReviewAddRoute
 import eg.masroof.ui.review.ReviewRoute
 import eg.masroof.ui.settings.SettingsRoute
 import eg.masroof.ui.startup.StartupBlockedScreen
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.MasroofTheme
 import eg.masroof.ui.transactions.TransactionsRoute
 import eg.masroof.ui.viewmodel.UndoDeleteViewModel
@@ -102,11 +103,11 @@ private enum class Tab(
     val label: Int,
     val icon: ImageVector,
 ) {
-    Wallet(START_ROUTE, R.string.nav_wallet, Icons.Filled.Home),
-    Bills("bills", R.string.bills_title, Icons.Filled.Notifications),
-    Plan("plan", R.string.nav_plan, Icons.Filled.CheckCircle),
-    Wealth("wealth", R.string.wealth_title, Icons.Filled.AccountBox),
-    Ask("ask", R.string.nav_ask, AskIcon),
+    Wallet(START_ROUTE, R.string.nav_wallet, AppIcons.Wallet),
+    Bills("bills", R.string.bills_title, AppIcons.Calendar),
+    Plan("plan", R.string.nav_plan, AppIcons.Target),
+    Wealth("wealth", R.string.wealth_title, AppIcons.Growth),
+    Ask("ask", R.string.nav_ask, AppIcons.Chat),
 }
 
 private const val INSIGHTS_ROUTE = "insights"
@@ -207,6 +208,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // With 3-button navigation the system would paint its own strip under the bottom bar; let the bar reach the edge.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         takeIntent(intent, savedInstanceState == null)
         val startup = DatabaseStartup.state()
         if (startup !is DbStartup.Ready) {
@@ -323,21 +326,40 @@ private fun MasroofApp(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selected == tab.route,
-                        onClick = { openTab(tab.route) },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(stringResource(tab.label)) },
-                    )
+            // A page-colored bar under a hairline: the selected tab is marked by a soft green pill and ink text.
+            val scheme = MaterialTheme.colorScheme
+            Column {
+                HorizontalDivider(color = scheme.outlineVariant)
+                NavigationBar(containerColor = scheme.background, tonalElevation = 0.dp) {
+                    Tab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selected == tab.route,
+                            onClick = { openTab(tab.route) },
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(stringResource(tab.label), maxLines = 1) },
+                            colors =
+                                NavigationBarItemDefaults.colors(
+                                    selectedIconColor = scheme.onPrimaryContainer,
+                                    selectedTextColor = scheme.onSurface,
+                                    indicatorColor = scheme.primaryContainer,
+                                    unselectedIconColor = scheme.onSurfaceVariant,
+                                    unselectedTextColor = scheme.onSurfaceVariant,
+                                ),
+                        )
+                    }
                 }
             }
         },
         floatingActionButton = {
             if (destination?.route !in FAB_HIDDEN_ROUTES) {
-                FloatingActionButton(onClick = { nav.navigate("add") }) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.nav_add))
+                FloatingActionButton(
+                    onClick = { nav.navigate("add") },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp),
+                ) {
+                    Icon(AppIcons.Plus, contentDescription = stringResource(R.string.nav_add))
                 }
             }
         },

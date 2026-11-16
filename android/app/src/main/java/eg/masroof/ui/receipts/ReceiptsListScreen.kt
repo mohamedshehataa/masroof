@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -56,7 +57,7 @@ fun ReceiptsListRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     SecureWindow()
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             stringResource(R.string.rcpt_list_title),
             style = MaterialTheme.typography.headlineSmall,
@@ -73,7 +74,7 @@ fun ReceiptsListRoute(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             else ->
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     items(state.receipts, key = { it.id }) { receipt ->
                         ReceiptRow(
                             receipt = receipt,
@@ -132,7 +133,7 @@ private fun ReceiptRow(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Thumbnail(file, isPdf, description, onView)
             Column(Modifier.weight(1f)) {
-                Text(date, style = MaterialTheme.typography.titleSmall)
+                Text(date, style = MaterialTheme.typography.titleMedium)
                 Text(kind, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (stale) {
                     Text(
@@ -144,11 +145,11 @@ private fun ReceiptRow(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton(
+            Button(
                 onClick = onNewEntry,
                 modifier = Modifier.heightIn(min = TARGET),
             ) { Text(stringResource(R.string.rcpt_new_entry)) }
-            OutlinedButton(onClick = onAttach, modifier = Modifier.heightIn(min = TARGET)) {
+            TextButton(onClick = onAttach, modifier = Modifier.heightIn(min = TARGET)) {
                 Text(stringResource(R.string.rcpt_attach_entry))
             }
             TextButton(onClick = onDelete, modifier = Modifier.heightIn(min = TARGET)) {
@@ -183,10 +184,11 @@ private fun EntryPicker(
                                 .clickable { onPick(e.id) }
                                 .padding(vertical = 8.dp),
                         ) {
-                            Text(amount, style = MaterialTheme.typography.titleSmall)
+                            Text(amount, style = MaterialTheme.typography.titleMedium)
                             Text(
                                 listOfNotNull(e.merchant?.takeIf { it.isNotBlank() }, date).joinToString(" - "),
                                 style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

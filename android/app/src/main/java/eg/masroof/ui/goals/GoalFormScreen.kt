@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -58,7 +58,7 @@ fun GoalFormContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -75,7 +75,11 @@ fun GoalFormContent(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(stringResource(R.string.goals_pick_emoji), style = MaterialTheme.typography.titleSmall)
+        Text(
+            stringResource(R.string.goals_pick_emoji),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         EmojiGrid(state.emoji, actions.onEmoji)
         OutlinedTextField(
             value = state.targetText,
@@ -117,8 +121,8 @@ private fun EmojiGrid(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 48.dp),
         modifier = Modifier.fillMaxWidth().heightIn(max = GRID_HEIGHT),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(GoalEmoji.ALL) { emoji ->
             val description = stringResource(R.string.goals_emoji_desc, emoji)
@@ -126,10 +130,15 @@ private fun EmojiGrid(
             Box(
                 Modifier
                     .size(48.dp)
-                    .clip(CircleShape)
-                    .background(if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                    .border(if (chosen) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                    .clickable { onPick(emoji) }
+                    .clip(RoundedCornerShape(CELL_CORNER_PERCENT))
+                    .background(if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .then(
+                        if (chosen) {
+                            Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(CELL_CORNER_PERCENT))
+                        } else {
+                            Modifier
+                        },
+                    ).clickable { onPick(emoji) }
                     .semantics {
                         contentDescription = description
                         this.selected = chosen
@@ -143,3 +152,4 @@ private fun EmojiGrid(
 }
 
 private val GRID_HEIGHT = 280.dp
+private const val CELL_CORNER_PERCENT = 32

@@ -1,9 +1,11 @@
 package eg.masroof.ui.wallet
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,19 +18,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -43,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -56,22 +61,25 @@ import eg.masroof.data.wallet.ComingUpItem
 import eg.masroof.data.wallet.ComingUpKind
 import eg.masroof.ui.answers.AnswerCardsSection
 import eg.masroof.ui.answers.AnswerCardsViewModel
-import eg.masroof.ui.ask.AskIcon
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.HomeBudgetsCard
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.DeltaChip
 import eg.masroof.ui.components.ExpenseListItem
+import eg.masroof.ui.components.IconTile
+import eg.masroof.ui.components.Panel
 import eg.masroof.ui.components.SectionCard
+import eg.masroof.ui.components.SectionLabel
 import eg.masroof.ui.components.SkeletonList
 import eg.masroof.ui.components.StatusBanner
 import eg.masroof.ui.components.StopLearningDialog
 import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
-import eg.masroof.ui.insights.InsightsIcon
 import eg.masroof.ui.insights.TrendBar
 import eg.masroof.ui.receipts.rememberCameraLaunch
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.theme.extra
 import eg.masroof.ui.viewmodel.CapturedViewModel
 import eg.masroof.ui.viewmodel.HomeBudgetsViewModel
 import eg.masroof.ui.viewmodel.LoadStatus
@@ -185,7 +193,7 @@ fun WalletContent(
     LazyColumn(
         modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "bar") { WalletTopBar(actions) }
@@ -236,68 +244,120 @@ fun WalletContent(
 private fun WalletTopBar(actions: WalletActions) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = actions.onOpenSettings, modifier = Modifier.size(TARGET_DP.dp)) {
-            Icon(Icons.Filled.AccountCircle, contentDescription = stringResource(R.string.wallet_profile_desc))
+            Icon(AppIcons.Person, contentDescription = stringResource(R.string.wallet_profile_desc))
         }
         Text(
             stringResource(R.string.wallet_title),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { heading() },
         )
         IconButton(onClick = actions.onOpenInsights, modifier = Modifier.size(TARGET_DP.dp)) {
-            Icon(InsightsIcon, contentDescription = stringResource(R.string.wallet_analytics))
+            Icon(AppIcons.Bars, contentDescription = stringResource(R.string.wallet_analytics))
         }
     }
 }
 
+/** The one loud surface of the app: a dark green panel with the period's spending, its trend and the balance. */
 @Composable
 private fun HeroCard(
     state: WalletUi,
     actions: WalletActions,
 ) {
     val figures = state.figures
-    val style = LocalMoneyStyle.current
-    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
-    Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PeriodPill(state, actions, Modifier.weight(1f, fill = false))
-                AccountPicker(state, actions, Modifier.weight(1f, fill = false))
+    val extra = MaterialTheme.extra
+    Panel(Modifier.fillMaxWidth(), color = extra.hero) {
+        CompositionLocalProvider(LocalContentColor provides extra.onHero) {
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PeriodPill(state, actions, Modifier.weight(1f, fill = false))
+                    AccountPicker(state, actions, Modifier.weight(1f, fill = false))
+                }
+                // Only the figures that failed are replaced by the error banner above; the pill, picker and balance stay.
+                if (figures != null) {
+                    SpentBlock(figures, Modifier.padding(top = 4.dp))
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp), color = extra.onHero.copy(alpha = HERO_RULE_ALPHA))
+                }
+                BalanceBlock(state, actions)
             }
-            // Only the figures that failed are replaced by the error banner above; the pill, picker and balance stay.
-            if (figures != null) SpentBlock(figures)
-            BalanceBlock(state, actions)
         }
     }
 }
 
+private const val HERO_RULE_ALPHA = 0.14f
+private const val HERO_CHIP_ALPHA = 0.1f
+
 @Composable
-private fun SpentBlock(figures: WalletFigures) {
+private fun SpentBlock(
+    figures: WalletFigures,
+    modifier: Modifier = Modifier,
+) {
     val style = LocalMoneyStyle.current
-    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.wallet_spent), style = MaterialTheme.typography.labelLarge, color = onContainer)
-        AmountText(Money(figures.spentMinor), style = MaterialTheme.typography.displaySmall, color = onContainer)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val extra = MaterialTheme.extra
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The figure and its six-month trend share a line; on a narrow screen or at a large font the trend wraps under it.
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.Bottom,
+        ) {
+            Column {
+                Text(stringResource(R.string.wallet_spent), style = MaterialTheme.typography.labelLarge, color = extra.onHeroMuted)
+                AmountText(
+                    Money(figures.spentMinor),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = extra.onHero,
+                    smallUnit = true,
+                )
+            }
+            MiniTrend(figures.trend)
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             figures.todayMinor?.let {
                 Text(
                     stringResource(R.string.wallet_today, MoneyFormat.format(Money(it), style.arabic, style.digits)),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                    color = onContainer,
+                    color = extra.onHero,
                 )
             }
             DeltaChip(figures.deltaBps)
             if (figures.deltaBps != null) {
-                Text(stringResource(R.string.home_vs_last_month), style = MaterialTheme.typography.bodySmall, color = onContainer)
+                Text(stringResource(R.string.home_vs_last_month), style = MaterialTheme.typography.bodySmall, color = extra.onHeroMuted)
             }
         }
-        MiniTrend(figures.trend)
+    }
+}
+
+/** A quiet chip on the dark panel that opens a menu: the text, then a small chevron. */
+@Composable
+private fun HeroChip(
+    text: String,
+    onClick: () -> Unit,
+) {
+    val extra = MaterialTheme.extra
+    Box(Modifier.heightIn(min = TARGET_DP.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick), Alignment.Center) {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .background(extra.onHero.copy(alpha = HERO_CHIP_ALPHA))
+                .padding(start = 14.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge,
+                color = extra.onHero,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(AppIcons.ChevronDown, contentDescription = null, tint = extra.onHeroMuted, modifier = Modifier.size(16.dp))
+        }
     }
 }
 
@@ -319,9 +379,7 @@ private fun PeriodPill(
             DateFormat.shortDate(p.to, style.arabic, style.digits),
         )
     Box(modifier) {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = TARGET_DP.dp)) {
-            Text(range(period), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
+        HeroChip(range(period)) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             state.choices.forEachIndexed { index, p ->
                 DropdownMenuItem(
@@ -346,13 +404,7 @@ private fun AccountPicker(
     var open by remember { mutableStateOf(false) }
     val chosen = state.accounts.firstOrNull { it.account.id == state.selectedAccountId }
     Box(modifier) {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = TARGET_DP.dp)) {
-            Text(
-                chosen?.account?.label ?: stringResource(R.string.wallet_all_accounts),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        HeroChip(chosen?.account?.label ?: stringResource(R.string.wallet_all_accounts)) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.wallet_all_accounts)) },
@@ -381,13 +433,21 @@ private fun BalanceBlock(
     state: WalletUi,
     actions: WalletActions,
 ) {
-    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    val extra = MaterialTheme.extra
     val style = LocalMoneyStyle.current
     val balance = state.balance
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.wallet_balance), style = MaterialTheme.typography.labelLarge, color = onContainer)
-        if (balance.minor != null) {
-            AmountText(Money(balance.minor), style = MaterialTheme.typography.titleLarge, color = onContainer)
+    Column {
+        // Label at the start, figure at the end: one line, like a total at the foot of a statement.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.wallet_balance),
+                style = MaterialTheme.typography.labelLarge,
+                color = extra.onHeroMuted,
+                modifier = Modifier.weight(1f),
+            )
+            if (balance.minor != null) {
+                AmountText(Money(balance.minor), style = MaterialTheme.typography.titleLarge, color = extra.onHero)
+            }
         }
         if (balance.minor == null || balance.uncounted > 0) {
             val text =
@@ -396,76 +456,103 @@ private fun BalanceBlock(
                 } else {
                     pluralStringResource(R.plurals.wallet_uncounted, balance.uncounted, DateFormat.number(balance.uncounted, style.digits))
                 }
-            TextButton(onClick = actions.onOpenAccounts, modifier = Modifier.heightIn(min = TARGET_DP.dp)) {
-                Text(text, color = onContainer, style = MaterialTheme.typography.bodyMedium)
-            }
+            HeroLink(text, actions.onOpenAccounts)
         }
         if (state.owedMinor > 0) {
-            Text(
+            HeroLink(
                 stringResource(R.string.wallet_owe, MoneyFormat.format(Money(state.owedMinor), style.arabic, style.digits)),
-                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                color = onContainer,
-                modifier =
-                    Modifier
-                        .heightIn(
-                            min = TARGET_DP.dp,
-                        ).clickable(role = Role.Button, onClick = actions.onOpenWealth)
-                        .padding(vertical = 12.dp),
+                actions.onOpenWealth,
             )
         }
+    }
+}
+
+/** A line of the dark panel that opens a screen: full-height touch target, a chevron at the end. */
+@Composable
+private fun HeroLink(
+    text: String,
+    onClick: () -> Unit,
+) {
+    val extra = MaterialTheme.extra
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = TARGET_DP.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(role = Role.Button, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+            color = extra.onHero,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(AppIcons.ChevronEnd, contentDescription = null, tint = extra.onHeroMuted, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun QuickActions(actions: WalletActions) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuickAction("＋", stringResource(R.string.wallet_action_add), actions.onAdd, Modifier.weight(1f))
-        QuickAction("🎙", stringResource(R.string.wallet_action_say), actions.onSayIt, Modifier.weight(1f))
-        QuickAction("🧾", stringResource(R.string.wallet_action_receipt), actions.onReceipt, Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        QuickAction(AppIcons.Plus, stringResource(R.string.wallet_action_add), actions.onAdd, Modifier.weight(1f), primary = true)
+        QuickAction(AppIcons.Mic, stringResource(R.string.wallet_action_say), actions.onSayIt, Modifier.weight(1f))
+        QuickAction(AppIcons.Receipt, stringResource(R.string.wallet_action_receipt), actions.onReceipt, Modifier.weight(1f))
         actions.onAsk?.let {
             QuickAction(
-                null,
+                AppIcons.Chat,
                 stringResource(R.string.wallet_action_ask),
                 it,
                 Modifier.weight(1f),
-                AskIcon,
-                stringResource(R.string.ask_open),
+                description = stringResource(R.string.ask_open),
             )
         }
     }
 }
 
+/** One home action: a round icon button with its name under it. Add is the filled one; the rest are quiet. */
 @Composable
 private fun QuickAction(
-    glyph: String?,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
+    primary: Boolean = false,
     description: String? = null,
 ) {
-    Card(
+    val scheme = MaterialTheme.colorScheme
+    Column(
         modifier
-            .heightIn(min = TARGET_DP.dp)
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { description?.let { contentDescription = it } },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            .semantics(mergeDescendants = true) { description?.let { contentDescription = it } }
+            .padding(vertical = 4.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        Box(
+            Modifier.size(ACTION_DP.dp).clip(CircleShape).background(if (primary) scheme.primary else scheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
         ) {
-            if (icon != null) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-            } else {
-                Text(glyph.orEmpty(), style = MaterialTheme.typography.titleLarge)
-            }
-            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = if (primary) scheme.onPrimary else scheme.onSurface,
+            )
         }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }
+
+private const val ACTION_DP = 56
 
 @Composable
 private fun ReviewBanner(
@@ -473,20 +560,29 @@ private fun ReviewBanner(
     onOpen: () -> Unit,
 ) {
     val digits = LocalMoneyStyle.current.digits
-    Card(
+    val scheme = MaterialTheme.colorScheme
+    Panel(
         Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClick = onOpen)
             .heightIn(min = TARGET_DP.dp)
             .semantics(mergeDescendants = true) {},
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        color = scheme.tertiaryContainer,
     ) {
-        Text(
-            pluralStringResource(R.plurals.insights_pending_review, count, DateFormat.number(count, digits)),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                pluralStringResource(R.plurals.insights_pending_review, count, DateFormat.number(count, digits)),
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.onTertiaryContainer,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(AppIcons.ChevronEnd, contentDescription = null, tint = scheme.onTertiaryContainer, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
@@ -497,11 +593,7 @@ private fun AccountsCarousel(
 ) {
     val style = LocalMoneyStyle.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            stringResource(R.string.wallet_accounts),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
+        SectionLabel(stringResource(R.string.wallet_accounts), Modifier.padding(horizontal = 4.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.accounts, key = { it.account.id }) { view ->
                 val balance = view.balanceMinor
@@ -523,10 +615,15 @@ private fun AccountsCarousel(
                         .clickable(role = Role.Button, onClick = actions.onOpenAccounts)
                         .semantics(mergeDescendants = true) { contentDescription = "$name, $shown" },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(name, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Text(
                             shown,
                             style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
@@ -567,7 +664,7 @@ private fun ComingUpCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         "${stringResource(kind)} · ${DateFormat.shortDate(item.date, style.arabic, style.digits)}",
                         style = MaterialTheme.typography.bodySmall,
@@ -585,10 +682,14 @@ private fun ComingUpCard(
 
 @Composable
 private fun RecentHeader(onViewAll: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             stringResource(R.string.wallet_recent),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.semantics { heading() },
         )
         TextButton(onClick = onViewAll, modifier = Modifier.heightIn(min = TARGET_DP.dp)) { Text(stringResource(R.string.wallet_view_all)) }
@@ -600,28 +701,33 @@ internal fun GetStartedCards(actions: WalletActions) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(R.string.wallet_start_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
         )
         StartCard(
-            "📥",
+            AppIcons.Inbox,
             stringResource(R.string.wallet_start_capture),
             stringResource(R.string.wallet_start_capture_body),
             actions.onTurnOnCapture,
         )
         StartCard(
-            "🏦",
+            AppIcons.Bank,
             stringResource(R.string.wallet_set_balances),
             stringResource(R.string.wallet_start_balances_body),
             actions.onOpenAccounts,
         )
-        StartCard("🗓", stringResource(R.string.wallet_start_bill), stringResource(R.string.wallet_start_bill_body), actions.onAddBill)
+        StartCard(
+            AppIcons.Calendar,
+            stringResource(R.string.wallet_start_bill),
+            stringResource(R.string.wallet_start_bill_body),
+            actions.onAddBill,
+        )
     }
 }
 
 @Composable
 private fun StartCard(
-    glyph: String,
+    icon: ImageVector,
     title: String,
     body: String,
     onClick: () -> Unit,
@@ -634,14 +740,19 @@ private fun StartCard(
             ).clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {},
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(glyph, style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconTile(icon)
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Icon(
+                AppIcons.ChevronEnd,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -651,7 +762,7 @@ private fun StartCard(
 private fun MiniTrend(trend: List<TrendBar>) {
     val style = LocalMoneyStyle.current
     if (trend.none { it.total.amountMinor > 0 }) return
-    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    val extra = MaterialTheme.extra
     val description =
         stringResource(
             R.string.home_trend_desc,
@@ -660,12 +771,24 @@ private fun MiniTrend(trend: List<TrendBar>) {
                     MoneyFormat.format(it.total, style.arabic, style.digits)
             },
         )
-    BarChart(
-        items = trend.map { BarItem(DateFormat.monthShort(it.start, style.arabic), it.total.amountMinor, it.selected) },
-        description = description,
-        height = 72.dp,
-        showLabels = false,
-        modifier = Modifier.padding(top = 4.dp),
-    )
-    Text(stringResource(R.string.home_trend_title), style = MaterialTheme.typography.labelSmall, color = onContainer)
+    Column(Modifier.width(TREND_WIDTH_DP.dp).padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        BarChart(
+            items = trend.map { BarItem(DateFormat.monthShort(it.start, style.arabic), it.total.amountMinor, it.selected) },
+            description = description,
+            height = 40.dp,
+            showLabels = false,
+            barColor = extra.onHero,
+            restColor = extra.onHero.copy(alpha = TREND_REST_ALPHA),
+            gap = 5.dp,
+        )
+        Text(
+            stringResource(R.string.home_trend_title),
+            style = MaterialTheme.typography.labelSmall,
+            color = extra.onHeroMuted,
+            maxLines = 1,
+        )
+    }
 }
+
+private const val TREND_REST_ALPHA = 0.28f
+private const val TREND_WIDTH_DP = 88

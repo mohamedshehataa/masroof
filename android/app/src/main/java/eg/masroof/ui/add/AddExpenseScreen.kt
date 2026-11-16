@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -290,17 +289,17 @@ fun AddExpenseContent(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AddFields(state, arabic, AddFieldActions(onAmount, onCategory, onAccount, onDate, onNotes, onPaidBy, quick))
             extra()
         }
-        Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = onSave,
                 enabled = !form.saving,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.add_save)) }
         }
     }
@@ -346,7 +345,7 @@ private fun ColumnScope.AddFields(
             onValueChange = onAmount,
             label = { Text(stringResource(if (inEgp) R.string.add_amount else R.string.voice_amount_label)) },
             prefix = { Text(MoneyFormat.symbol(form.currency, arabic)) },
-            textStyle = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+            textStyle = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
             isError = form.amountInvalid || form.amountTooLarge || form.amountMissing,
             supportingText = {
                 if (form.amountInvalid) Text(stringResource(R.string.add_amount_error))
