@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +39,7 @@ import eg.masroof.data.db.GoalMovementEntity
 import eg.masroof.ui.components.MessageState
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.components.SkeletonList
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.LocalMoneyStyle
 
 @Composable
@@ -83,12 +82,12 @@ fun GoalDetailContent(
 ) {
     val card = state.card
     when {
-        state.loading -> SkeletonList(modifier.padding(16.dp))
+        state.loading -> SkeletonList(modifier.padding(horizontal = 20.dp, vertical = 16.dp))
         card == null ->
             MessageState(
                 title = stringResource(R.string.goals_not_found),
                 body = stringResource(R.string.goals_nothing_moves),
-                icon = Icons.Filled.Warning,
+                icon = AppIcons.Alert,
                 modifier = modifier,
             )
         else -> {
@@ -97,8 +96,8 @@ fun GoalDetailContent(
                 modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Figures(card, state.backing)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -157,14 +156,24 @@ private fun Figures(
     val p = card.progress
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         GoalRing(card.emoji, p.percentBp, goalRingDescription(card), size = 128.dp)
-        Text(card.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+        Text(
+            card.name,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(top = 8.dp).semantics { heading() },
+        )
         Text(goalSavedOfTarget(p, card.currency), style = MaterialTheme.typography.titleMedium)
-        Text(wholePercent(p.percentBp), style = MaterialTheme.typography.bodyMedium)
+        Text(wholePercent(p.percentBp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         backing.forEach {
             val res = if (it.kind == "SILVER") R.string.gold_including_silver else R.string.gold_including_gold
-            Text(stringResource(res, goalMoney(it.valueMinor, card.currency)), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(res, goalMoney(it.valueMinor, card.currency)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        p.daysToGo?.let { Text(goalDaysText(it), style = MaterialTheme.typography.bodyMedium) }
+        p.daysToGo?.let {
+            Text(goalDaysText(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         p.monthlyNeedMinor?.let {
             Text(stringResource(R.string.goals_needs_month, goalMoney(it, card.currency)), style = MaterialTheme.typography.titleSmall)
         }
@@ -181,7 +190,11 @@ private fun ChartCard(
     SectionCard(stringResource(R.string.goals_chart_title)) {
         val now = goalMoney(state.steps.lastOrNull() ?: 0L, card.currency)
         GoalStepChart(state.steps, Modifier.clearAndSetSemantics {}.padding(vertical = 4.dp))
-        Text(stringResource(R.string.goals_chart_desc, now), style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.goals_chart_desc, now),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -192,7 +205,11 @@ private fun HistoryCard(
 ) {
     SectionCard(stringResource(R.string.goals_history)) {
         if (history.isEmpty()) {
-            Text(stringResource(R.string.goals_history_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                stringResource(R.string.goals_history_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         val style = LocalMoneyStyle.current
         history.forEach { m ->
@@ -200,7 +217,10 @@ private fun HistoryCard(
             val amount = goalMoney(Math.abs(m.amountMinor), currency)
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(stringResource(if (taken) R.string.goals_history_taken else R.string.goals_history_added, amount))
+                    Text(
+                        stringResource(if (taken) R.string.goals_history_taken else R.string.goals_history_added, amount),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                     val date = DateFormat.shortDate(CairoTime.dateOf(m.atMillis), style.arabic, style.digits)
                     Text(
                         listOfNotNull(date, m.note).joinToString(" - "),

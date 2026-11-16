@@ -12,9 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import eg.masroof.R
@@ -43,6 +40,8 @@ import eg.masroof.data.answers.PurchaseOption
 import eg.masroof.data.db.AccountEntity
 import eg.masroof.data.wealth.AccountDraft
 import eg.masroof.ui.accounts.AccountFormDialog
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.components.SectionLabel
 import eg.masroof.ui.theme.LocalMoneyStyle
 import kotlinx.coroutines.delay
 
@@ -76,11 +75,7 @@ fun AnswerCardsRow(
 ) {
     val rowDescription = pluralStringResource(R.plurals.answers_row_desc, cards.size, cards.size)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            stringResource(R.string.answers_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
+        SectionLabel(stringResource(R.string.answers_title))
         LazyRow(
             Modifier.fillMaxWidth().semantics { contentDescription = rowDescription },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -95,10 +90,7 @@ private fun AnswerCardView(
     card: AnswerCard,
     actions: AnswerActions,
 ) {
-    Card(
-        Modifier.width(CARD_WIDTH_DP.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
+    Panel(Modifier.width(CARD_WIDTH_DP.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when (card) {
                 is AnswerCard.Refund -> RefundBody(card, actions)
@@ -115,7 +107,7 @@ private fun Question(
     text: String,
     card: AnswerCard,
 ) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
     Excerpt(card)
 }
 
@@ -158,7 +150,7 @@ private fun AnswerButton(
 ) {
     val modifier = Modifier.fillMaxWidth().heightIn(min = TARGET_DP.dp)
     if (primary) {
-        FilledTonalButton(onClick = onClick, modifier = modifier) { Text(text) }
+        Button(onClick = onClick, modifier = modifier) { Text(text) }
     } else {
         TextButton(onClick = onClick, modifier = modifier) { Text(text) }
     }
@@ -241,13 +233,13 @@ fun AnswerUndoBar(
         delay(UNDO_VISIBLE_MS)
         onExpire()
     }
-    Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+    Panel(modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.tertiaryContainer) {
         Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.answers_done), color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(stringResource(R.string.answers_done), color = MaterialTheme.colorScheme.onTertiaryContainer)
             TextButton(onClick = onUndo, modifier = Modifier.heightIn(min = TARGET_DP.dp)) { Text(stringResource(R.string.answers_undo)) }
         }
     }

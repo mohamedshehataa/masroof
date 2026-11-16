@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,16 +13,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -44,6 +41,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -58,6 +57,9 @@ import eg.masroof.core.analytics.BudgetPeriodKind
 import eg.masroof.data.db.CategoryEntity
 import eg.masroof.ui.components.ListStates
 import eg.masroof.ui.components.MessageState
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.components.ProgressLine
+import eg.masroof.ui.components.SectionLabel
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.theme.extra
 import eg.masroof.ui.viewmodel.BudgetError
@@ -99,7 +101,10 @@ fun BudgetsContent(
     // null = closed; a target with a null row is the create form, otherwise the budget being edited.
     var dialog by remember { mutableStateOf<DialogTarget?>(null) }
     val firstFree = firstFreeScope(state.rows, state.categories)
-    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier.fillMaxSize().padding(start = 20.dp, top = 12.dp, end = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -130,7 +135,7 @@ fun BudgetsContent(
             MessageState(stringResource(R.string.budgets_empty_title), stringResource(R.string.budgets_empty_body))
         } else {
             ListStates(state.status, isEmpty = state.rows.isEmpty(), onRetry = onRetry) {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 96.dp)) {
                     items(state.rows, key = { it.id }) { row ->
                         BudgetCard(row, onClick = { dialog = DialogTarget(row) })
                     }
@@ -161,7 +166,7 @@ private fun ProgressFailedBanner(onRetry: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.errorContainer)
             .padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -215,12 +220,7 @@ fun BudgetProgressBar(
     row: BudgetRowUi,
     modifier: Modifier = Modifier,
 ) {
-    LinearProgressIndicator(
-        progress = { row.barBps / FULL_BPS_F },
-        modifier = modifier.fillMaxWidth().heightIn(min = 8.dp),
-        color = levelColor(row.level),
-        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-    )
+    ProgressLine(row.barBps / FULL_BPS_F, modifier, color = levelColor(row.level))
 }
 
 @Composable
@@ -248,26 +248,28 @@ private fun BudgetCard(
             remaining.amountMinor >= 0 -> stringResource(R.string.budgets_row_desc, name, spokenPercent(percent), spokenAmount)
             else -> stringResource(R.string.budgets_row_desc_over, name, spokenPercent(percent), spokenAmount)
         }
-    Card(
+    Panel(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = description },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     if (row.weekly) "$name · ${stringResource(R.string.budgets_weekly)}" else name,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
                 if (row.hasProgress) {
-                    Text(percent, style = MaterialTheme.typography.titleMedium, color = levelColor(row.level))
+                    Text(percent, style = figureStyle(MaterialTheme.typography.titleMedium), color = levelColor(row.level))
                 } else {
-                    Text(MoneyFormat.format(row.limit, style.arabic, style.digits), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        MoneyFormat.format(row.limit, style.arabic, style.digits),
+                        style = figureStyle(MaterialTheme.typography.titleMedium),
+                    )
                 }
             }
             if (row.hasProgress) {
@@ -311,6 +313,9 @@ private fun BudgetCard(
         }
     }
 }
+
+/** Tabular numerals and a firmer weight for a figure at the end of a row. */
+private fun figureStyle(style: TextStyle): TextStyle = style.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.SemiBold)
 
 /** "1,000 pounds": the amount without the currency symbol, so TalkBack does not spell out "EGP". */
 @Composable
@@ -364,7 +369,11 @@ private fun BudgetDialog(
         title = { Text(stringResource(if (editing == null) R.string.budgets_add else R.string.budgets_edit)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.budgets_category), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(R.string.budgets_category),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (editing == null) {
                     Box {
                         OutlinedButton(onClick = { menuOpen = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -517,17 +526,17 @@ fun HomeBudgetsCard(
             "${names[i]} $percent, ${labels[i]}"
         }
     val description = stringResource(R.string.budgets_home_desc, summary.ifEmpty { stringResource(R.string.budgets_home_cta) })
-    Card(
+    // A calm panel on Home: a quiet label, then one line per budget with its share used and a thin bar.
+    Panel(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = description },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(R.string.budgets_title), style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionLabel(stringResource(R.string.budgets_title))
             if (rows.isEmpty()) {
                 Text(
                     stringResource(R.string.budgets_home_cta),
@@ -536,12 +545,12 @@ fun HomeBudgetsCard(
                 )
             }
             rows.forEachIndexed { i, r ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(names[i], style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(names[i], style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text(
                             PercentFormat.format(r.progressBps, style.arabic, style.digits),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = figureStyle(MaterialTheme.typography.labelLarge),
                             color = levelColor(r.level),
                         )
                     }

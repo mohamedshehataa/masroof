@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -38,6 +37,8 @@ import eg.masroof.data.db.ReviewItemEntity
 import eg.masroof.data.edit.DuplicateCard
 import eg.masroof.ui.add.AddExpenseRoute
 import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.components.SectionLabel
 import eg.masroof.ui.components.SecureWindow
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.viewmodel.AddExpenseViewModel
@@ -142,17 +143,25 @@ fun ReviewContent(
     onMerge: (DuplicateCard) -> Unit = {},
     onKeepBoth: (DuplicateCard) -> Unit = {},
 ) {
-    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             stringResource(R.string.review_title),
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() },
         )
-        Text(stringResource(R.string.review_intro), style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.review_intro),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         when {
             items == null -> CircularProgressIndicator()
             items.isEmpty() && duplicates.isEmpty() ->
-                Text(stringResource(R.string.review_empty), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(R.string.review_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             else -> {
                 // messages and duplicate cards together, newest first
                 val rows =
@@ -163,7 +172,7 @@ fun ReviewContent(
                             )
                         } + duplicates.map { ReviewRow.Duplicate(it) }
                     ).sortedByDescending { it.atMillis }
-                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(rows, key = { it.key }) { row ->
                         when (row) {
                             is ReviewRow.Message -> ReviewCard(row.item, onCreate, onDismiss, onSave)
@@ -185,12 +194,16 @@ private fun ReviewCard(
     onSave: (String) -> Unit,
 ) {
     val suggested = item.sugKind != null && item.sugAmountMinor != null
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(item.sender, style = MaterialTheme.typography.titleSmall)
-            Text(item.text, style = MaterialTheme.typography.bodyMedium)
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(item.sender, style = MaterialTheme.typography.titleMedium)
+            Text(item.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (suggested) Suggestion(item)
-            Text(reasonLabel(item.reason), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            Text(
+                reasonLabel(item.reason),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -216,13 +229,15 @@ private fun ReviewCard(
 @Composable
 private fun Suggestion(item: ReviewItemEntity) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(stringResource(R.string.review_suggestion_title), style = MaterialTheme.typography.labelMedium)
+        SectionLabel(stringResource(R.string.review_suggestion_title))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(kindLabel(item.sugKind.orEmpty()), style = MaterialTheme.typography.bodyMedium)
             AmountText(Money(item.sugAmountMinor ?: 0L, item.sugCurrency ?: Money.EGP))
         }
         val detail = listOfNotNull(item.sugMerchant, item.sugLast4?.let { "**$it" }).joinToString(" - ")
-        if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall)
+        if (detail.isNotEmpty()) {
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

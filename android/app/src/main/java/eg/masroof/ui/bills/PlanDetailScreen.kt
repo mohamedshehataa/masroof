@@ -14,9 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -37,12 +34,15 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.CairoTime
+import eg.masroof.core.Money
 import eg.masroof.data.bills.PLAN_COMPLETED
 import eg.masroof.data.bills.PaymentChoice
 import eg.masroof.data.bills.PlanProgress
 import eg.masroof.data.bills.UndoToken
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.db.InstallmentPaymentEntity
+import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.Panel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -98,8 +98,8 @@ fun PlanDetailContent(
     val completed = p.plan.status == PLAN_COMPLETED || p.nextDue == null
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             Text(
@@ -116,8 +116,8 @@ fun PlanDetailContent(
         item {
             Text(
                 stringResource(R.string.bills_schedule),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 8.dp).semantics { heading() },
             )
         }
         items(p.payments, key = { it.id }) { PaymentRow(it, p.plan.currency) }
@@ -163,11 +163,8 @@ private enum class Confirm { COMPLETE, DELETE }
 
 @Composable
 private fun AmountsCard(p: PlanProgress) {
-    Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             p.plan.purchasePriceMinor?.let { LabeledAmount(stringResource(R.string.bills_purchase_price), billMoney(it, p.plan.currency)) }
             LabeledAmount(stringResource(R.string.bills_monthly), billMoney(p.plan.monthlyAmountMinor, p.plan.currency))
             LabeledAmount(stringResource(R.string.bills_remaining), billMoney(p.remainingMinor, p.plan.currency))
@@ -179,20 +176,21 @@ private fun AmountsCard(p: PlanProgress) {
 @Composable
 private fun DetailsBlock(p: PlanProgress) {
     val first = CairoTime.dateOf(p.plan.firstDueAtMillis)
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             stringResource(R.string.bills_details),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.semantics { heading() },
         )
-        Text(stringResource(R.string.bills_first_payment, billDate(first)))
-        Text(reminderText(p.plan.reminderDaysBefore))
+        Text(stringResource(R.string.bills_first_payment, billDate(first)), style = MaterialTheme.typography.bodyMedium)
+        Text(reminderText(p.plan.reminderDaysBefore), style = MaterialTheme.typography.bodyMedium)
         p.plan.payoutAtMillis?.let { payout ->
             val amount = billMoney(p.plan.payoutAmountMinor ?: 0L, p.plan.currency)
             val date = billDate(CairoTime.dateOf(payout))
             val received = p.plan.payoutReceivedAtMillis != null
             Text(
                 stringResource(if (received) R.string.bills_collection_received else R.string.bills_collection_on, amount, date),
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }
@@ -228,11 +226,10 @@ private fun ActionsBlock(
                 Text(stringResource(R.string.bills_mark_complete))
             }
         }
-        OutlinedButton(
+        TextButton(
             onClick = { onConfirm(Confirm.DELETE) },
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) { Text(stringResource(R.string.bills_delete)) }
+        ) { Text(stringResource(R.string.bills_delete), color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -241,18 +238,21 @@ private fun UndoBanner(
     token: UndoToken,
     actions: PlanDetailActions,
 ) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface)) {
-        Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Panel(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.inverseSurface) {
+        Row(Modifier.padding(start = 18.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(if (token.payment != null) R.string.bills_recorded else R.string.bills_collection_recorded),
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = actions.onUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bills_undo)) }
+            TextButton(onClick = actions.onUndo, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.bills_undo), color = MaterialTheme.colorScheme.inversePrimary)
+            }
             TextButton(
                 onClick = actions.onDismissUndo,
                 modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.bills_ok)) }
+            ) { Text(stringResource(R.string.bills_ok), color = MaterialTheme.colorScheme.inversePrimary) }
         }
     }
 }
@@ -270,9 +270,14 @@ private fun LabeledAmount(
     label: String,
     value: String,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleSmall)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        BillAmount(value)
     }
 }
 
@@ -282,12 +287,16 @@ private fun Hero(
     today: LocalDate,
 ) {
     val next = p.nextDue
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Panel(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (next == null || p.plan.status == PLAN_COMPLETED) {
                 Text(stringResource(R.string.bills_completed), style = MaterialTheme.typography.headlineMedium)
             } else {
-                Text(billMoney(next.amountMinor, p.plan.currency), style = MaterialTheme.typography.headlineMedium)
+                AmountText(
+                    Money(next.amountMinor, p.plan.currency),
+                    style = MaterialTheme.typography.headlineMedium,
+                    smallUnit = true,
+                )
                 val due = CairoTime.dateOf(next.dueAtMillis)
                 val days = ChronoUnit.DAYS.between(today, due).toInt()
                 Text(
@@ -297,7 +306,7 @@ private fun Hero(
                         days == 1 -> stringResource(R.string.bills_due_tomorrow)
                         else -> stringResource(R.string.bills_due_in_days, billNumber(days))
                     },
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -314,8 +323,13 @@ private fun PaymentRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(billNumber(payment.seq) + ".  " + billDate(CairoTime.dateOf(payment.dueAtMillis)), modifier = Modifier.weight(1f))
-        Text(billMoney(payment.amountMinor, currency))
+        Text(
+            billNumber(payment.seq) + ".  " + billDate(CairoTime.dateOf(payment.dueAtMillis)),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            color = if (payment.paidAtMillis != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        BillAmount(billMoney(payment.amountMinor, currency))
         Text(
             stringResource(if (payment.paidAtMillis != null) R.string.bills_row_paid else R.string.bills_row_due),
             style = MaterialTheme.typography.labelMedium,

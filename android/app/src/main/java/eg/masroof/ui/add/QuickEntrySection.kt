@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import eg.masroof.R
+import eg.masroof.ui.components.Panel
 import eg.masroof.ui.viewmodel.ADD_CURRENCIES
 import eg.masroof.ui.viewmodel.AddFormState
 import eg.masroof.ui.viewmodel.VoiceUi
@@ -65,8 +65,8 @@ class AddVoiceActions(
 internal fun highlightColors(on: Boolean) =
     if (on) {
         OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            unfocusedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            focusedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            unfocusedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
         )
     } else {
         OutlinedTextFieldDefaults.colors()
@@ -115,8 +115,8 @@ private fun VoicePanel(
     quick: AddQuickActions,
 ) {
     if (voice == VoiceUi.Idle || voice == VoiceUi.Requesting) return
-    Card(Modifier.fillMaxWidth().testTag("voice_panel")) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(Modifier.fillMaxWidth().testTag("voice_panel")) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when (voice) {
                 is VoiceUi.Listening -> ListeningBody(voice, quick)
                 VoiceUi.Processing -> {

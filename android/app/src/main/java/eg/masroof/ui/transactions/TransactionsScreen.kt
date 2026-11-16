@@ -2,6 +2,7 @@ package eg.masroof.ui.transactions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,7 +56,7 @@ fun TransactionsContent(
     onUndoCaptured: (String) -> Unit = {},
     onOpenExpense: ((String) -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             stringResource(R.string.transactions_title),
             style = MaterialTheme.typography.headlineSmall,
@@ -63,7 +64,7 @@ fun TransactionsContent(
         )
         if (state.rows.isNotEmpty()) StatusBanner(state.status, onRetry)
         ListStates(state.status, isEmpty = state.rows.isEmpty(), onRetry = onRetry) {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                 items(state.rows, key = { it.id }) {
                     ExpenseListItem(
                         it,

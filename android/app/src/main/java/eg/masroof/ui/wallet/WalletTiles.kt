@@ -1,9 +1,7 @@
 package eg.masroof.ui.wallet
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -12,15 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -38,11 +33,13 @@ import eg.masroof.core.PercentFormat
 import eg.masroof.core.analytics.Projections
 import eg.masroof.ui.budgets.BudgetRowUi
 import eg.masroof.ui.budgets.budgetName
+import eg.masroof.ui.components.ProgressLine
 import eg.masroof.ui.goals.cards
 import eg.masroof.ui.insights.CategoryDonut
 import eg.masroof.ui.insights.DonutSlice
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
+import eg.masroof.ui.theme.extra
 
 private const val TILE_MIN_DP = 132
 private const val DONUT_SLICES = 5
@@ -67,8 +64,8 @@ internal fun InsightTiles(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(R.string.wallet_tiles_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
         )
         tiles.chunked(2).forEach { pair ->
             // Equal height per row so a taller tile (larger text) does not leave its neighbour short.
@@ -93,9 +90,8 @@ private fun Tile(
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = description },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
             content()
         }
@@ -219,9 +215,9 @@ private fun BudgetTile(
             )
         } else {
             Text(name.orEmpty(), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            LinearProgressIndicator(
-                progress = { (budget.progressBps.coerceAtLeast(0) / BPS_FULL).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+            ProgressLine(
+                budget.progressBps.coerceAtLeast(0) / BPS_FULL,
+                color = if (remaining < 0) MaterialTheme.extra.negative else MaterialTheme.colorScheme.primary,
             )
             Text(percent.orEmpty(), style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"))
             Text(
@@ -252,8 +248,8 @@ private fun InOutTile(
         actions.onOpenInsights,
         modifier,
     ) {
-        FlowBar(stringResource(R.string.tile_in), inText, bps(income, widest) / BPS_FULL, MaterialTheme.colorScheme.primary)
-        FlowBar(stringResource(R.string.tile_out), outText, bps(spent, widest) / BPS_FULL, MaterialTheme.colorScheme.error)
+        FlowBar(stringResource(R.string.tile_in), inText, bps(income, widest) / BPS_FULL, MaterialTheme.extra.positive)
+        FlowBar(stringResource(R.string.tile_out), outText, bps(spent, widest) / BPS_FULL, MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -269,15 +265,7 @@ private fun FlowBar(
             Text(label, style = MaterialTheme.typography.labelMedium)
             Text(amount, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"))
         }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).fillMaxHeight().background(color))
-        }
+        ProgressLine(fraction, color = color)
     }
 }
 
@@ -299,7 +287,7 @@ private fun KeptTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            Text(value, style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"))
+            Text(value, style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"))
             Text(
                 stringResource(R.string.tile_kept_hint),
                 style = MaterialTheme.typography.bodySmall,
@@ -334,10 +322,7 @@ private fun GoalTile(
     val of = stringResource(R.string.goals_of, money(progress.savedMinor), money(progress.targetMinor))
     Tile(title, "$title. $label, $of", actions.onOpenGoals, modifier) {
         Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        LinearProgressIndicator(
-            progress = { shownProgress },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-        )
+        ProgressLine(shownProgress)
         Text(of, style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"))
     }
 }

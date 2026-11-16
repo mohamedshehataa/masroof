@@ -2,6 +2,7 @@ package eg.masroof.ui.plan
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import eg.masroof.R
 import eg.masroof.ui.budgets.BudgetsRoute
@@ -27,13 +29,20 @@ fun PlanScreen(
 ) {
     var selected by rememberSaveable { mutableIntStateOf(BUDGETS) }
     Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = selected) {
+        // The two sides sit on the page itself: no bar color and no rule under them, only the green indicator.
+        PrimaryTabRow(selectedTabIndex = selected, containerColor = Color.Transparent, divider = {}) {
             Tab(
                 selected = selected == BUDGETS,
                 onClick = { selected = BUDGETS },
-                text = { Text(stringResource(R.string.plan_tab_budgets)) },
+                text = { Text(stringResource(R.string.plan_tab_budgets), style = MaterialTheme.typography.titleSmall) },
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Tab(selected = selected == GOALS, onClick = { selected = GOALS }, text = { Text(stringResource(R.string.plan_tab_goals)) })
+            Tab(
+                selected = selected == GOALS,
+                onClick = { selected = GOALS },
+                text = { Text(stringResource(R.string.plan_tab_goals), style = MaterialTheme.typography.titleSmall) },
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (selected == BUDGETS) BudgetsRoute() else GoalsRoute(onOpenGoal = onOpenGoal, onNewGoal = onNewGoal)
     }

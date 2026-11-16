@@ -26,9 +26,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +66,7 @@ import eg.masroof.ask.MerchantStat
 import eg.masroof.core.Money
 import eg.masroof.core.PercentFormat
 import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.Panel
 import eg.masroof.ui.insights.BarChart
 import eg.masroof.ui.insights.BarItem
 import eg.masroof.ui.insights.CategoryDonut
@@ -116,21 +116,21 @@ fun AskContent(
         if (state.messages.isNotEmpty()) listState.scrollToItem(state.messages.size)
     }
     Column(modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 12.dp, end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.ask_back))
             }
             Text(
                 stringResource(R.string.ask_title),
                 style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.semantics { heading() },
+                modifier = Modifier.padding(start = 4.dp).semantics { heading() },
             )
         }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item(key = "intro") { IntroCard(state, texts, onQuery) }
             items(state.messages, key = { it.id }) { m ->
@@ -154,7 +154,11 @@ private fun InputBar(onSend: (String) -> Unit) {
             text = ""
         }
     }
-    Row(Modifier.fillMaxWidth().imePadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().imePadding().padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it.take(MAX_INPUT) },
@@ -164,8 +168,9 @@ private fun InputBar(onSend: (String) -> Unit) {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() }),
         )
-        IconButton(onClick = { send() }, enabled = text.isNotBlank(), modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.ask_send))
+        // The one filled control of the screen: send.
+        FilledIconButton(onClick = { send() }, enabled = text.isNotBlank(), modifier = Modifier.size(48.dp)) {
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.ask_send), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -177,8 +182,8 @@ private fun IntroCard(
     onQuery: (AskQuery, String) -> Unit,
 ) {
     val intro = state.intro
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.ask_greeting), style = MaterialTheme.typography.titleMedium)
                 if (intro != null) {
@@ -186,6 +191,7 @@ private fun IntroCard(
                     Text(
                         if (fact != null) texts.greetingFact(fact) else stringResource(R.string.ask_greeting_empty),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -199,16 +205,17 @@ private fun QuestionBubble(question: String) {
     val label = stringResource(R.string.ask_you_asked, question)
     // End is the right edge in LTR and the left edge in RTL.
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // The user's own words: the green bubble, with the tail corner at the bottom end (it mirrors in RTL).
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomEnd = 4.dp, bottomStart = 18.dp),
             modifier = Modifier.widthIn(max = BUBBLE_MAX_DP.dp).semantics { contentDescription = label },
         ) {
             Text(
                 question,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
     }
@@ -223,13 +230,17 @@ private fun AnswerCard(
     onOpenExpense: (String) -> Unit,
 ) {
     val answer = message.answer
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (answer) {
                 null ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text(stringResource(R.string.ask_thinking), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            stringResource(R.string.ask_thinking),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 AskAnswer.Failed -> {
                     Text(stringResource(R.string.ask_failed), style = MaterialTheme.typography.bodyLarge)
@@ -402,11 +413,22 @@ private fun Chips(
     ) {
         chips.forEach { chip ->
             val text = texts.chipLabel(chip)
-            AssistChip(
-                onClick = { onQuery(chip.query, text) },
-                label = { Text(text) },
-                modifier = Modifier.heightIn(min = 48.dp),
-            )
+            // A tinted pill inside a 48dp touch target: the pill is what is seen, the box is what is tapped.
+            Box(
+                Modifier.heightIn(min = 48.dp).clip(CircleShape).clickable(role = Role.Button) { onQuery(chip.query, text) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier =
+                        Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
         }
     }
 }

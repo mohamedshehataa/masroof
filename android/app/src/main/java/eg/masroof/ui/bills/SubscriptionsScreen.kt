@@ -13,8 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -36,11 +35,14 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.DateFormat
+import eg.masroof.core.Money
 import eg.masroof.data.bills.Cadence
 import eg.masroof.data.bills.PaydaySource
 import eg.masroof.data.bills.PriceNotice
 import eg.masroof.data.bills.SubscriptionService
 import eg.masroof.data.bills.Suggestion
+import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.Panel
 import eg.masroof.ui.components.SectionCard
 import eg.masroof.ui.components.SkeletonList
 import eg.masroof.ui.theme.LocalMoneyStyle
@@ -140,8 +142,8 @@ fun SubscriptionsContent(
     var calendar by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -262,11 +264,16 @@ private fun TotalsCard(state: SubscriptionsUiState) {
                 modifier = Modifier.heightIn(min = 48.dp),
             )
         }
-        Text(
-            billMoney(if (yearly) state.totals.perYearMinor else state.totals.perMonthMinor),
+        AmountText(
+            Money(if (yearly) state.totals.perYearMinor else state.totals.perMonthMinor, Money.EGP),
             style = MaterialTheme.typography.headlineMedium,
+            smallUnit = true,
         )
-        Text(stringResource(R.string.subs_active_count, billNumber(state.totals.activeCount)), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            stringResource(R.string.subs_active_count, billNumber(state.totals.activeCount)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -277,19 +284,21 @@ private fun SubscriptionRow(
 ) {
     val row = item.row
     val service = SubscriptionService.entries.firstOrNull { it.merchant != null && it.merchant == row.merchantKey }
+    // A flat row on the page, like a line in a ledger: what it is and when, the amount and its cadence at the end.
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(
                 (service?.emoji?.plus(" ") ?: "") + row.name,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
             )
             val renews =
                 if (row.active) {
@@ -307,8 +316,12 @@ private fun SubscriptionRow(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(billMoney(row.amountMinor, row.currency), style = MaterialTheme.typography.bodyLarge)
-            Text(cadenceLabel(Cadence.of(row.cadence)), style = MaterialTheme.typography.bodySmall)
+            BillAmount(billMoney(row.amountMinor, row.currency))
+            Text(
+                cadenceLabel(Cadence.of(row.cadence)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -320,8 +333,8 @@ private fun PriceNoticeCard(
     onReject: (String) -> Unit,
 ) {
     val up = notice.toMinor > notice.fromMinor
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 4.dp)) {
+    Panel(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.tertiaryContainer) {
+        Column(Modifier.padding(start = 18.dp, top = 14.dp, end = 6.dp, bottom = 4.dp)) {
             Text(
                 stringResource(
                     if (up) R.string.subs_price_up else R.string.subs_price_down,
@@ -330,6 +343,8 @@ private fun PriceNoticeCard(
                     billMoney(notice.toMinor, notice.currency),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(end = 12.dp),
             )
             Row {
                 TextButton(onClick = { onDismiss(notice.subscriptionId) }, modifier = Modifier.heightIn(min = 48.dp)) {
@@ -350,8 +365,8 @@ private fun SuggestionCard(
     suggestion: Suggestion,
     actions: SubscriptionsActions,
 ) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 stringResource(R.string.subs_suggestion, suggestion.name, billMoney(suggestion.amountMinor, suggestion.currency)),
                 style = MaterialTheme.typography.bodyMedium,
@@ -375,7 +390,11 @@ private fun EmptyState(
     onAdd: () -> Unit,
     addLabel: Int,
 ) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(stringResource(title), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Text(
             stringResource(body),
@@ -393,7 +412,7 @@ private fun LazyListScope.calendarSection(
 ) {
     item {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { actions.onShiftMonth(-1) }, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = { actions.onShiftMonth(-1) }, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.bills_prev_month))
             }
             val arabic = LocalMoneyStyle.current.arabic
@@ -402,27 +421,28 @@ private fun LazyListScope.calendarSection(
                     DateFormat.digitsAs(state.calendarMonth.year.toString(), LocalMoneyStyle.current.digits),
                 style = MaterialTheme.typography.titleMedium,
             )
-            OutlinedButton(onClick = { actions.onShiftMonth(1) }, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = { actions.onShiftMonth(1) }, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.bills_next_month))
             }
         }
     }
     item { CalendarGrid(state.calendarMonth, state.calendar) }
     if (state.calendar.isEmpty()) {
-        item { Text(stringResource(R.string.subs_calendar_empty), style = MaterialTheme.typography.bodyMedium) }
+        item {
+            Text(
+                stringResource(R.string.subs_calendar_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
     items(state.calendar, key = { "${it.planId}-${it.date}" }) { item ->
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { actions.onOpen(item.planId) },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(item.title, style = MaterialTheme.typography.bodyLarge)
-                Text(billDate(item.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val amount = billMoney(item.amountMinor, item.currency)
-            Text(if (item.incoming) stringResource(R.string.bills_incoming, amount) else amount, style = MaterialTheme.typography.bodyLarge)
-        }
+        DueRow(
+            title = item.title,
+            date = item.date,
+            amount = billMoney(item.amountMinor, item.currency),
+            incoming = item.incoming,
+            onClick = { actions.onOpen(item.planId) },
+        )
     }
 }

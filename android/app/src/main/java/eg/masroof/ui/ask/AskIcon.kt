@@ -1,8 +1,6 @@
 package eg.masroof.ui.ask
 
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.materialIcon
-import androidx.compose.material.icons.materialPath
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -11,19 +9,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import eg.masroof.R
+import eg.masroof.ui.theme.AppIcons
 
-/** Speech-bubble glyph for "Ask Masroof" (the core icon set has none; the extended set is a large dependency). */
-val AskIcon: ImageVector =
-    materialIcon(name = "Filled.AskMasroof") {
-        materialPath {
-            moveTo(4f, 4f)
-            horizontalLineToRelative(16f)
-            verticalLineToRelative(12f)
-            horizontalLineTo(8f)
-            lineToRelative(-4f, 4f)
-            close()
-        }
-    }
+/** Speech-bubble glyph for "Ask Masroof": the outlined one from the app's own icon set. */
+val AskIcon: ImageVector = AppIcons.Chat
 
 /** The top-bar button that opens Ask Masroof; a 48dp touch target with a content description for TalkBack. */
 @Composable

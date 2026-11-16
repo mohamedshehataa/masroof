@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,9 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -45,7 +45,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,30 +59,59 @@ import eg.masroof.core.DateFormat
 import eg.masroof.core.Money
 import eg.masroof.core.MoneyFormat
 import eg.masroof.core.PercentFormat
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.CategoryPalette
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.theme.extra
 import eg.masroof.ui.viewmodel.ExpenseRow
 import eg.masroof.ui.viewmodel.LoadStatus
 
-/** Amount rendered per locale and digit setting, with tabular numerals so columns line up. */
+/**
+ * Amount rendered per locale and digit setting, with tabular numerals where the typeface has them. With [smallUnit] the
+ * currency is set smaller than the figure (the large home numbers); the text itself is unchanged.
+ */
 @Composable
 fun AmountText(
     money: Money,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = Color.Unspecified,
+    smallUnit: Boolean = false,
 ) {
     val s = LocalMoneyStyle.current
+    val text = MoneyFormat.format(money, s.arabic, s.digits)
     Text(
-        text = MoneyFormat.format(money, s.arabic, s.digits),
+        text = if (smallUnit) withSmallUnit(text, style) else AnnotatedString(text),
         modifier = modifier,
         color = color,
         style = style.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.SemiBold),
     )
 }
 
-/** Colored circle with the category's emoji; the first letter of the name when it has none (STORY-207). */
+private const val UNIT_SCALE = 0.5f
+
+/** [text] with everything outside the figure (the currency) at half size and medium weight. */
+private fun withSmallUnit(
+    text: String,
+    style: TextStyle,
+): AnnotatedString {
+    val first = text.indexOfFirst { it.isDigit() }
+    val last = text.indexOfLast { it.isDigit() }
+    if (first < 0) return AnnotatedString(text)
+    val unit = SpanStyle(fontSize = style.fontSize * UNIT_SCALE, fontWeight = FontWeight.Medium)
+    // A minus sign in front of the figure belongs to the figure: it keeps the full size.
+    val lead = text.substring(0, first)
+    return buildAnnotatedString {
+        append(text)
+        if (lead.any { it.isLetter() }) addStyle(unit, 0, first)
+        if (last < text.lastIndex) addStyle(unit, last + 1, text.length)
+    }
+}
+
+/**
+ * Soft square with the category's emoji; the first letter of the name, on a faint wash of the category's color, when
+ * it has none (STORY-207). Emoji tiles are neutral so a list of rows stays calm.
+ */
 @Composable
 fun CategoryAvatar(
     name: String,
@@ -88,24 +120,82 @@ fun CategoryAvatar(
     size: Dp = 44.dp,
     emoji: String? = null,
 ) {
-    val color = CategoryPalette.colorFor(key)
+    val glyph = emoji?.takeIf { it.isNotBlank() }
     Box(
         modifier
             .size(size)
-            .clip(CircleShape)
-            .background(color.copy(alpha = AVATAR_ALPHA))
+            .clip(RoundedCornerShape(TILE_CORNER_PERCENT))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(if (glyph == null) Modifier.background(CategoryPalette.colorFor(key).copy(alpha = LETTER_TINT)) else Modifier)
             .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            emoji?.takeIf { it.isNotBlank() } ?: name.trim().take(1).uppercase(),
+            glyph ?: name.trim().take(1).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
-private const val AVATAR_ALPHA = 0.18f
+private const val TILE_CORNER_PERCENT = 32
+private const val LETTER_TINT = 0.18f
+
+/** A line icon on a soft square: the lead of an action row or an empty state. */
+@Composable
+fun IconTile(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp,
+    container: Color = MaterialTheme.colorScheme.primaryContainer,
+    tint: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(TILE_CORNER_PERCENT)).background(container),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size / 2))
+    }
+}
+
+/** A flat, tinted panel: the app's card. No shadow and no outline; the tint alone separates it from the page. */
+@Composable
+fun Panel(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier,
+        colors = CardDefaults.cardColors(containerColor = color, contentColor = contentColorFor(color)),
+        content = content,
+    )
+}
+
+/** A thin progress line with a quiet track. [fraction] is clamped to 0..1; the caller describes it for TalkBack. */
+@Composable
+fun ProgressLine(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    track: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(CircleShape)
+            .background(track),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .background(color),
+        )
+    }
+}
 
 /**
  * Change versus the previous period as a chip: red up arrow when spending grew, green down arrow when it fell.
@@ -155,27 +245,33 @@ private data class Chip(
     val description: String,
 )
 
-/** A titled card: the building block of the Insights and Home screens. */
+/** A titled panel: the building block of the Insights and Home screens. The title is a quiet label, not a headline. */
 @Composable
 fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { heading() },
-            )
+    Panel(modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionLabel(title)
             content()
         }
     }
+}
+
+/** The quiet heading above a group of rows or inside a panel. */
+@Composable
+fun SectionLabel(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.semantics { heading() },
+    )
 }
 
 /**
@@ -209,14 +305,16 @@ fun ExpenseListItem(
     // Every row opens the edit screen, which works on Room (STORY-170).
     val openLabel = stringResource(R.string.edit_open)
     val open = onOpen != null
-    Card(
-        (if (open) modifier.clickable(onClickLabel = openLabel) { onOpen(row.id) } else modifier).fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    // A flat row on the page, like a line in a ledger: no card, the amount aligned at the end.
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .then(if (open) Modifier.clickable(onClickLabel = openLabel) { onOpen(row.id) } else Modifier),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CategoryAvatar(categoryName, row.category?.id, emoji = row.category?.emoji)
@@ -239,7 +337,7 @@ fun ExpenseListItem(
                     Text(
                         stringResource(sourceLabel),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                 }
                 val kindLabel = kindLabelRes(row)
@@ -247,7 +345,7 @@ fun ExpenseListItem(
                     Text(
                         stringResource(kindLabel),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
                 if (row.excluded) {
@@ -262,7 +360,7 @@ fun ExpenseListItem(
                     Text(
                         paidByText,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.semantics { contentDescription = paidByText },
                     )
                 }
@@ -283,7 +381,7 @@ fun ExpenseListItem(
                     Text(
                         stringResource(R.string.pending_sync),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
                 if (row.failed) {
@@ -329,8 +427,8 @@ fun SkeletonList(
                     .fillMaxWidth()
                     .height(68.dp)
                     .alpha(pulse)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             )
         }
     }
@@ -354,15 +452,18 @@ fun MessageState(
     ) {
         if (icon != null) {
             Box(
-                Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(TILE_CORNER_PERCENT))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(32.dp))
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(26.dp))
             }
         }
         Text(
             title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = if (icon != null) 16.dp else 0.dp),
         )
@@ -398,8 +499,8 @@ fun StatusBanner(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
             .padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -407,7 +508,7 @@ fun StatusBanner(
         Text(
             stringResource(text),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.weight(1f),
         )
         TextButton(onClick = onRetry, modifier = Modifier.height(48.dp)) {
@@ -432,15 +533,15 @@ fun ListStates(
         !isEmpty -> content()
         status == LoadStatus.LOADING -> SkeletonList(modifier.padding(16.dp))
         status == LoadStatus.OFFLINE ->
-            MessageState(stringResource(R.string.offline_title), stringResource(R.string.offline_body), modifier, Icons.Filled.Warning) {
+            MessageState(stringResource(R.string.offline_title), stringResource(R.string.offline_body), modifier, AppIcons.Alert) {
                 RetryButton(onRetry)
             }
         status == LoadStatus.SIGN_IN ->
-            MessageState(stringResource(R.string.sign_in_title), stringResource(R.string.sign_in_body), modifier, Icons.Filled.Info) {
+            MessageState(stringResource(R.string.sign_in_title), stringResource(R.string.sign_in_body), modifier, AppIcons.Info) {
                 RetryButton(onRetry)
             }
         status == LoadStatus.ERROR ->
-            MessageState(stringResource(R.string.error_title), stringResource(R.string.error_body), modifier, Icons.Filled.Warning) {
+            MessageState(stringResource(R.string.error_title), stringResource(R.string.error_body), modifier, AppIcons.Alert) {
                 RetryButton(onRetry)
             }
         else ->

@@ -2,17 +2,17 @@ package eg.masroof.ui.accounts
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -22,10 +22,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -44,7 +46,7 @@ import eg.masroof.data.wealth.SUPPORTED_CURRENCIES
 import eg.masroof.data.wealth.WealthValidation
 import eg.masroof.ui.components.AmountText
 import eg.masroof.ui.components.MessageState
-import eg.masroof.ui.components.SectionCard
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.LocalMoneyStyle
 import eg.masroof.ui.wealth.FormField
 
@@ -103,13 +105,13 @@ fun AccountsContent(
         )
     }
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
             stringResource(R.string.accounts_title),
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() },
+            modifier = Modifier.padding(top = 12.dp).semantics { heading() },
         )
         Button(onClick = { adding = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.accounts_add)) }
         if (state.loaded && state.accounts.isEmpty()) {
@@ -117,11 +119,13 @@ fun AccountsContent(
                 stringResource(R.string.accounts_empty_title),
                 stringResource(R.string.accounts_empty_body),
                 Modifier.heightIn(min = 240.dp),
-                Icons.Filled.Info,
+                AppIcons.Info,
             )
         }
-        state.accounts.forEach { view ->
-            AccountCard(view, onEdit = {
+        // The accounts sit flat on the page, one after the other, with a hairline between them.
+        state.accounts.forEachIndexed { index, view ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            AccountRow(view, onEdit = {
                 editing = view.account
             }, onBalance = { balanceFor = view.account }, onArchive = { actions.onArchive(view.account.id) })
         }
@@ -129,7 +133,7 @@ fun AccountsContent(
 }
 
 @Composable
-private fun AccountCard(
+private fun AccountRow(
     view: AccountView,
     onEdit: () -> Unit,
     onBalance: () -> Unit,
@@ -137,37 +141,35 @@ private fun AccountCard(
 ) {
     val a = view.account
     val style = LocalMoneyStyle.current
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     val title = listOfNotNull(a.emoji, a.label).joinToString(" ")
-    SectionCard(title) {
-        val detail = listOfNotNull(stringResource(kindLabel(a.kind)), a.institution, a.last4?.let { "•••• $it" }).joinToString(" - ")
-        Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val card = view.card
-        when {
-            view.balanceMinor == null -> Text(stringResource(R.string.accounts_no_balance), style = MaterialTheme.typography.titleMedium)
-            card != null -> {
-                Text(stringResource(R.string.accounts_outstanding), style = MaterialTheme.typography.labelMedium)
-                AmountText(Money(card.outstandingMinor, a.currency), style = MaterialTheme.typography.titleLarge)
-                card.availableMinor?.let {
-                    Text(stringResource(R.string.accounts_available), style = MaterialTheme.typography.labelMedium)
-                    AmountText(Money(it, a.currency))
-                }
-                Text(stringResource(R.string.accounts_spent_since_statement), style = MaterialTheme.typography.labelMedium)
-                AmountText(Money(card.spentSinceStatementMinor, a.currency))
-                card.nextDue?.let {
-                    Text(stringResource(R.string.accounts_next_due, DateFormat.shortDate(it, style.arabic, style.digits)))
-                }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                val detail =
+                    listOfNotNull(stringResource(kindLabel(a.kind)), a.institution, a.last4?.let { "•••• $it" }).joinToString(" - ")
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = quiet)
             }
-            else -> AmountText(Money(view.balanceMinor, a.currency), style = MaterialTheme.typography.titleLarge)
+            // A plain account's balance is the amount at the end of its row; a card's figures follow below.
+            if (view.card == null && view.balanceMinor != null) {
+                AmountText(Money(view.balanceMinor, a.currency), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        if (view.balanceMinor == null) {
+            Text(stringResource(R.string.accounts_no_balance), style = MaterialTheme.typography.bodyMedium, color = quiet)
+        } else {
+            CardFigures(view)
         }
         view.check?.let {
             val date = DateFormat.shortDate(CairoTime.dateOf(it.atMillis), style.arabic, style.digits)
-            Text(
-                stringResource(R.string.accounts_balance_as_of, date),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(stringResource(R.string.accounts_balance_as_of, date), style = MaterialTheme.typography.bodySmall, color = quiet)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onBalance,
                 modifier = Modifier.heightIn(min = 48.dp),
@@ -175,6 +177,47 @@ private fun AccountCard(
             TextButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.accounts_edit)) }
             TextButton(onClick = onArchive, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.accounts_archive)) }
         }
+    }
+}
+
+/** A credit card's figures: what is owed, then what is left and what was spent side by side, then the next due date. */
+@Composable
+private fun CardFigures(view: AccountView) {
+    val card = view.card ?: return
+    val currency = view.account.currency
+    val style = LocalMoneyStyle.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Figure(R.string.accounts_outstanding, Money(card.outstandingMinor, currency), MaterialTheme.typography.titleLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            card.availableMinor?.let {
+                Figure(R.string.accounts_available, Money(it, currency), MaterialTheme.typography.bodyLarge, Modifier.weight(1f))
+            }
+            Figure(
+                R.string.accounts_spent_since_statement,
+                Money(card.spentSinceStatementMinor, currency),
+                MaterialTheme.typography.bodyLarge,
+                Modifier.weight(1f),
+            )
+        }
+        card.nextDue?.let {
+            Text(
+                stringResource(R.string.accounts_next_due, DateFormat.shortDate(it, style.arabic, style.digits)),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Figure(
+    label: Int,
+    money: Money,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AmountText(money, style = style)
     }
 }
 

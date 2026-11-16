@@ -87,7 +87,7 @@ fun CategoriesContent(
     var adding by remember { mutableStateOf(false) }
     var archiveAsk by remember { mutableStateOf<CategoryEntity?>(null) }
     var deleteAsk by remember { mutableStateOf<CategoryEntity?>(null) }
-    Column(modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
             stringResource(R.string.cat_title),
             style = MaterialTheme.typography.headlineSmall,

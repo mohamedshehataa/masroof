@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +25,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -48,6 +51,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
@@ -58,6 +62,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eg.masroof.R
 import eg.masroof.core.CountFormat
 import eg.masroof.ui.AppLanguage
+import eg.masroof.ui.components.IconTile
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.theme.AppIcons
 import eg.masroof.ui.theme.LocalMoneyStyle
 
 /** What the guide shows for the current step; everything the system decides (permissions) comes in from the route. */
@@ -106,7 +113,7 @@ internal fun OnboardingContent(
     val last = ui.step == OnboardingSteps.DONE
     var name by rememberSaveable { mutableStateOf("") }
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(
@@ -115,6 +122,7 @@ internal fun OnboardingContent(
                         CountFormat.format(OnboardingSteps.COUNT, digits),
                     ),
                     style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!last) {
                     TextButton(onClick = actions.onNext, modifier = Modifier.heightIn(min = 48.dp)) {
@@ -128,7 +136,7 @@ internal fun OnboardingContent(
             ) {
                 when (ui.step) {
                     OnboardingSteps.LANGUAGE -> LanguageStep(ui.language, actions)
-                    OnboardingSteps.STAYS_ON_PHONE -> TextStep("🔒", R.string.onb_phone_title, R.string.onb_phone_body)
+                    OnboardingSteps.STAYS_ON_PHONE -> TextStep(AppIcons.Lock, R.string.onb_phone_title, R.string.onb_phone_body)
                     OnboardingSteps.SMS_CAPTURE -> SmsStep(ui, actions)
                     OnboardingSteps.PAST_SMS -> PastSmsStep(ui, actions)
                     OnboardingSteps.NOTIFICATIONS -> NotificationsStep(ui, actions)
@@ -137,7 +145,7 @@ internal fun OnboardingContent(
                             name = it
                             actions.onNameChange()
                         }
-                    else -> TextStep("✅", R.string.onb_done_title, R.string.onb_done_body)
+                    else -> TextStep(AppIcons.Check, R.string.onb_done_title, R.string.onb_done_body)
                 }
             }
             Button(
@@ -156,26 +164,33 @@ internal fun OnboardingContent(
     }
 }
 
-/** The big emoji of a step: decoration only, so TalkBack skips it. */
+/**
+ * The head of a step: its line icon beside the title. Side by side (not stacked) so the choices under the body stay on
+ * a small phone's first screen. The icon is decoration only, so TalkBack skips it.
+ */
 @Composable
-private fun Illustration(emoji: String) {
-    Text(emoji, style = MaterialTheme.typography.displayMedium, modifier = Modifier.clearAndSetSemantics {})
-}
-
-@Composable
-private fun StepTitle(title: Int) {
-    Text(stringResource(title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+private fun StepHeader(
+    icon: ImageVector,
+    title: Int,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconTile(icon, modifier = Modifier.clearAndSetSemantics {})
+        Text(
+            stringResource(title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
+    }
 }
 
 @Composable
 private fun TextStep(
-    emoji: String,
+    icon: ImageVector,
     title: Int,
     body: Int,
 ) {
-    Illustration(emoji)
-    StepTitle(title)
-    Text(stringResource(body), style = MaterialTheme.typography.bodyLarge)
+    StepHeader(icon, title)
+    Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -183,8 +198,7 @@ private fun LanguageStep(
     language: String,
     actions: OnboardingActions,
 ) {
-    Illustration("🌍")
-    StepTitle(R.string.onb_lang_title)
+    StepHeader(AppIcons.Globe, R.string.onb_lang_title)
     Text(stringResource(R.string.onb_lang_body), style = MaterialTheme.typography.bodyLarge)
     Column(Modifier.selectableGroup()) {
         listOf(AppLanguage.ARABIC to R.string.onb_lang_arabic, AppLanguage.ENGLISH to R.string.onb_lang_english).forEach { (code, label) ->
@@ -207,8 +221,7 @@ private fun SmsStep(
     ui: OnboardingUi,
     actions: OnboardingActions,
 ) {
-    Illustration("💬")
-    StepTitle(R.string.onb_sms_title)
+    StepHeader(AppIcons.Chat, R.string.onb_sms_title)
     Text(stringResource(R.string.onb_sms_body), style = MaterialTheme.typography.bodyLarge)
     if (ui.smsGranted) {
         Text(stringResource(R.string.onb_sms_on), color = MaterialTheme.colorScheme.primary)
@@ -235,8 +248,7 @@ private fun PastSmsStep(
     ui: OnboardingUi,
     actions: OnboardingActions,
 ) {
-    Illustration("📥")
-    StepTitle(R.string.onb_past_title)
+    StepHeader(AppIcons.Inbox, R.string.onb_past_title)
     Text(stringResource(R.string.onb_past_body), style = MaterialTheme.typography.bodyLarge)
     val labels = mapOf(30 to R.string.backfill_range_30, 90 to R.string.backfill_range_90, 180 to R.string.backfill_range_180)
     Column(Modifier.selectableGroup()) {
@@ -282,8 +294,7 @@ private fun NotificationsStep(
     ui: OnboardingUi,
     actions: OnboardingActions,
 ) {
-    Illustration("🔔")
-    StepTitle(R.string.onb_ntf_title)
+    StepHeader(AppIcons.Bell, R.string.onb_ntf_title)
     Text(stringResource(R.string.onb_ntf_body), style = MaterialTheme.typography.bodyLarge)
     if (ui.notificationAccess != true) {
         Button(onClick = actions.onOpenNotificationAccess, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -308,8 +319,7 @@ private fun MemberStep(
     name: String,
     onName: (String) -> Unit,
 ) {
-    Illustration("👥")
-    StepTitle(R.string.onb_member_title)
+    StepHeader(AppIcons.People, R.string.onb_member_title)
     Text(stringResource(R.string.onb_member_body), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(
         value = name,
@@ -470,26 +480,36 @@ internal fun SetupGate(
 }
 
 /** The dismissible "Finish setup" card on Wallet for a phone that already had data when the guide arrived. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FinishSetupCard(
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
+        Column(Modifier.padding(start = 18.dp, end = 10.dp, top = 14.dp, bottom = 4.dp)) {
             Text(
                 stringResource(R.string.onb_card_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.semantics { heading() },
             )
-            Text(stringResource(R.string.onb_card_body), style = MaterialTheme.typography.bodyMedium)
-            // stacked, so at a large font on a narrow screen neither button is squeezed
-            Button(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.onb_card_open))
-            }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.onb_card_dismiss))
+            Text(
+                stringResource(R.string.onb_card_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(top = 2.dp, end = 8.dp),
+            )
+            // side by side when they fit, wrapping at a large font so neither is squeezed
+            // the actions take the card's own ink, so they read on amber in light and dark
+            val ink = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp), colors = ink) {
+                    Text(stringResource(R.string.onb_card_open), fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp), colors = ink) {
+                    Text(stringResource(R.string.onb_card_dismiss))
+                }
             }
         }
     }

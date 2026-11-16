@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +39,8 @@ import eg.masroof.core.MoneyFormat
 import eg.masroof.data.db.ExpenseEntity
 import eg.masroof.data.edit.DuplicateCard
 import eg.masroof.ui.components.AmountText
+import eg.masroof.ui.components.Panel
+import eg.masroof.ui.components.SectionLabel
 import eg.masroof.ui.theme.LocalMoneyStyle
 
 /**
@@ -67,7 +68,7 @@ fun DuplicateCardItem(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(16.dp)
                     .clearAndSetSemantics {},
                 contentAlignment = Alignment.CenterStart,
@@ -92,16 +93,13 @@ private fun DuplicateCardBody(
     val captureAmount = MoneyFormat.format(Money(card.capture.amountMinor, card.capture.currency), style.arabic, style.digits)
     val captureLabel = captureLabel(card)
     val description = stringResource(R.string.duplicates_a11y, manualAmount, captureAmount, captureLabel)
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(
                 Modifier.clearAndSetSemantics { contentDescription = description },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    stringResource(R.string.duplicates_title),
-                    style = MaterialTheme.typography.titleSmall,
-                )
+                SectionLabel(stringResource(R.string.duplicates_title))
                 // the two columns swap sides in a right-to-left language on their own
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Side(card.manual, categoryNames, stringResource(R.string.duplicates_manual), manual = true, Modifier.weight(1f))
@@ -149,13 +147,13 @@ private fun Side(
                 sourceIcon(e, manual),
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.tertiary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AmountText(Money(e.amountMinor, e.currency))
-        Text(whenText, style = MaterialTheme.typography.bodySmall)
-        Text(merchant, style = MaterialTheme.typography.bodyMedium)
+        Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(merchant, style = MaterialTheme.typography.titleMedium)
         Text(category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -78,7 +78,7 @@ fun AddPlanContent(
     val form = state.form
     val errors = state.errors
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -132,7 +132,7 @@ private fun ProviderAndPurpose(
     form: AddPlanForm,
     onEdit: Edit,
 ) {
-    Text(stringResource(R.string.bills_provider), style = MaterialTheme.typography.titleSmall)
+    FormLabel(stringResource(R.string.bills_provider))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         BillProvider.entries.forEach { p ->
             FilterChip(
@@ -144,7 +144,7 @@ private fun ProviderAndPurpose(
         }
     }
     if (form.isGam3eya) return
-    Text(stringResource(R.string.bills_what_for), style = MaterialTheme.typography.titleSmall)
+    FormLabel(stringResource(R.string.bills_what_for))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         BillPurpose.entries.forEach { purpose ->
             val label = purposeLabel(purpose)
@@ -231,7 +231,7 @@ private fun DurationFields(
             { v -> onEdit { it.copy(endDate = v) } },
             KeyboardType.Text,
         )
-        derived.count?.let { Text(stringResource(R.string.bills_computed_count, billNumber(it))) }
+        derived.count?.let { FormHint(stringResource(R.string.bills_computed_count, billNumber(it))) }
     } else {
         Field(
             stringResource(R.string.bills_months),
@@ -240,7 +240,7 @@ private fun DurationFields(
             { v -> onEdit { it.copy(count = v) } },
             KeyboardType.Number,
         )
-        derived.endDate?.let { Text(stringResource(R.string.bills_computed_end, billDate(it))) }
+        derived.endDate?.let { FormHint(stringResource(R.string.bills_computed_end, billDate(it))) }
     }
 }
 
@@ -266,7 +266,7 @@ private fun ExtraFields(
         { v -> onEdit { it.copy(downPayment = v) } },
         KeyboardType.Decimal,
     )
-    Text(stringResource(R.string.bills_category), style = MaterialTheme.typography.titleSmall)
+    FormLabel(stringResource(R.string.bills_category))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         state.categories.forEach { c ->
             FilterChip(
@@ -287,7 +287,7 @@ private fun AccountAndReminder(
 ) {
     val form = state.form
     if (state.accounts.isNotEmpty()) {
-        Text(stringResource(R.string.bills_account), style = MaterialTheme.typography.titleSmall)
+        FormLabel(stringResource(R.string.bills_account))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             state.accounts.forEach { a ->
                 FilterChip(
@@ -299,7 +299,7 @@ private fun AccountAndReminder(
             }
         }
     }
-    Text(stringResource(R.string.bills_remind_me), style = MaterialTheme.typography.titleSmall)
+    FormLabel(stringResource(R.string.bills_remind_me))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         REMINDER_CHOICES.forEach { days ->
             FilterChip(
@@ -318,6 +318,23 @@ private fun AccountAndReminder(
             )
         }
     }
+}
+
+/** The quiet label above a group of chips in a form. */
+@Composable
+internal fun FormLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+}
+
+/** What the form worked out from the fields above it. */
+@Composable
+private fun FormHint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
