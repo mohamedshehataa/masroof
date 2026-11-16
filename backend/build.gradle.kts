@@ -40,11 +40,11 @@ plugins {
     jacoco
     checkstyle
     id("org.springframework.boot") version "4.1.2"
-    id("net.ltgt.errorprone") version "5.1.1"
-    id("com.diffplug.spotless") version "8.10.4"
+    id("net.ltgt.errorprone") version "5.2.0"
+    id("com.diffplug.spotless") version "8.11.0"
     id("com.github.spotbugs") version "6.5.13"
     id("info.solidsoft.pitest") version "1.19.0"
-    id("org.openapi.generator") version "7.26.0"
+    id("org.openapi.generator") version "7.27.0"
 }
 
 group = "eg.masroof"
@@ -89,7 +89,7 @@ dependencies {
     implementation("org.jspecify:jspecify")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
-    errorprone("com.google.errorprone:error_prone_core:2.51.0")
+    errorprone("com.google.errorprone:error_prone_core:2.52.0")
     errorprone("com.uber.nullaway:nullaway:0.14.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
